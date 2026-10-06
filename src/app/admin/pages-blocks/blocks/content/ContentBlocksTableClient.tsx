@@ -1,5 +1,7 @@
 "use client";
 
+import type { AdminActionResult } from "../../../../../lib/admin/admin-action-result";
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
@@ -259,32 +261,33 @@ export default function ContentBlocksTableClient({
   async function runRowMutation(
     row: ContentBlockRow,
     mutationAction: "duplicate" | "delete",
-    action: () => Promise<void>,
+    action: () => Promise<void | AdminActionResult>,
     successMessage: string,
   ) {
     clearFeedback(feedbackChannel);
     try {
-      await instant.mutateAsync({
+      const settled = await instant.mutateAsync({
         rowId: row.id,
         action: mutationAction,
         optimistic: (cache) => {
           if (mutationAction === "delete") cache.removeRows(new Set([row.id]));
         },
         execute: async () => {
-          await action();
-          return { ok: true as const, message: successMessage };
+          const response = await action();
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? successMessage, feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
         },
       });
       publishFeedback(
         {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
+          variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+          title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+          message: settled.message,
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
     } catch (error) {
       publishFeedback(
@@ -299,7 +302,7 @@ export default function ContentBlocksTableClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
     }
   }
@@ -312,7 +315,7 @@ export default function ContentBlocksTableClient({
       nextStatus === "published" ? "تم نشر البلوك." : "تم إخفاء البلوك.";
     clearFeedback(feedbackChannel);
     try {
-      await instant.mutateAsync({
+      const settled = await instant.mutateAsync({
         rowId: row.id,
         action: "visibility",
         optimistic: (cache) =>
@@ -325,20 +328,21 @@ export default function ContentBlocksTableClient({
           const formData = new FormData();
           formData.set("id", String(row.id));
           formData.set("next_status", nextStatus);
-          await toggleContentBlockStatus(formData);
-          return { ok: true, message: successMessage };
+          const response = await toggleContentBlockStatus(formData);
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? successMessage, feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
         },
       });
       publishFeedback(
         {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
+          variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+          title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+          message: settled.message,
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
     } catch (error) {
       publishFeedback(
@@ -353,7 +357,7 @@ export default function ContentBlocksTableClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
     }
   }
@@ -464,7 +468,7 @@ export default function ContentBlocksTableClient({
                 clearFeedback(feedbackChannel);
                 try {
                   const idSet = new Set(ids.map(Number));
-                  await instant.mutateAsync({
+                  const settled = await instant.mutateAsync({
                     action: `bulk-${action}`,
                     bulk: true,
                     optimistic: (cache) => {
@@ -488,23 +492,21 @@ export default function ContentBlocksTableClient({
                       const formData = new FormData();
                       formData.set("bulk_action", action);
                       ids.forEach((id) => formData.append("ids", String(id)));
-                      await bulkContentBlocks(formData);
-                      return {
-                        ok: true as const,
-                        message: "تم تنفيذ العملية الجماعية بنجاح.",
-                      };
+                      const response = await bulkContentBlocks(formData);
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? "تم تنفيذ العملية الجماعية بنجاح.", feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
                     },
                   });
                   publishFeedback(
                     {
-                      variant: "success",
-                      title: "تم تنفيذ الإجراء",
-                      message: "تم تنفيذ العملية الجماعية بنجاح.",
+                      variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+                      title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+                      message: settled.message,
                       layout: "inline",
                       dismissible: true,
                       lifecycle: "manual",
                     },
-                    { channel: feedbackChannel, placement: "inline" },
+                    { channel: feedbackChannel, placement: "global" },
                   );
                   selection.clearSelection();
                 } catch (error) {
@@ -522,7 +524,7 @@ export default function ContentBlocksTableClient({
                     },
                     {
                       channel: feedbackChannel,
-                      placement: "inline",
+                      placement: "global",
                       reveal: true,
                     },
                   );
@@ -655,7 +657,7 @@ export default function ContentBlocksTableClient({
                         async () => {
                           const formData = new FormData();
                           formData.set("id", String(row.id));
-                          await duplicateContentBlock(formData);
+                          return duplicateContentBlock(formData);
                         },
                         "تم إنشاء نسخة من البلوك.",
                       ),
@@ -671,7 +673,7 @@ export default function ContentBlocksTableClient({
                         async () => {
                           const formData = new FormData();
                           formData.set("id", String(row.id));
-                          await deleteContentBlock(formData);
+                          return deleteContentBlock(formData);
                         },
                         "تم حذف البلوك.",
                       ),

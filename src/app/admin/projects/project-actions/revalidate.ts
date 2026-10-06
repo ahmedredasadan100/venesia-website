@@ -3,13 +3,13 @@ import type { ProjectCategory } from "../../../../lib/projects/public-types";
 import { revalidateProjectsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { listPath } from "./helpers";
 
-export function revalidateProjectPaths(
+export async function revalidateProjectPaths(
   type: ProjectCategory,
   id?: number,
   slug?: string | null,
   previousSlug?: string | null,
 ) {
-  revalidateProjectsCache();
+  await revalidateProjectsCache();
   revalidatePath("/admin/projects");
   revalidatePath(listPath(type));
   if (id) revalidatePath(`/admin/projects/${id}`);

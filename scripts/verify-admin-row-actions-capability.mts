@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
+import { buildAdminListSearchOrFilter } from "../src/lib/admin/admin-list-search.ts";
+import { loadNormalizedAdminEntityListPage } from "../src/lib/admin/entity-list/data-engine/adapter.ts";
 
 import {
   ADMIN_ROW_ACTION_MORE_ORDER,
@@ -60,6 +62,7 @@ import {
   graphUsesExecutableBinding,
   parseTypeScriptSource,
   type ExecutableSourceGraph,
+  type ExecutableBinding,
   type SourceOverrides,
 } from "./lib/typescript-executable-graph.mts";
 
@@ -168,6 +171,7 @@ type ConsumerCapabilityAuditRecord = {
   sourceFiles: readonly string[];
   declaration: AdminConsumerCapabilityAuditDeclaration;
   collectionSurface?: AdminCollectionSurfaceInventoryEntry;
+  presentationEntryBindings?: readonly ExecutableBinding[];
   formEntry?: AdminFormAdoptionEntry;
 };
 
@@ -615,13 +619,21 @@ function formBaseCapabilities(entry: AdminFormAdoptionEntry) {
   return capabilities;
 }
 
+// A grouped consumer is the export actually mounted by its registered page.
+// Import selection and module side effects already belong to the existing graph owner.
+function consumerGraphEntrySources(consumer: ConsumerCapabilityAuditRecord) {
+ return consumer.presentationEntryBindings?.length
+   ? consumer.collectionSurface!.pageSourceFiles
+   : consumer.sourceFiles;
+}
+
 function consumerExecutableGraph(
   consumer: ConsumerCapabilityAuditRecord,
   sourceOverrides?: SourceOverrides,
 ) {
   return collectExecutableSourceGraph({
     root: ROOT,
-    entrySourceFiles: consumer.sourceFiles,
+    entrySourceFiles: consumerGraphEntrySources(consumer),
     sourceOverrides,
     symbolAware: true,
   });
@@ -642,7 +654,7 @@ function consumerOwnershipGraph(
 ) {
   return collectExecutableSourceGraph({
     root: ROOT,
-    entrySourceFiles: consumer.sourceFiles,
+    entrySourceFiles: consumerGraphEntrySources(consumer),
     sourceOverrides,
     traversalBoundarySourceFiles: canonicalCapabilityOwnerSourceFiles,
     symbolAware: true,
@@ -657,6 +669,45 @@ function graphWithoutOwnerSources(
   return new Map(
     [...graph].filter(([sourceFile]) => !excluded.has(sourceFile)),
   );
+}
+
+/** The shared hook returns context; only its provenance-bound request is a guarded intent. */
+function graphRequestsFloatingConfirmation(graph: ExecutableSourceGraph, sourceOverrides?: SourceOverrides) {
+ for(const [sourceFile,parsed] of graph){
+  if(!parsed.text.includes("openConfirmation"))continue;
+  const options:ts.CompilerOptions={noLib:true,noResolve:true,jsx:ts.JsxEmit.Preserve};const host=ts.createCompilerHost(options);
+  host.getSourceFile=(file)=>normalizeSourcePath(file)===normalizeSourcePath(sourceFile)?parsed:undefined;
+  const checker=ts.createProgram([sourceFile],options,host).getTypeChecker();
+  const unwrap=(node:ts.Expression):ts.Expression=>ts.isParenthesizedExpression(node)||ts.isAsExpression(node)||ts.isNonNullExpression(node)?unwrap(node.expression):node;
+  const importedHook=(name:ts.Identifier)=>{
+   const declaration=checker.getSymbolAtLocation(name)?.declarations?.[0];if(!declaration||!ts.isImportSpecifier(declaration)||declaration.isTypeOnly)return false;
+   const statement=declaration.parent.parent.parent;if(!ts.isImportDeclaration(statement)||statement.importClause?.isTypeOnly)return false;
+   const probe=parseTypeScriptSource(sourceFile,statement.getText(parsed)+";export function provenanceProbe(){return "+declaration.name.text+"();}");
+   return graphUsesExecutableBinding({root:ROOT,graph:new Map([[sourceFile,probe]]),bindings:[{sourceFile:"src/components/admin/entity-list/AdminFloatingLayerContext.tsx",exportNames:["useAdminFloatingLayer"]}],sourceOverrides});
+  };
+  const hookResult=(expression:ts.Expression,seen=new Set<ts.Symbol>()):boolean=>{
+   const value=unwrap(expression);if(ts.isCallExpression(value)&&ts.isIdentifier(value.expression))return importedHook(value.expression);
+   if(!ts.isIdentifier(value))return false;const symbol=checker.getSymbolAtLocation(value);if(!symbol||seen.has(symbol))return false;seen.add(symbol);
+   const declaration=symbol.declarations?.[0];return Boolean(declaration&&ts.isVariableDeclaration(declaration)&&declaration.initializer&&hookResult(declaration.initializer,seen));
+  };
+  const memberRequest=(expression:ts.Expression):boolean=>{const value=unwrap(expression);return ts.isPropertyAccessExpression(value)?value.name.text==="openConfirmation"&&hookResult(value.expression):ts.isElementAccessExpression(value)&&Boolean(value.argumentExpression&&ts.isStringLiteral(value.argumentExpression)&&value.argumentExpression.text==="openConfirmation"&&hookResult(value.expression));};
+  const requestIsExecutable=(call:ts.CallExpression)=>{
+   let marker="__confirmationRequestBinding";while(parsed.text.includes(marker))marker+="_";
+   let importPath=normalizeSourcePath(relative(dirname(sourceFile),"src/components/admin/ui/AdminConfirmDialog.tsx"));if(!importPath.startsWith("."))importPath="./"+importPath;
+   const projected='import '+marker+' from '+JSON.stringify(importPath)+';\n'+parsed.text.slice(0,call.expression.getStart(parsed))+marker+parsed.text.slice(call.expression.end);
+   const probe=parseTypeScriptSource(sourceFile,projected);
+   return graphUsesExecutableBinding({root:ROOT,graph:new Map([[sourceFile,probe]]),bindings:ADMIN_CURRENT_SHARED_CAPABILITY_SET.confirmation.executableBindings,sourceOverrides});
+  };
+  let found=false;const visit=(node:ts.Node)=>{if(found)return;if(ts.isCallExpression(node)){
+   if(memberRequest(node.expression))found=true;
+   else if(ts.isIdentifier(node.expression)){const declaration=checker.getSymbolAtLocation(node.expression)?.declarations?.[0];
+    if(declaration&&ts.isBindingElement(declaration)&&ts.isObjectBindingPattern(declaration.parent)&&ts.isVariableDeclaration(declaration.parent.parent)){const key=declaration.propertyName??declaration.name,owner=declaration.parent.parent;found=(ts.isIdentifier(key)||ts.isStringLiteral(key))&&key.text==="openConfirmation"&&Boolean(owner.initializer&&hookResult(owner.initializer));}
+    else if(declaration&&ts.isVariableDeclaration(declaration)&&declaration.initializer)found=memberRequest(declaration.initializer);
+   }
+   if(found&&!requestIsExecutable(node))found=false;
+  }ts.forEachChild(node,visit);};visit(parsed);if(found)return true;
+ }
+ return false;
 }
 
 function resolvedDecision(
@@ -772,6 +823,29 @@ function capabilityExecutableBindingSignature(
     .join("|");
 }
 
+/** Updates has no mounted selector; the shared list's disabled bulk branch is not consumer adoption. */
+function trackingUpdateListboxBoundaryIsAbsent(consumer: ConsumerCapabilityAuditRecord, sourceOverrides?: SourceOverrides) {
+  if (consumer.id !== "project-tracking-updates" || consumer.boundary !== "collection") return false;
+  const file = "src/components/admin/projects/tracking/TrackingCollections.tsx";
+  const source = sourceOverrides?.get(file) ?? read(file);
+  const tree = parseTypeScriptSource(file, source);
+  if ((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length !== 0) return false;
+  const owners = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdatesCollection");
+  if (owners.length !== 1) return false;
+  const lists: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
+  function visit(node: ts.Node) {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(tree) === "AdminEntityList") lists.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(owners[0]);
+  if (lists.length !== 1) return false;
+  const attributes = lists[0].attributes.properties;
+  if (attributes.some(node => ts.isJsxSpreadAttribute(node))) return false;
+  if (attributes.some(node => ts.isJsxAttribute(node) && ["bulkOptions", "onBulkExecute", "bulkAdditionalControls"].includes(node.name.getText(tree)))) return false;
+  const selection = attributes.filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === "enableSelection");
+  return selection.length === 1 && Boolean(selection[0].initializer && ts.isJsxExpression(selection[0].initializer) && selection[0].initializer.expression?.kind === ts.SyntaxKind.FalseKeyword);
+}
+
 function collectConsumerCapabilityAuditFailures(
   consumer: ConsumerCapabilityAuditRecord,
   phase: "applicability" | "source_proof",
@@ -843,8 +917,17 @@ function collectConsumerCapabilityAuditFailures(
 
   if (phase === "applicability") return [...new Set(failures)];
 
+  if (consumer.id === "project-tracking-updates" && decisions.listbox.state === "not_applicable" && !trackingUpdateListboxBoundaryIsAbsent(consumer, sourceOverrides)) {
+    failures.push("listbox:invalid_not_applicable_bulk_boundary");
+  }
+
   const fullGraph = consumerExecutableGraph(consumer, sourceOverrides);
   const ownershipGraph = consumerOwnershipGraph(consumer, sourceOverrides);
+  for (const binding of consumer.presentationEntryBindings ?? []) {
+    if (!graphUsesExecutableBinding({ root: ROOT, graph: fullGraph, bindings: [binding], sourceOverrides })) {
+      failures.push("presentation:missing_registered_entry_binding");
+    }
+  }
 
   for (const capability of currentSharedCapabilityKeys) {
     const decision = decisions[capability];
@@ -869,6 +952,7 @@ function collectConsumerCapabilityAuditFailures(
       });
     const hasConsumerBoundaryBinding =
       consumerDirectlyOwnsBinding ||
+      (capability === "confirmation" && graphRequestsFloatingConfirmation(consumerOwnedGraph, sourceOverrides)) ||
       graphUsesExecutableBinding({
         root: ROOT,
         graph: consumerOwnedGraph,
@@ -963,6 +1047,7 @@ function collectionCapabilityAuditRecords(
         id: consumer.id,
         boundary: "collection" as const,
         sourceFiles: [consumer.pageSourceFile, consumer.presentationOwner],
+        presentationEntryBindings: consumer.executableBindings.filter(binding => normalizeSourcePath(binding.sourceFile) === normalizeSourcePath(consumer.presentationOwner)),
         declaration: consumer.applicability,
         collectionSurface,
       };
@@ -1112,7 +1197,7 @@ function readCliOption(option: string) {
   return optionIndex >= 0 ? process.argv[optionIndex + 1] : undefined;
 }
 
-function runConsumerCapabilityAuditPreflight() {
+async function runConsumerCapabilityAuditPreflight() {
   if (!process.argv.includes("--consumer-capability-audit")) return;
 
   const consumerId = readCliOption("--consumer");
@@ -1163,7 +1248,24 @@ function runConsumerCapabilityAuditPreflight() {
       [],
       `Consumer Capability Adoption Audit failed: ${failures.join(", ")}`,
     );
-    console.log("Consumer Capability Adoption Audit passed.");
+    const auditJson = process.argv.includes("--json")
+      ? JSON.stringify({
+        phase: requestedPhase,
+        capabilities: currentSharedCapabilityKeys,
+        consumers: consumerCapabilityAuditRecords.map(consumer => ({
+          id: consumer.id,
+          boundary: consumer.boundary,
+          decisions: resolveConsumerCapabilityAudit(consumer),
+        })),
+      }) + "\n"
+      : "";
+    // POSIX pipes are asynchronous; finish the canonical payload before exit.
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(`${auditJson}Consumer Capability Adoption Audit passed.\n`, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
     process.exit(0);
   }
 
@@ -1204,7 +1306,7 @@ function runConsumerCapabilityAuditPreflight() {
   process.exit(0);
 }
 
-runConsumerCapabilityAuditPreflight();
+await runConsumerCapabilityAuditPreflight();
 
 type CollectionSourceOverrides = ReadonlyMap<string, string>;
 
@@ -2383,6 +2485,30 @@ function formConsumerFixture(input: {
   } as ConsumerCapabilityAuditRecord;
 }
 
+// Read-only consumers have no guarded intent; their shared defaults must not invent one.
+for(const id of ["activity-log","topics-without-image-report"]){
+ const consumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.id===id);assert.ok(consumer?.collectionSurface);
+ check(id+" declares Confirmation outside its read-only contract",consumer.collectionSurface.confirmationOwner==="not_applicable"&&resolveConsumerCapabilityAudit(consumer).confirmation.state==="not_applicable");
+ const inherited={...consumer,collectionSurface:{...consumer.collectionSurface,confirmationOwner:"AdminConfirmDialog"}} as ConsumerCapabilityAuditRecord;
+ check(id+" inherited full-collection Confirmation is detected as false adoption",resolveConsumerCapabilityAudit(inherited).confirmation.state==="adopted");
+ const actions=ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities.filter(row=>consumer.collectionSurface!.dataRegistryEntities.some(entity=>entity===row.entity));
+ check(id+" has no declared guarded Row Action",actions.every(row=>row.confirmationActions.length===0));
+}
+for(const id of ["activity-log","topics-without-image-report"]){
+ const consumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.id===id)!;
+ check(id+" shared Collection surface does not claim consumer Confirmation",!collectConsumerCapabilityAuditFailures(consumer,"source_proof").some(f=>f.startsWith("confirmation:")));
+ const file=consumer.collectionSurface!.presentationSourceFiles[0],prefix=id==="activity-log"?"../../../":"../../../../";
+ const surface='import {AdminEntityListSurface} from "'+prefix+'components/admin/entity-list";';
+ const probes:Record<string,string>={direct:'import AdminConfirmDialog from "'+prefix+'components/admin/ui/AdminConfirmDialog";export default function Probe(){return <AdminConfirmDialog open={true}/>;}',request:'import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();return <button onClick={()=>layer.openConfirmation({title:"Owned",onConfirm:()=>{}})}>Confirm</button>;}',local:'export default function Probe(){return <button onClick={()=>window.confirm("Owned")}>Confirm</button>;}',surface:surface+'export default function Probe(){return <AdminEntityListSurface><p>Read only</p></AdminEntityListSurface>;}'};
+ probes.destructured='import {useAdminFloatingLayer as useLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const {openConfirmation:confirm}=useLayer();return <button onClick={()=>confirm({title:"Owned"})}>Confirm</button>;}';
+ probes.menu='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();return <button onClick={()=>layer.toggleLayer("columns")}>Menu</button>;}';
+ probes.foreign='import {useMemo as useAdminFloatingLayer} from "react";export default function Probe(){const layer=useAdminFloatingLayer(()=>({openConfirmation:()=>{}}),[]);return <button onClick={()=>layer.openConfirmation()}>Unrelated</button>;}';
+ probes.shadow='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();layer.toggleLayer("columns");function child(layer:{openConfirmation:()=>void}){layer.openConfirmation();}return <button onClick={()=>child({openConfirmation:()=>{}})}>Unrelated</button>;}';
+ probes.dead='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();if(false){layer.openConfirmation({title:"Never"});}return <p>Read only</p>;}';
+ for(const[mode,source]of Object.entries(probes)){const failures=collectConsumerCapabilityAuditFailures(consumer,"source_proof",new Map([[file,source]]));check(id+" Confirmation boundary "+mode,["surface","menu","foreign","shadow","dead"].includes(mode)?!failures.some(f=>f.startsWith("confirmation:")):failures.includes(mode==="local"?"confirmation:local_implementation":"confirmation:hidden_adoption"));}
+}
+const guardedConfirmationConsumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.collectionSurface?.confirmationOwner==="AdminConfirmDialog");assert.ok(guardedConfirmationConsumer);
+check("Existing guarded Collection keeps Confirmation adoption",resolveConsumerCapabilityAudit(guardedConfirmationConsumer).confirmation.state==="adopted");
 const collectionCapabilityFixtureConsumer = consumerCapabilityAuditRecords.find(
   (consumer) => consumer.boundary === "collection" && consumer.collectionSurface,
 );
@@ -2403,6 +2529,7 @@ function collectionConsumerFixture(input: {
     ...baseConsumer,
     id: input.id,
     sourceFiles: [input.pageSourceFile, input.presentationSourceFile],
+    presentationEntryBindings: undefined,
     declaration: input.declaration,
     collectionSurface: {
       ...baseConsumer.collectionSurface,
@@ -2413,6 +2540,59 @@ function collectionConsumerFixture(input: {
     },
   } as ConsumerCapabilityAuditRecord;
 }
+
+
+// Exact page-selected exports must not borrow sibling capabilities from one module.
+const selectedPresentationPage="src/fixtures/governance/selected-presentation-page.tsx";
+const selectedPresentationFile="src/fixtures/governance/selected-presentation.tsx";
+const selectedPresentationChild="src/fixtures/governance/selected-presentation-child.tsx";
+const selectedPresentationMediaImport='import AdminMediaImageField from "../../components/admin/media/AdminMediaImageField";';
+const selectedPresentationDeclaration={...collectionCapabilityFixtureConsumer.declaration,decisions:{...collectionCapabilityFixtureConsumer.declaration.decisions,media:{state:"not_applicable",rationale:"The selected sibling exposes no Media."}}} as AdminConsumerCapabilityAuditDeclaration;
+const selectedPresentationConsumer={...collectionConsumerFixture({id:"selected-presentation-fixture",pageSourceFile:selectedPresentationPage,presentationSourceFile:selectedPresentationFile,declaration:selectedPresentationDeclaration}),presentationEntryBindings:[{sourceFile:selectedPresentationFile,exportNames:["Chosen"]}]};
+function selectedPresentationFailures(mode:"sibling"|"direct"|"indirect"|"side-effect"|"missing-entry") {
+ const page=mode==="missing-entry"?'export default function Page(){return null;}':'import {Chosen,Sibling} from "./selected-presentation";export default function Page(){return <Chosen/>;}';
+ const chosen=mode==="direct"?'return <AdminMediaImageField name="media" label="Media"/>;':mode==="indirect"?'return <Child/>;':'return null;';
+ const shared=selectedPresentationMediaImport+(mode==="indirect"?'import {Child} from "./selected-presentation-child";':'')+'export function Chosen(){'+chosen+'}export function Sibling(){return <AdminMediaImageField name="media" label="Media"/>;}'+(mode==="side-effect"?'AdminMediaImageField({name:"media",label:"Media"});':'');
+ const overrides=new Map([[selectedPresentationPage,page],[selectedPresentationFile,shared],[selectedPresentationChild,selectedPresentationMediaImport+'export function Child(){return <AdminMediaImageField name="media" label="Media"/>;}']]);
+ return collectConsumerCapabilityAuditFailures(selectedPresentationConsumer,"source_proof",overrides);
+}
+check("page-selected export excludes an unused Media sibling without hiding its registered entry",!selectedPresentationFailures("sibling").some(failure=>failure.startsWith("media:")||failure.startsWith("presentation:")));
+for(const mode of ["direct","indirect","side-effect"] as const)check("page-selected export preserves "+mode+" Media ownership",selectedPresentationFailures(mode).includes("media:hidden_adoption"));
+check("page-selected export must execute its exact registered binding",selectedPresentationFailures("missing-entry").includes("presentation:missing_registered_entry_binding"));
+for(const id of ["project-tracking-stages","project-tracking-items"]){
+ const consumer=consumerCapabilityAuditRecords.find(row=>row.id===id&&row.boundary==="collection")!;assert.ok(consumer);
+ const file="src/components/admin/projects/tracking/TrackingForms.tsx",text=read(file),name=id.endsWith("stages")?"TrackingStageFormModal":"TrackingItemFormModal",parsed=parseTypeScriptSource(file,text),node=parsed.statements.find(row=>ts.isFunctionDeclaration(row)&&row.name?.text===name);assert.ok(node);
+ const original=node.getText(parsed),mutated=original.replace("<ModalActions pending={pending}",'<AdminMediaGalleryField name="injected_media" label="Media"/><ModalActions pending={pending}');assert.notEqual(mutated,original);
+ const failures=collectConsumerCapabilityAuditFailures(consumer,"source_proof",new Map([[file,text.replace(original,mutated)]]));
+ check("actual "+id+" rejects Media introduced into its own child Form",failures.includes("media:hidden_adoption"));
+}
+
+// The Updates declaration cannot turn a dormant shared bulk selector into mounted behavior.
+const trackingUpdateListboxConsumer = consumerCapabilityAuditRecords.find(row => row.id === "project-tracking-updates" && row.boundary === "collection")!;
+assert.ok(trackingUpdateListboxConsumer);
+check("Updates Listbox absence is explicit while Stage and Item remain adopted", resolveConsumerCapabilityAudit(trackingUpdateListboxConsumer).listbox.state === "not_applicable" && ["project-tracking-stages", "project-tracking-items"].every(id => resolveConsumerCapabilityAudit(consumerCapabilityAuditRecords.find(row => row.id === id && row.boundary === "collection")!).listbox.state === "adopted"));
+check("Updates exact false bulk boundary passes current source proof", trackingUpdateListboxBoundaryIsAbsent(trackingUpdateListboxConsumer) && !collectConsumerCapabilityAuditFailures(trackingUpdateListboxConsumer, "source_proof").some(failure => failure.startsWith("listbox:")));
+const trackingUpdateCollectionFile = "src/components/admin/projects/tracking/TrackingCollections.tsx";
+const trackingUpdateCollectionSource = read(trackingUpdateCollectionFile);
+const trackingUpdateCollectionTree = parseTypeScriptSource(trackingUpdateCollectionFile, trackingUpdateCollectionSource);
+const trackingUpdateCollectionNode = trackingUpdateCollectionTree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdatesCollection")!;
+assert.ok(trackingUpdateCollectionNode);
+const trackingUpdateCollectionBody = trackingUpdateCollectionNode.getText(trackingUpdateCollectionTree);
+assert.equal(trackingUpdateCollectionBody.split("enableSelection={false}").length, 2);
+for (const [label, replacement] of [["enabled", "enableSelection={true}"], ["omitted", ""], ["spread", "enableSelection={false} {...foreignProps}"], ["bulk handler", "enableSelection={false} onBulkExecute={foreignExecute}"], ["bulk options", "enableSelection={false} bulkOptions={foreignOptions}"]] as const) {
+  const mutated = trackingUpdateCollectionSource.replace(trackingUpdateCollectionBody, trackingUpdateCollectionBody.replace("enableSelection={false}", replacement));
+  assert.notEqual(mutated, trackingUpdateCollectionSource);
+  check("Updates Listbox absence rejects " + label + " bulk boundary", collectConsumerCapabilityAuditFailures(trackingUpdateListboxConsumer, "source_proof", new Map([[trackingUpdateCollectionFile, mutated]])).includes("listbox:invalid_not_applicable_bulk_boundary"));
+}
+const trackingUpdateFormFile = "src/components/admin/projects/tracking/TrackingForms.tsx";
+const trackingUpdateFormSource = read(trackingUpdateFormFile);
+const trackingUpdateFormTree = parseTypeScriptSource(trackingUpdateFormFile, trackingUpdateFormSource);
+const trackingUpdateFormNode = trackingUpdateFormTree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdateFormModal")!;
+assert.ok(trackingUpdateFormNode);
+const trackingUpdateFormBody = trackingUpdateFormNode.getText(trackingUpdateFormTree);
+const trackingUpdateFormMutation = trackingUpdateFormBody.replace("<ModalActions pending={pending}", '<AdminFormListboxSelect name="injected_update_selector" options={[]} /><ModalActions pending={pending}');
+assert.notEqual(trackingUpdateFormMutation, trackingUpdateFormBody);
+check("Updates Listbox absence rejects a newly mounted child selector", collectConsumerCapabilityAuditFailures(trackingUpdateListboxConsumer, "source_proof", new Map([[trackingUpdateFormFile, trackingUpdateFormSource.replace(trackingUpdateFormBody, trackingUpdateFormMutation)]])).includes("listbox:hidden_adoption"));
 
 const transitiveFixtureRoot = "src/fixtures/governance/consumer.tsx";
 const transitiveFixtureOverrides = new Map<string, string>([
@@ -4615,7 +4795,7 @@ check(
     ) &&
     entityListTableSource.includes("stickyEndOffsets.get(column.key) ?? 0") &&
     entityListTableSource.includes(
-      'data-admin-grid-sticky="inline-end-adjacent"',
+      'pinAdjacentColumns ? "inline-end-adjacent" : undefined',
     ) &&
     !pagesSource.includes("AdminDataGridActionsHeaderCell") &&
     !pagesSource.includes("flushInlineEnd"),
@@ -5955,14 +6135,10 @@ check(
     read(paths.boundedPagination).includes(
       "const applyQueryPatch = useCallback",
     ) &&
-    read(paths.boundedPagination).includes("useRouter") &&
-    read(paths.boundedPagination).includes(
-      "router.push(href, { scroll: false })",
-    ) &&
-    read(paths.boundedPagination).includes(
-      "router.replace(href, { scroll: false })",
-    ) &&
-    !read(paths.boundedPagination).includes("window.history") &&
+    read(paths.boundedPagination).includes("window.history[behavior") &&
+    read(paths.boundedPagination).includes("window.history.replaceState(null") &&
+    read(paths.boundedPagination).includes("currentPageSize") &&
+    !read(paths.boundedPagination).includes("useRouter") &&
     read(paths.boundedPagination).includes("previousDatasetKey"),
 );
 
@@ -6113,11 +6289,69 @@ check(
     read(sourceFile).includes("loadNormalizedAdminEntityListPage"),
   ) &&
     read(paths.dataAdapter).includes("for (let attempt = 0;") &&
-    read(paths.dataAdapter).includes("page <= totalPages") &&
     read(paths.dataAdapter).includes(
       "throw new AdminEntityListPageNormalizationError",
     ),
 );
+async function assertThinAdapterPageNormalization(
+  normalize: typeof loadNormalizedAdminEntityListPage,
+) {
+  for (const [requestedPage, rejectRange, totalRows, expectedPages] of [
+    [2, false, 23, [2]],
+    [999999, false, 23, [999999, 3]],
+    [999999, true, 23, [999999, 1, 3]],
+    [999999, true, 0, [999999, 1]],
+  ] as const) {
+    const reads: number[] = [];
+    const result = await normalize({
+      requestedPage,
+      pageSize: 10,
+      loadPage: async (page) => {
+        reads.push(page);
+        if (rejectRange && page === requestedPage) {
+          throw Object.assign(new Error("structured range rejection"), { code: "PGRST103" });
+        }
+        return { rows: totalRows ? [page] : [], totalRows };
+      },
+    });
+    const page = expectedPages[expectedPages.length - 1];
+    assert.deepEqual(reads, expectedPages);
+    assert.deepEqual(result, {
+      rows: totalRows ? [page] : [], totalRows, page,
+      totalPages: Math.max(1, Math.ceil(totalRows / 10)),
+    });
+  }
+  for (const [requestedPage, error] of [
+    [999999, Object.assign(new Error("permission rejection"), { code: "42501" })],
+    [999999, new Error("Requested range not satisfiable")],
+    [1, Object.assign(new Error("first page rejection"), { code: "PGRST103" })],
+  ] as const) {
+    let reads = 0;
+    await assert.rejects(normalize({
+      requestedPage, pageSize: 10,
+      loadPage: async () => { reads += 1; throw error; },
+    }), (actual) => actual === error);
+    assert.equal(reads, 1);
+  }
+  for (const maxReads of [1, 2, 3]) {
+    const reads: number[] = [];
+    await assert.rejects(normalize({
+      requestedPage: 999999, pageSize: 10, maxReads,
+      loadPage: async (page) => {
+        reads.push(page);
+        if (page !== 1) {
+          throw Object.assign(new Error("shrinking range rejection"), { code: "PGRST103" });
+        }
+        return { rows: [1], totalRows: 23 };
+      },
+    }), (error: unknown) => error instanceof Error &&
+      error.name === "AdminEntityListPageNormalizationError" &&
+      "attempts" in error && error.attempts === maxReads);
+    assert.deepEqual(reads, [999999, 1, 3].slice(0, maxReads));
+  }
+}
+await assertThinAdapterPageNormalization(loadNormalizedAdminEntityListPage);
+check("thin adapters use actual bounded normalization, preserve errors, and reject inconsistent results", true);
 check(
   "legacy collection query, URL, and pager owners are removed",
   !redirectsActionsSource.includes("listRedirects(") &&
@@ -6178,19 +6412,59 @@ check(
     read(paths.redirectsFilters).includes("onQueryPatch") &&
     !read(paths.redirectsFilters).includes("useRouter"),
 );
+
+
+function verifyServerPageSearchDelegationControls() {
+  const rootFile = paths.redirectsAdapter;
+  const alias = 'import { buildAdminListSearchOrFilter as search } from "../admin-list-search"; export function load(q:string){ return search(["title"], q); }';
+  assert.equal(verifyServerPageSearchDelegation(new Map([[rootFile, alias]])), true);
+  for (const source of [
+    'export const note = "buildAdminListSearchOrFilter"; // buildAdminListSearchOrFilter is not called',
+    'import { buildAdminListSearchOrFilter } from "../admin-list-search"; export const unused = true;',
+  ]) assert.throws(() => verifyServerPageSearchDelegation(new Map([[rootFile, source]])));
+  const foreign = "src/lib/admin/redirects/controlled-search-owner.ts";
+  assert.throws(() => verifyServerPageSearchDelegation(new Map([
+    [rootFile, 'import { buildAdminListSearchOrFilter } from "./controlled-search-owner"; export function load(q:string){ return buildAdminListSearchOrFilter(["title"], q); }'],
+    [foreign, 'export function buildAdminListSearchOrFilter(){ return "local replacement"; }'],
+  ])));
+  assert.throws(() => verifyServerPageSearchDelegation(new Map(), (fields, term) =>
+    term === "50%" ? 'title.ilike."%50%"' : buildAdminListSearchOrFilter(fields, term)));
+  assert.throws(() => verifyServerPageSearchDelegation(new Map(), (fields, term) =>
+    buildAdminListSearchOrFilter(fields.map(field => field === "title,deleted_at" ? "title" : field), term)));
+  return 6;
+}
+
+function verifyServerPageSearchDelegation(
+  sourceOverrides: SourceOverrides = new Map(),
+  build: typeof buildAdminListSearchOrFilter = buildAdminListSearchOrFilter,
+) {
+  for (const sourceFile of [paths.redirectsAdapter, paths.activityLoader, paths.reportQuery]) {
+    const graph = collectExecutableSourceGraph({
+      root: ROOT, entrySourceFiles: [sourceFile], sourceOverrides, symbolAware: true,
+    });
+    assert.ok(graphUsesExecutableBinding({
+      root: ROOT, graph, sourceOverrides,
+      bindings: [{ sourceFile: paths.adminListSearch, exportNames: ["buildAdminListSearchOrFilter"] }],
+    }), sourceFile + ": executable search delegation must reach the canonical owner");
+  }
+  assert.equal(build(["title"], "   "), "");
+  assert.equal(build(["title"], "ordinary text"), 'title.ilike."%ordinary text%"');
+  assert.equal(build(["title"], "50%"), "title.ilike." + JSON.stringify("%50\\%%"));
+  assert.equal(build(["title"], "a*.b"), "title.imatch." + JSON.stringify("a\\*\\.b"));
+  assert.throws(() => build(["title,deleted_at"], "literal"), TypeError);
+  return true;
+}
+
 check(
   "server-page search consumers delegate escaping to their authoritative query owners",
-  [paths.redirectsAdapter, paths.activityLoader, paths.reportQuery].every(
-    (sourceFile) => read(sourceFile).includes("buildAdminListSearchOrFilter"),
-  ) &&
+  verifyServerPageSearchDelegation() &&
     read(paths.projectsAdapter).includes("p_search: query.search") &&
     read(paths.projectPublishing).includes("v_search_pattern") &&
     read(paths.projectPublishing).includes("ilike v_search_pattern") &&
-    read(paths.adminListSearch).includes('const pattern = `"%${escaped}%"`') &&
-    read(paths.adminListSearch).includes("Invalid Admin list search field") &&
     !read(paths.redirectsAdapter).includes("sanitizeRedirectSearch") &&
     !read(paths.projectsAdapter).includes("sanitizeProjectSearch"),
 );
+check("search delegation retains alias support and rejects five ownership or behavior counterexamples", verifyServerPageSearchDelegationControls() === 6);
 check(
   "topics-without-image adapter delegates canonical sort direction to the domain read",
   read(paths.reportAdapter).includes("sortDirection: query.sort.direction") &&

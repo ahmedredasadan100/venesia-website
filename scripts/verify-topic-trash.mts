@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import ts from "typescript";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,14 +16,12 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
-function exportedFunction(source: string, name: string, nextName?: string) {
-  const start = source.indexOf(`export async function ${name}`);
-  assert.notEqual(start, -1, `Missing ${name}`);
-  const end = nextName
-    ? source.indexOf(`export async function ${nextName}`, start + 1)
-    : source.length;
-  assert.notEqual(end, -1, `Missing boundary after ${name}`);
-  return source.slice(start, end);
+function exportedFunction(source: string, name: string) {
+  const ast = ts.createSourceFile("actions.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name + "Impl")
+    ?? ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(declaration, "Missing action implementation " + name);
+  return declaration.getText(ast);
 }
 
 function functionSection(source: string, startMarker: string, endMarker: string) {
@@ -38,7 +37,7 @@ const contract = read(
 );
 const loader = read("src/lib/admin/content/load-unified-content.ts");
 const actions = read("src/app/admin/content/topics/actions.ts");
-const atomicSql = read("sql/migrations/20260925200723_topics_batch_atomic_current_state.sql");
+const atomicSql = read("sql/migrations/20260926013216_topics_command_completion.sql");
 const rowActions = read(
   "src/components/admin/content/UnifiedContentRowActions.tsx",
 );
@@ -59,30 +58,22 @@ const bulkLabels = read(
   "src/lib/admin/entity-list/bulk-action-labels.ts",
 );
 
-const softDelete = functionSection(
-  actions,
-  "export async function softDeleteUnifiedContent",
-  "async function restoreTopicsWithCanonicalOwner",
-);
+const softDelete = exportedFunction(actions, "softDeleteUnifiedContent");
 const restoreAction = exportedFunction(
   actions,
   "restoreUnifiedContent",
-  "permanentlyDeleteUnifiedContent",
 );
 const purgeAction = exportedFunction(
   actions,
   "permanentlyDeleteUnifiedContent",
-  "emptyUnifiedContentTrash",
 );
 const emptyTrashAction = exportedFunction(
   actions,
   "emptyUnifiedContentTrash",
-  "bulkUpdateUnifiedContent",
 );
 const bulkAction = exportedFunction(
   actions,
   "bulkUpdateUnifiedContent",
-  "saveContentTablePreferences",
 );
 const restoreOwner = functionSection(
   actions,
@@ -92,7 +83,7 @@ const restoreOwner = functionSection(
 const purgeOwner = functionSection(
   actions,
   "async function permanentlyDeleteTopicsWithCanonicalOwner",
-  "export async function restoreUnifiedContent",
+  "async function restoreUnifiedContentImpl",
 );
 const metricItems = functionSection(
   listClient,
@@ -114,8 +105,9 @@ check(
 );
 check(
   "Soft delete keeps the slug and stays an update mutation",
-  softDelete.includes(".update({") &&
-    softDelete.includes("deleted_at: now") &&
+  softDelete.includes("runAtomicTopicsBatch") &&
+    softDelete.includes('action: "delete"') &&
+    atomicSql.includes("when p_action in ('delete', 'move_to_trash') then v_now") &&
     softDelete.includes("slug_retained: true") &&
     !softDelete.includes(".delete()"),
 );

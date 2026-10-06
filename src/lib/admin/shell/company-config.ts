@@ -1,7 +1,9 @@
 import "server-only";
 
+import { cachePublicRead } from "../../cache/public-cache-generation";
+
 import { z } from "zod";
-import { unstable_cache, revalidateTag } from "next/cache";
+import { expirePublicCacheTags } from "../../cache/revalidate-public-cache-tags";
 
 import type {
   AdminCompanyIdentity,
@@ -68,7 +70,7 @@ async function loadAdminCompanyConfigUncached(
   };
 }
 
-const loadCachedAdminCompanyConfig = unstable_cache(
+const loadCachedAdminCompanyConfig = cachePublicRead(
   loadAdminCompanyConfigUncached,
   ["admin-company-config-owner-v1"],
   { tags: [ADMIN_COMPANY_CONFIG_CACHE_TAG] },
@@ -92,6 +94,6 @@ export async function saveAdminCompanyConfig(value: AdminCompanyIdentity) {
   return parsed;
 }
 
-export function revalidateAdminCompanyConfig() {
-  revalidateTag(ADMIN_COMPANY_CONFIG_CACHE_TAG, { expire: 0 });
+export async function revalidateAdminCompanyConfig() {
+  await expirePublicCacheTags([ADMIN_COMPANY_CONFIG_CACHE_TAG]);
 }

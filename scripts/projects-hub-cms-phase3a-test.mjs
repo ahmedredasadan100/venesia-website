@@ -397,6 +397,10 @@ async function verifyInstalledNextCacheRejectsWithoutWriting() {
 }
 
 async function verifyProjectsHubLoaderRecovery() {
+  const priorOrigin=process.env.NEXT_PUBLIC_SUPABASE_URL,priorVercel=process.env.VERCEL;
+  process.env.NEXT_PUBLIC_SUPABASE_URL="http://127.0.0.1:57604";delete process.env.VERCEL;
+  try {
+  let generation="7",generationAvailable=true,generationReads=0;
   const queryPlan = [
     {
       table: "page_content_block_assignments",
@@ -454,6 +458,10 @@ async function verifyProjectsHubLoaderRecovery() {
       "../supabase-admin": {
         getSupabaseAdmin: () => ({
           from: (table) => new QueryMock(table),
+          rpc: (name) => {
+            assert.equal(name,"read_public_cache_generation");
+            return {throwOnError:async()=>{generationReads++;if(!generationAvailable)throw Object.assign(new Error("controlled missing generation"),{code:"PGRST202"});return{data:generation};}};
+          },
         }),
       },
       "../pages/get-published-page-by-slug": {
@@ -522,6 +530,25 @@ async function verifyProjectsHubLoaderRecovery() {
     "cached recovery must avoid a duplicate assignment query",
   );
   assert.equal(queryPlan.length, 0);
+  assert.equal(generationReads,3,"Each independent loader call consults the real generation owner.");
+  // The missing generation RPC requires an uncached source read, never a cache fill.
+  generationAvailable=false;
+  queryPlan.push({table:"page_content_block_assignments",result:{data:[],error:null}});
+  const uncached=await loadProjectsHubComposition();assert.equal(uncached.status,"ready");
+  assert.equal(pageStateCalls,3);assert.equal(cacheWrites,1);assert.equal(cacheEntries.size,1);
+  generationAvailable=true;
+  assert.equal((await loadProjectsHubComposition()).status,"ready");
+  assert.equal(pageStateCalls,3,"Recovered generation may reuse only its own unchanged entry.");
+  generation="8";
+  queryPlan.push({table:"page_content_block_assignments",result:{data:[],error:null}});
+  assert.equal((await loadProjectsHubComposition()).status,"ready");
+  assert.equal(pageStateCalls,4,"A new generation cannot reuse the previous cached composition.");
+  assert.equal(cacheWrites,2);assert.equal(cacheEntries.size,2);assert.equal(generationReads,6);
+  assert.equal(queryCounts.get("page_content_block_assignments"),3);assert.equal(queryPlan.length,0);
+  } finally {
+    if(priorOrigin===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_URL;else process.env.NEXT_PUBLIC_SUPABASE_URL=priorOrigin;
+    if(priorVercel===undefined)delete process.env.VERCEL;else process.env.VERCEL=priorVercel;
+  }
 }
 
 // 5a. Object-shaped invalid values never become active through public defaults.

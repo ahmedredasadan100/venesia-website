@@ -263,7 +263,9 @@ export const assignMediaHubModule=assignPageBlock;
 export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRows = {} } = {}) {
   const nativeRequire = createRequire(import.meta.url);
   const files = new Set();
-  const state = { reads: [], cache: [], events: [], failTable: "", failTables: [], errorMessages: {}, publicFailure: false };
+  const state = { reads: [], cache: [], events: [], generationCalls: [], generationAck: { data: "1", error: null }, failTable: "", failTables: [], errorMessages: {}, publicFailure: false };
+  // Lexical environment for evaluated owners only; no inherited production URL or host mutation.
+  const scopedProcess = { env: { NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321" } };
   const wait = () => delayMs ? new Promise(resolve => setTimeout(resolve, delayMs)) : Promise.resolve();
   const layout = {
     id: 1,
@@ -361,8 +363,14 @@ export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRo
   const record = kind => (...args) => state.cache.push({ kind, args });
   const ports = new Map([
     ["server-only", {}],
-    ["next/cache", { revalidatePath: record("path"), revalidateTag: record("tag"), updateTag: record("update") }],
-    ["src/lib/supabase-admin", { getSupabaseAdmin: () => ({ from }) }],
+    ["node:crypto", nativeRequire("node:crypto")],
+    ["next/navigation", { unstable_rethrow() { throw new Error("Unexpected persistent cache read boundary"); } }],
+    ["next/cache", { revalidatePath: record("path"), revalidateTag: record("tag"), updateTag: record("update"), unstable_cache() { throw new Error("Unexpected persistent cache read boundary"); } }],
+    ["src/lib/supabase-admin", { getSupabaseAdmin: () => ({ from, async rpc(name) {
+      assert.equal(name, "advance_public_cache_generation", "Only the current immediate invalidation acknowledgment is in this fixture.");
+      state.generationCalls.push(name);
+      return state.generationAck;
+    } }) }],
     ["src/lib/logging", { logError() {} }],
     ["src/lib/content/public-content-read/owner", { async loadPublicContentCollection(query) {
       state.reads.push({ table: "public-content", fields: query }); state.events.push(`start:public:${query.contentTypes[0]}:${query.page}`);
@@ -392,7 +400,7 @@ export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRo
       assert.ok(target, `Unresolved ${specifier}`);
       return load(target);
     };
-    new Function("require", "module", "exports", output)(require, mod, mod.exports);
+    new Function("require", "module", "exports", "process", output)(require, mod, mod.exports, scopedProcess);
     return mod.exports;
   }
   return {
@@ -402,7 +410,7 @@ export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRo
     assignment: load("src/lib/page-blocks/admin-queries.ts"),
     references: load("src/lib/feed-modules/load-topic-filter-options.ts"),
     featured: load("src/lib/featured-modules/load-editor-options.ts"),
-    reset() { state.reads.length = 0; state.cache.length = 0; state.events.length = 0; state.failTable = ""; state.failTables.length = 0; state.errorMessages = {}; state.publicFailure = false; },
+    reset() { state.reads.length = 0; state.cache.length = 0; state.events.length = 0; state.generationCalls.length = 0; state.generationAck = { data: "1", error: null }; state.failTable = ""; state.failTables.length = 0; state.errorMessages = {}; state.publicFailure = false; },
   };
 }
 
@@ -425,6 +433,25 @@ export function createPageCompositionProjectionFixture() {
 export async function verifyPageBlockReadAndRevalidationContract(root) {
   const h = createPageBlockPerformanceHarness(root);
   const canonicalCalls = calls => [...new Set(calls.map(call => JSON.stringify(call)))].sort();
+  const originalHostOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  for (const acknowledgment of [
+    { data: null, error: null },
+    { data: "not-a-generation", error: null },
+    { data: "9223372036854775808", error: null },
+    { data: null, error: { code: "08006", message: "isolated_generation_failure" } },
+    { data: null, error: { code: "25006", message: "isolated_readonly_origin" } },
+  ]) {
+    h.reset(); h.state.generationAck = acknowledgment;
+    await assert.rejects(() => h.revalidation.revalidatePageBlocksPath(2), /Public cache (invalidation generation was not acknowledged|reads require the direct primary Supabase origin)/u);
+    assert.deepEqual(h.state.generationCalls, ["advance_public_cache_generation"]);
+    assert.deepEqual(h.state.reads, [], "Unacknowledged fence must not start later page-path reads.");
+    assert.deepEqual(h.state.cache, [], "Unacknowledged fence must not publish downstream cache/path effects.");
+  }
+  h.reset(); await h.revalidation.revalidatePageBlocksPath(2);
+  assert.deepEqual(h.state.generationCalls, ["advance_public_cache_generation"]);
+  assert.ok(h.state.cache.some(call => call.kind === "update"), "Acknowledged real owner still reaches immediate tag invalidation.");
+  assert.equal(process.env.NEXT_PUBLIC_SUPABASE_URL, originalHostOrigin, "Evaluated owner must not alter the host environment.");
+
   const moduleKinds = [...Object.keys(h.registry.BLOCK_MODULE_REGISTRY), "media-hub", "media-sidebar"];
   for (const moduleKind of moduleKinds) {
     // Compare the prior composed operations with the batch through the actual

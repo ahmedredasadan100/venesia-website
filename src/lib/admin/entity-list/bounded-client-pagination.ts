@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { AdminEntityFilterDef, AdminEntityFilterValues } from "./types";
@@ -64,7 +64,6 @@ export function useAdminBoundedClientPagination<Row>({
   pageSizeOptions = ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS,
   defaultPageSize = ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
 }: AdminBoundedClientPaginationOptions<Row>) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamName = queryContract.search?.paramKey ?? "q";
   const searchMinLength = queryContract.search?.minLength ?? 0;
@@ -128,10 +127,15 @@ export function useAdminBoundedClientPagination<Row>({
       });
       if (current.toString() === next.toString()) return;
       const href = currentLocationHref(next);
-      if (behavior === "replace") router.replace(href, { scroll: false });
-      else router.push(href, { scroll: false });
+      // Commit accepted client-query intent before another enabled control runs.
+      // Null lets Next synchronize useSearchParams and retain its history tree.
+      window.history[behavior === "replace" ? "replaceState" : "pushState"](
+        null,
+        "",
+        href,
+      );
     },
-    [defaultPageSize, limitParamName, pageParamName, router],
+    [defaultPageSize, limitParamName, pageParamName],
   );
 
   const commit = useCallback(
@@ -145,18 +149,25 @@ export function useAdminBoundedClientPagination<Row>({
       if (current.toString() === next.toString()) return;
 
       const href = currentLocationHref(next);
-      if (behavior === "replace") router.replace(href, { scroll: false });
-      else router.push(href, { scroll: false });
+      // Commit accepted client-query intent before another enabled control runs.
+      // Null lets Next synchronize useSearchParams and retain its history tree.
+      window.history[behavior === "replace" ? "replaceState" : "pushState"](
+        null,
+        "",
+        href,
+      );
     },
-    [defaultPageSize, limitParamName, pageParamName, router],
+    [defaultPageSize, limitParamName, pageParamName],
   );
 
   const previousDatasetKey = useRef(resolvedDatasetKey);
   useEffect(() => {
+    const current = new URLSearchParams(window.location.search);
+    // A newer accepted URL must not be overwritten by an older render effect.
+    if (current.toString() !== searchParams.toString()) return;
+
     const datasetChanged = previousDatasetKey.current !== resolvedDatasetKey;
     previousDatasetKey.current = resolvedDatasetKey;
-
-    const current = new URLSearchParams(window.location.search);
     const next = writeAdminBoundedClientPaginationParams(
       current,
       {
@@ -167,7 +178,7 @@ export function useAdminBoundedClientPagination<Row>({
     );
     if (current.toString() === next.toString()) return;
 
-    router.replace(currentLocationHref(next), { scroll: false });
+    window.history.replaceState(null, "", currentLocationHref(next));
   }, [
     resolvedDatasetKey,
     defaultPageSize,
@@ -175,12 +186,21 @@ export function useAdminBoundedClientPagination<Row>({
     pageParamName,
     pagination.page,
     pagination.pageSize,
-    router,
+    searchParams,
   ]);
 
+  const currentPageSize = useCallback(
+    () =>
+      normalizePageSize(
+        new URLSearchParams(window.location.search).get(limitParamName),
+        pageSizeOptions,
+        defaultPageSize,
+      ),
+    [defaultPageSize, limitParamName, pageSizeOptions],
+  );
   const setPage = useCallback(
-    (page: number) => commit(page, pagination.pageSize, "push"),
-    [commit, pagination.pageSize],
+    (page: number) => commit(page, currentPageSize(), "push"),
+    [commit, currentPageSize],
   );
   const setPageSize = useCallback(
     (pageSize: number) =>
@@ -192,8 +212,8 @@ export function useAdminBoundedClientPagination<Row>({
     [commit, defaultPageSize, pageSizeOptions],
   );
   const resetPage = useCallback(
-    () => commit(1, pagination.pageSize, "replace"),
-    [commit, pagination.pageSize],
+    () => commit(1, currentPageSize(), "replace"),
+    [commit, currentPageSize],
   );
 
   return {

@@ -1,11 +1,12 @@
 "use server";
 
+import { revalidateCommittedPageBlockResult } from "./helpers";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getPageModuleTemplateOptionsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
 import { PAGE_MODULE_KINDS, type PageModuleKind } from "../../../../../lib/page-blocks/types";
 import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import { getHeroAssignmentConflicts } from "../../../../../lib/page-blocks/module-assignments-query";
 import type { PageBlockType } from "../../../../../lib/page-blocks/types";
@@ -62,8 +63,7 @@ async function saveAssignment(options: {
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر حفظ ربط الموديول.");
   }
-  await revalidatePageBlocksPath(options.pageId);
-  return success();
+  return revalidateCommittedPageBlockResult(options.pageId, success());
 }
 
 export async function assignPageBlock(
@@ -149,6 +149,5 @@ export async function assignHeroModule(
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر حفظ ربط الهيرو.");
   }
-  await revalidatePageBlocksPath(pageId);
-  return success();
+  return revalidateCommittedPageBlockResult(pageId, success());
 }

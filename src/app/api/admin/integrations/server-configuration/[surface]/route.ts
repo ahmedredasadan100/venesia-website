@@ -40,7 +40,10 @@ function sameOriginMutation(request: Request) {
   if (fetchSite && fetchSite !== "same-origin") return false;
   if (!origin) return process.env.NODE_ENV !== "production";
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    // NextRequest.url normalizes loopback names; browser origins remain distinct.
+    // Read the original Web Request URL without trusting Host/forwarded headers.
+    const requestUrl: unknown = Object.getOwnPropertyDescriptor(Request.prototype, "url")?.get?.call(request);
+    return typeof requestUrl === "string" && new URL(origin).origin === new URL(requestUrl).origin;
   } catch {
     return false;
   }

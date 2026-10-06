@@ -29,14 +29,13 @@ function Fixture({kind,onCommitted}){useLayoutEffect(onCommitted,[kind,onCommitt
  return <Media settings={settings} readiness={readiness}/>;
 }
 let generation=0;
-window.footerSlots=footer.slots;
 window.mount=kind=>new Promise(resolve=>root.render(<AdminFeedbackProvider key={++generation}><Fixture kind={kind} onCommitted={resolve}/></AdminFeedbackProvider>));
 `;
 await writeFile(path.join(out, "entry.tsx"), entry);
 await writeFile(path.join(out, "navigation.ts"), `export {unstable_rethrow} from 'next/dist/client/components/unstable-rethrow.browser';const router={push(){},replace(){},refresh(){window.refreshes++}};export const useRouter=()=>router;export const usePathname=()=>'/proof';export const useSearchParams=()=>new URLSearchParams();`);
 await writeFile(path.join(out, "link.tsx"), `import React from 'react';export default function Link({href,children,prefetch,...props}){return <a href={href} {...props}>{children}</a>}`);
 await writeFile(path.join(out, "image.tsx"), `import React from 'react';export default function Image({fill,priority,unoptimized,quality,loader,...props}){return <img {...props}/>}`);
-await writeFile(path.join(out, "actions.ts"), `const run=(...args)=>window.action(...args);export const saveFooterBuilderAction=run,restoreDefaultFooterAction=run,updateMaintenanceModeAction=run,updateMediaSettingsAction=run;`);
+await writeFile(path.join(out, "actions.ts"), `const run=(...args)=>window.action(...args);export const saveFooterBuilderAction=run,updateMaintenanceModeAction=run,updateMediaSettingsAction=run;`);
 await writeFile(path.join(out, "link-actions.ts"), `export const browseAdminLinksAjax=async()=>[];export const browseMenusPickerAjax=async()=>[];export const browseMenuItemsPickerAjax=async()=>[];export const browseTopicCategoriesPickerAjax=async()=>[];export const resolveAdminLinkAjax=async()=>[];`);
 await require("next/dist/build/swc").loadBindings();
 const webpack = require("next/dist/compiled/webpack/webpack").webpack;
@@ -71,7 +70,10 @@ await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true });
 const results = [];
+const only=process.argv.find(arg=>arg.startsWith("--only="))?.slice(7);
+assert.ok(only===undefined||only==="footer-save-warning", "Only the bounded Footer Save selection is supported.");
 async function check(name, width, run) {
+  if(only&&name!==only)return;
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   const blocked = [], errors = [], consoleErrors = [];
   await context.route("**/*", route => {
@@ -97,7 +99,7 @@ const waitForCall = (page, count) => page.waitForFunction(count => window.calls 
 const settle = (page, result) => page.evaluate(result => window.finish(result), result);
 try {
   for (const width of [1280, 390]) {
-    await check("footer-save-restore-warning", width, async page => {
+    await check("footer-save-warning", width, async page => {
       await mount(page, "footer");
       await page.getByRole("tab", { name: "السوشيال والقانوني", exact: true }).click();
       const copyright = page.getByLabel("Copyright", { exact: true });
@@ -111,11 +113,8 @@ try {
       assert.equal(await page.getByText("يظل الحذف الآمن متوقفًا", { exact: false }).count(), 0);
       assert.equal(await page.evaluate(() => window.calls), 1);
       assert.equal(await page.evaluate(() => window.refreshes), 1);
-      await page.getByRole("button", { name: "استعادة الافتراضي", exact: true }).click();
-      await page.getByRole("button", { name: "تأكيد الاستعادة", exact: true }).click(); await waitForCall(page, 2);
-      await page.evaluate(message => window.finish({ ok: true, status: "warning", code: "committed_cache_revalidation_pending", message, slots: window.footerSlots }), "Restored once; cache update pending.");
-      await page.getByText("Restored once; cache update pending.", { exact: true }).waitFor();
-      assert.equal(await page.getByRole("dialog").count(), 0); assert.equal(await page.evaluate(() => window.calls), 2);
+      assert.equal(await page.getByRole("button", { name: "استعادة الافتراضي", exact: true }).count(), 0);
+      assert.equal(await page.getByRole("dialog").count(), 0);
     });
     await check("maintenance-warning-retains-new-state", width, async page => {
       await mount(page, "maintenance");
@@ -141,6 +140,6 @@ try {
   }
 } finally {
   await browser.close(); await new Promise(resolve => server.close(resolve));
-  await writeFile(path.join(out, "results.json"), JSON.stringify({ results, compiledFiles,
+  await writeFile(path.join(out, only ? "results-"+only+".json" : "results.json"), JSON.stringify({ results, compiledFiles,
     boundary: "Actual mounted Footer/Maintenance/Media consumers with shared Form, Feedback, Confirmation owners. Deferred action and router transports isolated. Action persistence/failure contract covered separately. No authenticated Admin, database, full composed page, production or styling closure claim." }, null, 2));
 }

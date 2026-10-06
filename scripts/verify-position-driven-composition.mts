@@ -649,7 +649,7 @@ const projectsHubPublicLoader = projectsHubCompositionLoader.slice(
 for (const reason of ["page_query_failed", "assignments_query_failed"] as const) {
   assert.ok(
     projectsHubCachedQuery.includes(`failProjectsHubCompositionRead(\n      "${reason}"`),
-    `Projects Hub ${reason} must reject inside unstable_cache`,
+    `Projects Hub ${reason} must reject inside the generation-fenced cache`,
   );
   assert.doesNotMatch(
     projectsHubCachedQuery,
@@ -658,7 +658,7 @@ for (const reason of ["page_query_failed", "assignments_query_failed"] as const)
   );
 }
 assert.ok(
-  projectsHubPublicLoader.includes("unstable_cache(queryProjectsHubComposition") &&
+  projectsHubPublicLoader.includes("cachePublicRead(queryProjectsHubComposition") &&
     projectsHubPublicLoader.includes("revalidate: 300") &&
     projectsHubPublicLoader.includes("error instanceof ProjectsHubCompositionReadError") &&
     projectsHubPublicLoader.includes(

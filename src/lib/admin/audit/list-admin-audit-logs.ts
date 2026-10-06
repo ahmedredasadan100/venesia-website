@@ -72,7 +72,7 @@ async function loadAdminAuditLogPage(
     .order("id", { ascending: filters.sortDirection === "asc" })
     .range(from, to);
 
-  if (error) throw new Error(error.message);
+  if (error) throw Object.assign(new Error(error.message), { code: error.code });
 
   return {
     rows: (data ?? []).map(mapAuditRow),

@@ -8,6 +8,11 @@ export function escapeAdminListSearchTerm(term: string): string {
     .replace(/[%_*]/g, "\\$&");
 }
 
+function quotePostgrestSearchPattern(pattern: string): string {
+  // The quoted OR operand is decoded before PostgreSQL interprets the pattern.
+  return '"' + pattern.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+}
+
 export function buildAdminListSearchOrFilter(fields: readonly string[], term: string): string {
   const escaped = escapeAdminListSearchTerm(term);
   if (!escaped) return "";
@@ -16,6 +21,13 @@ export function buildAdminListSearchOrFilter(fields: readonly string[], term: st
       throw new TypeError(`Invalid Admin list search field: ${field}`);
     }
   });
-  const pattern = `"%${escaped}%"`;
-  return fields.map((field) => `${field}.ilike.${pattern}`).join(",");
+  // PostgREST aliases every asterisk to % for ILIKE, even escaped asterisks.
+  // A fully escaped regex preserves literal substring search for those terms.
+  const containsAsterisk = term.includes("*");
+  const operator = containsAsterisk ? "imatch" : "ilike";
+  const pattern = containsAsterisk
+    ? term.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    : `%${escaped}%`;
+  const quoted = quotePostgrestSearchPattern(pattern);
+  return fields.map((field) => `${field}.${operator}.${quoted}`).join(",");
 }

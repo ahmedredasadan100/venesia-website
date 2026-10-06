@@ -8,7 +8,6 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const footerTypes = read("src/lib/footer/types.ts");
 const footerLoader = read("src/lib/footer/load-footer-settings.ts");
 const footerSave = read("src/app/admin/pages-blocks/footer/footer-actions/save.ts");
-const footerRestore = read("src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts");
 const footerHelpers = read("src/app/admin/pages-blocks/footer/footer-actions/helpers.ts");
 const siteLayout = read("src/app/(site)/layout.tsx");
 const homeContent = read("src/components/home/HomeMainSlotContent.tsx");
@@ -30,10 +29,10 @@ const diagnostics = read("src/lib/seo/run-global-seo-health.ts");
 const migration = read("sql/migrations/20260805090000_footer_public_composition_truth_closure.sql");
 
 assert.ok(!footerTypes.includes('"footer.brand"'), "footer.brand must not remain in the runtime contract");
-assert.ok(!footerSave.includes("footer.brand") && !footerRestore.includes("footer.brand"), "Footer writers must not dual-write footer.brand");
+assert.ok(!footerSave.includes("footer.brand"), "Footer writers must not dual-write footer.brand");
 assert.ok(footerLoader.includes('sourceStatus: "database"') && footerLoader.includes("cloneEmptyFooterSettings"), "Footer loader must expose database/outage truth");
 assert.ok(!footerLoader.includes("buildSlotsFromLegacy") && !siteLayout.includes("DEFAULT_FOOTER_SETTINGS"), "Public Footer must not use a hidden legacy/default composition fallback");
-assert.ok(footerHelpers.includes('rpc("save_footer_settings"') && footerSave.includes("saveFooterSettingsWithAudit") && footerRestore.includes("saveFooterSettingsWithAudit"), "Footer persistence and Audit must share the atomic owner");
+assert.ok(footerHelpers.includes('rpc("save_footer_settings"') && footerSave.includes("saveFooterSettingsWithAudit"), "Footer persistence and Audit must share the atomic owner");
 
 assert.ok(homeContent.includes("PageSlotContent") && !homeContent.includes("HomeStorySection") && !homeContent.includes("HomeContactSection"), "Home must use the shared CMS-only renderer without hardcoded section fallbacks");
 for (const source of homeSections) {

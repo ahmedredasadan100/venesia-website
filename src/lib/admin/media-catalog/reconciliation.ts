@@ -181,8 +181,6 @@ export async function reconcileMediaCatalog(options: {
         bucket: item.bucket,
         object_key: objectKey,
         public_url: item.path,
-        original_filename: item.filename,
-        display_name: item.filename,
         media_kind: item.kind,
         mime_type: item.contentType,
         extension: item.extension,
@@ -211,6 +209,8 @@ export async function reconcileMediaCatalog(options: {
             .from("media_assets")
             .insert({
               ...nextAsset,
+              original_filename: item.filename,
+              display_name: item.filename,
               status: "active",
               created_at: item.uploadedAt ?? new Date().toISOString(),
             })

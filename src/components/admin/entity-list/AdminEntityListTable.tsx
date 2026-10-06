@@ -138,12 +138,16 @@ export default function AdminEntityListTable<
     null,
   );
 
+  const [primaryColumnsPinned, setPrimaryColumnsPinned] = useState(false);
+
   useLayoutEffect(() => {
     const scrollport = tableRef.current?.parentElement;
     if (!scrollport) return;
 
+    const primaryStickyMedia = window.matchMedia("(min-width: 641px)");
     const updateAvailableWidth = () => {
       const nextWidth = scrollport.clientWidth;
+      setPrimaryColumnsPinned(primaryStickyMedia.matches);
       setAvailableTableWidth((currentWidth) =>
         currentWidth === nextWidth ? currentWidth : nextWidth,
       );
@@ -152,7 +156,11 @@ export default function AdminEntityListTable<
     updateAvailableWidth();
     const observer = new ResizeObserver(updateAvailableWidth);
     observer.observe(scrollport);
-    return () => observer.disconnect();
+    primaryStickyMedia.addEventListener("change", updateAvailableWidth);
+    return () => {
+      observer.disconnect();
+      primaryStickyMedia.removeEventListener("change", updateAvailableWidth);
+    };
   }, []);
 
   function getColumnMinimumWidth(
@@ -289,6 +297,35 @@ export default function AdminEntityListTable<
     stickyEndOffsets.set(column.key, nextStickyEndOffset);
     nextStickyEndOffset += allocatedColumnWidths.get(column.key) ?? 0;
   }
+
+  const stickyStartWidth = primaryColumnsPinned
+    ? columns.reduce(
+        (total, column) =>
+          total +
+          (column.sticky === "start"
+            ? (allocatedColumnWidths.get(column.key) ?? 0)
+            : 0),
+        0,
+      )
+    : 0;
+  const scrollableTrackWidth = columns.reduce(
+    (largestWidth, column) =>
+      column.sticky === "end" ||
+      column.sticky === "end-adjacent" ||
+      (column.sticky === "start" && primaryColumnsPinned)
+        ? largestWidth
+        : Math.max(largestWidth, allocatedColumnWidths.get(column.key) ?? 0),
+    ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH,
+  );
+  // Preserve a real content track between pinned controls. Adjacent controls
+  // scroll normally when they would consume that track; Actions stay pinned.
+  const pinAdjacentColumns =
+    availableTableWidth !== null &&
+    nextStickyEndOffset +
+      selectionWidth +
+      stickyStartWidth +
+      scrollableTrackWidth <=
+      availableTableWidth;
 
   function getColumnTrackStyle(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
@@ -454,11 +491,15 @@ export default function AdminEntityListTable<
                     <th
                       scope="col"
                       aria-sort={ariaSort}
-                      data-admin-grid-sticky="inline-end-adjacent"
+                      data-admin-grid-sticky={
+                        pinAdjacentColumns ? "inline-end-adjacent" : undefined
+                      }
                       data-admin-column-key={column.key}
                       style={{
                         ...getColumnTrackStyle(column),
                         insetInlineEnd: stickyEndOffsets.get(column.key) ?? 0,
+                        position: pinAdjacentColumns ? "sticky" : "static",
+                        zIndex: pinAdjacentColumns ? undefined : "auto",
                       }}
                       className="sticky z-30 whitespace-nowrap bg-[#10151C] text-center"
                     >
@@ -567,12 +608,16 @@ export default function AdminEntityListTable<
                       <Fragment key={column.key}>
                         {fillSpacer}
                         <td
-                          data-admin-grid-sticky="inline-end-adjacent"
+                          data-admin-grid-sticky={
+                            pinAdjacentColumns ? "inline-end-adjacent" : undefined
+                          }
                           data-admin-column-key={column.key}
                           style={{
                             ...getColumnTrackStyle(column),
                             insetInlineEnd:
                               stickyEndOffsets.get(column.key) ?? 0,
+                            position: pinAdjacentColumns ? "sticky" : "static",
+                            zIndex: pinAdjacentColumns ? undefined : "auto",
                           }}
                           className="sticky z-20 min-w-0 overflow-hidden border-b border-white/8 bg-[#080B10] text-center text-sm text-white/68 transition group-last:border-b-0 group-hover:bg-[#0D1117]"
                         >

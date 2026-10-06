@@ -1,0 +1,872 @@
+import {readFileSync} from "node:fs";
+import {createHash,randomUUID} from "node:crypto";
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
+import assert from "node:assert/strict";
+import {createCoreContentDraftReadCounter,assertCoreContentDraftReadReceipt} from "./admin-core-form-draft-restoration.mjs";
+import { createJiti } from "jiti";
+import { expect } from "playwright/test";
+
+/** A cursor paragraph is not authored content; the entire stored projection must still match. */
+export function assertCorePlainParagraphSnapshot(snapshot, expected, toMarkdown) {
+  assert.equal(typeof expected, "string"); assert.ok(expected.trim().length > 0);
+  assert.ok(Array.isArray(snapshot.paragraphs) && snapshot.paragraphs.every(value => typeof value === "string"));
+  assert.deepEqual(snapshot.paragraphs.filter(value => value.trim().length > 0), [expected], "Exactly one authored paragraph is required; extra nonempty paragraphs cannot be ignored.");
+  assert.equal(snapshot.headings, 0, "The paragraph toolbar must remove the seeded heading.");
+  assert.equal(toMarkdown(snapshot.html), expected, "The entire editor HTML must project to the exact canonical Markdown body.");
+  assert.equal(snapshot.markdown, expected, "The submitted Markdown must equal the whole-editor projection.");
+}
+
+const familyIds = ["topic-category-create-edit", "topic-series-create-edit", "topic-article-create-edit", "topic-media-create-edit", "projects-create-edit", "project-locations-create-edit"];
+const lifecycle = ["save_reload", "failure_preserves_input", "retry"];
+const locationSurface = { governorate: "governorate", city: "city", main_area: "district", sub_area: "sub-district" };
+
+/** Fixed affected-journey selectors; omission preserves each existing full cohort. */
+export function validateCoreJourneySelection({ scope, cohort, selection }) {
+  if (selection === undefined || selection === null) return null;
+  assert.equal(scope, "core-closure");
+  if (selection === "domain-form-controls-followup" || selection === "domain-form-controls-remaining-followup" || selection === "domain-form-controls-final-two-followup" || selection === "domain-form-controls-user-followup") { assert.equal(cohort, "domain-forms"); return selection; }
+  if (selection === "template-create-controls-followup") { assert.equal(cohort, "recovery-templates"); return selection; }
+  if (selection === "presentation-content-controls-followup") { assert.equal(cohort, "presentation-controls"); return selection; }
+  if (selection === "page-composition-closure-followup" || selection === "page-composition-controls-followup") { assert.equal(cohort, "page-composition"); return selection; }
+  if (selection === "navigation-closure-followup" || selection === "navigation-controls-followup") { assert.equal(cohort, "navigation-settings"); return selection; }
+  if (selection === "query-pending-followup") { assert.equal(cohort, "query-presentation"); return selection; }
+  if (selection === "atomic-confirmation-followup") { assert.equal(cohort, "domain-bulk"); return selection; }
+  if (selection === "specialized-closure-followup" || selection === "specialized-controls-followup") { assert.equal(cohort, "specialized-settings"); return selection; }
+  if (selection === "sitemap-closure-followup") { assert.equal(cohort, "domain-commands"); return selection; }
+  if (selection === "domain-command-tail" || selection === "tracking-permissions" || selection === "readonly-query-proof") assert.equal(cohort, "domain-commands");
+  else if (selection === "page-composition-followup" || selection === "page-composition-content-seo-followup" || selection === "page-composition-seo-followup") assert.equal(cohort, "page-composition");
+  else if (["template-controls-followup","template-link-controls-followup","template-dual-link-controls-followup"].includes(selection)) assert.equal(cohort, "template-controls");
+  else if (["topic-controls-followup", "topic-video-followup"].includes(selection)) assert.equal(cohort, "topic-controls");
+  else if ((selection === "presentation-hero-scroll-followup" || selection === "presentation-hero-followup")) assert.equal(cohort, "presentation-controls");
+  else if (selection === "media-library-held-followup" || selection === "media-library-final-three-followup") assert.equal(cohort, "media-library");
+  else if ((selection === "media-recovery-followup" || selection === "media-recovery-missing-followup")) assert.equal(cohort, "media-recovery");
+  else if (selection === "project-editors-followup") assert.equal(cohort, "project-controls");
+  else if (["navigation-settings-followup","navigation-settings-existing-followup","navigation-settings-menu-footer-followup","navigation-settings-graph-footer-followup","navigation-settings-footer-followup"].includes(selection)) assert.equal(cohort, "navigation-settings");
+  else if (selection === "template-hero-bulk-followup") assert.equal(cohort, "template-bulk");
+  else if (selection === "specialized-settings-followup") assert.equal(cohort, "specialized-settings");
+  else if (selection === "readonly-hubs-followup") assert.equal(cohort, "readonly-hubs");
+  else if (selection === "template-cards-presentation") assert.equal(cohort, "template-libraries");
+  else if (selection === "query-layout-followup") assert.equal(cohort, "query-presentation");
+  else if (selection === "template-form-creates" || selection === "template-form-creates-followup") assert.equal(cohort, "recovery-templates");
+  else { assert.equal(cohort, "domain-forms"); assert.ok(["text-topic-forms", "domain-forms-final-six-followup", "domain-forms-update-followup"].includes(selection), "Unknown affected journey selection."); }
+  return selection;
+}
+function isTextTopic(recipe) { return !["video", "gallery"].includes(recipe.kind); }
+function buildCoreTopicFormRecipes(manifest, coverage) {
+  const forms = Object.fromEntries(["topic-article-create-edit", "topic-media-create-edit"].map(id => {
+    const matches = manifest.filter(row => row.id === id); assert.equal(matches.length, 1); return [id, matches[0]];
+  }));
+  const media = forms["topic-media-create-edit"].surfaces.filter(surface => surface.endsWith(":create")).map(surface => surface.split(":")[0]);
+  assert.deepEqual([...media].sort(), ["gallery", "news", "press", "site_update", "video"]);
+  return ["article", ...media].map(kind => {
+    const id = kind === "article" ? "topic-article-create-edit" : "topic-media-create-edit";
+    const surfaces = kind === "article" ? ["create", "edit"] : [`${kind}:create`, `${kind}:edit`];
+    return { kind, id, surfaces, coverage: coverage(id, surfaces) };
+  });
+ }
+export function coreSelectedTopicRecipes(selection, manifest) {
+  if (selection === null) return [];
+  validateCoreJourneySelection({ scope: "core-closure", cohort: "domain-forms", selection });
+  assert.equal(selection, "text-topic-forms");
+  return buildCoreTopicFormRecipes(manifest, () => []).filter(isTextTopic);
+}
+export function selectCoreDomainFormPlan(plan, selection) {
+  if (selection === null || selection === undefined) return plan;
+  validateCoreJourneySelection({ scope: "core-closure", cohort: "domain-forms", selection });
+  assert.equal(selection, "text-topic-forms");
+  return { ...plan, taxonomy: [], topics: plan.topics.filter(isTextTopic), projectEdits: [], locations: [], pending: [] };
+}
+export function coreTopicJourneyId(recipe) { return "core-" + recipe.kind + "-content-form-create-edit"; }
+/** Reject invented execution and full-cohort promotion before native database access.
+ * @param {object} browser
+ * @param {ReadonlyArray<object>} manifest
+ * @param {ReadonlyArray<object>|null} canonicalRequiredCases
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,key:string}>}|null} draftRestoration
+ */
+export function assertCoreJourneySelectionReceipt(browser, manifest, canonicalRequiredCases, draftRestoration = null) {
+  const selection = validateCoreJourneySelection({ scope: browser.scope, cohort: browser.cohort, selection: browser.journeySelection });
+  if (selection === null) return null;
+  const identities = rows => {
+    assert.ok(Array.isArray(rows) && rows.length > 0);
+    assert.ok(rows.every(row => typeof row.key === "string" && row.key.length > 0));
+    assert.equal(new Set(rows.map(row => row.key)).size, rows.length, "Canonical case identities must be unique.");
+    return rows.map(row => { const identity = { ...row }; delete identity.status; delete identity.evidence; return identity; }).sort((a, b) => a.key.localeCompare(b.key));
+  };
+  assert.deepEqual(identities(browser.requiredCases), identities(canonicalRequiredCases), "Selected verification must retain the entire current canonical required-case universe.");
+  const recipes = coreSelectedTopicRecipes(selection, manifest), ids = recipes.map(coreTopicJourneyId);
+  assert.equal(browser.driverCompleted, true); assert.equal(browser.status, "pass"); assert.deepEqual(browser.errors, []);
+  assert.equal(browser.globalClosed, false); assert.equal(browser.wholeCohortExecuted, false);
+  assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
+  assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...ids]);
+  assert.ok(browser.evidence.every(row => row.status === "pass"));
+  const expectedKeys = [];
+  for (const [index, recipe] of recipes.entries()) {
+    const row = browser.evidence[index + 1]; assert.equal(row.kind, recipe.kind); assert.equal(row.consumer, recipe.id);
+    assert.deepEqual(row.surfaces, recipe.surfaces); assert.equal(row.bodyBoundary, "authored_markdown_roundtrip");
+    assert.ok(Number.isSafeInteger(row.entityId) && row.entityId > 0);
+    const keys = recipe.surfaces.flatMap(surface => lifecycle.map(scenario => {
+      const cells = browser.requiredCases.filter(cell => cell.boundary === "form" && cell.consumer === recipe.id && cell.surface === surface && cell.scenario === scenario);
+      assert.equal(cells.length, 1); assert.equal(cells[0].status, "behavior_verified"); assert.equal(cells[0].evidence, ids[index]); return cells[0].key;
+    }));
+    assert.deepEqual(row.coverage, keys); expectedKeys.push(...keys);
+    const writes = browser.databaseReadback.filter(write => write.id === row.entityId); assert.equal(writes.length, 2);
+    assert.ok(writes.every(write => write.table === "topics" && write.auditEntityType === "topic"));
+    assert.deepEqual(writes.map(write => write.auditActions), [["topic.create"], ["topic.update"]]);
+    assert.equal(writes[1].expected.content_type, recipe.kind); assert.equal(typeof writes[1].expected.content, "string"); assert.ok(writes[1].expected.content.length > 0);
+  }
+  assert.equal(new Set(browser.evidence.slice(1).map(row => row.entityId)).size, recipes.length);
+  assert.equal(browser.databaseReadback.length, recipes.length * 2);
+  const allowed = new Set(expectedKeys);
+  for (const cell of browser.requiredCases) if (!allowed.has(cell.key)) { assert.equal(cell.status, "open"); assert.equal(cell.evidence, null); }
+  if (draftRestoration !== null) {
+    assert.equal(draftRestoration.globalClosed, false); assert.deepEqual(draftRestoration.automaticCoverage, []);
+    const expectedDrafts=recipes.flatMap(recipe=>recipe.surfaces.map(surface=>({journeyId:coreTopicJourneyId(recipe),key:browser.requiredCases.find(row=>row.boundary==='form'&&row.consumer===recipe.id&&row.surface===surface&&row.scenario==='rollback')?.key})));
+    assert.deepEqual(draftRestoration.qualified.map(row=>({journeyId:row.journeyId,key:row.key})),expectedDrafts);
+  }
+  return { selection, selectedJourneyIds: ids, executedJourneyIds: [...browser.executedJourneyIds], wholeCohortExecuted: false, globalClosed: false };
+}
+
+/** Fixed remaining six, derived from the existing Project and Tracking plans. */
+export async function buildCoreDomainFinalSixPlan(input) {
+  const { buildCoreProjectCreatePlan } = await import("./admin-core-project-create-journeys.mjs");
+  const { buildCoreOperationalFormPlan, selectCoreOperationalFormPlan } = await import("./admin-core-operational-form-journeys.mjs");
+  const projects=buildCoreProjectCreatePlan(input), operational=selectCoreOperationalFormPlan(buildCoreOperationalFormPlan(input),"domain-forms-final-six-followup");
+  const recipes=[...projects.map(row=>({...row,surfaces:[row.surface],journeyId:"core-project-"+row.kind+"-full-create"})),...operational.recipes.map(row=>({...row,journeyId:"core-operational-"+row.kind+"-form-roundtrip"}))];
+  assert.equal(projects.length,2);assert.equal(operational.recipes.length,4);assert.equal(new Set(recipes.map(row=>row.journeyId)).size,6);
+  return {recipes,journeyIds:recipes.map(row=>row.journeyId)};
+}
+/** The sole unqualified Update recipe, derived from the existing operational plan. */
+export async function buildCoreDomainFinalUpdatePlan(input) {
+  const {buildCoreOperationalFormPlan,selectCoreOperationalFormPlan}=await import("./admin-core-operational-form-journeys.mjs");
+  const selected=selectCoreOperationalFormPlan(buildCoreOperationalFormPlan(input),"domain-forms-update-followup");
+  const recipes=selected.recipes.map(row=>({...row,journeyId:"core-operational-"+row.kind+"-form-roundtrip"}));
+  assert.equal(recipes.length,1);assert.equal(recipes[0].kind,"update");
+  return {recipes,journeyIds:recipes.map(row=>row.journeyId)};
+}
+/** Selected execution only; existing native, draft, Tracking and write joins still qualify behavior.
+ * @param {object} browser
+ * @param {object} plan
+ * @param {ReadonlyArray<object>} canonicalRequiredCases
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,key:string}>}|null} draftRestoration
+ */
+export function assertCoreDomainFinalSixReceipt(browser, plan, canonicalRequiredCases, draftRestoration = null) {
+  return assertCoreDomainResidualReceipt(browser,plan,canonicalRequiredCases,draftRestoration,"domain-forms-final-six-followup",6,9);
+}
+/** @param {object} browser @param {object} plan @param {ReadonlyArray<object>} canonicalRequiredCases @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,key:string}>}|null} draftRestoration */
+export function assertCoreDomainFinalUpdateReceipt(browser,plan,canonicalRequiredCases,draftRestoration=null) {
+  assert.deepEqual(plan.recipes.map(row=>({consumer:row.consumer,kind:row.kind,surfaces:row.surfaces,journeyId:row.journeyId})),[{consumer:"project-tracking-create-edit",kind:"update",surfaces:["update-create","update-edit"],journeyId:"core-operational-update-form-roundtrip"}]);
+  assert.deepEqual(plan.journeyIds,plan.recipes.map(row=>row.journeyId));
+  return assertCoreDomainResidualReceipt(browser,plan,canonicalRequiredCases,draftRestoration,"domain-forms-update-followup",1,2);
+}
+/** @param {object} browser @param {object} plan @param {ReadonlyArray<object>} canonicalRequiredCases @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,key:string}>}|null} draftRestoration @param {string} selection @param {number} recipeCount @param {number} writeCount */
+function assertCoreDomainResidualReceipt(browser,plan,canonicalRequiredCases,draftRestoration,selection,recipeCount,writeCount) {
+  assert.equal(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}),selection);
+  assert.equal(browser.inventoryOnly,false);assert.equal(browser.driverCompleted,true);assert.equal(browser.status,"pass");assert.deepEqual(browser.errors,[]);assert.equal(browser.globalClosed,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(plan.recipes.length,recipeCount);
+  const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const result={...row};delete result.status;delete result.evidence;return result;}).sort((a,b)=>a.key.localeCompare(b.key));};
+  assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases));assert.deepEqual(browser.selectedJourneyIds,plan.journeyIds);assert.deepEqual(browser.executedJourneyIds,plan.journeyIds);
+  assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...plan.journeyIds]);assert.ok(browser.evidence.every(row=>row.status==="pass"));
+  const allowed=new Set(),expectedDrafts=[],writes=[];
+  for(const[index,recipe]of plan.recipes.entries()){
+    const row=browser.evidence[index+1];assert.equal(row.consumer,recipe.consumer);assert.deepEqual(row.coverage,recipe.coverage);
+    const project=recipe.consumer==="projects-create-edit",entityId=project?row.entityId:row.ids?.[0];assert.ok(Number.isSafeInteger(entityId)&&entityId>0);
+    if(project){assert.equal(row.kind,recipe.kind);assert.equal(row.surface,recipe.surface);assert.equal(row.sourceFixtureId,recipe.fixture.id);assert.equal(row.publication,"unpublished");}
+    else{assert.equal(recipe.consumer,"project-tracking-create-edit");assert.deepEqual(row.surfaces,recipe.surfaces);assert.equal(row.ids.length,1);}
+    assert.deepEqual(row.permissionEvidence.map(proof=>proof.surface),recipe.surfaces);
+    for(const proof of row.permissionEvidence){assert.equal(proof.status,"pass");assert.equal(proof.formConsumer,recipe.consumer);assert.equal(proof.originalUiSuccessVerified,true);assert.equal(proof.originalNativeSaveVerified,true);}
+    for(const key of recipe.coverage){const cells=browser.requiredCases.filter(cell=>cell.key===key);assert.equal(cells.length,1);assert.equal(cells[0].status,"behavior_verified");assert.equal(cells[0].evidence,recipe.journeyId);assert.equal(allowed.has(key),false);allowed.add(key);}
+    for(const surface of recipe.surfaces){const cells=browser.requiredCases.filter(cell=>cell.boundary==="form"&&cell.consumer===recipe.consumer&&cell.surface===surface&&cell.scenario==="rollback");assert.equal(cells.length,1);expectedDrafts.push({journeyId:recipe.journeyId,key:cells[0].key});}
+    const table=project?"projects":"project_tracking_"+({profile:"profiles",stage:"stages",item:"items",update:"updates"}[recipe.kind]),actual=browser.databaseReadback.filter(write=>write.table===table&&write.id===entityId);assert.equal(actual.length,recipe.surfaces.length);writes.push(...actual);
+    assert.deepEqual(actual.map(write=>write.auditActions),recipe.surfaces.map(surface=>[project?"project.create":"project_children."+(surface.endsWith("-create")?"create":"update")]));if(project)assert.equal(actual[0].expected.publication_status,"unpublished");
+  }
+  assert.equal(new Set(writes).size,writes.length);assert.equal(browser.databaseReadback.length,writes.length);assert.equal(writes.length,writeCount);
+  for(const cell of browser.requiredCases)if(!allowed.has(cell.key)){assert.equal(cell.status,"open");assert.equal(cell.evidence,null);}
+  if(draftRestoration!==null){assert.equal(draftRestoration.globalClosed,false);assert.deepEqual(draftRestoration.automaticCoverage,[]);assert.deepEqual(draftRestoration.qualified.map(row=>({journeyId:row.journeyId,key:row.key})),expectedDrafts);}
+  return {selection:browser.journeySelection,selectedJourneyIds:[...plan.journeyIds],executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+}
+
+export function buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig }) {
+  assert.ok(Array.isArray(manifest) && Array.isArray(requiredCases));
+  const forms = Object.fromEntries(familyIds.map(id => {
+    const matches = manifest.filter(entry => entry.id === id);
+    assert.equal(matches.length, 1, `Missing canonical Form family ${id}.`);
+    return [id, matches[0]];
+  }));
+  const coverage = (id, surfaces) => surfaces.flatMap(surface => {
+    assert.ok(forms[id].surfaces.includes(surface), `Undeclared Form surface ${id}/${surface}.`);
+    return lifecycle.map(scenario => {
+      const matches = requiredCases.filter(row => row.boundary === "form" && row.consumer === id && row.surface === surface && row.scenario === scenario);
+      assert.equal(matches.length, 1, `Missing or ambiguous generic Form case ${id}/${surface}/${scenario}.`);
+      return matches[0].key;
+    });
+  });
+  assert.ok(Number.isSafeInteger(fixtures?.category?.id) && fixtures.category.name);
+  const taxonomy = ["category", "series"].map(kind => {
+    const id = `topic-${kind}-create-edit`;
+    return { kind, id, surfaces: ["create", "edit"], coverage: coverage(id, ["create", "edit"]) };
+  });
+  const topics = buildCoreTopicFormRecipes(manifest, coverage);
+  const projectEdits = ["residential", "commercial"].map(kind => {
+    const fixture = kind === "residential" ? fixtures.project : fixtures.commercialProject;
+    assert.ok(Number.isSafeInteger(fixture?.id) && fixture.editorPath === `/admin/projects/${fixture.id}`);
+    return { kind, id: "projects-create-edit", fixture, surfaces: [`${kind}:edit`], coverage: coverage("projects-create-edit", [`${kind}:edit`]) };
+  });
+  const parentIds = fixtures.project.locationIds;
+  assert.ok(Array.isArray(parentIds) && parentIds.length === Object.keys(locationConfig).length && parentIds.every(id => Number.isSafeInteger(id) && id > 0));
+  assert.deepEqual(Object.keys(locationConfig).sort(), Object.keys(locationSurface).sort());
+  const locations = Object.entries(locationConfig).map(([level, config]) => {
+    const index = Object.keys(locationConfig).indexOf(level);
+    const id = "project-locations-create-edit", surface = locationSurface[level];
+    const surfaces = [`${surface}:create`, `${surface}:edit`];
+    return { level, id, config, parentId: config.parentLevel ? parentIds[index - 1] : null, surfaces, coverage: coverage(id, surfaces) };
+  });
+  return { taxonomy, topics, projectEdits, locations,
+    pending: forms["projects-create-edit"].surfaces.filter(surface => surface.endsWith(":create")).map(surface => ({ consumer: "projects-create-edit", surface, status: "unexecuted_actionable", reason: "Requires the current full Project create UI: media selection, hierarchy/maps, overview and delivery. Existing edits do not prove create." })) };
+}
+
+/** Canonical native settings projections and the one normalized Tracking instant; no generic empty-save allowance. */
+export function assertCoreFormPermissionNativeDescriptor(write, mapping) {
+  assert.ok(write?.expected && typeof write.expected === "object" && !Array.isArray(write.expected));
+  if (Object.keys(write.expected).length) return;
+  const canonical = {
+    "company-identity-settings": ["singleton-settings", "admin.company"],
+    "global-seo-settings": ["global-meta", "seo.global"],
+    "media-library-settings": ["media-policy-settings", "media.settings"],
+  }[mapping.formConsumer];
+  assert.ok(canonical && mapping.surface === canonical[0] && write.table === "site_settings" && write.id === canonical[1], "Empty scalar fields require the exact canonical settings consumer/key.");
+  assert.ok(Array.isArray(write.expectedJson) && write.expectedJson.length > 0 && write.expectedJson.length <= 32);
+  const paths = new Set();
+  for (const projection of write.expectedJson) {
+    assert.equal(projection.column, "value"); assert.ok(Array.isArray(projection.path) && projection.path.length > 0);
+    assert.ok(projection.path.every(key => typeof key === "string" && /^(?:[a-zA-Z_][a-zA-Z0-9_]*|0|[1-9][0-9]*)$/u.test(key) && !["__proto__", "constructor", "prototype"].includes(key)));
+    assert.ok(Object.hasOwn(projection, "value") && projection.value !== undefined);
+    const key = JSON.stringify(projection.path); assert.equal(paths.has(key), false); paths.add(key);
+  }
+}
+export function assertCoreFormPermissionNativeWrite(expected, actual, mapping) {
+  assertCoreFormPermissionNativeDescriptor(expected, mapping);
+  assert.equal(actual.deleted, false);
+  if (Object.keys(expected.expected).length === 0) assert.deepEqual(actual.actual, { key: expected.id }, "JSON-only settings must retain the canonical native key projection.");
+  else if (expected.table === "project_tracking_updates" && Object.hasOwn(expected.expected, "occurred_at")) {
+    assert.ok(actual.actual && Object.hasOwn(actual.actual, "occurred_at"));
+    assert.equal(typeof expected.expected.occurred_at, "string"); assert.equal(typeof actual.actual.occurred_at, "string");
+    const wanted = Date.parse(expected.expected.occurred_at), observed = Date.parse(actual.actual.occurred_at);
+    assert.ok(Number.isFinite(wanted) && Number.isFinite(observed)); assert.equal(observed, wanted, "Tracking authored instant changed.");
+    assert.deepEqual({ ...actual.actual, occurred_at: wanted }, { ...expected.expected, occurred_at: wanted });
+  } else assert.deepEqual(actual.actual, expected.expected, "Native save must prove every authored field.");
+  assert.deepEqual(actual.json, (expected.expectedJson ?? []).map(projection => ({ column: projection.column, path: projection.path, actual: projection.value })), "Native save must prove every authored JSON projection.");
+  assert.ok(Number.isSafeInteger(actual.expectedActorId) && actual.expectedActorId > 0, "Canonical native QA actor is required.");
+  assert.ok(Array.isArray(actual.audit) && actual.audit.length > 0 && actual.audit.every(row => Number(row.actor_admin_user_id) === actual.expectedActorId), "The original write requires its exact canonical QA actor audit.");
+  for (const action of expected.auditActions ?? []) assert.ok(actual.audit.some(row => row.action === action));
+}
+
+/** One accepted current Form intent; the optional replay never precedes native save proof. */
+export async function runCoreFormPermissionIntent({ permissionReplay, mapping, perform, permissionEvidence }) {
+  const startedAt = new Date().toISOString();
+  const capture = permissionReplay?.begin(mapping);
+  try {
+    const { value, nativeWrites } = await perform();
+    if (!capture) return value;
+    assert.equal(typeof permissionReplay.nativeSave, "function", "Original native save verification is required.");
+    assert.ok(Array.isArray(nativeWrites) && nativeWrites.length > 0 && nativeWrites.length <= 4);
+    for (const write of nativeWrites) assertCoreFormPermissionNativeDescriptor(write, mapping);
+    const native = await permissionReplay.nativeSave(nativeWrites, { ...mapping, startedAt });
+    assert.equal(native?.kind, "form-save-native");
+    assert.equal(native.status, "partial-not-global-pass");
+    assert.equal(native.globalClosed, false);
+    assert.match(native.id, /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu);
+    for (const key of ["caseId", "formConsumer", "surface"]) assert.equal(native[key], mapping[key], "Native save receipt belongs to another intent.");
+    assert.ok(Array.isArray(native.writes) && native.writes.length === nativeWrites.length);
+    for (const expected of nativeWrites) {
+      const matches = native.writes.filter(write => write.table === expected.table && write.id === expected.id);
+      assert.equal(matches.length, 1, "Native save must cover exactly this persisted row.");
+      const actual = matches[0];
+      assertCoreFormPermissionNativeWrite(expected, actual, mapping);
+    }
+    const receipt = await capture.verifyAfterSuccessfulUI({ canonicalUiSuccessVerified: true, nativeSaveVerified: true });
+    assert.equal(receipt.status, "pass");
+    for (const key of ["caseId", "formConsumer", "surface"]) assert.equal(receipt[key], mapping[key]);
+    assert.deepEqual(receipt.automaticCoverage, []);
+    permissionEvidence.push({ ...receipt, originalNativeSaveReceipt: native.id, originalProjectionCount: nativeWrites.length });
+    return value;
+  } finally {
+    capture?.discard();
+  }
+}
+
+export async function runCoreDomainFormJourneys(ctx) {
+  const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases } = ctx;
+  assert.equal(new URL(origin).hostname, "127.0.0.1");
+  assert.ok(Array.isArray(databaseReadback));
+  const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
+  const { richTextHtmlToMarkdown } = await jiti.import("../../src/lib/rich-text/html-utils.ts");
+  const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
+  const { PROJECT_LOCATION_LEVEL_CONFIG: locationConfig } = await jiti.import("../../src/lib/admin/projects/location-management-contract.ts");
+  const plan = selectCoreDomainFormPlan(buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig }), ctx.journeySelection ?? null);
+  const suffix = Date.now().toString(36), completed = [], permissionEvidence = [];
+  const permissionIntent = (recipe, surface, caseId, perform) => runCoreFormPermissionIntent({
+    permissionReplay: ctx.permissionReplay, mapping: { caseId, formConsumer: recipe.id, surface }, perform, permissionEvidence,
+  });
+  let locationRendered=null;
+  const currentForm = () => page.locator("form[data-admin-form-runtime]");
+  const control = (form, name) => form.locator(`[name="${name}"]`);
+  const save = form => form.locator('button[type="submit"]');
+  const successfulFeedback = () => page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first();
+  const ownedBoundary = "Real current Form UI and reload; parent native readback required. Optional permission evidence proves only the cookie-free HTTP boundary after native save verification. No complete capability, UI permission-state, rollback, publication, or media-provider coverage.";
+
+  async function navigate(path, expectsForm = true) {
+    const leave = async dialog => dialog.type() === "beforeunload" ? dialog.accept() : dialog.dismiss();
+    page.on("dialog", leave);
+    try { await observe("domain-form-navigation", () => page.goto(origin + path, { waitUntil: "domcontentloaded" })); }
+    finally { page.off("dialog", leave); }
+    if (expectsForm) await expect(currentForm()).toHaveCount(1);
+  }
+  async function acknowledge(form) {
+    await expect(save(form)).toHaveCount(1);
+    await observe("domain-form-action", async () => {
+      const [response] = await Promise.all([actionResponse(), save(form).click()]);
+      assertActionAcknowledged(response);
+    });
+  }
+  async function selectValue(form, name, value) {
+    const source = form.locator(`select[name="${name}"]`);
+    await expect(source.locator(`option[value="${value}"]`)).toHaveCount(1);
+    const label = (await source.locator(`option[value="${value}"]`).textContent()).trim();
+    const owner = form.locator(`[data-admin-form-listbox]:has(select[name="${name}"])`);
+    await owner.getByRole("combobox").click();
+    await page.getByRole("option", { name: label, exact: true }).click();
+    await expect(source).toHaveValue(String(value));
+  }
+  async function acceptedClose(form, destinationPathname, refill, verifyReopen = false) {
+    const original=page.url(),trigger=form.locator('[data-admin-form-action="close"]'),target=new URL(destinationPathname,origin);assert.equal(target.origin,origin);
+    return{trigger,destination:{kind:'navigated',pathname:target.pathname},...(verifyReopen?{verifyReopen:true}:{}),reopenAndRefill:async()=>{await navigate(new URL(original).pathname+new URL(original).search);await refill();}};
+  }
+  async function valuesEqual(form, fields) {
+    for (const [name, value] of Object.entries(fields)) await expect(control(form, name)).toHaveValue(String(value));
+  }
+  const locationBase=surface=>({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:"form",consumer:locationRendered.recipe.id,surface}]});
+  async function observeLocationOpening(form,trigger,surface) {
+    locationRendered.surface=surface;if(locationRendered.opened.has(surface))return;
+    const dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")}),common=locationBase(surface),prefix="location-"+locationRendered.recipe.level+"-"+surface;
+    locationRendered.observations.push(await observeCoreModalCleanReturn({...common,id:prefix+"-return",dialog,form,trigger,cancel:form.getByRole("button",{name:"إلغاء",exact:true})}));
+    locationRendered.observations.push(await observeCoreModalFocusAdoption({...common,id:prefix+"-focus",dialog}));
+    const body=dialog.locator(":scope > div").filter({has:page.locator("form[data-admin-form-runtime]")});
+    locationRendered.observations.push(await observeCoreScrollbarAdoption({...common,id:prefix+"-scroll",container:body,target:save(form),axis:"y",containment:"modal-lock"}));
+    locationRendered.opened.add(surface);
+  }
+  async function observeLocationPending(form,surface) {
+    const dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")});
+    locationRendered.observations.push(await observeCoreModalPendingDismissal({...locationBase(surface),id:"location-"+locationRendered.recipe.level+"-"+surface+"-pending",dialog,form}));
+  }
+  async function dirtyCloseCancel(form, fields, modal = false) {
+    const original = page.url();
+    const close = modal ? form.getByRole("button", { name: "إلغاء", exact: true }) : form.locator('[data-admin-form-action="close"]');
+    await close.click();
+    const confirmation = page.getByRole("dialog", { name: "إغلاق دون حفظ؟", exact: true });
+    await expect(confirmation).toBeVisible();
+    if(modal&&locationRendered&&!locationRendered.dirty.has(locationRendered.surface)){locationRendered.observations.push(await observeCoreModalFocusAdoption({...locationBase(locationRendered.surface),id:"location-"+locationRendered.recipe.level+"-"+locationRendered.surface+"-dirty-focus",dialog:confirmation,state:"dirty-confirmation",escape:"not-exercised"}));locationRendered.dirty.add(locationRendered.surface);}
+    await confirmation.locator("[data-admin-confirm-cancel]").click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(close).toBeFocused();
+    assert.equal(page.url(), original);
+    await valuesEqual(form, fields);
+  }
+  async function rejectRequired(form, name, fields) {
+    await observe("domain-required-field-rejection", async () => {
+      await control(form, name).fill("");
+      await expect(control(form, name)).toHaveValue("");
+      await acknowledge(form);
+      await expect(form.locator(`#${name}-error`)).toBeVisible();
+      await expect(form.locator(`#${name}-error`)).not.toHaveText("");
+      await expect(save(form)).toBeEnabled();
+      await expect(control(form, name)).toHaveValue("");
+      await valuesEqual(form, Object.fromEntries(Object.entries(fields).filter(([key]) => key !== name)));
+      await control(form, name).fill(String(fields[name]));
+    });
+  }
+  async function accepted(form) {
+    await acknowledge(form);
+    await observe("domain-form-canonical-outcome", async () => {
+      await expect(successfulFeedback()).toBeVisible({ timeout: 60_000 });
+      await expect(save(currentForm())).toBeEnabled({ timeout: 60_000 });
+    });
+  }
+  async function reloadValues(fields, tab = null) {
+    await observe("domain-form-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
+    if (tab) await currentForm().locator(`[data-admin-tab-id="${tab}"]`).click();
+    await valuesEqual(currentForm(), fields);
+  }
+  function audit(table, id, entity, label, verb, expected, extra = {}) {
+    const descriptor = { table, id, expected, auditEntityType: entity, auditActions: [`${entity}.${verb}`], auditEntityLabel: label, ...extra };
+    databaseReadback.push(descriptor);
+    return descriptor;
+  }
+  function details(recipe, id, fields, extra = {}) {
+    const result = { ...(recipe.id==="project-locations-create-edit"?{renderedAdoption:locationRendered.observations}:{}), consumer: recipe.id, surfaces: recipe.surfaces, kind: recipe.kind ?? recipe.level, id,
+      verified: ["required_server_validation", "input_preservation", "retry", "save_reload", "dirty_close_cancel"], fields, proofBoundary: ownedBoundary, ...extra };
+    const permissions = permissionEvidence.filter(item => item.formConsumer === recipe.id && recipe.surfaces.includes(item.surface));
+    if (permissions.length) result.permissionEvidence = permissions;
+    completed.push(result); return result;
+  }
+
+  for (const recipe of plan.taxonomy) await run(`core-${recipe.kind}-form-create-edit`, recipe.coverage, async () => {
+    const plural = recipe.kind === "category" ? "categories" : "series", table = recipe.kind === "category" ? "topic_categories" : "topic_series";
+    const entity = recipe.kind === "category" ? "topic_category" : "topic_series";
+    await navigate(`/admin/content/${plural}/new`);
+    let form = currentForm();
+    const name = `QA Core ${recipe.kind} ${suffix}`, slug = `qa-core-form-${recipe.kind}-${suffix}`;
+    await control(form, "name").fill(name);
+    await control(form, "slug").fill(slug);
+    if (recipe.kind === "series") await selectValue(form, "category_id", fixtures.category.id);
+    const createFields = { name, slug, ...(recipe.kind === "series" ? { category_id: fixtures.category.id } : {}) };
+    await dirtyCloseCancel(form, createFields);
+    await rejectRequired(form, "name", createFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-create",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"create"},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/'+plural,async()=>{await control(form,'name').fill(name);await control(form,'slug').fill(slug);if(recipe.kind==='series')await selectValue(form,'category_id',fixtures.category.id);})});
+    const id = await permissionIntent(recipe, "create", "core-" + recipe.kind + "-form-create", async () => {
+      await accepted(form);
+      await expect(page).toHaveURL(url => new RegExp("^/admin/content/" + plural + "/[0-9]+$", "u").test(url.pathname));
+      const createdId = Number(new URL(page.url()).pathname.split("/").at(-1));
+      await reloadValues({ name });
+      const descriptor = audit(table, createdId, entity, name, "create", {});
+      return { value: createdId, nativeWrites: [{ ...descriptor, expected: { ...createFields, status: "unpublished" } }] };
+    });
+    form = currentForm();
+    const edited = `${name} saved`;
+    await control(form, "name").fill(edited);
+    const editFields = { name: edited, ...(recipe.kind === "series" ? { category_id: fixtures.category.id } : {}) };
+    await dirtyCloseCancel(form, editFields);
+    await rejectRequired(form, "name", editFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-edit",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"edit"},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/'+plural,async()=>{await control(form,'name').fill(edited);if(recipe.kind==='series')await selectValue(form,'category_id',fixtures.category.id);})});
+    await permissionIntent(recipe, "edit", "core-" + recipe.kind + "-form-edit", async () => {
+      await accepted(form);
+      await reloadValues(editFields);
+      const descriptor = audit(table, id, entity, edited, "update", { ...editFields, slug, status: "unpublished" });
+      return { nativeWrites: [descriptor] };
+    });
+    return details(recipe, id, ["name", "slug", ...(recipe.kind === "series" ? ["category_id"] : [])]);
+  });
+
+  for (const recipe of plan.topics) await run(coreTopicJourneyId(recipe), recipe.coverage, async () => {
+    await navigate(`/admin/content/topics/new?type=${recipe.kind}`);
+    let form = currentForm();
+    const title = `QA Core ${recipe.kind} ${suffix}`, slug = `qa-core-content-${recipe.kind.replaceAll("_", "-")}-${suffix}`;
+    const excerpt = `QA authored excerpt for ${recipe.kind} content ${suffix}.`;
+    const markdown = isTextTopic(recipe);
+    const body = `Authored core content for ${recipe.kind.replaceAll("_", " ")} ${suffix}.`;
+    await form.locator('[data-admin-tab-id="basic"]').click();
+    await control(form, "title").fill(title);
+    await control(form, "slug").fill(slug);
+    await control(form, "excerpt").fill(excerpt);
+    await selectValue(form, "category_id", fixtures.category.id);
+    if (markdown) {
+      const editor = form.getByRole("textbox", { name: "نص المقال", exact: true });
+      await editor.fill(body);
+      // The seeded create document starts with a heading; author a paragraph
+      // explicitly through the current toolbar before testing plain Markdown.
+      await form.getByRole("button", { name: "فقرة", exact: true }).click();
+      // StarterKit may retain an empty trailing cursor paragraph after converting a heading.
+      // Check every authored paragraph and the entire canonical projection, not the first node.
+      await expect(control(form, "content")).toHaveValue(body);
+      await expect.poll(async () => richTextHtmlToMarkdown(await editor.innerHTML())).toBe(body);
+      const snapshot = await editor.evaluate(element => ({
+        paragraphs: Array.from(element.querySelectorAll("p"), paragraph => paragraph.textContent ?? ""),
+        headings: element.querySelectorAll("h1,h2,h3,h4,h5,h6").length,
+        html: element.innerHTML,
+      }));
+      assertCorePlainParagraphSnapshot({ ...snapshot, markdown: await control(form, "content").inputValue() }, body, richTextHtmlToMarkdown);
+    }
+    if (recipe.kind === "video") await control(form, "video_duration").fill("2:34");
+    const createFields = { title, slug, excerpt, category_id: fixtures.category.id, ...(markdown ? { content: body } : {}), ...(recipe.kind === "video" ? { video_duration: "2:34" } : {}) };
+    await valuesEqual(form, createFields);
+    await dirtyCloseCancel(form, createFields);
+    await rejectRequired(form, "title", createFields);
+    const payloadAudit = recipe.kind === "video"
+      ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "video" }, { column: "media_payload", path: ["duration"], value: "2:34" }] }
+      : recipe.kind === "gallery" ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "gallery" }] } : {};
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-create",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/topics',async()=>{
+      await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'title').fill(title);await control(form,'slug').fill(slug);await control(form,'excerpt').fill(excerpt);await selectValue(form,'category_id',fixtures.category.id);
+      if(markdown){const editor=form.getByRole('textbox',{name:'نص المقال',exact:true});await editor.fill(body);await form.getByRole('button',{name:'فقرة',exact:true}).click();await expect(control(form,'content')).toHaveValue(body);}
+      if(recipe.kind==='video')await control(form,'video_duration').fill('2:34');
+    })});
+    const id = await permissionIntent(recipe, recipe.surfaces[0], "core-" + recipe.kind + "-content-create", async () => {
+      await accepted(form);
+      await expect(page).toHaveURL(url => /^\/admin\/content\/topics\/[0-9]+$/u.test(url.pathname));
+      const createdId = Number(new URL(page.url()).pathname.split("/").at(-1));
+      await reloadValues(createFields, "basic");
+      const descriptor = audit("topics", createdId, "topic", title, "create", {});
+      return { value: createdId, nativeWrites: [{ ...descriptor,
+        expected: { title, slug, excerpt, category_id: fixtures.category.id, content_type: recipe.kind, status: "unpublished", ...(markdown ? { content: body } : {}) },
+        ...payloadAudit }] };
+    });
+    form = currentForm();
+    const edited = `${title} saved`, editedExcerpt = `${excerpt} Saved update.`;
+    await control(form, "title").fill(edited);
+    await control(form, "excerpt").fill(editedExcerpt);
+    const editFields = { ...createFields, title: edited, excerpt: editedExcerpt };
+    await dirtyCloseCancel(form, editFields);
+    await rejectRequired(form, "title", editFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-edit",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/topics',async()=>{
+      await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'title').fill(edited);await control(form,'excerpt').fill(editedExcerpt);
+    },true)});
+    await permissionIntent(recipe, recipe.surfaces[1], "core-" + recipe.kind + "-content-edit", async () => {
+      await accepted(form);
+      await reloadValues(editFields, "basic");
+      const descriptor = audit("topics", id, "topic", edited, "update", { title: edited, slug, excerpt: editedExcerpt, category_id: fixtures.category.id, content_type: recipe.kind, status: "unpublished", ...(markdown ? { content: body } : {}) }, payloadAudit);
+      return { nativeWrites: [descriptor] };
+    });
+    return details(recipe, id, Object.keys(editFields), { publication: "unpublished", bodyBoundary: markdown ? "authored_markdown_roundtrip" : recipe.kind === "video" ? "authored_duration_and_draft_video_kind_only" : "draft_gallery_kind_only_no_media_selection_claim" });
+  });
+
+  for (const recipe of plan.projectEdits) await run(`core-project-${recipe.kind}-existing-form-edit`, recipe.coverage, async () => {
+    await navigate(recipe.fixture.editorPath);
+    let form = currentForm();
+    await form.locator('[data-admin-tab-id="basic"]').click();
+    const name = `QA Core ${recipe.kind} project ${suffix}`, description = `QA retained complete fixture with authored ${recipe.kind} description ${suffix}.`;
+    await control(form, "arabic_name").fill(name);
+    await control(form, "general_description").fill(description);
+    const fields = { arabic_name: name, general_description: description };
+    await dirtyCloseCancel(form, fields);
+    await rejectRequired(form, "arabic_name", fields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-project-"+recipe.kind+"-form-edit",journeyId:"core-project-"+recipe.kind+"-existing-form-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/projects/'+recipe.kind,async()=>{
+      await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'arabic_name').fill(name);await control(form,'general_description').fill(description);
+    },true)});
+    await permissionIntent(recipe, recipe.surfaces[0], "core-project-" + recipe.kind + "-form-edit", async () => {
+      await accepted(form);
+      await reloadValues(fields, "basic");
+      form = currentForm();
+      await expect(control(form, "type")).toHaveValue(recipe.kind);
+      const descriptor = audit("projects", recipe.fixture.id, "project", name, "update", { ...fields, type: recipe.kind, slug: recipe.fixture.slug });
+      return { nativeWrites: [descriptor] };
+    });
+    return details(recipe, recipe.fixture.id, Object.keys(fields), { existingCompleteFixture: true, createNotCovered: true });
+  });
+
+  for (const recipe of plan.locations) await run(`core-location-${recipe.level}-form-create-edit`, recipe.coverage, async () => {
+    locationRendered={recipe,surface:null,opened:new Set(),dirty:new Set(),observations:[]};
+    const path = `/admin/projects/locations/${recipe.config.slug}`;
+    await navigate(path, false);
+    await page.getByRole("button", { name: `إضافة ${recipe.config.singularLabel}`, exact: true }).click();
+    let form = page.locator(`#project-location-${recipe.level}-create`);
+    await observeLocationOpening(form,page.getByRole("button",{name:`إضافة ${recipe.config.singularLabel}`,exact:true}),recipe.surfaces[0]);
+    const name = `QA Core ${recipe.level} ${suffix}`, english = `QA Location ${recipe.level} ${suffix}`;
+    await control(form, "name_ar").fill(name);
+    await control(form, "name_en").fill(english);
+    await control(form, "sort_order").fill("7");
+    if (recipe.parentId) await selectValue(form, "parent_id", recipe.parentId);
+    const fields = { name_ar: name, name_en: english, sort_order: 7, ...(recipe.parentId ? { parent_id: recipe.parentId } : {}) };
+    await dirtyCloseCancel(form, fields, true);
+    await rejectRequired(form, "name_ar", fields);
+    let row;
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-create",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[0]),discardDirty:{trigger:form.getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:path},reopenAndRefill:async()=>{await page.getByRole('button',{name:'إضافة '+recipe.config.singularLabel,exact:true}).click();for(const key of ['name_ar','name_en','sort_order'])await control(form,key).fill(String(fields[key]));if(recipe.parentId)await selectValue(form,'parent_id',recipe.parentId);}}});
+    const id = await permissionIntent(recipe, recipe.surfaces[0], "core-location-" + recipe.level + "-form-create", async () => {
+      await acknowledge(form);
+      await expect(form).toHaveCount(0, { timeout: 60_000 });
+      await expect(successfulFeedback()).toBeVisible();
+      await observe("location-list-reload", () => page.goto(origin + path + "?q=" + encodeURIComponent(name), { waitUntil: "domcontentloaded" }));
+      row = page.getByRole("row").filter({ hasText: name });
+      await expect(row).toHaveCount(1);
+      const createdId = Number(await row.locator('[data-admin-row-action="more"]').getAttribute("data-admin-entity-id"));
+      assert.ok(Number.isSafeInteger(createdId) && createdId > 0);
+      const descriptor = audit("project_locations", createdId, "project_location", name, "create", {});
+      await row.locator('[data-admin-row-action="edit"]').getByRole("button").click();
+      form = page.locator("#project-location-" + recipe.level + "-edit");
+      await observeLocationOpening(form,row.locator('[data-admin-row-action="edit"]').getByRole("button"),recipe.surfaces[1]);
+      await valuesEqual(form, fields);
+      return { value: createdId, nativeWrites: [{ ...descriptor, expected: { ...fields, level: recipe.level, parent_id: recipe.parentId, is_active: true } }] };
+    });
+    const editFields = { ...fields, name_ar: `${name} saved`, name_en: `${english} saved`, sort_order: 9 };
+    for (const key of ["name_ar", "name_en", "sort_order"]) await control(form, key).fill(String(editFields[key]));
+    await dirtyCloseCancel(form, editFields, true);
+    await rejectRequired(form, "name_ar", editFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-edit",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[1]),discardDirty:{trigger:form.getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:path},reopenAndRefill:async()=>{await row.locator('[data-admin-row-action="edit"]').getByRole('button').click();for(const key of ['name_ar','name_en','sort_order'])await control(form,key).fill(String(editFields[key]));}}});
+    await permissionIntent(recipe, recipe.surfaces[1], "core-location-" + recipe.level + "-form-edit", async () => {
+      await acknowledge(form);
+      await expect(form).toHaveCount(0, { timeout: 60_000 });
+      await expect(successfulFeedback()).toBeVisible();
+      await observe("location-edited-reload", () => page.goto(origin + path + "?q=" + encodeURIComponent(editFields.name_ar), { waitUntil: "domcontentloaded" }));
+      row = page.getByRole("row").filter({ hasText: editFields.name_ar });
+      await expect(row).toHaveCount(1);
+      await row.locator('[data-admin-row-action="edit"]').getByRole("button").click();
+      form = page.locator("#project-location-" + recipe.level + "-edit");
+      await valuesEqual(form, editFields);
+      await form.getByRole("button", { name: "إلغاء", exact: true }).click();
+      await expect(form).toHaveCount(0);
+      const descriptor = audit("project_locations", id, "project_location", editFields.name_ar, "update", { ...editFields, level: recipe.level, parent_id: recipe.parentId, is_active: true });
+      return { nativeWrites: [descriptor] };
+    });
+    return details(recipe, id, Object.keys(editFields), { actualLevel: recipe.level, parentId: recipe.parentId });
+  });
+  return { planned: plan.taxonomy.length + plan.topics.length + plan.projectEdits.length + plan.locations.length, completed: completed.length, results: completed, pending: plan.pending, permissionEvidence, permissionCandidateKeys: [...new Set(permissionEvidence.map(item => item.candidateRequiredCase))], proofBoundary: ownedBoundary };
+}
+
+// Publication and rendered handoff are separate observations: the saved event
+// alone cannot prove that the persistent Feedback viewport displayed the result.
+export function assertCoreFormFeedbackPublicationSource(source){
+ const begin=source.indexOf('    if (state.status === "idle" || handledResultRef.current === state) return;');assert.ok(begin>=0);
+ const effect=source.slice(begin,source.indexOf('  }, [',begin));
+ const publication=effect.indexOf('publishFeedback(nextFeedback, {'),error=effect.indexOf('if (state.status === "error")'),saved=effect.indexOf('new CustomEvent("admin-form-saved"'),success=effect.indexOf('onSuccess?.(state)'),navigation=effect.indexOf('router.replace(editHref');
+ assert.ok(publication>=0&&error>publication&&saved>error&&success>saved&&navigation>success);
+ assert.ok(effect.slice(error,saved).includes('return;'));
+ const mapper=source.slice(source.indexOf('function formFeedback('),source.indexOf('function formFeedback(')+1300);
+ assert.ok(mapper.includes('state.status === "success"')&&mapper.includes('state.status === "warning"')&&mapper.includes('dismissible: true'));
+ return{path:'src/components/admin/ui/AdminFormRuntime.tsx',sha256:createHash('sha256').update(source).digest('hex'),publicationBeforeSavedEvent:true,savedEventBeforeHandoff:true};
+}
+export function assertCoreAcceptedFormFeedback(proof,{consumer,surface,entityId,entityKey,routePrefix,requiredCases,sourceSha256,sourceBinding}){
+ assert.equal(requiredCases.filter(row=>row.boundary==='form'&&row.consumer===consumer&&row.surface===surface&&row.scenario==='save_reload').length,1);
+ assert.equal(proof.consumer,consumer);assert.equal(proof.surface,surface);assert.equal(proof.entityId,entityId);assert.ok(Number.isSafeInteger(entityId)&&entityId>0);
+ assert.equal(proof.sourceSha256,sourceSha256);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.deepEqual(proof.sourceBinding,sourceBinding);
+ assert.equal(proof.events.length,1);assert.deepEqual(proof.events[0],{type:'admin-form-saved',entityId,targetIsForm:true,formConnected:true});
+ assert.equal(proof.mode,'create');assert.equal(proof.entityKey,entityKey);assert.equal(proof.routePathname,routePrefix+'/'+entityId);assert.equal(proof.channel,'form:'+proof.entityKey);
+ assert.equal(proof.publicationOrderObserved,true);assert.equal(proof.renderedRegionObserved,true);assert.equal(proof.postUnmountPersistenceRequired,true);assert.equal(proof.globalClosed,false);assert.deepEqual(proof.automaticCoverage,[]);
+ assertCoreVisibleAcceptedFeedback(proof.visibleFeedback,proof.channel,sourceSha256);
+ assert.equal(proof.visibleFeedback.routePathname,proof.routePathname);assert.equal(proof.visibleFeedback.createFormDetached,true);assert.equal(proof.visibleFeedback.placement,'global');assert.equal(proof.visibleFeedback.lifecycle,'manual');assert.equal(proof.visibleFeedback.dismissed,true);
+ return proof;
+}
+export async function observeCoreAcceptedFormFeedback({form,consumer,surface,entityKey,routePrefix,requiredCases,perform}){
+ await expect(form).toHaveCount(1);await expect(form).toBeVisible();await expect(form).toHaveAttribute('data-admin-form-mode','create');await expect(form).toHaveAttribute('data-admin-form-entity',entityKey);
+ const sourceBinding=assertCoreFormFeedbackPublicationSource(readFileSync(new URL('../../src/components/admin/ui/AdminFormRuntime.tsx',import.meta.url),'utf8'));
+ const observer=await form.evaluateHandle(node=>{const events=[];const handler=event=>{events.push({type:event.type,entityId:Number(event.detail?.entityId),targetIsForm:event.target===node,formConnected:node.isConnected});};node.addEventListener('admin-form-saved',handler);return{events,entityKey:node.getAttribute('data-admin-form-entity'),mode:node.getAttribute('data-admin-form-mode'),isConnected:()=>node.isConnected,dispose:()=>node.removeEventListener('admin-form-saved',handler)};});
+ try{
+  const page=form.page(),channel='form:'+entityKey;let accepted;
+  const rendered=await observeCoreVisibleAcceptedFeedback({page,channel,perform:async()=>{
+   accepted=await perform();assert.ok(Number.isSafeInteger(accepted.entityId)&&accepted.entityId>0);assert.equal(accepted.routePathname,routePrefix+'/'+accepted.entityId);
+   await expect(page).toHaveURL(url=>url.pathname===accepted.routePathname);
+   await expect.poll(()=>observer.evaluate(value=>value.isConnected())).toBe(false);
+  }});
+  const entry=page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="'+channel+'"]');
+  await expect(page.locator('[data-admin-feedback-viewport][data-admin-feedback-placement="global"]').filter({has:entry})).toBeVisible();
+  await expect(entry.locator('[data-admin-notice-lifecycle="manual"]')).toBeVisible();
+  await entry.getByRole('button',{name:'إغلاق الإشعار',exact:true}).click();await expect(entry).toHaveCount(0);
+  const visibleFeedback={...rendered,routePathname:new URL(page.url()).pathname,createFormDetached:true,placement:'global',lifecycle:'manual',dismissed:true};
+  const observed=await observer.evaluate(value=>({events:value.events,entityKey:value.entityKey,mode:value.mode}));
+  const proof={...observed,consumer,surface,entityId:accepted.entityId,channel:'form:'+observed.entityKey,routePathname:accepted.routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,sourceBinding,publicationOrderObserved:true,renderedRegionObserved:true,postUnmountPersistenceRequired:true,visibleFeedback,automaticCoverage:[],globalClosed:false};
+  return assertCoreAcceptedFormFeedback(proof,{consumer,surface,entityId:accepted.entityId,entityKey,routePrefix,requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,sourceBinding});
+ }finally{await observer.evaluate(value=>value.dispose());await observer.dispose();}
+}
+export function assertCoreVisibleAcceptedFeedback(proof,channel,sourceSha256){
+ assert.equal(proof.channel,channel);assert.equal(proof.sourceSha256,sourceSha256);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.ok(['success','warning'].includes(proof.variant));assert.equal(proof.visibleCount,1);assert.equal(proof.nonemptyMessage,true);assert.equal(proof.priorEntryDetached,true);assert.equal(proof.renderedRegionObserved,true);assert.equal(proof.observedBeforeReload,true);assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);return proof;
+}
+export async function observeCoreVisibleAcceptedFeedback({page,channel,perform}){
+ const entry=page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="'+channel+'"]');const priorCount=await entry.count();assert.ok(priorCount<=1);const previous=priorCount===1?await entry.elementHandle():null;
+ try{await perform();await expect(entry).toHaveCount(1);await expect(entry).toBeVisible();await expect(entry).toHaveAttribute('data-admin-feedback-variant',/^(success|warning)$/u);if(previous)await expect.poll(()=>previous.evaluate(node=>node.isConnected)).toBe(false);assert.ok((await entry.innerText()).trim().length>0);
+  return assertCoreVisibleAcceptedFeedback({channel,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,variant:await entry.getAttribute('data-admin-feedback-variant'),visibleCount:1,nonemptyMessage:true,priorEntryDetached:true,renderedRegionObserved:true,observedBeforeReload:true,automaticCoverage:[],globalClosed:false},channel,process.env.QA_ADMIN_SOURCE_SHA256);
+ }finally{await previous?.dispose();}
+}
+
+/** Observe the existing Provider's actual DOM during a mounted read/error/retry window. */
+export function createCoreMutationFeedbackAbsenceObserver() {
+ const selector='[data-admin-feedback-entry]',initialCount=document.querySelectorAll(selector).length;
+ let observedEntries=0,disconnected=false;const checkpoints=[];
+ const countNode=node=>node?.nodeType===1?Number(node.matches(selector))+node.querySelectorAll(selector).length:0;
+ const inspect=records=>{for(const record of records){if(record.type==='childList'){for(const node of [...record.addedNodes,...record.removedNodes])observedEntries+=countNode(node);}else if(record.type==='attributes'&&record.attributeName==='data-admin-feedback-entry'){observedEntries+=Math.max(countNode(record.target),Number(record.oldValue!==null));}}};
+ const observer=new MutationObserver(inspect);observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeOldValue:true,attributeFilter:['data-admin-feedback-entry']});
+ return {
+  mark(label){inspect(observer.takeRecords());const count=document.querySelectorAll(selector).length;checkpoints.push({label,count});return count;},
+  finish(){inspect(observer.takeRecords());const finalCount=document.querySelectorAll(selector).length;observer.disconnect();disconnected=true;return{initialCount,finalCount,observedEntries,checkpoints,disconnected};},
+  disconnect(){observer.disconnect();disconnected=true;},
+ };
+}
+export function assertCoreMutationFeedbackAbsence(proof,sourceSha256){
+ assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(proof.sourceSha256,sourceSha256);
+ for(const key of ['initialCount','finalCount','observedEntries'])assert.equal(proof[key],0);
+ assert.deepEqual(proof.checkpoints,[{label:'query-error-visible',count:0},{label:'retry-success-visible',count:0}]);
+ for(const key of ['disconnected','renderedRegionObserved','sameDocumentWindow','observedBeforeReload'])assert.equal(proof[key],true);
+ assert.equal(proof.scope,'mounted-query-error-and-retry');assert.equal(proof.mutationResultFeedbackClaimed,false);assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);return proof;
+}
+export async function observeCoreMutationFeedbackAbsence({page,perform}){
+ const sourceSha256=process.env.QA_ADMIN_SOURCE_SHA256;assert.match(sourceSha256,/^[a-f0-9]{64}$/u);
+ const pathname=new URL(page.url()).pathname,observer=await page.evaluateHandle(createCoreMutationFeedbackAbsenceObserver);
+ try{
+  await perform(async label=>{assert.equal(await observer.evaluate((value,marker)=>value.mark(marker),label),0);});
+  assert.equal(new URL(page.url()).pathname,pathname);
+  const observed=await observer.evaluate(value=>value.finish());
+  return assertCoreMutationFeedbackAbsence({...observed,sourceSha256,renderedRegionObserved:true,sameDocumentWindow:true,observedBeforeReload:true,scope:'mounted-query-error-and-retry',mutationResultFeedbackClaimed:false,automaticCoverage:[],globalClosed:false},sourceSha256);
+ }finally{try{await observer.evaluate(value=>value.disconnect());}finally{await observer.dispose();}}
+}
+
+/** Targeted current-control observations; completed Form lifecycles are not replayed. */
+export async function observeCoreControlDraft(ctx, perform, {readContract=/** @type {string|null} */(null)}={}) {
+  const {page,origin,nativeCheckpoint}=ctx,correlationId=randomUUID();
+  assert.equal(new URL(origin).hostname,'127.0.0.1');assert.equal(typeof nativeCheckpoint,'function');
+  const read=async phase=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId,phase},result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);assert.equal(result.status,'pass');assert.equal(result.adminAuditIncluded,true);assert.equal(result.adminUsersIncluded,true);return result;};
+  const sourceSha256=ctx.sourceSha256??process.env.QA_ADMIN_SOURCE_SHA256,pathname=new URL(page.url()).pathname;
+  assert.ok(readContract===null||readContract==='admin-links-content');if(readContract){assert.equal(ctx.journeySelection,'presentation-content-controls-followup');assert.equal(pathname,'/admin/pages-blocks/blocks/content/'+ctx.fixtures.presentationControls.contentControls.id);}
+  const counter=readContract?createCoreContentDraftReadCounter({origin,pathname,sourceSha256}):null;
+  const before=await read('before');let actionRequests=0;const listener=request=>{if(counter){if(request.method()==='POST'){actionRequests++;counter.track(request);}}else if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)actionRequests++;};page.on('request',listener);
+  try{const value=await perform();const after=await read('after');const readReceipt=counter?.receipt();assertCoreControlDraftNative({before,after,actionRequests,...(readReceipt?{readReceipt,sourceSha256,pathname}:{})});return{value,noWrite:{nativeBefore:before.id,nativeAfter:after.id,correlationId,ownedRunId:before.ownedRunId,actionRequests,...(readReceipt?{readReceipt}:{}),nativeStateUnchanged:true,adminAuditIncluded:true}};}catch(error){if(counter)console.log('core-content-draft-read-requests '+JSON.stringify(counter.snapshot()));throw error;}finally{page.off('request',listener);}
+}
+export function assertCoreControlDraftNative({before,after,actionRequests,readReceipt=/** @type {any} */(null),sourceSha256='',pathname=''}) {
+  if(readReceipt!==null){assertCoreContentDraftReadReceipt(readReceipt,sourceSha256,pathname);assert.equal(actionRequests,readReceipt.totalPosts);}else assert.equal(actionRequests,0);assert.notEqual(before.id,after.id);assert.equal(before.phase,'before');assert.equal(after.phase,'after');
+  for(const row of[before,after]){assert.equal(row.status,'pass');assert.equal(row.kind,'form-permission-fingerprint');assert.equal(row.adminAuditIncluded,true);assert.equal(row.adminUsersIncluded,true);}
+  for(const key of['ownedRunId','correlationId','publicTableCount','publicTableInventorySha256','publicDataSha256']){assert.ok(before[key]);assert.equal(after[key],before[key]);}
+}
+export async function observeCoreBooleanControl({form,name,target=null,value=null}) {
+  const control=form.locator('input[type="checkbox"][name="'+name+'"]'+(value===null?'':'[value="'+value+'"]'));await expect(control).toHaveCount(1);await expect(control).toBeEnabled();
+  const before=await control.isChecked(),after=target??!before;assert.equal(typeof after,'boolean');assert.notEqual(after,before,'The actual Boolean must change.');
+  const label=control.locator('xpath=ancestor::label[1]');await expect(label).toHaveCount(1);await label.click();await expect(control).toBeChecked({checked:after});
+  const submitted=await form.evaluate((node,name)=>new FormData(node).getAll(name).map(String),name);
+  return{field:name,value:await control.inputValue(),before,after,submitted,actualControlOperated:true};
+}
+export async function observeCoreListboxControl({page,form,name,value,observePopover=null}) {
+  const source=form.locator('select[name="'+name+'"]');await expect(source).toHaveCount(1);const before=await source.inputValue();assert.notEqual(String(value),before);
+  const option=source.locator('option').filter({hasText:/./});const values=await option.evaluateAll(nodes=>nodes.map(node=>({value:node.value,label:node.textContent.trim(),disabled:node.disabled})));
+  const wanted=values.filter(row=>row.value===String(value)&&!row.disabled);assert.equal(wanted.length,1);
+  const trigger=form.locator('[data-admin-form-listbox]:has(select[name="'+name+'"])').getByRole('combobox');await expect(trigger).toBeEnabled();await trigger.click();
+  const popup=page.locator('[data-admin-listbox-popover]');await expect(popup).toHaveCount(1);const rendered=observePopover?await observePopover(popup):null;
+  await popup.getByRole('option',{name:wanted[0].label,exact:true}).click();await expect(popup).toHaveCount(0);await expect(trigger).toBeFocused();await expect(source).toHaveValue(String(value));
+  return{field:name,before,after:String(value),label:wanted[0].label,actualControlOperated:true,exactFocusReturn:true,...(rendered?{rendered}: {})};
+}
+export function assertCoreControlSaveNative(native,descriptor,mapping) {
+  assert.equal(native.kind,'form-save-native');assert.equal(native.status,'partial-not-global-pass');assert.equal(native.globalClosed,false);
+  for(const key of['caseId','formConsumer','surface'])assert.equal(native[key],mapping[key]);
+  assert.equal(native.writes.length,1);const actual=native.writes[0];assert.equal(actual.table,descriptor.table);assert.equal(actual.id,descriptor.id);assertCoreFormPermissionNativeWrite(descriptor,actual,mapping);return actual;
+}
+export async function acceptCoreControlSave(ctx,{form,ownedRunId,mapping,descriptor,reopen,submit=null}) {
+  assert.ok(typeof ownedRunId==='string'&&ownedRunId.length>0);
+  const startedAt=new Date().toISOString(),{page,actionResponse,assertActionAcknowledged,nativeCheckpoint,databaseReadback}=ctx;
+  const button=submit??form.locator('button[type="submit"], [data-admin-users-edit-save]');await expect(button).toHaveCount(1);await expect(button).toBeEnabled();
+  const[response]=await Promise.all([actionResponse(),button.click()]);assertActionAcknowledged(response);
+  await reopen();const expected=typeof descriptor==='function'?descriptor():descriptor;expected.auditSince=startedAt;
+  const request={id:randomUUID(),kind:'form-save-native',descriptors:[expected],...mapping,startedAt},native=await nativeCheckpoint(request);
+  for(const key of['id','kind'])assert.equal(native[key],request[key]);const actual=assertCoreControlSaveNative(native,expected,mapping);databaseReadback.push(expected);
+  const sourceSha256=ctx.sourceSha256??process.env.QA_ADMIN_SOURCE_SHA256;assert.match(sourceSha256,/^[a-f0-9]{64}$/u);
+  return{...mapping,sourceSha256,ownedRunId,nativeSaveReceipt:native.id,expectedActorId:actual.expectedActorId,descriptor:expected,routePathname:new URL(page.url()).pathname,reloaded:true,automaticCoverage:[],globalClosed:false};
+}
+export async function runCoreDomainControlFollowup(ctx) {
+  assert.ok(['domain-form-controls-followup','domain-form-controls-remaining-followup','domain-form-controls-final-two-followup','domain-form-controls-user-followup'].includes(validateCoreJourneySelection({scope:'core-closure',cohort:'domain-forms',selection:ctx.journeySelection})));
+  const{page,origin,fixtures,run,requiredCases}=ctx,results=[];if(['domain-form-controls-final-two-followup','domain-form-controls-user-followup'].includes(ctx.journeySelection))return{selection:ctx.journeySelection,results,automaticCoverage:[],globalClosed:false};
+  for(const kind of(ctx.journeySelection==='domain-form-controls-remaining-followup'?[]:['category','series']))await run('core-control-'+kind+'-selectors',[],async()=>{
+    const plural=kind==='category'?'categories':'series',consumer='topic-'+kind+'-create-edit',field=kind==='category'?'parent_id':'category_id',name='QA control '+kind+' '+randomUUID().slice(0,8),slug=name.toLowerCase().replaceAll(' ','-');
+    await page.goto(origin+'/admin/content/'+plural+'/new',{waitUntil:'domcontentloaded'});const form=page.locator('form[data-admin-form-runtime]');await expect(form).toHaveCount(1);await form.locator('[name="name"]').fill(name);await form.locator('[name="slug"]').fill(slug);
+    const draft=await observeCoreControlDraft(ctx,async()=>({listbox:await observeCoreListboxControl({page,form,name:field,value:String(fixtures.category.id),observePopover:popup=>observeCoreScrollbarAdoption({page,origin,requiredCases,bindings:[{boundary:'collection',consumer:'content-editor-pages',surface:new URL(page.url()).pathname}],id:'control-'+kind+'-selector-scroll',container:popup.locator('[data-admin-listbox-scroll-viewport]'),target:popup.getByRole('option').last(),axis:'y',containment:'overscroll-contain'})}),boolean:await observeCoreBooleanControl({form,name:'is_published',target:true})}));
+    let id;const saved=await acceptCoreControlSave(ctx,{form,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-'+kind+'-selectors',formConsumer:consumer,surface:'create'},descriptor:()=>({table:kind==='category'?'topic_categories':'topic_series',id,expected:{name,slug,status:'published',[field]:fixtures.category.id},auditEntityType:'topic_'+kind,auditEntityLabel:name,auditActions:['topic_'+kind+'.create']}),reopen:async()=>{await expect(page).toHaveURL(url=>new RegExp('^/admin/content/'+plural+'/[0-9]+$','u').test(url.pathname));id=Number(new URL(page.url()).pathname.split('/').at(-1));await page.reload({waitUntil:'domcontentloaded'});await expect(form.locator('[name="'+field+'"]')).toHaveValue(String(fixtures.category.id));await expect(form.locator('input[type="checkbox"][name="is_published"]')).toBeChecked();}});
+    const result={...saved,controls:draft.value,noWrite:draft.noWrite};results.push(result);return result;
+  });
+  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),{PROJECT_LOCATION_LEVEL_CONFIG:config}=await jiti.import('../../src/lib/admin/projects/location-management-contract.ts');
+  assert.deepEqual(fixtures.commandClosure.locations.map(row=>row.level).sort(),['city','governorate','main_area','sub_area']);
+  for(const location of fixtures.commandClosure.locations)await run('core-control-location-'+location.level,[],async()=>{
+    const path='/admin/projects/locations/'+config[location.level].slug;const open=async()=>{await page.goto(origin+path+'?q='+encodeURIComponent(location.label),{waitUntil:'domcontentloaded'});const row=page.locator('tr[data-entity-row-id="'+location.id+'"]');await expect(row).toHaveCount(1);await expect(row.locator('td[data-admin-column-key="name"]')).toHaveText(location.label+' — '+location.label);assert.equal(Number(await row.locator('[data-admin-row-action="more"]').getAttribute('data-admin-entity-id')),location.id);await row.locator('[data-admin-row-action="edit"] button').click();};await open();const form=page.locator('#project-location-'+location.level+'-edit');await expect(form).toHaveCount(1);await expect(form.locator('input[name="id"]')).toHaveValue(String(location.id));await expect(form.locator('input[name="name_ar"]')).toHaveValue(location.label);
+    const draft=await observeCoreControlDraft(ctx,()=>observeCoreBooleanControl({form,name:'is_active',target:false}));
+    const saved=await acceptCoreControlSave(ctx,{form,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-location-'+location.level,formConsumer:'project-locations-create-edit',surface:locationSurface[location.level]+':edit'},descriptor:{table:'project_locations',id:location.id,expected:{name_ar:location.label,level:location.level,is_active:false},auditEntityType:'project_location',auditEntityLabel:location.label,auditActions:['project_location.update']},reopen:async()=>{await expect(form).toHaveCount(0);await open();await expect(form.locator('input[name="is_active"]')).not.toBeChecked();await form.getByRole('button',{name:'إلغاء',exact:true}).click();}});
+    const result={...saved,controls:[draft.value],noWrite:draft.noWrite};results.push(result);return result;
+  });return{selection:ctx.journeySelection,results,automaticCoverage:[],globalClosed:false};
+}
+
+export function coreControlFollowupJourneyIds(selection) {
+  if(selection==='domain-form-controls-user-followup')return['core-control-user-boolean'];
+  if(selection==='domain-form-controls-final-two-followup')return['core-control-user-boolean','core-control-media-policy-booleans'];
+  if(selection==='domain-form-controls-remaining-followup')return[...['governorate','city','main_area','sub_area'].map(level=>'core-control-location-'+level),'core-control-user-boolean','core-control-global-seo-listboxes','core-control-media-policy-booleans','core-control-menu-active'];
+  if(selection==='domain-form-controls-followup')return['core-control-category-selectors','core-control-series-selectors',...['governorate','city','main_area','sub_area'].map(level=>'core-control-location-'+level),...['stage','item','update','user'].map(kind=>'core-control-'+kind+'-boolean'),'core-control-global-seo-listboxes','core-control-media-policy-booleans','core-control-menu-active'];
+  if(selection==='template-create-controls-followup')return['content','hero','cta','cards','feed','featured'].map(kind=>'core-control-template-create-'+kind);
+  assert.equal(selection,'presentation-content-controls-followup');return['core-control-content-specialized'];
+}
+/** Same-source mounted controls plus exact original native requests/responses; no axis credit. */
+export function assertCoreControlFollowupCompletion({browser,native,sourceSha256,ownedRunId,actorId,canonicalRequiredCases}) {
+  assert.equal(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}),browser.journeySelection);
+  const ids=coreControlFollowupJourneyIds(browser.journeySelection);assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);
+  assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(browser.evidence.every(row=>row.status==='pass'));
+  const identity=rows=>{assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(value=>{const row={...value};delete row.status;delete row.evidence;return row;}).sort((a,b)=>a.key.localeCompare(b.key));};assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status!=='behavior_verified'));
+  assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);const records=native.records;assert.ok(Array.isArray(records));assert.equal(new Set(records.map(row=>row.id)).size,records.length);const used=new Set(),qualified=[];
+  const get=id=>{assert.equal(used.has(id),false,'Native control receipt cannot be replayed.');const matches=records.filter(row=>row.id===id);assert.equal(matches.length,1);used.add(id);return matches[0];};
+  for(const row of browser.evidence.slice(1)){
+    assert.equal(row.caseId,row.id);assert.equal(row.sourceSha256,sourceSha256);assert.equal(row.ownedRunId,ownedRunId);assert.equal(row.expectedActorId,actorId);assert.equal(row.reloaded,true);assert.deepEqual(row.coverage,[]);assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);assert.ok(row.controls);assertCoreControlObservation(row);
+    const proof=row.noWrite;assert.equal(proof.ownedRunId,ownedRunId);assert.equal(proof.nativeStateUnchanged,true);assert.equal(proof.adminAuditIncluded,true);
+    const before=get(proof.nativeBefore),after=get(proof.nativeAfter);for(const[record,phase]of[[before,'before'],[after,'after']]){assert.equal(record.kind,'form-permission-fingerprint');assert.equal(record.correlationId,proof.correlationId);assert.equal(record.phase,phase);assert.equal(record.ownedRunId,ownedRunId);}
+    if(row.caseId==='core-control-content-specialized'){assert.equal(row.routePathname,'/admin/pages-blocks/blocks/content/'+row.descriptor.id);assertCoreContentDraftReadReceipt(proof.readReceipt,sourceSha256,row.routePathname);}else assert.equal(proof.readReceipt,undefined);
+    assertCoreControlDraftNative({before,after,actionRequests:proof.actionRequests,...(row.caseId==='core-control-content-specialized'?{readReceipt:proof.readReceipt,sourceSha256,pathname:row.routePathname}:{})});
+    const save=get(row.nativeSaveReceipt);assert.ok(Number.isFinite(Date.parse(row.descriptor.auditSince)));for(const key of['caseId','formConsumer','surface'])assert.equal(save[key],row[key]);const actual=assertCoreControlSaveNative(save,row.descriptor,row);assert.equal(actual.expectedActorId,actorId);
+    qualified.push({journeyId:row.id,consumer:row.formConsumer,surface:row.surface,sourceSha256,ownedRunId,nativeIds:[proof.nativeBefore,proof.nativeAfter,row.nativeSaveReceipt],descriptor:row.descriptor});
+  }
+  assert.equal(used.size,records.length,'No unjoined native control receipt may be dropped.');assert.deepEqual(browser.databaseReadback,qualified.map(row=>row.descriptor));return{status:'qualified-targeted-control-observations',selection:browser.journeySelection,qualified,automaticCoverage:[],globalClosed:false};
+}
+
+/** Validate observed intent semantics separately from the canonical persisted row join. */
+export function assertCoreControlObservation(row) {
+ const boolean=proof=>{assert.ok(proof);assert.equal(proof.actualControlOperated,true);assert.equal(typeof proof.before,'boolean');assert.equal(typeof proof.after,'boolean');assert.notEqual(proof.before,proof.after);assert.ok(Array.isArray(proof.submitted));if(proof.after)assert.ok(proof.submitted.includes(proof.value));else assert.equal(proof.submitted.includes(proof.value),false);};
+ const listbox=proof=>{assert.ok(proof);assert.equal(proof.actualControlOperated,true);assert.equal(proof.exactFocusReturn,true);assert.equal(typeof proof.before,'string');assert.equal(typeof proof.after,'string');assert.notEqual(proof.before,proof.after);assert.ok(proof.label);};
+ if(row.caseId==='core-control-content-specialized'){assert.equal(row.descriptor.table,'content_block_templates');assert.equal(row.descriptor.expected.slug,'home-story');assert.equal(row.descriptor.expected.variant,'about-intro');const identity={slug:'home-story',variant:'about-intro',configSchema:'about-intro',storyCta:'1'};assert.deepEqual(row.editorIdentity.before,identity);assert.deepEqual(row.editorIdentity.after,identity);const link=row.controls.modal;assert.ok(Array.isArray(link.linkBefore)&&link.linkBefore.length>0);assert.equal(new Set(link.linkBefore.map(value=>value.name)).size,link.linkBefore.length);assert.deepEqual(link.linkAfterCleanCancel,link.linkBefore);assert.deepEqual(link.linkAfterDirtyCancel,link.linkBefore);assert.deepEqual(link.linkAfterReload,link.linkBefore);listbox(row.controls.listbox);assert.equal(row.controls.listbox.field,'button_open_target');assert.equal(row.controls.listbox.after,'_blank');assert.deepEqual(row.controls.media.operations,['cancel-original','select','replace-occupied','clear','reselect-final']);const media=row.controls.media;assert.equal(media.replacement.occupiedBefore,true);assert.equal(media.catalogAssets.length,2);assert.equal(media.replacement.before,media.catalogAssets[0].publicUrl);assert.equal(media.replacement.after,media.catalogAssets[1].publicUrl);assert.notEqual(media.replacement.before,media.replacement.after);assert.equal(media.final,media.replacement.after);assert.equal(row.controls.media.exactTriggerFocusReturn,true);assert.equal(row.controls.modal.imageCleanCancelReopen,true);assert.equal(row.controls.modal.linkCleanCancelReopen,true);assert.equal(row.renderedAdoption.length,2);for(const proof of row.renderedAdoption){assert.equal(proof.axis,'modal');assert.equal(proof.status,'rendered-fragments-observed');assert.equal(proof.sourceSha256,row.sourceSha256);}return;}
+ if(row.caseId.startsWith('core-control-template-create-')){listbox(row.controls.listbox);const kind=row.caseId.slice('core-control-template-create-'.length);assert.equal(row.controls.listbox.field,kind==='feed'?'feed_type':'variant');if(kind==='featured'){assert.equal(Object.hasOwn(row.descriptor.expected,'variant'),false);assert.deepEqual(row.descriptor.expectedJson,[{column:'config',path:['presentation','variant'],value:row.controls.listbox.after}]);}else assert.equal(row.descriptor.expected[row.controls.listbox.field],row.controls.listbox.after);if(kind==='hero'){boolean(row.controls.boolean);assert.equal(row.controls.boolean.field,'status');assert.equal(row.controls.boolean.after,true);assert.equal(row.descriptor.expected.status,'published');}return;}
+ if(row.caseId==='core-control-category-selectors'||row.caseId==='core-control-series-selectors'){listbox(row.controls.listbox);boolean(row.controls.boolean);const field=row.caseId==='core-control-category-selectors'?'parent_id':'category_id';assert.equal(row.controls.listbox.field,field);assert.equal(row.descriptor.expected[field],Number(row.controls.listbox.after));assert.equal(row.controls.boolean.field,'is_published');assert.equal(row.controls.boolean.after,true);assert.equal(row.descriptor.expected.status,'published');assert.equal(row.controls.listbox.rendered.axis,'scrollbar');return;}
+ if(row.caseId==='core-control-global-seo-listboxes'){assert.deepEqual(row.controls.map(proof=>proof.field),['default_robots_index','default_robots_follow']);for(const proof of row.controls)listbox(proof);return;}
+ if(row.caseId==='core-control-media-policy-booleans'){const fields=new Set();for(const proof of row.controls){boolean(proof.first);fields.add(proof.first.field);if(proof.first.field!=='mimeVerification'){boolean(proof.restored);assert.equal(proof.restored.field,proof.first.field);assert.equal(proof.restored.value,proof.first.value);assert.equal(proof.restored.after,proof.first.before);}}assert.deepEqual([...fields].sort(),['allowedDocumentExtensions','allowedImageExtensions','allowedKinds','mimeVerification']);const groups=['allowedKinds','allowedImageExtensions','allowedDocumentExtensions'];for(const name of groups){assert.ok(Array.isArray(row.originalPolicy[name])&&row.originalPolicy[name].length>0);assert.equal(new Set(row.originalPolicy[name]).size,row.originalPolicy[name].length);const native=row.descriptor.expectedJson.filter(item=>item.column==='value'&&item.path.length===1&&item.path[0]===name);assert.equal(native.length,1);assert.deepEqual(native[0].value,row.originalPolicy[name]);}assert.ok(Array.isArray(row.dependentRestorations));const restoredIds=new Set();for(const proof of row.dependentRestorations){boolean(proof);assert.ok(groups.includes(proof.field));const key=proof.field+':'+proof.value;assert.equal(restoredIds.has(key),false);restoredIds.add(key);assert.equal(proof.after,row.originalPolicy[proof.field].includes(proof.value));}const mime=row.controls.filter(item=>item.first.field==='mimeVerification');assert.equal(mime.length,1);const mimeNative=row.descriptor.expectedJson.filter(item=>item.column==='value'&&item.path.length===1&&item.path[0]==='mimeVerification');assert.equal(mimeNative.length,1);assert.equal(mimeNative[0].value,mime[0].first.after);assert.equal(row.reconciliationInvoked,false);return;}
+ assert.equal(row.controls.length,1);const proof=row.controls[0];boolean(proof);if(row.caseId==='core-control-user-boolean'){assert.equal(proof.confirmationCancelledWithExactFocus,true);assert.equal(proof.confirmationAcceptedAfterCancel,true);assert.notEqual(row.descriptor.id,row.expectedActorId);assert.deepEqual(row.descriptor.auditActions,['admin_user.deactivated']);assert.equal(row.descriptor.auditEntityType,'admin_user');assert.equal(row.descriptor.auditEntityLabel,row.descriptor.expected.username);assert.deepEqual(row.descriptor.auditMetadata,{username:row.descriptor.expected.username});assert.equal(row.descriptor.expected.session_version,2);assert.equal(row.descriptor.exactAuditCount,1);}const field=row.caseId.includes('stage-')||row.caseId.includes('item-')?'is_visible':row.caseId==='core-control-update-boolean'?'publication_status':'is_active';assert.equal(proof.field,field);assert.equal(row.descriptor.expected[field],field==='publication_status'?(proof.after?'published':'draft'):proof.after);
+}
+
+/** Retain only the five complete r158 observations; the failed original frame is never projected as PASS. */
+export function assertCoreControlPartial158Completion({browser,native,partialReadback,sourceSha256,ownedRunId,actorId,canonicalRequiredCases}) {
+  const ids=coreControlFollowupJourneyIds('domain-form-controls-followup'),pending=coreControlFollowupJourneyIds('domain-form-controls-remaining-followup'),passed=ids.filter(id=>!pending.includes(id)),executed=ids.slice(0,10),failed=executed.filter(id=>pending.includes(id));
+  assert.deepEqual(passed,['core-control-category-selectors','core-control-series-selectors','core-control-stage-boolean','core-control-item-boolean','core-control-update-boolean']);
+  assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'domain-forms');assert.equal(browser.journeySelection,'domain-form-controls-followup');
+  assert.equal(browser.status,'fail');assert.equal(browser.driverCompleted,false);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+  assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.ok(typeof ownedRunId==='string'&&ownedRunId.length>0);assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
+  assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,executed);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...executed]);assert.equal(browser.evidence[0].status,'pass');assert.equal(browser.evidence[0].authenticated,true);assert.deepEqual(browser.readOnlyReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);
+  assert.deepEqual(browser.errors.map(row=>row.id),[...failed,'driver']);for(const error of browser.errors)assert.ok(typeof error.message==='string'&&error.message.length>0);
+  assert.equal(browser.errors.at(-2).message,'Action HTTP acknowledgement was not observed within 60000ms.');assert.equal(browser.errors.at(-1).message,browser.errors.at(-2).message);assert.equal(browser.errors.at(-1).pathname,'/admin/users-roles');
+  const identity=rows=>{assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(value=>{const row={...value};delete row.status;delete row.evidence;return row;}).sort((a,b)=>a.key.localeCompare(b.key));};assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status!=='behavior_verified'));
+  assert.equal(native.status,'fail');assert.equal(native.ownedRunId,ownedRunId);assert.equal(native.records.length,17);assert.equal(new Set(native.records.map(row=>row.id)).size,17);
+  assert.equal(partialReadback.status,'partial-not-global-pass');assert.equal(partialReadback.browserStatus,'fail');assert.equal(partialReadback.preview,null);assert.equal(partialReadback.writes.status,'partial-not-global-pass');assert.equal(partialReadback.writes.browserStatus,'fail');assert.equal(partialReadback.writes.globalClosed,false);assert.equal(partialReadback.writes.writes.length,5);
+  const used=[],qualified=[];const get=id=>{assert.equal(used.includes(id),false,'An original native record cannot be reused.');const records=native.records.filter(row=>row.id===id);assert.equal(records.length,1);used.push(id);return records[0];};
+  for(const row of browser.evidence.slice(1)){
+    assert.deepEqual(row.coverage,[]);assert.equal(row.status,passed.includes(row.id)?'pass':'fail');
+    if(row.status==='fail'){for(const key of['controls','noWrite','nativeSaveReceipt','descriptor'])assert.equal(Object.hasOwn(row,key),false);continue;}
+    assert.equal(row.caseId,row.id);assert.equal(row.sourceSha256,sourceSha256);assert.equal(row.ownedRunId,ownedRunId);assert.equal(row.expectedActorId,actorId);assert.equal(row.reloaded,true);assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);assertCoreControlObservation(row);
+    const proof=row.noWrite;assert.equal(proof.ownedRunId,ownedRunId);assert.equal(proof.nativeStateUnchanged,true);assert.equal(proof.adminAuditIncluded,true);
+    const before=get(proof.nativeBefore),after=get(proof.nativeAfter);for(const[record,phase]of[[before,'before'],[after,'after']]){assert.equal(record.kind,'form-permission-fingerprint');assert.equal(record.correlationId,proof.correlationId);assert.equal(record.phase,phase);assert.equal(record.ownedRunId,ownedRunId);}
+    assertCoreControlDraftNative({before,after,actionRequests:proof.actionRequests});
+    const save=get(row.nativeSaveReceipt);assert.ok(Number.isFinite(Date.parse(row.descriptor.auditSince)));const actual=assertCoreControlSaveNative(save,row.descriptor,row);assert.equal(actual.expectedActorId,actorId);
+    const final=partialReadback.writes.writes[qualified.length];assert.equal(final.table,row.descriptor.table);assert.equal(final.id,row.descriptor.id);assert.equal(final.expectedActorId,actorId);assert.equal(final.auditSince,row.descriptor.auditSince);assertCoreFormPermissionNativeWrite(row.descriptor,final,row);assert.deepEqual(final,actual,'The independently collected final native row must retain the exact successful save projection.');
+    qualified.push({journeyId:row.id,consumer:row.formConsumer,surface:row.surface,sourceSha256,ownedRunId,nativeIds:[before.id,after.id,save.id],descriptor:row.descriptor,finalWriteIndex:qualified.length});
+  }
+  assert.deepEqual(qualified.map(row=>row.journeyId),passed);assert.deepEqual(browser.databaseReadback,qualified.map(row=>row.descriptor));assert.deepEqual(native.records.slice(0,15).map(row=>row.id),used,'Every successful native receipt retains its original order.');
+  const uncredited=native.records.slice(15);assert.deepEqual(uncredited.map(row=>row.phase),['before','after']);assert.notEqual(uncredited[0].id,uncredited[1].id);
+  for(const record of uncredited){assert.equal(used.includes(record.id),false);assert.equal(record.kind,'form-permission-fingerprint');assert.equal(record.status,'pass');assert.equal(record.ownedRunId,ownedRunId);assert.equal(record.adminAuditIncluded,true);assert.equal(record.adminUsersIncluded,true);assert.ok(record.correlationId);for(const key of['caseId','expectedActorId','sourceSha256'])assert.equal(Object.hasOwn(record,key),false,'Do not invent per-record case/actor/source attribution.');}
+  assert.equal(used.some(id=>native.records.find(row=>row.id===id)?.correlationId===uncredited[0].correlationId),false);
+  const state=record=>{const value={...record};delete value.id;delete value.phase;return value;};assert.deepEqual(state(uncredited[0]),state(uncredited[1]),'The uncredited terminal pair must preserve its entire captured native state.');
+  return{status:'qualified-partial-targeted-control-observations-original-failed',selection:browser.journeySelection,qualified,pendingJourneyIds:pending,original:{browserStatus:browser.status,driverCompleted:browser.driverCompleted,nativeStatus:native.status,errors:structuredClone(browser.errors)},nativeConservation:{total:17,joined:15,uncredited:2,joinedIds:used,uncreditedIds:uncredited.map(row=>row.id),uncreditedReason:'Terminal fingerprint pair in the sole failed User context; frame-bound only, with no per-record case/actor attribution and no User or successful-discard credit.'},automaticCoverage:[],globalClosed:false};
+}
+
+/** Bounded six passing observations from the failed remaining-eight r159 frame. */
+export function assertCoreControlPartial159Completion({browser,native,partialReadback,sourceSha256,ownedRunId,actorId,canonicalRequiredCases}) {
+  const ids=coreControlFollowupJourneyIds('domain-form-controls-remaining-followup'),pending=coreControlFollowupJourneyIds('domain-form-controls-final-two-followup'),passed=ids.filter(id=>!pending.includes(id)),executed=ids,failed=executed.filter(id=>pending.includes(id));
+  assert.deepEqual(passed,['core-control-location-governorate','core-control-location-city','core-control-location-main_area','core-control-location-sub_area','core-control-global-seo-listboxes','core-control-menu-active']);
+  assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'domain-forms');assert.equal(browser.journeySelection,'domain-form-controls-remaining-followup');
+  assert.equal(browser.status,'fail');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+  assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.ok(typeof ownedRunId==='string'&&ownedRunId.length>0);assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
+  assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,executed);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...executed]);assert.equal(browser.evidence[0].status,'pass');assert.equal(browser.evidence[0].authenticated,true);assert.deepEqual(browser.readOnlyReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);
+  assert.deepEqual(browser.errors.map(row=>row.id),[...failed,'driver']);for(const error of browser.errors)assert.ok(typeof error.message==='string'&&error.message.length>0);
+  assert.ok(browser.errors[0].message.includes('strict mode violation'));assert.ok(browser.errors[1].message.includes('values.allowedKinds.length&&values.allowedImageExtensions.length&&values.allowedDocumentExtensions.length'));assert.ok(browser.errors[2].message.includes("'fail' !== 'pass'"));assert.equal(browser.errors[2].pathname,'/admin/pages-blocks/menus/'+browser.databaseReadback.at(-1).id);
+  const identity=rows=>{assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(value=>{const row={...value};delete row.status;delete row.evidence;return row;}).sort((a,b)=>a.key.localeCompare(b.key));};assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status!=='behavior_verified'));
+  assert.equal(native.status,'fail');assert.equal(native.ownedRunId,ownedRunId);assert.equal(native.records.length,21);assert.equal(new Set(native.records.map(row=>row.id)).size,21);
+  assert.equal(partialReadback.status,'partial-not-global-pass');assert.equal(partialReadback.browserStatus,'fail');assert.equal(partialReadback.preview,null);assert.equal(partialReadback.writes.status,'partial-not-global-pass');assert.equal(partialReadback.writes.browserStatus,'fail');assert.equal(partialReadback.writes.globalClosed,false);assert.equal(partialReadback.writes.writes.length,6);
+  const used=[],qualified=[];const get=id=>{assert.equal(used.includes(id),false,'An original native record cannot be reused.');const records=native.records.filter(row=>row.id===id);assert.equal(records.length,1);used.push(id);return records[0];};
+  for(const row of browser.evidence.slice(1)){
+    assert.deepEqual(row.coverage,[]);assert.equal(row.status,passed.includes(row.id)?'pass':'fail');
+    if(row.status==='fail'){for(const key of['controls','noWrite','nativeSaveReceipt','descriptor'])assert.equal(Object.hasOwn(row,key),false);continue;}
+    assert.equal(row.caseId,row.id);assert.equal(row.sourceSha256,sourceSha256);assert.equal(row.ownedRunId,ownedRunId);assert.equal(row.expectedActorId,actorId);assert.equal(row.reloaded,true);assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);assertCoreControlObservation(row);
+    const proof=row.noWrite;assert.equal(proof.ownedRunId,ownedRunId);assert.equal(proof.nativeStateUnchanged,true);assert.equal(proof.adminAuditIncluded,true);
+    const before=get(proof.nativeBefore),after=get(proof.nativeAfter);for(const[record,phase]of[[before,'before'],[after,'after']]){assert.equal(record.kind,'form-permission-fingerprint');assert.equal(record.correlationId,proof.correlationId);assert.equal(record.phase,phase);assert.equal(record.ownedRunId,ownedRunId);}
+    assertCoreControlDraftNative({before,after,actionRequests:proof.actionRequests});
+    const save=get(row.nativeSaveReceipt);assert.ok(Number.isFinite(Date.parse(row.descriptor.auditSince)));const actual=assertCoreControlSaveNative(save,row.descriptor,row);assert.equal(actual.expectedActorId,actorId);
+    const final=partialReadback.writes.writes[qualified.length];assert.equal(final.table,row.descriptor.table);assert.equal(final.id,row.descriptor.id);assert.equal(final.expectedActorId,actorId);assert.equal(final.auditSince,row.descriptor.auditSince);assertCoreFormPermissionNativeWrite(row.descriptor,final,row);assert.deepEqual(final,actual,'The independently collected final native row must retain the exact successful save projection.');
+    qualified.push({journeyId:row.id,consumer:row.formConsumer,surface:row.surface,sourceSha256,ownedRunId,nativeIds:[before.id,after.id,save.id],descriptor:row.descriptor,finalWriteIndex:qualified.length});
+  }
+  assert.deepEqual(qualified.map(row=>row.journeyId),passed);assert.deepEqual(browser.databaseReadback,qualified.map(row=>row.descriptor));const uncredited=[native.records[12],native.records[16],native.records[17]];
+  assert.equal(used.length,18);assert.deepEqual(native.records.map(row=>row.id),[...used.slice(0,12),uncredited[0].id,...used.slice(12,15),uncredited[1].id,uncredited[2].id,...used.slice(15)],'Every original native record retains its exact chronological position.');
+  assert.deepEqual(uncredited.map(row=>row.phase),['before','before','after']);assert.notEqual(uncredited[0].correlationId,uncredited[1].correlationId);
+  for(const record of uncredited){assert.equal(used.includes(record.id),false);assert.equal(record.kind,'form-permission-fingerprint');assert.equal(record.status,'pass');assert.equal(record.ownedRunId,ownedRunId);assert.equal(record.adminAuditIncluded,true);assert.equal(record.adminUsersIncluded,true);assert.ok(Number.isSafeInteger(record.publicTableCount)&&record.publicTableCount>0);for(const key of['publicTableInventorySha256','publicDataSha256'])assert.match(record[key],/^[a-f0-9]{64}$/u);assert.ok(record.correlationId);for(const key of['caseId','expectedActorId','sourceSha256'])assert.equal(Object.hasOwn(record,key),false,'Do not invent per-record case/actor/source attribution.');assert.equal(used.some(id=>native.records.find(row=>row.id===id)?.correlationId===record.correlationId),false);}
+  const state=record=>{const value={...record};delete value.id;delete value.phase;return value;};assert.deepEqual(state(uncredited[1]),state(uncredited[2]),'The uncredited Media pair retains its entire captured native state.');
+  return{status:'qualified-partial-targeted-control-observations-original-failed',selection:browser.journeySelection,qualified,pendingJourneyIds:pending,original:{browserStatus:browser.status,driverCompleted:browser.driverCompleted,nativeStatus:native.status,errors:structuredClone(browser.errors)},nativeConservation:{total:21,joined:18,uncredited:3,joinedIds:used,uncreditedIds:uncredited.map(row=>row.id),uncreditedReason:'One pre-observation fingerprint in failed User context and one unchanged fingerprint pair in failed Media context; frame-bound only, no per-record case/actor attribution and no successful User/Media or no-write credit for the incomplete User observation.'},automaticCoverage:[],globalClosed:false};
+}
+
+/** The sole completed Media policy observation from original failed r161. */
+export function assertCoreControlPartial161Completion({browser,native,partialReadback,sourceSha256,ownedRunId,actorId,canonicalRequiredCases}) {
+ const ids=coreControlFollowupJourneyIds('domain-form-controls-final-two-followup'),passed=['core-control-media-policy-booleans'],pending=['core-control-user-boolean'];assert.deepEqual(ids,[...pending,...passed]);
+ assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'domain-forms');assert.equal(browser.journeySelection,'domain-form-controls-final-two-followup');assert.equal(browser.status,'fail');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.ok(typeof ownedRunId==='string'&&ownedRunId.length>0);assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
+ assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(r=>r.id),['existing-auth-login',...ids]);assert.equal(browser.evidence[0].status,'pass');assert.equal(browser.evidence[0].authenticated,true);assert.deepEqual(browser.readOnlyReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);assert.deepEqual(browser.errors.map(r=>r.id),[...pending,'driver']);assert.equal(browser.errors[0].message,'The fixed native invariant failed.');assert.ok(browser.errors[1].message.includes("'fail' !== 'pass'"));assert.equal(browser.errors[1].pathname,'/admin/settings/media');
+ const identity=rows=>{assert.equal(new Set(rows.map(r=>r.key)).size,rows.length);return rows.map(value=>{const row={...value};delete row.status;delete row.evidence;return row;}).sort((a,b)=>a.key.localeCompare(b.key));};assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(r=>r.status!=='behavior_verified'));const failed=browser.evidence[1];assert.equal(failed.status,'fail');assert.deepEqual(failed.coverage,[]);for(const key of['controls','noWrite','nativeSaveReceipt','descriptor'])assert.equal(Object.hasOwn(failed,key),false);
+ assert.equal(native.status,'fail');assert.equal(native.ownedRunId,ownedRunId);assert.equal(native.records.length,6);assert.equal(new Set(native.records.map(r=>r.id)).size,6);assert.equal(partialReadback.status,'partial-not-global-pass');assert.equal(partialReadback.browserStatus,'fail');assert.equal(partialReadback.preview,null);assert.equal(partialReadback.writes.status,'partial-not-global-pass');assert.equal(partialReadback.writes.browserStatus,'fail');assert.equal(partialReadback.writes.globalClosed,false);assert.equal(partialReadback.writes.writes.length,1);
+ const row=browser.evidence[2];assert.equal(row.status,'pass');assert.deepEqual(row.coverage,[]);assert.equal(row.caseId,passed[0]);assert.equal(row.formConsumer,'media-library-settings');assert.equal(row.surface,'media-policy-settings');assert.equal(row.sourceSha256,sourceSha256);assert.equal(row.ownedRunId,ownedRunId);assert.equal(row.expectedActorId,actorId);assert.equal(row.reloaded,true);assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);assertCoreControlObservation(row);
+ const proof=row.noWrite;assert.equal(proof.ownedRunId,ownedRunId);assert.equal(proof.nativeStateUnchanged,true);assert.equal(proof.adminAuditIncluded,true);const[before,after,save]=native.records.slice(3);assert.equal(before.id,proof.nativeBefore);assert.equal(after.id,proof.nativeAfter);assert.equal(save.id,row.nativeSaveReceipt);for(const[record,phase]of[[before,'before'],[after,'after']]){assert.equal(record.correlationId,proof.correlationId);assert.equal(record.phase,phase);assert.equal(record.ownedRunId,ownedRunId);}assertCoreControlDraftNative({before,after,actionRequests:proof.actionRequests});assert.ok(Number.isFinite(Date.parse(row.descriptor.auditSince)));const actual=assertCoreControlSaveNative(save,row.descriptor,row);assert.equal(actual.expectedActorId,actorId);const final=partialReadback.writes.writes[0];assert.equal(final.table,row.descriptor.table);assert.equal(final.id,row.descriptor.id);assert.equal(final.expectedActorId,actorId);assert.equal(final.auditSince,row.descriptor.auditSince);assertCoreFormPermissionNativeWrite(row.descriptor,final,row);assert.deepEqual(final,actual);assert.deepEqual(browser.databaseReadback,[row.descriptor]);
+ const uncredited=native.records.slice(0,3);assert.deepEqual(uncredited.slice(0,2).map(r=>r.phase),['before','after']);for(const record of uncredited.slice(0,2)){assert.equal(record.kind,'form-permission-fingerprint');assert.equal(record.status,'pass');assert.equal(record.ownedRunId,ownedRunId);assert.equal(record.adminAuditIncluded,true);assert.equal(record.adminUsersIncluded,true);assert.ok(Number.isSafeInteger(record.publicTableCount)&&record.publicTableCount>0);for(const key of['publicTableInventorySha256','publicDataSha256'])assert.match(record[key],/^[a-f0-9]{64}$/u);assert.ok(record.correlationId);assert.notEqual(record.correlationId,proof.correlationId);for(const key of['caseId','expectedActorId','sourceSha256'])assert.equal(Object.hasOwn(record,key),false);}
+ const state=record=>{const value={...record};delete value.id;delete value.phase;return value;};assert.deepEqual(state(uncredited[0]),state(uncredited[1]));assert.deepEqual(Object.keys(uncredited[2]).sort(),['id','kind','message','status']);assert.equal(uncredited[2].kind,'form-save-native');assert.equal(uncredited[2].status,'fail');assert.equal(uncredited[2].message,'The fixed native invariant failed; no passing readback is available.');
+ const qualified=[{journeyId:row.id,consumer:row.formConsumer,surface:row.surface,sourceSha256,ownedRunId,nativeIds:[before.id,after.id,save.id],descriptor:row.descriptor,finalWriteIndex:0}];return{status:'qualified-partial-targeted-control-observations-original-failed',selection:browser.journeySelection,qualified,pendingJourneyIds:pending,original:{browserStatus:browser.status,driverCompleted:browser.driverCompleted,nativeStatus:native.status,errors:structuredClone(browser.errors)},nativeConservation:{total:6,joined:3,uncredited:3,joinedIds:[before.id,after.id,save.id],uncreditedIds:uncredited.map(r=>r.id),uncreditedReason:'Original User fingerprint pair and failed native-save response remain uncredited and in original order. No User qualification or fabricated per-record actor/source attribution.'},automaticCoverage:[],globalClosed:false};
+}

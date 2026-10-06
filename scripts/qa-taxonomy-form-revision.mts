@@ -64,6 +64,7 @@ type TaxonomyActionMockState = {
 };
 
 type TaxonomyActionHarness = {
+  rejectUnexpectedPersistentRead: () => never;
   qa: TaxonomyActionMockState;
   updateCategoryForm: (
     previousState: TaxonomyActionResult,
@@ -203,6 +204,7 @@ export {
   updateSeriesForm,
 } from "@taxonomy-form-actions";
 export { qa } from "@taxonomy-action-state";
+export { unstable_cache as rejectUnexpectedPersistentRead } from "next/cache";
 `;
 
 const taxonomyActionStateMockSource = String.raw`
@@ -310,6 +312,10 @@ export function revalidatePath(value) {
 }
 export function revalidateTag() {}
 export function updateTag() {}
+// Persistent reads are outside this bounded mutation/revision fixture.
+export function unstable_cache() {
+  throw new Error("Unexpected persistent cache read in taxonomy revision fixture");
+}
 `;
 
 const supabaseAdminMockSource = String.raw`
@@ -740,6 +746,11 @@ try {
     path.join(tempDir, "taxonomy-actions.bundle.cjs"),
   ) as TaxonomyActionHarness;
   const qa = actionHarness.qa;
+  assert.throws(
+    () => actionHarness.rejectUnexpectedPersistentRead(),
+    /Unexpected persistent cache read in taxonomy revision fixture/u,
+  );
+  check("compiled cache port rejects unrelated persistent reads instead of inventing a cache", true);
 
   qa.reset();
   const freshCategory = await actionHarness.updateCategoryForm(

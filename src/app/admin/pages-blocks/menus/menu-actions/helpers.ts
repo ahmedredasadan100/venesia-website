@@ -54,6 +54,9 @@ export async function mutateMenuTree(
     p_actor_admin_user_id: actor.id,
     p_actor_username: actor.username,
   });
+  if (error?.code === '23503' && error.message.includes('menu_items_linked_')) {
+    throw new Error('لم يعد هدف الرابط الداخلي موجودًا. حدّث الاختيار ثم احفظ القائمة.');
+  }
   if (error) throw new Error(error.message);
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Menu atomic mutation returned an invalid result.");
@@ -81,14 +84,20 @@ export function createSlug(value: string) {
   return slugifyFromTitle(value);
 }
 
-type NavigationMessage = string | { message: string; mediaWarning: true } | { message: string; cacheWarning: true };
+type NavigationMessage = string | { message: string; mediaWarning: true } | { message: string; cacheWarning: true } | { message: string; error: true };
+
+export function navigationFailureMessage(message: string): NavigationMessage {
+  return { message, error: true };
+}
 
 function navigationQuery(message?: NavigationMessage) {
   if (!message) return "";
   const text = typeof message === "string" ? message : message.message;
   const params = new URLSearchParams({ message: text });
   if (typeof message !== "string") {
-    params.set("notice", "cacheWarning" in message
+    params.set("notice", "error" in message
+      ? "error"
+      : "cacheWarning" in message
       ? "committed_cache_revalidation_pending"
       : "saved_with_media_sync_warning");
   }

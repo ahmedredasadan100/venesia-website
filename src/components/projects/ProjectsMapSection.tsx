@@ -34,7 +34,7 @@ export default function ProjectsMapSection({
     (project) => project.category === "residential"
   );
 
-  const grouped = residentialProjects.reduce<Record<string, number>>(
+  const grouped = residentialProjects.reduce<Map<string, number>>(
     (acc, project) => {
       const visibleTags = [
         project.location.governorate,
@@ -46,10 +46,10 @@ export default function ProjectsMapSection({
         visibleTags.at(-1)?.nameAr ??
         project.location.label;
       if (!area) return acc;
-      acc[area] = (acc[area] ?? 0) + 1;
+      acc.set(area, (acc.get(area) ?? 0) + 1);
       return acc;
     },
-    {}
+    new Map<string, number>()
   );
 
   return (
@@ -61,7 +61,7 @@ export default function ProjectsMapSection({
           </h2> : null}
 
           <div className="mt-6 space-y-4">
-            {Object.entries(grouped).map(([area, count]) => (
+            {[...grouped].map(([area, count]) => (
               <div
                 key={area}
                 className="flex items-center justify-between border-b border-white/10 pb-3 text-sm"

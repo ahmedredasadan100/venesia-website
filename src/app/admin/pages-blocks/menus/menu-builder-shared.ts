@@ -1,3 +1,12 @@
+import type { AdminEntityNoticeCodeMap } from "../../../../lib/admin/entity-list/types";
+
+export const MENU_BUILDER_NOTICE_CODES: AdminEntityNoticeCodeMap = {
+  saved: { title: "تم الحفظ", message: "", variant: "success" },
+  error: { title: "تعذر الحفظ", message: "", variant: "danger", kind: "action_validation" },
+  saved_with_media_sync_warning: { title: "تم الحفظ مع تنبيه", message: "", variant: "warning" },
+  committed_cache_revalidation_pending: { title: "تم الحفظ مع تنبيه", message: "", variant: "warning" },
+};
+
 export type Menu = {
   id: number;
   name: string;

@@ -1,5 +1,7 @@
 "use server";
 
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 
 import { revalidatePath } from "next/cache";
@@ -36,7 +38,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -234,7 +236,8 @@ export async function toggleFeaturedModuleStatus(formData: FormData) {
     entityId: id,
     metadata: { blockType: "featured", status },
   }, actor);
-  await revalidateBlockModulePaths("featured");
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("featured"));
 }
 
 export async function deleteFeaturedModule(formData: FormData) {
@@ -252,10 +255,10 @@ export async function deleteFeaturedModule(formData: FormData) {
   const synchronization = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [], null, [{ domainKey: "featured_module_templates", entityIdentity: id }],
   );
-  await revalidateBlockModulePaths("featured");
-  if (synchronization.status === "saved_with_media_sync_warning") {
-    redirect("/admin/pages-blocks/blocks/featured?notice=saved_with_media_sync_warning");
-  }
+  const result = synchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حذف القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: id })
+    : adminActionSuccess("تم الحفظ", "تم حذف القالب.", { code: "deleted", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("featured"));
 }
 
 export async function duplicateFeaturedModule(formData: FormData) {
@@ -295,10 +298,10 @@ export async function duplicateFeaturedModule(formData: FormData) {
     entityLabel: nextRow.name,
     metadata: { blockType: "featured", sourceId: id },
   }, actor);
-  await revalidateBlockModulePaths("featured");
-  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
-    redirect("/admin/pages-blocks/blocks/featured?notice=saved_with_media_sync_warning");
-  }
+  const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
+    : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("featured"));
 }
 
 export async function bulkFeaturedModules(formData: FormData) {
@@ -324,8 +327,8 @@ export async function bulkFeaturedModules(formData: FormData) {
     entityLabel: "featured_module_templates",
     metadata: { blockType: "featured", action, ids, count: ids.length },
   }, actor);
-  await revalidateBlockModulePaths("featured");
-  if (synchronization?.status === "saved_with_media_sync_warning") {
-    redirect("/admin/pages-blocks/blocks/featured?notice=saved_with_media_sync_warning");
-  }
+  const result = synchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
+    : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("featured"));
 }

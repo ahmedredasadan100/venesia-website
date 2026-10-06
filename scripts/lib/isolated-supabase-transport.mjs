@@ -49,6 +49,20 @@ export function validateTransportOptions(options) {
   }
 }
 
+/** Wait before opening a new owned PG socket; never retry a dispatched connection. */
+export async function waitForOwnedDatabaseCapacity(bridge, timeoutMs = 5000) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 5000) throw new Error('INVALID_QA_CAPACITY_BUDGET');
+  const started = performance.now();
+  while (true) {
+    const state = bridge.snapshot();
+    if (state.stopping) throw Object.assign(new Error('QA_TRANSPORT_STOPPING'), { code: 'QA_TRANSPORT_STOPPING' });
+    const remaining = timeoutMs - Math.ceil(performance.now() - started);
+    if (remaining <= 0) throw Object.assign(new Error('QA_TRANSPORT_CAPACITY_TIMEOUT'), { code: 'QA_TRANSPORT_CAPACITY_TIMEOUT' });
+    if (state.active < MAX_CONNECTIONS) return remaining;
+    await new Promise(done => setTimeout(done, Math.min(25, remaining)));
+  }
+}
+
 /** Loopback ingress -> local Engine exec stdio -> fixed internal service. */
 export async function startHostAccessBridge(options) {
   validateTransportOptions(options);

@@ -1,0 +1,259 @@
+import assert from 'node:assert/strict';
+import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
+
+import { TOPIC_CONTROL_KINDS, coreTopicControlFixtureSlug } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { PRESENTATION_CONTROL_KINDS, PRESENTATION_CONTROL_TABLES } from "./fixtures/admin-core-presentation-controls-contract.mjs";
+import { PROJECT_CONTROL_KINDS, projectControlSlug } from "./fixtures/admin-core-project-controls-contract.mjs";
+import { TEMPLATE_CONTROL_RECIPES } from "./fixtures/admin-core-template-controls-contract.mjs";
+
+type Row = Record<string, unknown>;
+type Target = { table: string; id: number; signature: string; level?: string; slug?: string };
+const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const object = (value: unknown): Row => { assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Row; };
+const positive = (value: unknown): number => { assert.ok(Number.isSafeInteger(value) && Number(value) > 0); return Number(value); };
+const relation = (name: string) => '("public"|public)[[:space:]]*\\.[[:space:]]*("' + name + '"|' + name + ')';
+const update = (table: string) => 'UPDATE[[:space:]]+' + relation(table) + '[[:space:]]+SET[[:space:]]';
+const rpc = (...names: string[]) => '(' + names.map(name => relation(name) + '[[:space:]]*\\(').join('|') + ')';
+
+// The row-visibility owner writes exactly these fields. Match only its bounded
+// PostgREST SET projection (including status), not arbitrary topics UPDATEs.
+const topicVisibilityAssignment = (column:string) => '("'+column+'"|'+column+')[[:space:]]*=[[:space:]]*(("pgrst_body"|pgrst_body)[[:space:]]*\\.[[:space:]]*("'+column+'"|'+column+')|\\$[1-9][0-9]*)';
+const topicVisibilityUpdate = () => {
+ const allowed='('+['status','updated_at','updated_by','published_at','published_by'].map(topicVisibilityAssignment).join('|')+')';
+ return update('topics')+'('+allowed+'[[:space:]]*,[[:space:]]*)*'+topicVisibilityAssignment('status')+'([[:space:]]*,[[:space:]]*'+allowed+')*[[:space:]]+(FROM|WHERE)[[:space:]]';
+};
+
+/** Fixed fixture identities come from the owner, never from a Browser request. */
+function fixedTargets(input: unknown): Record<string, Target> {
+  const fixtures = object(input), closure = object(fixtures.commandClosure), tracking = object(closure.tracking);
+  const getId = (row: unknown) => positive(Number(object(row).id));
+  const targets: Record<string, Target> = {
+    topics: { table: 'topics', id: getId(fixtures.topic), signature: '('+rpc('admin_mutate_topics_batch_atomically', 'admin_publish_topics_atomically')+'|'+topicVisibilityUpdate()+')' },
+    categories: { table: 'topic_categories', id: getId(fixtures.category), signature: update('topic_categories') },
+    series: { table: 'topic_series', id: getId(fixtures.series), signature: update('topic_series') },
+    pages: { table: 'pages', id: positive(Number(object(fixtures.pages).pageId)), signature: update('pages') },
+    projects: { table: 'projects', id: getId(fixtures.project), signature: rpc('set_project_publication_admin_entry') },
+    project_tracking_stages: { table: 'project_tracking_stages', id: getId(tracking.stage), signature: rpc('mutate_project_tracking_stage') },
+    project_tracking_items: { table: 'project_tracking_items', id: getId(tracking.item), signature: rpc('mutate_project_tracking_item') },
+    project_tracking_updates: { table: 'project_tracking_updates', id: getId(tracking.update), signature: rpc('mutate_project_tracking_update') },
+    redirects: { table: 'url_redirects', id: getId(closure.redirect), signature: update('url_redirects') },
+    admin_users: { table: 'admin_users', id: getId(closure.adminUser), signature: update('admin_users') },
+  };
+  assert.ok(Array.isArray(closure.locations) && closure.locations.length === 4);
+  for (const raw of closure.locations) {
+    const row = object(raw); assert.ok(['governorate', 'city', 'main_area', 'sub_area'].includes(String(row.level)));
+    const entity = 'project_locations_' + row.level; assert.equal(row.entity, entity); assert.ok(!Object.hasOwn(targets, entity));
+    targets[entity] = { table: 'project_locations', id: getId(row), signature: rpc('mutate_project_location'), level: String(row.level) };
+  }
+  if (fixtures.templateControls !== undefined) {
+    const controls = object(fixtures.templateControls); assert.ok(Array.isArray(controls.templates));
+    assert.equal(controls.templates.length, Object.keys(TEMPLATE_CONTROL_RECIPES).length);
+    for (const [kind, recipe] of Object.entries(TEMPLATE_CONTROL_RECIPES)) {
+      const rows: Row[] = controls.templates.map(object).filter((row: Row) => row.kind === kind);
+      assert.equal(rows.length, 1); const slug = 'qa-admin-page-interaction-' + kind + '-8';
+      assert.equal(rows[0].slug, slug);
+      targets['template_control_' + kind.replaceAll('-', '_')] = { table: recipe.table, id: getId(rows[0]), slug, signature: rpc('mutate_page_composition') };
+    }
+  }
+  if (fixtures.topicControls !== undefined) {
+    const controls = object(fixtures.topicControls); assert.ok(Array.isArray(controls.topics));
+    assert.equal(controls.topics.length, TOPIC_CONTROL_KINDS.length);
+    for (const kind of TOPIC_CONTROL_KINDS) {
+      const rows: Row[] = controls.topics.map(object).filter((row: Row) => row.kind === kind);
+      assert.equal(rows.length, 1); const slug = coreTopicControlFixtureSlug(kind);
+      assert.equal(rows[0].slug, slug);
+      targets['topic_control_' + kind] = { table: 'topics', id: getId(rows[0]), slug, signature: update('topics') };
+    }
+  }
+  if (fixtures.projectControls !== undefined) {
+    const controls=object(fixtures.projectControls);assert.ok(Array.isArray(controls.projects));assert.equal(controls.projects.length,PROJECT_CONTROL_KINDS.length);
+    for(const kind of PROJECT_CONTROL_KINDS){
+      const rows:Row[]=controls.projects.map(object).filter((row:Row)=>row.kind===kind);assert.equal(rows.length,1);const slug=projectControlSlug(kind);assert.equal(rows[0].slug,slug);
+      const id=getId(rows[0]);
+      if(kind==='residential'){
+        assert.equal(id,targets.projects.id,'The optional residential form must reuse the same existing owned Project identity.');
+        targets.projects={...targets.projects,slug,signature:rpc('set_project_publication_admin_entry','save_project_admin_entry')};
+      }else{
+        assert.equal(id,getId(fixtures.commercialProject));
+        targets.project_control_commercial={table:'projects',id,slug,signature:rpc('save_project_admin_entry')};
+      }
+    }
+  }
+  if(fixtures.presentationControls!==undefined){
+    const controls=object(fixtures.presentationControls);assert.ok(Array.isArray(controls.templates));assert.equal(controls.templates.length,PRESENTATION_CONTROL_KINDS.length);
+    for(const kind of PRESENTATION_CONTROL_KINDS as Array<keyof typeof PRESENTATION_CONTROL_TABLES>){const rows:Row[]=controls.templates.map(object).filter((row:Row)=>row.kind===kind);assert.equal(rows.length,1);const slug='qa-admin-page-interaction-'+kind+'-8';assert.equal(rows[0].slug,slug);targets['presentation_control_'+kind]={table:PRESENTATION_CONTROL_TABLES[kind],id:getId(rows[0]),slug,signature:rpc('mutate_page_composition')};}
+  }
+  const identities = Object.values(targets).map(row => row.table + ':' + row.id);
+  assert.equal(new Set(identities).size, identities.length);
+  return targets;
+}
+
+type Armed = {
+  token: string; entity: string; target: Target; state: 'arming' | 'armed' | 'cancelled' | 'released' | 'expired';
+  observedStatement?: { pid: number; backendStart: unknown; queryStart: unknown; fingerprint: unknown };
+  holderPid?: number; holderBackendStart?: string; holderFinished: boolean; releaseRequested: boolean; deadline: number; release: () => void; settled: Promise<void>; failure?: unknown; timer?: ReturnType<typeof setTimeout>;
+};
+
+/** One current owned row lock; an exactly attributed PostgREST statement can be cancelled once. */
+export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtures: unknown) {
+  assertOwnedLocalHandle(handle);
+  const targets = fixedTargets(fixtures), usedTokens = new Set<string>(), records: Row[] = [];
+  let live: Armed | undefined, closed = false, cleanupFailure: unknown;
+  async function settle(current: Armed) {
+    clearTimeout(current.timer); current.release(); await current.settled;
+    if (current.failure) throw current.failure;
+  }
+  function currentFor(request: Row) {
+    assert.ok(live && live.token === request.token && live.entity === request.entity, 'Fault operations require the exact currently armed token and entity.');
+    assert.ok(!live.holderFinished && !live.failure, 'The owned holder ended before this operation.');
+    assert.ok(Date.now() < live.deadline && live.state !== 'expired', 'The fixed owned fault deadline expired.');
+    return live;
+  }
+  async function arm(request: Row) {
+    assert.equal(live, undefined, 'Only one fixture fault may own a lock at a time.');
+    const token = String(request.token); assert.ok(!usedTokens.has(token), 'A fault token cannot be replayed.'); usedTokens.add(token);
+    let release!: () => void, readyResolve!: () => void, readyReject!: (error: unknown) => void;
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+    const current: Armed = { token, entity: String(request.entity), target: targets[String(request.entity)], state: 'arming', holderFinished: false, releaseRequested: false, deadline: Date.now() + 45_000, release: () => { current.releaseRequested = true; release(); }, settled: Promise.resolve() };
+    live = current;
+    current.settled = handle.withDatabaseConnection(async connection => {
+      let began = false;
+      try {
+        await connection.query('begin'); began = true;
+        await connection.query("set local statement_timeout='5000ms'");
+        await connection.query("set local idle_in_transaction_session_timeout='60000ms'");
+        const identity = (await connection.query("select pg_backend_pid() pid,current_database() database,current_user role,backend_start::text from pg_stat_activity where pid=pg_backend_pid()")).rows[0];
+        assert.equal(identity.database, 'postgres'); assert.equal(identity.role, 'postgres');
+        current.holderPid = positive(Number(identity.pid)); current.holderBackendStart = String(identity.backend_start);
+        assert.ok(Number.isFinite(Date.parse(current.holderBackendStart)));
+        const target = current.target;
+        const rows = (await connection.query('select id' + (target.level ? ',level' : '') + (target.slug ? ',slug' : '') + ' from public.' + target.table + ' where id=$1 for update', [target.id])).rows;
+        assert.equal(rows.length, 1, 'The owned fault target must be one existing fixture row.');
+        if (target.level) assert.equal(rows[0].level, target.level);
+        if (target.slug) assert.equal(rows[0].slug, target.slug);
+        current.state = 'armed'; current.deadline = Date.now() + 45_000;
+        current.timer = setTimeout(() => {
+          current.state = 'expired'; current.failure ??= new Error('The owned fixture fault expired before explicit release.');
+          cleanupFailure ??= current.failure; current.release();
+        }, 45_000);
+        readyResolve(); await released;
+      } catch (error) { current.failure ??= error; readyReject(error); }
+      finally {
+        if (began) try { await connection.query('rollback'); } catch (error) { current.failure ??= error; cleanupFailure ??= error; }
+      }
+    }).catch(error => { current.failure ??= error; readyReject(error); }).then(() => {
+      current.holderFinished = true;
+      if (!current.releaseRequested) {
+        current.failure ??= new Error('The owned holder ended before an explicit release.');
+        cleanupFailure ??= current.failure; clearTimeout(current.timer); readyReject(current.failure);
+      }
+    });
+    try { await ready; }
+    catch (error) { await settle(current); live = undefined; throw error; }
+    return { status: 'pass', state: 'armed', table: current.target.table, fixtureId: current.target.id, deadline: new Date(current.deadline).toISOString(), holderPid: current.holderPid,
+      holderBackendStart: current.holderBackendStart, boundary: 'Only the fixed owned fixture row is locked; no grant, schema, Auth or Product change.' };
+  }
+  async function inspectBlocked(request: Row, cancelStatement: boolean) {
+    const current = currentFor(request); assert.equal(current.state, 'armed', 'Only an armed token may observe or cancel a blocked statement.');
+    const cancellationStarted = Date.now();
+    let phase = 'connection', candidateCount: number | null = null, connectionElapsedMs: number | null = null;
+    let result: Row;
+    try {
+    result = await handle.withDatabaseConnection(async connection => {
+      connectionElapsedMs = Date.now() - cancellationStarted;
+      const deadline = Math.min(current.deadline - 5_000, Date.now() + 20_000);
+      while (true) {
+        phase = 'deadline';
+        assert.ok(Date.now() < deadline, 'No uniquely attributable PostgREST statement reached the owned row lock.');
+        phase = 'candidate-read';
+        await connection.query('select pg_stat_clear_snapshot()');
+        const candidates = (await connection.query(`select pid,backend_start::text,query_start::text,application_name,usename,datname,state,backend_type,wait_event_type,
+          pg_blocking_pids(pid) blockers,md5(query) query_fingerprint,(query ~* $2::text) signature_matches
+          from pg_stat_activity where $1::integer=any(pg_blocking_pids(pid)) and pid<>pg_backend_pid() order by pid`, [current.holderPid, current.target.signature])).rows;
+        phase = 'candidate-count'; candidateCount = candidates.length;
+        assert.ok(candidates.length <= 1, 'Multiple blocked statements cannot be attributed to a single intentional UI command.');
+        if (candidates.length === 0) { await wait(100); continue; }
+        phase = 'candidate-identity';
+        const candidate = candidates[0], pid = positive(Number(candidate.pid));
+        assert.notEqual(pid, current.holderPid);
+        assert.equal(candidate.usename, 'authenticator'); assert.equal(candidate.datname, 'postgres'); assert.equal(candidate.state, 'active'); assert.equal(candidate.backend_type, 'client backend'); assert.equal(candidate.wait_event_type, 'Lock');
+        assert.deepEqual(candidate.blockers, [current.holderPid]); assert.equal(candidate.signature_matches, true, 'The blocked statement is outside the fixed table/RPC mutation allowlist.');
+        assert.ok(typeof candidate.application_name === 'string' && /^[a-zA-Z0-9 ._-]{0,80}$/.test(candidate.application_name));
+        assert.ok(Number.isFinite(Date.parse(String(candidate.backend_start))) && Number.isFinite(Date.parse(String(candidate.query_start))));
+        assert.match(String(candidate.query_fingerprint), /^[a-f0-9]{32}$/);
+        assert.ok(Date.now() < current.deadline && current.state === 'armed' && !current.holderFinished && !current.failure);
+        const statementIdentity = { pid, backendStart: candidate.backend_start, queryStart: candidate.query_start, fingerprint: candidate.query_fingerprint };
+        phase = 'same-statement';
+        if (current.observedStatement) assert.deepEqual(statementIdentity, current.observedStatement, 'A different statement cannot replace the first observed save.');
+        phase = 'atomic-recheck';
+        await connection.query('select pg_stat_clear_snapshot()');
+        const cancelled = (await connection.query(`select ${cancelStatement ? 'pg_cancel_backend(a.pid) cancelled' : 'a.pid observed_pid'} from pg_stat_activity a
+          where a.pid=$1::integer and a.backend_start=$2::timestamptz and a.query_start=$3::timestamptz and md5(a.query)=$4
+          and a.usename='authenticator' and a.datname=current_database() and a.state='active' and a.backend_type='client backend' and a.wait_event_type='Lock'
+          and pg_blocking_pids(a.pid)=array[$5::integer] and a.query ~* $6::text
+          and exists(select 1 from pg_stat_activity h where h.pid=$5::integer and h.backend_start=$7::timestamptz
+            and h.usename='postgres' and h.datname=current_database() and h.backend_type='client backend' and h.state='idle in transaction')
+          and (select count(*) from pg_stat_activity b where $5::integer=any(pg_blocking_pids(b.pid)))=1`,
+        [pid, candidate.backend_start, candidate.query_start, candidate.query_fingerprint, current.holderPid, current.target.signature, current.holderBackendStart])).rows;
+        phase = 'atomic-identity';
+        assert.equal(cancelled.length, 1, 'The exact observed backend/query/blocker identity changed before cancellation.');
+        phase = 'acknowledgement';
+        if (cancelStatement) {
+          assert.equal(cancelled[0].cancelled, true, 'PostgreSQL did not acknowledge cancellation of the one observed statement.');
+          current.state = 'cancelled';
+        } else assert.equal(Number(cancelled[0].observed_pid), pid, 'The read-only observation must retain the exact blocked statement.');
+        current.observedStatement = statementIdentity;
+        return { backendPid: pid, backendStartedAt: candidate.backend_start, queryStartedAt: candidate.query_start,
+          applicationName: candidate.application_name, backendRole: candidate.usename, queryFingerprint: candidate.query_fingerprint,
+          exactBlockers: candidate.blockers, fixedMutationSignatureMatched: true, holderLifetimeVerified: true, observedOneStatement: true, cancelledOneStatement: cancelStatement };
+      }
+    });
+    } catch (error) {
+      // Fixed diagnostic fields only; never serialize SQL, requests or error messages.
+      // Recording failure must not replace the original invariant failure or cleanup.
+      try { handle.record('core-domain-fault-inspection-failed', {
+        requestId: String(request.id), operation: cancelStatement ? 'cancel' : 'observe', phase, candidateCount, connectionElapsedMs,
+        elapsedMs: Date.now() - cancellationStarted, previouslyObserved: Boolean(current.observedStatement),
+        holderFinished: current.holderFinished, holderFailed: Boolean(current.failure), deadlineExpired: Date.now() >= current.deadline,
+      }); } catch { /* Preserve the original failure. */ }
+      throw error;
+    }
+    return { status: 'pass', state: current.state, table: current.target.table, fixtureId: current.target.id, holderPid: current.holderPid, cancellationElapsedMs: Date.now() - cancellationStarted, ...result,
+      boundary: cancelStatement ? 'Native query cancellation was acknowledged while the owned lock remains held. The Browser and native before/after proof must independently establish rejection and no commit.' : 'Read-only native observation matched one exact blocked statement and holder lifetime. No cancellation or commit occurred; Browser pending/dedup and later persistence remain separate assertions.' };
+  }
+  async function handleRequest(input: unknown): Promise<Row> {
+    assertOwnedLocalHandle(handle); assert.equal(closed, false);
+    const request = object(input); assert.deepEqual(Object.keys(request).sort(), ['entity', 'id', 'kind', 'token']);
+    assert.match(String(request.id), uuid); assert.match(String(request.token), uuid);
+    assert.equal(typeof request.entity, 'string'); assert.ok(Object.hasOwn(targets, String(request.entity)));
+    assert.ok(['domain-write-fault-arm', 'domain-write-fault-observe-blocked', 'domain-write-fault-cancel', 'domain-write-fault-release'].includes(String(request.kind)));
+    let outcome: Row;
+    try {
+      if (request.kind === 'domain-write-fault-arm') outcome = await arm(request);
+      else if (request.kind === 'domain-write-fault-cancel') outcome = await inspectBlocked(request, true);
+      else if (request.kind === 'domain-write-fault-observe-blocked') outcome = await inspectBlocked(request, false);
+      else {
+        const current = currentFor(request), cancellationObserved = current.state === 'cancelled';
+        await settle(current); current.state = 'released'; live = undefined;
+        outcome = { status: 'pass', state: 'released', cancellationObserved, ownedLockRolledBack: true };
+      }
+    } catch (error) {
+      if (live && live.token === request.token && live.entity === request.entity) {
+        const current = live;
+        try { await settle(current); } finally { live = undefined; }
+      }
+      throw error;
+    }
+    const result = { id: request.id, kind: request.kind, entity: request.entity, token: request.token, ...outcome };
+    records.push(result); return result;
+  }
+  async function close() {
+    assertOwnedLocalHandle(handle); assert.equal(closed, false); closed = true;
+    if (live) { const current = live; try { await settle(current); } finally { live = undefined; } }
+    if (cleanupFailure) throw cleanupFailure;
+    return { status: 'closed', activeLocks: 0, records, boundary: 'Every dedicated connection was awaited and its transaction rolled back inside the existing owner.' };
+  }
+  return { handleRequest, close };
+}

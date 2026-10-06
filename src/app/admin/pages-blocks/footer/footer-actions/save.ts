@@ -11,7 +11,7 @@ import {
 import { isFooterContactItemPublic } from "../../../../../lib/footer/parse-footer-settings";
 import { FOOTER_SLOTS_SETTING_KEY, type FooterLegal } from "../../../../../lib/footer/types";
 import type { Json } from "../../../../../lib/database.types";
-import { assertValidFooterSlots } from "../../../../../lib/footer/validate-footer-slots";
+import { validateFooterSlots } from "../../../../../lib/footer/validate-footer-slots";
 import type { FooterBuilderSaveInput } from "./types";
 import {
   sanitizeContactItems,
@@ -24,16 +24,20 @@ import {
 export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
   const adminUser = await requireAdminSession();
 
-  const validatedSlots = assertValidFooterSlots(input.slots);
+  const slotsValidation = validateFooterSlots(input.slots);
+  if (!slotsValidation.ok) {
+    return { ok: false as const, status: "error" as const, message: slotsValidation.errors.join(" ") };
+  }
+  const validatedSlots = slotsValidation.value;
   const contactItems = sanitizeContactItems(input.contactItems);
   const socialLinks = sanitizeSocialLinks(input.socialLinks);
 
   if (usesGlobalContactPool(validatedSlots) && !contactItems.some(isFooterContactItemPublic)) {
-    throw new Error("أضف عنصر تواصل ظاهرًا واحدًا على الأقل للمجموعة العامة.");
+    return { ok: false as const, status: "error" as const, message: "أضف عنصر تواصل ظاهرًا واحدًا على الأقل للمجموعة العامة." };
   }
 
   if (!socialLinks.length) {
-    throw new Error("أضف رابط سوشيال واحدًا على الأقل.");
+    return { ok: false as const, status: "error" as const, message: "أضف رابط سوشيال واحدًا على الأقل." };
   }
 
   const legal: FooterLegal = {

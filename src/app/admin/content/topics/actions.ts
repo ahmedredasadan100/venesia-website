@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import {
   adminActionFailure,
@@ -68,6 +69,126 @@ import {
   deriveEntitySeoScore,
   toTopicSeoScoreInput,
 } from "../../../../lib/admin/seo/entity-seo-persistence";
+
+type TopicCommandIntent = {
+  action: string;
+  ids: number[] | null;
+  categoryId: number | null;
+  expectedCount: number | null;
+};
+type TopicCommandContext = { id: string; attempted: boolean; rejected: boolean; committed: boolean; committedIds?: number[] };
+const topicCommandContext = new AsyncLocalStorage<TopicCommandContext>();
+const COMMAND_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function topicCommandWasRejected(code: string): boolean {
+  // Connection loss and statement/transaction completion-unknown codes cannot
+  // prove rollback. Only explicit statement rejection permits a new command.
+  return /^(?:22|23|25|28|3D|3F|42|44)[0-9A-Z]{3}$/.test(code) ||
+    ["0A000", "40001", "40P01", "55P03", "57014", "P0001", "P0002", "P0003"].includes(code) ||
+    /^PGRST[012][0-9]{2}$/.test(code);
+}
+
+function unknownTopicCommand(commandId: string): AdminActionResult {
+  return { ok: false, feedbackStatus: "warning", completion: "unknown", commandId,
+    title: "نتيجة العملية غير مؤكدة",
+    message: "لم نتمكن من تأكيد نتيجة الأمر. لا تكرر العملية؛ استعد نتيجتها أو حدّث القائمة للتحقق.",
+    code: "completion_unknown", correlationId: commandId };
+}
+
+async function readTopicCommandReceipt(actorId: number, commandId: string) {
+  const { data, error } = await getSupabaseAdmin().from("admin_audit_logs")
+    .select("metadata").eq("actor_admin_user_id", actorId)
+    .contains("metadata", { command: { id: commandId } }).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const metadata = data.metadata as Record<string, unknown> | null;
+  const command = metadata?.command as { id?: unknown; intent?: TopicCommandIntent; result?: Record<string, unknown> } | undefined;
+  const ids = command?.result?.changedIds ?? command?.result?.requestedIds;
+  if (command?.id !== commandId || command.result?.ok !== true || !command.intent ||
+      !Array.isArray(ids) || !ids.every(id => Number.isSafeInteger(id) && Number(id) > 0)) {
+    throw new Error("Invalid topic command receipt");
+  }
+  return { intent: command.intent, ids: ids as number[] };
+}
+
+async function reconcileTopicCommandReceipt(commandId: string, receipt: NonNullable<Awaited<ReturnType<typeof readTopicCommandReceipt>>>): Promise<AdminActionResult> {
+  try {
+    // Domain writes and their audit are already committed. Only idempotent
+    // downstream work is repeated; current domain state is never rewritten.
+    let mediaWarning = false;
+    if (["permanent_delete", "empty_trash"].includes(receipt.intent.action)) {
+      try {
+        const media = await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+          [], null, receipt.ids.map(id => ({ domainKey: "topics", entityIdentity: id })),
+        );
+        mediaWarning = media.status === "saved_with_media_sync_warning";
+      } catch { mediaWarning = true; }
+    }
+    const cache = await runBoundedPublicCacheRevalidation(() => {
+      revalidateTopicsCache();
+      revalidateMediaCenterCache();
+      revalidateMediaCenterPublicPaths();
+      revalidatePath("/topics");
+      revalidatePath(ADMIN_CONTENT_ROUTES.topics);
+      for (const id of receipt.ids) revalidatePath(adminContentTopicPath(id));
+    });
+    const result = mediaWarning
+      ? adminActionWarning("تم تأكيد الحفظ مع تنبيه للميديا", "تم استرداد نتيجة الأمر المحفوظ، وتعذرت مزامنة بعض مراجع الميديا؛ لا تكرر العملية.", { code: "saved_with_media_sync_warning" })
+      : adminActionSuccess("تم استرداد نتيجة العملية", "تأكد حفظ الأمر وسجل المراجعة، وأعيد طلب تحديث القراءات دون تكرار العملية.", { code: "saved" });
+    return { ...withAdminActionCacheWarning(result, cache.ok), commandId, correlationId: commandId,
+      completion: "committed", ...(receipt.ids.length === 1 ? { entityId: receipt.ids[0] } : {}) };
+  } catch {
+    return adminActionWarning("تم حفظ العملية مع تنبيه", "تأكد حفظ البيانات وسجل المراجعة، لكن تعذر استكمال تحديث القراءات. لا تكرر العملية.", {
+      code: "committed_reconciliation_pending", commandId, correlationId: commandId, completion: "committed",
+      ...(receipt.ids.length === 1 ? { entityId: receipt.ids[0] } : {}),
+    });
+  }
+}
+
+export async function recoverUnifiedContentCommand(commandId: string): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  commandId = commandId.toLowerCase();
+  if (!COMMAND_ID.test(commandId)) return invalidMutation("معرّف الأمر غير صالح.");
+  try {
+    const receipt = await readTopicCommandReceipt(actor.id, commandId);
+    return receipt ? await reconcileTopicCommandReceipt(commandId, receipt) : unknownTopicCommand(commandId);
+  } catch { return unknownTopicCommand(commandId); }
+}
+
+async function withTopicCommand(formData: FormData, intent: TopicCommandIntent, run: () => Promise<AdminActionResult>): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  const commandId = (getString(formData, "command_id") || crypto.randomUUID()).toLowerCase();
+  if (!COMMAND_ID.test(commandId)) return invalidMutation("معرّف الأمر غير صالح.");
+  const context: TopicCommandContext = { id: commandId, attempted: false, rejected: false, committed: false };
+  try {
+    const previous = await readTopicCommandReceipt(actor.id, commandId);
+    if (previous) {
+      const sameIntent = previous.intent.action === intent.action &&
+        previous.intent.categoryId === intent.categoryId && previous.intent.expectedCount === intent.expectedCount &&
+        JSON.stringify(previous.intent.ids) === JSON.stringify(intent.ids);
+      if (!sameIntent) return { ...adminActionFailure("تعارض هوية الأمر", "استُخدمت هوية الأمر لنية مختلفة. نفّذ الإجراء الجديد بهوية جديدة.", { code: "command_conflict" }), commandId, completion: "not_committed" };
+      context.committed = true; context.committedIds = previous.ids;
+      return await reconcileTopicCommandReceipt(commandId, previous);
+    }
+    const result = await topicCommandContext.run(context, run);
+    if (context.committed && result.ok) return { ...result, commandId, correlationId: result.correlationId ?? commandId, completion: "committed" };
+    if (!context.committed && (!context.attempted || context.rejected)) return { ...result, commandId, completion: "not_committed" };
+  } catch {
+    if (!context.committed && context.rejected) return { ...adminActionFailure("لم تُحفظ العملية", "رفضت قاعدة البيانات الأمر قبل اكتمال الحفظ. لم تتغير البيانات.", { code: "database_failure" }), commandId, completion: "not_committed" };
+    if (!context.committed && !context.attempted) return { ...adminActionFailure("تعذر بدء العملية", "تعذر التحقق من سجل الأمر قبل الحفظ. لم تبدأ الكتابة.", { code: "database_failure" }), commandId, completion: "not_committed" };
+  }
+  if (context.committed && context.committedIds) {
+    // A validated RPC acknowledgement already proves this exact receipt. An
+    // unexpected downstream failure cannot erase that known commit, even if
+    // reading the audit is currently unavailable. Retry reconciliation only.
+    return await reconcileTopicCommandReceipt(commandId, { intent, ids: context.committedIds });
+  }
+  try {
+    const receipt = await readTopicCommandReceipt(actor.id, commandId);
+    if (receipt) return await reconcileTopicCommandReceipt(commandId, receipt);
+  } catch {}
+  return unknownTopicCommand(commandId);
+}
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -224,6 +345,8 @@ function mapBulkPublishRpcFailure(
   result: Exclude<TopicsBulkPublishRpcResult, { ok: true }>,
 ): AdminActionResult {
   switch (result.code) {
+    case "command_conflict":
+      return adminActionFailure("تعارض هوية الأمر", "استُخدمت هوية الأمر لنية مختلفة؛ لم تنفذ النية الجديدة.", { code: "command_conflict" });
     case "invalid_input":
       return adminActionFailure(
         "تعذر نشر المحتوى",
@@ -297,11 +420,14 @@ async function runAtomicTopicsBatch(input: {
   categoryId?: number;
   expectedDeletedCount?: number;
 }): Promise<AtomicTopicsBatchResult> {
+  const command = topicCommandContext.getStore();
+  if (command) command.attempted = true;
   const { data, error } = await getSupabaseAdmin().rpc(
     "admin_mutate_topics_batch_atomically",
     {
       p_actor_id: input.actor.id,
       p_action: input.action,
+      p_command_id: command?.id,
       p_topic_ids: input.ids,
       ...(input.categoryId ? { p_category_id: input.categoryId } : {}),
       ...(input.expectedDeletedCount
@@ -309,12 +435,15 @@ async function runAtomicTopicsBatch(input: {
         : {}),
     },
   );
+  if (command && error && topicCommandWasRejected(error.code)) command.rejected = true;
+  if (error?.code === '23503' && error.message.includes('menu_items_linked_')) return { ok: false, code: 'resource_in_use' };
   if (error) throw error;
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("تعذر تأكيد نتيجة العملية الذرية. حدّث القائمة قبل إعادة المحاولة.");
   }
   const result = data as Record<string, unknown>;
   if (result.ok === false && typeof result.code === "string") {
+    if (command) command.rejected = true;
     return { ok: false, code: result.code };
   }
   const changedIds = result.changedIds;
@@ -330,18 +459,25 @@ async function runAtomicTopicsBatch(input: {
   ) {
     throw new Error("تعذر تأكيد نتيجة العملية الذرية. حدّث القائمة قبل إعادة المحاولة.");
   }
+  if (command) {
+    if (result.commandId !== command.id) throw new Error("Missing atomic command receipt");
+    command.committed = true;
+    command.committedIds = changedIds;
+  }
   return { ok: true, changedIds };
 }
 
 function atomicTopicsBatchFailure(code: string, title: string): AdminActionResult {
   return adminActionFailure(
     title,
-    code === "revision_conflict"
+    code === 'resource_in_use'
+      ? 'أضيف رابط داخلي إلى أحد الموضوعات قبل اكتمال الحذف. لم يتم حذف أي موضوع؛ أزل الرابط أولًا ثم أعد المحاولة.'
+      : code === "revision_conflict"
       ? "تغيرت حالة بعض الموضوعات أثناء التنفيذ؛ لم تتغير المجموعة. حدّث القائمة ثم راجع الاختيار."
       : code === "missing_topics"
         ? "بعض الموضوعات المحددة لم تعد موجودة؛ لم تتغير المجموعة. حدّث القائمة."
         : "تعذر تنفيذ الإجراء على المجموعة كاملة؛ لم تتغير المجموعة. حدّث القائمة وراجع الاختيار.",
-    { code: code === "revision_conflict" ? "revision_conflict" : "database_failure" },
+    { code: code === "resource_in_use" ? "resource_in_use" : code === "revision_conflict" ? "revision_conflict" : "database_failure" },
   );
 }
 async function validateBulkCategoryMoveSeries(
@@ -424,7 +560,7 @@ async function finishMutation(input: {
     revalidatePath(ADMIN_CONTENT_ROUTES.topics);
     if (input.entityId) revalidatePath(adminContentTopicPath(input.entityId));
   });
-  await recordCmsAdminAudit(
+  if (!topicCommandContext.getStore()?.committed) await recordCmsAdminAudit(
     {
       action: buildCmsAuditAction("topic", input.action),
       entityType: "topic",
@@ -510,7 +646,7 @@ export async function setUnifiedContentStatus(
   ), cacheRevalidation.ok);
 }
 
-export async function toggleUnifiedContentFeatured(
+async function toggleUnifiedContentFeaturedImpl(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
@@ -525,33 +661,8 @@ export async function toggleUnifiedContentFeatured(
   const topic = await loadTopic(id);
   if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
 
-  if (Boolean(topic.is_featured) === isFeatured) {
-    return adminActionSuccess(
-      "التمييز محدّث بالفعل",
-      isFeatured ? "المحتوى مميز بالفعل." : "المحتوى غير مميز بالفعل.",
-      { code: isFeatured ? "featured" : "unfeatured", entityId: id },
-    );
-  }
-
-  const { data: updated, error } = await getSupabaseAdmin()
-    .from("topics")
-    .update({
-      is_featured: isFeatured,
-      updated_at: new Date().toISOString(),
-      updated_by: actor.id,
-    })
-    .eq("id", id)
-    .is("deleted_at", null)
-    .select("id")
-    .maybeSingle();
-  if (error) return invalidMutation(error.message);
-  if (updated?.id !== id) {
-    return adminActionFailure(
-      "تغير المحتوى أثناء التنفيذ",
-      "نُقل الموضوع إلى المحذوفات قبل تحديث التمييز. حدّث القائمة.",
-      { code: "revision_conflict", entityId: id },
-    );
-  }
+  const updated = await runAtomicTopicsBatch({ actor, action: isFeatured ? "feature" : "unfeature", ids: [id] });
+  if (!updated.ok) return atomicTopicsBatchFailure(updated.code, "تعذر تحديث التمييز");
 
   const cacheRevalidation = await finishMutation({
     actor,
@@ -669,7 +780,7 @@ export async function duplicateUnifiedContent(
   ), cacheRevalidation.ok);
 }
 
-export async function softDeleteUnifiedContent(
+async function softDeleteUnifiedContentImpl(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
@@ -678,15 +789,8 @@ export async function softDeleteUnifiedContent(
   const topic = await loadTopic(id);
   if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
 
-  const now = new Date().toISOString();
-  const { data: updated, error } = await getSupabaseAdmin()
-    .from("topics")
-    .update({ status: "unpublished", deleted_at: now, updated_at: now, updated_by: actor.id })
-    .eq("id", id)
-    .select("id")
-    .maybeSingle();
-  if (error) return invalidMutation(error.message);
-  if (updated?.id !== id) return invalidMutation("تعذر تأكيد نقل المحتوى إلى المحذوفات. حدّث القائمة للتحقق قبل إعادة المحاولة.");
+  const updated = await runAtomicTopicsBatch({ actor, action: "delete", ids: [id] });
+  if (!updated.ok) return atomicTopicsBatchFailure(updated.code, "تعذر نقل المحتوى إلى المحذوفات");
 
   const cacheRevalidation = await finishMutation({
     actor,
@@ -937,7 +1041,7 @@ async function permanentlyDeleteTopicsWithCanonicalOwner(input: {
   }), cacheRevalidation.ok);
 }
 
-export async function restoreUnifiedContent(
+async function restoreUnifiedContentImpl(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
@@ -946,7 +1050,7 @@ export async function restoreUnifiedContent(
   return restoreTopicsWithCanonicalOwner({ actor, ids: [id], scope: "single" });
 }
 
-export async function permanentlyDeleteUnifiedContent(
+async function permanentlyDeleteUnifiedContentImpl(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
@@ -966,7 +1070,7 @@ export async function permanentlyDeleteUnifiedContent(
   });
 }
 
-export async function emptyUnifiedContentTrash(
+async function emptyUnifiedContentTrashImpl(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
@@ -1002,7 +1106,7 @@ export async function emptyUnifiedContentTrash(
   });
 }
 
-export async function bulkUpdateUnifiedContent(
+async function bulkUpdateUnifiedContentImpl(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
@@ -1136,12 +1240,16 @@ export async function bulkUpdateUnifiedContent(
       id: Number(topic.id),
       expected_updated_at: topic.updated_at,
     }));
+    const command = topicCommandContext.getStore();
+    if (command) command.attempted = true;
     const { data: rpcPayload, error: publishError } =
       await getSupabaseAdmin().rpc("admin_publish_topics_atomically", {
         p_actor_id: actor.id,
         p_topics: expectedRevisions,
+        p_command_id: command?.id,
       });
     if (publishError) {
+      if (command && topicCommandWasRejected(publishError.code)) command.rejected = true;
       logError(
         "Topics bulk publish RPC failed",
         publishError,
@@ -1169,7 +1277,10 @@ export async function bulkUpdateUnifiedContent(
         { code: "database_failure" },
       );
     }
-    if (!publishResult.ok) return mapBulkPublishRpcFailure(publishResult);
+    if (!publishResult.ok) {
+      if (command) command.rejected = true;
+      return mapBulkPublishRpcFailure(publishResult);
+    }
     if (!hasExactTopicIds(ids, publishResult.requestedIds)) {
       logError(
         "Topics bulk publish RPC result did not match the requested batch",
@@ -1181,6 +1292,12 @@ export async function bulkUpdateUnifiedContent(
         "لا تطابق نتيجة النشر الدفعة المطلوبة. حدّث القائمة قبل تنفيذ إجراء جديد.",
         { code: "database_failure" },
       );
+    }
+
+    if (command) {
+      if ((rpcPayload as Record<string, unknown>)?.commandId !== command.id) return unknownTopicCommand(command.id);
+      command.committed = true;
+      command.committedIds = publishResult.requestedIds;
     }
 
     if (publishResult.publishedIds.length === 0) {
@@ -1322,4 +1439,29 @@ export async function saveContentTablePreferences(visibleColumns: string[]) {
     allowedColumns: TOPICS_PREFERENCE_COLUMN_KEYS,
     contractVersion: TOPICS_COLUMN_CONTRACT_VERSION,
   });
+}
+
+
+export async function toggleUnifiedContentFeatured(formData: FormData): Promise<AdminActionResult> {
+  return withTopicCommand(formData, { action: getString(formData, "desired_featured") === "true" ? "feature" : "unfeature", ids: [Number(getString(formData, "id"))], categoryId: null, expectedCount: null }, () => toggleUnifiedContentFeaturedImpl(formData));
+}
+
+export async function softDeleteUnifiedContent(formData: FormData): Promise<AdminActionResult> {
+  return withTopicCommand(formData, { action: "delete", ids: [Number(getString(formData, "id"))], categoryId: null, expectedCount: null }, () => softDeleteUnifiedContentImpl(formData));
+}
+
+export async function restoreUnifiedContent(formData: FormData): Promise<AdminActionResult> {
+  return withTopicCommand(formData, { action: "restore", ids: [Number(getString(formData, "id"))], categoryId: null, expectedCount: null }, () => restoreUnifiedContentImpl(formData));
+}
+
+export async function permanentlyDeleteUnifiedContent(formData: FormData): Promise<AdminActionResult> {
+  return withTopicCommand(formData, { action: "permanent_delete", ids: [Number(getString(formData, "id"))], categoryId: null, expectedCount: null }, () => permanentlyDeleteUnifiedContentImpl(formData));
+}
+
+export async function emptyUnifiedContentTrash(formData: FormData): Promise<AdminActionResult> {
+  return withTopicCommand(formData, { action: "empty_trash", ids: null, categoryId: null, expectedCount: Number(getString(formData, "expected_count")) }, () => emptyUnifiedContentTrashImpl(formData));
+}
+
+export async function bulkUpdateUnifiedContent(formData: FormData): Promise<AdminActionResult> {
+  return withTopicCommand(formData, { action: getString(formData, "bulk_action"), ids: getIds(formData).sort((a, b) => a - b), categoryId: getString(formData, "bulk_action") === "move_category" ? Number(getString(formData, "category_id")) : null, expectedCount: null }, () => bulkUpdateUnifiedContentImpl(formData));
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 
@@ -60,6 +60,8 @@ export default function AdminMediaImageField({
   ariaInvalid = false,
   ariaDescribedBy,
 }: AdminMediaImageFieldProps) {
+  const generatedFocusTargetId = useId();
+  const triggerId = focusTargetId ?? generatedFocusTargetId;
   const [value, setValue] = useState(defaultValue);
   const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
   const [altValue, setAltValue] = useState(defaultAlt);
@@ -125,7 +127,7 @@ export default function AdminMediaImageField({
               />
               <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-2 pt-8">
                 <button
-                  id={focusTargetId}
+                  id={triggerId}
                   type="button"
                   aria-label={focusTargetId ? label : undefined}
                   aria-haspopup={focusTargetId ? "dialog" : undefined}
@@ -149,7 +151,7 @@ export default function AdminMediaImageField({
             </>
           ) : (
             <button
-              id={focusTargetId}
+              id={triggerId}
               type="button"
               aria-label={focusTargetId ? label : undefined}
               aria-haspopup={focusTargetId ? "dialog" : undefined}
@@ -219,7 +221,7 @@ export default function AdminMediaImageField({
             <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" />
             <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
               <button
-                id={focusTargetId}
+                id={triggerId}
                 type="button"
                 aria-label={focusTargetId ? label : undefined}
                 aria-haspopup={focusTargetId ? "dialog" : undefined}
@@ -247,7 +249,7 @@ export default function AdminMediaImageField({
         </div>
       ) : (
         <button
-          id={focusTargetId}
+          id={triggerId}
           type="button"
           aria-label={focusTargetId ? label : undefined}
           aria-haspopup={focusTargetId ? "dialog" : undefined}

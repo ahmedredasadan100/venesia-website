@@ -13,8 +13,6 @@ import {
   AdminPageHeader,
   AdminTablePagination,
 } from "../../../components/admin/ui";
-import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
-import { adminActionFailure } from "../../../lib/admin/admin-action-result";
 import {
   AUDIT_ACTION_LABELS,
   type AuditAction,
@@ -285,18 +283,6 @@ export default function ActivityLogClient({
     [actionOptions, actorOptions, entityTypes],
   );
   const pagination = controller.result.pagination;
-  const initialFeedback = useMemo(
-    () =>
-      controller.error
-        ? mapAdminActionResultToFeedback(
-            adminActionFailure(
-              "تعذر تحميل سجل النشاط",
-              controller.error.message,
-            ),
-          )
-        : null,
-    [controller.error],
-  );
 
   return (
     <AdminEntityListPageLayout className="pb-10" dir="rtl">
@@ -319,6 +305,8 @@ export default function ActivityLogClient({
           >
             listId="activity-log-table"
             queryPending={controller.queryPending}
+            queryError={controller.error?.message}
+            onQueryRetry={() => { void controller.retry(); }}
             sizingStrategy={{ mode: "flexible", columnKey: "actor" }}
             toolbar={{
               basePath: "/admin/activity-log",
@@ -356,7 +344,6 @@ export default function ActivityLogClient({
             enableColumnManagement
             enableSelection={false}
             scrollLabel="جدول سجل النشاط"
-            mapResultToFeedback={mapAdminActionResultToFeedback}
             sort={{
               key: controller.query.sort.field,
               direction: controller.query.sort.direction,
@@ -375,7 +362,6 @@ export default function ActivityLogClient({
               },
             }}
             actionsColumnWidth={0}
-            initialFeedback={initialFeedback}
             emptyState={{
               mode:
                 pagination.totalRows === 0 &&

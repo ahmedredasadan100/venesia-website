@@ -75,17 +75,38 @@ export async function loadNormalizedAdminEntityListPage<Row>({
   }
 
   let page = requestedPage;
+  let rejectedPage: number | null = null;
   for (let attempt = 0; attempt < maxReads; attempt += 1) {
-    const loaded = await loadPage(page);
+    let loaded: AdminEntityListPageSlice<Row>;
+    try {
+      loaded = await loadPage(page);
+    } catch (error) {
+      if (
+        page === 1 ||
+        typeof error !== "object" ||
+        error === null ||
+        !("code" in error) ||
+        error.code !== "PGRST103"
+      ) {
+        throw error;
+      }
+      // PostgREST rejects an out-of-range offset without a usable SDK count.
+      // Read a valid page for its count; do not parse server error prose.
+      rejectedPage = page;
+      page = 1;
+      continue;
+    }
     if (!Number.isInteger(loaded.totalRows) || loaded.totalRows < 0) {
       throw new TypeError("Entity-list totalRows must be a non-negative integer");
     }
 
     const totalPages = Math.max(1, Math.ceil(loaded.totalRows / pageSize));
-    if (page <= totalPages) {
+    const normalizedPage = Math.min(rejectedPage ?? page, totalPages);
+    rejectedPage = null;
+    if (page === normalizedPage) {
       return { ...loaded, page, totalPages };
     }
-    page = totalPages;
+    page = normalizedPage;
   }
 
   throw new AdminEntityListPageNormalizationError(requestedPage, maxReads);

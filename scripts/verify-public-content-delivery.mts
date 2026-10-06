@@ -426,7 +426,7 @@ const owner = loadTranspiledModule(
   "src/lib/content/public-content-read/owner.ts",
   {
     "server-only": {},
-    "next/cache": { unstable_cache: unstableCacheMock },
+    "../../cache/public-cache-generation": { cachePublicRead: unstableCacheMock },
     react: {
       // React cache is render-pass/request memoization. Identity here models a
       // fresh request for the required transient-failure recovery proof.

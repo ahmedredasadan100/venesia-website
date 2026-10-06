@@ -151,13 +151,23 @@ export function verifyMigrationCorpusProvenanceTests() {
   }
   const globalConfig = join(temporaryRoot, "empty-global-git-config");
   const hooks = join(temporaryRoot, "empty-hooks");
+  const fixtureEnvironment = { ...cleanEnvironment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: globalConfig,
+    GIT_TERMINAL_PROMPT: "0", GIT_NO_REPLACE_OBJECTS: "1", GIT_NO_LAZY_FETCH: "1" };
   const localGit = (...args) => execFileSync("git", [
     "-c", "user.name=Migration Corpus QA", "-c", "user.email=migration-corpus-qa@example.invalid",
     "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false", "-c", "core.safecrlf=false",
     "-c", `core.hooksPath=${hooks}`, ...args,
   ], { cwd: temporaryRoot, encoding: "utf8", windowsHide: true, timeout: 15_000,
-    env: { ...cleanEnvironment, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: globalConfig,
-      GIT_TERMINAL_PROMPT: "0", GIT_NO_REPLACE_OBJECTS: "1" }, stdio: ["ignore", "pipe", "pipe"] }).trim();
+    env: fixtureEnvironment, stdio: ["ignore", "pipe", "pipe"] }).trim();
+  // The parent may bind Git to an immutable application snapshot. Keep that
+  // context for repository evidence, but read this fixture through its own Git.
+  const fixtureEvidence = snapshot => JSON.parse(execFileSync(process.execPath, [
+    "--input-type=module", "--eval",
+    "const { loadGitMigrationCorpusEvidence } = await import(process.argv[1]); " +
+      "process.stdout.write(JSON.stringify(loadGitMigrationCorpusEvidence({ root: process.argv[2], snapshotCommit: process.argv[3] })));",
+    new URL("./lib/migration-provenance.mjs", import.meta.url).href, temporaryRoot, snapshot,
+  ], { cwd: temporaryRoot, encoding: "utf8", windowsHide: true, timeout: 15_000,
+    env: fixtureEnvironment, stdio: ["ignore", "pipe", "pipe"] }));
   try {
     assert.equal(dirname(canonicalTemporaryRoot), temporaryParent);
     writeFileSync(globalConfig, "", { flag: "wx" }); mkdirSync(hooks);
@@ -171,7 +181,7 @@ export function verifyMigrationCorpusProvenanceTests() {
     localGit("add", "--", `sql/migrations/${addition.file}`);
     localGit("commit", "--quiet", "-m", "Committed dependency-ordered fixture addition");
     const committedHead = localGit("rev-parse", "HEAD");
-    const captured = loadGitMigrationCorpusEvidence({ root: temporaryRoot, snapshotCommit: historicalCommit });
+    const captured = fixtureEvidence(historicalCommit);
     check(captured.headCommit === committedHead && captured.snapshotCommit === historicalCommit,
       "The loader reports the actual owned repository HEAD and the requested snapshot.");
     check(captured.historical.length === 1 && captured.committed.length === 2
@@ -181,11 +191,11 @@ export function verifyMigrationCorpusProvenanceTests() {
       committed: captured.committed, current: [addition, first], compatibilities: [] });
     check(fixtureProof.currentAdditions.length === 1 && fixtureProof.currentAdditions[0].version === addition.version,
       "The real Git loader and pure verifier accept the committed backdated addition together.");
-    fails(() => loadGitMigrationCorpusEvidence({ root: temporaryRoot, snapshotCommit: "0".repeat(40) }),
+    fails(() => fixtureEvidence("0".repeat(40)),
       "A missing historical Git object fails closed without network fallback.");
     localGit("checkout", "--quiet", "--orphan", "disconnected-history");
     localGit("commit", "--quiet", "--allow-empty", "-m", "Unrelated fixture history");
-    fails(() => loadGitMigrationCorpusEvidence({ root: temporaryRoot, snapshotCommit: historicalCommit }),
+    fails(() => fixtureEvidence(historicalCommit),
       "An available historical object outside current HEAD ancestry fails closed.");
   } finally {
     assert.equal(realpathSync(temporaryRoot), canonicalTemporaryRoot);

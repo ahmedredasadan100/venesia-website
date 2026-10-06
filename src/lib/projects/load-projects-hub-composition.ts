@@ -1,6 +1,7 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 
 import { getPublicPageRoute } from "../admin/links/static-routes";
 import type { Json } from "../database.types";
@@ -134,7 +135,7 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
 /** Loads Projects Hub page + content assignments. Never throws for public consumers. */
 export async function loadProjectsHubComposition(): Promise<ProjectsHubCompositionLoadResult> {
   try {
-    return await unstable_cache(queryProjectsHubComposition, ["projects-hub-composition"], {
+    return await cachePublicRead(queryProjectsHubComposition, ["projects-hub-composition"], {
       revalidate: 300,
       tags: ["page-composition", "page-blocks", "projects-hub"],
     })();

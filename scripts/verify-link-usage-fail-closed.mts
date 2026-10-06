@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,7 +80,9 @@ const actionResults = loadSource("src/lib/admin/admin-action-result.ts");
 function fixture(options: FixtureOptions = {}) {
   const reads: string[] = [];
   let deletes = 0;
-  let audits = 0;
+  let appAudits = 0;
+  let receiptReads = 0;
+  let receiptCommandId: string | null = null;
   let synchronizations = 0;
   let seoCalls = 0;
   const unexpectedSeoCalculation = () => {
@@ -130,6 +133,7 @@ function fixture(options: FixtureOptions = {}) {
       const query = {
         select(value: string) { columns = value; return query; },
         eq(key: string, value: unknown) { filters.set(key, value); return query; },
+        contains(key: string, value: unknown) { filters.set(key, value); return query; },
         in(key: string, value: number[]) { assert.equal(key, "id"); ids = value; return query; },
         not(key: string, operator: string, value: unknown) {
           assert.deepEqual([key, operator, value], ["deleted_at", "is", null]);
@@ -146,6 +150,15 @@ function fixture(options: FixtureOptions = {}) {
         },
       };
       async function execute() {
+        if (table === "admin_audit_logs") {
+          assert.equal(columns, "metadata");
+          assert.equal(filters.get("actor_admin_user_id"), 73);
+          const commandId = (filters.get("metadata") as { command: { id: string } }).command.id;
+          assert.match(commandId, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u);
+          receiptCommandId = commandId;
+          receiptReads += 1;
+          return { data: null, error: null };
+        }
         if (table === "topics" && columns === "id,title,slug,content_type,deleted_at") {
           assert.deepEqual(ids, [TOPIC_ID]);
           return { data: [topic], error: null };
@@ -172,8 +185,14 @@ function fixture(options: FixtureOptions = {}) {
       assert.equal(name, "admin_mutate_topics_batch_atomically");
       assert.equal(args.p_action, "permanent_delete");
       assert.deepEqual(args.p_topic_ids, [TOPIC_ID]);
+      assert.equal(args.p_actor_id, 73);
+      assert.equal(args.p_command_id, receiptCommandId, "The RPC must use the identity checked by the receipt pre-read.");
+      assert.equal(typeof args.p_command_id, "string");
+      assert.match(args.p_command_id as string, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u);
       deletes += 1;
-      return { data: { ok: true, requestedIds: [TOPIC_ID], changedIds: [TOPIC_ID] }, error: null };
+      // The real RPC owns its atomic audit; this action fixture acknowledges
+      // that command and forbids an additional best-effort application audit.
+      return { data: { ok: true, commandId: args.p_command_id, requestedIds: [TOPIC_ID], changedIds: [TOPIC_ID] }, error: null };
     },
   };
 
@@ -188,8 +207,10 @@ function fixture(options: FixtureOptions = {}) {
   const cache = loadSource("src/lib/cache/revalidate-public-cache-tags.ts", {
     "server-only": {},
     "next/cache": { revalidatePath: () => undefined, revalidateTag: () => undefined, updateTag: () => undefined },
+    "./public-cache-generation": { advancePublicCacheGeneration: async () => { throw new Error("Topics SWR deletion must not advance the public cache generation"); } },
   });
   const dependencies: Record<string, unknown> = {
+    "node:async_hooks": { AsyncLocalStorage },
     "../../../../lib/admin/seo/entity-seo-persistence": {
       toTopicSeoScoreInput: unexpectedSeoCalculation,
       deriveEntitySeoScore: unexpectedSeoCalculation,
@@ -198,7 +219,7 @@ function fixture(options: FixtureOptions = {}) {
     "../../../../lib/admin/auth/require-admin-session": { requireAdminSession: async () => ({ id: 73 }) },
     "../../../../lib/admin/admin-action-result": actionResults,
     "../../../../lib/admin/audit/cms-audit-actions": { buildCmsAuditAction: () => "topic.permanent_delete" },
-    "../../../../lib/admin/audit-log": { recordCmsAdminAudit: async () => { audits += 1; } },
+    "../../../../lib/admin/audit-log": { recordCmsAdminAudit: async () => { appAudits += 1; } },
     "../../../../lib/admin/content-workflow/media-publish-validation": {},
     "../../../../lib/admin/content-workflow/topic-publish-validation": {},
     "../../../../lib/admin/content-workflow/content-review-capability": {},
@@ -234,12 +255,13 @@ function fixture(options: FixtureOptions = {}) {
   return {
     usage,
     reads,
-    effects: () => ({ deletes, audits, synchronizations }),
+    effects: () => ({ deletes, appAudits, synchronizations }),
     async remove() {
       const input = new FormData();
       input.set("id", String(TOPIC_ID));
       input.set("confirm_permanent", "true");
       const result = await actions.permanentlyDeleteUnifiedContent(input);
+      assert.equal(receiptReads, 1, "The real action checks its durable command receipt before mutation.");
       assert.equal(seoCalls, 0, "Non-SEO permanent deletion must never enter scoring, including failure paths.");
       return result;
     },
@@ -265,7 +287,7 @@ for (const linkedType of RESOURCE_TYPES) {
     await check(`${linkedType} path ${failureMode} error rejects usage count safely`, async () => {
       const proof = fixture({ failureStage: `path:${linkedType}`, failureMode });
       await assert.rejects(proof.usage.getResourceLinkUsageCount({ linkedType, linkedId: TOPIC_ID }), { message: SAFE_ERROR });
-      assert.deepEqual(proof.effects(), { deletes: 0, audits: 0, synchronizations: 0 });
+      assert.deepEqual(proof.effects(), { deletes: 0, appAudits: 0, synchronizations: 0 });
     });
   }
 }
@@ -278,7 +300,7 @@ for (const failureStage of READ_STAGES) {
       assert.equal(result.ok, false);
       assert.equal(result.feedbackStatus, "error");
       assert.equal(result.message, SAFE_ERROR);
-      assert.deepEqual(proof.effects(), { deletes: 0, audits: 0, synchronizations: 0 });
+      assert.deepEqual(proof.effects(), { deletes: 0, appAudits: 0, synchronizations: 0 });
       assert.ok(proof.reads.includes(failureStage));
     });
   }
@@ -291,7 +313,7 @@ for (const usageStage of READ_STAGES.filter((stage) => !stage.startsWith("path:"
     const result = await proof.remove();
     assert.equal(result.ok, false);
     assert.match(result.message, /مستخدم في 1 من الروابط الداخلية/u);
-    assert.deepEqual(proof.effects(), { deletes: 0, audits: 0, synchronizations: 0 });
+    assert.deepEqual(proof.effects(), { deletes: 0, appAudits: 0, synchronizations: 0 });
   });
 }
 
@@ -301,7 +323,7 @@ for (const failureMode of ["returned", "thrown"] as const) {
     const result = await proof.remove();
     assert.equal(result.ok, false);
     assert.equal(result.message, SAFE_ERROR);
-    assert.deepEqual(proof.effects(), { deletes: 0, audits: 0, synchronizations: 0 });
+    assert.deepEqual(proof.effects(), { deletes: 0, appAudits: 0, synchronizations: 0 });
   });
 }
 
@@ -310,7 +332,7 @@ await check("footer contact link still blocks when slots are absent", async () =
   const result = await proof.remove();
   assert.equal(result.ok, false);
   assert.match(result.message, /مستخدم في 1 من الروابط الداخلية/u);
-  assert.deepEqual(proof.effects(), { deletes: 0, audits: 0, synchronizations: 0 });
+  assert.deepEqual(proof.effects(), { deletes: 0, appAudits: 0, synchronizations: 0 });
 });
 
 for (const slotsMissing of [false, true]) {
@@ -321,7 +343,8 @@ for (const slotsMissing of [false, true]) {
     const result = await proof.remove();
     assert.equal(result.ok, true);
     assert.equal(result.code, "permanently_deleted");
-    assert.deepEqual(proof.effects(), { deletes: 1, audits: 1, synchronizations: 1 });
+    assert.equal(result.completion, "committed");
+    assert.deepEqual(proof.effects(), { deletes: 1, appAudits: 0, synchronizations: 1 });
     assert.deepEqual([...new Set(proof.reads)].sort(), [...READ_STAGES].sort());
   });
 }

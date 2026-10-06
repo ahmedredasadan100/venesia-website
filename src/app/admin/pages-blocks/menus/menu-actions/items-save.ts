@@ -10,6 +10,7 @@ import {
   mediaWriteMutationErrorMessage,
   mutateMenuTree,
   navigationMutationMessage,
+  navigationFailureMessage,
   resolveMenuItemLink,
   revalidateNavigation,
 } from "./helpers";
@@ -56,7 +57,7 @@ export async function createMenuItem(formData: FormData) {
     } catch (error) {
       backToMenu(
         menuId,
-        mediaWriteMutationErrorMessage(error, "تعذر إضافة عنصر القائمة."),
+        navigationFailureMessage(mediaWriteMutationErrorMessage(error, "تعذر إضافة عنصر القائمة.")),
       );
     }
   })();
@@ -115,7 +116,7 @@ export async function updateMenuItem(formData: FormData) {
     } catch (error) {
       backToMenu(
         menuId,
-        mediaWriteMutationErrorMessage(error, "تعذر تحديث عنصر القائمة."),
+        navigationFailureMessage(mediaWriteMutationErrorMessage(error, "تعذر تحديث عنصر القائمة.")),
       );
     }
   })();

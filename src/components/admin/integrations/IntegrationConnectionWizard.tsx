@@ -362,12 +362,12 @@ export default function IntegrationConnectionWizard({
         <h2 className="text-lg font-semibold text-white">إجراءات الاتصال</h2>
         <div className="mt-5 flex flex-wrap gap-3">
           {canAuthorize ? (
-            <Link
+            <a
               href={`/api/admin/integrations/${item.key}/authorize`}
               className="inline-flex min-h-11 items-center rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/[.08] px-5 text-xs font-semibold text-[#E8CF9A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]"
             >
               {item.connectionId ? "إعادة التفويض" : "بدء التفويض"}
-            </Link>
+            </a>
           ) : null}
           {item.connectionId && !groups.length ? (
             <button

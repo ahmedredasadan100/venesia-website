@@ -29,6 +29,8 @@ const nav = [{ id: 1, label: "Fixture navigation", href: "/proof-page", target: 
 const ports = {
   "server-only": {},
   "next/cache": { unstable_cache: (fn) => fn },
+  "next/server": { connection: async () => { calls.push(["dynamic-request-boundary"]); } },
+  "src/lib/cache/public-cache-generation": { cachePublicRead: (fn) => fn },
   "next/navigation": {
     notFound() { throw new Error("NEXT_NOT_FOUND"); },
     usePathname: () => page.path,

@@ -63,7 +63,7 @@ export default async function Page({
         menu={menu}
         items={items}
         message={query?.message}
-        messageWarning={query?.notice === "saved_with_media_sync_warning"}
+        messageNotice={query?.notice}
         loadError={
           itemsResult.error
             ? `حدث خطأ أثناء قراءة عناصر القائمة: ${itemsResult.error.message}`

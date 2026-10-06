@@ -1,6 +1,7 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { cachePublicRead } from "../../cache/public-cache-generation";
+
 import { cache } from "react";
 import { z } from "zod";
 
@@ -553,7 +554,7 @@ export const loadProjectTrackingDetail = cache(
     const normalizedInput = projectTrackingReadInputSchema.parse(input);
     const cacheInput = JSON.stringify(normalizedInput);
     try {
-      return await unstable_cache(
+      return await cachePublicRead(
         () => queryProjectTrackingDetail(slug, normalizedInput),
         [
           "project-tracking-public-detail",

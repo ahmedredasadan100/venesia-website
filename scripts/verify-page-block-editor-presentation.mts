@@ -144,6 +144,7 @@ const cardsActions = read("src/app/admin/pages-blocks/blocks/cards/actions.ts");
 const cardsRepeater = read(
   "src/components/admin/page-blocks/editors/AdminCardsItemsField.tsx",
 );
+const cardsEditor = read("src/components/admin/page-blocks/CardsModuleEditClient.tsx");
 const breadcrumbRepeater = read(
   "src/components/admin/page-blocks/editors/BreadcrumbManualItemsField.tsx",
 );
@@ -679,7 +680,9 @@ check(
   ) &&
     cardsRepeater.includes("addItem") &&
     cardsRepeater.includes("removeItem") &&
-    cardsRepeater.includes("prefix={`item_${index}`}") &&
+    cardsRepeater.includes("renderHref(item, index)") &&
+    cardsEditor.includes("renderHref={renderCardHref}") &&
+    cardsEditor.includes("prefix={`item_${index}`}") &&
     cardsActions.includes("index < 12") &&
     breadcrumbRepeater.includes("addItem") &&
     breadcrumbRepeater.includes("removeItem") &&
@@ -1402,6 +1405,32 @@ check(
     !assignmentModalOwner.includes("assignState.ok || assignHeroState.ok"),
 );
 
+const assignmentFeedbackAst = ts.createSourceFile("assignment.ts", assignmentModalOwner, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+const assignmentFeedbackTransitions: ts.IfStatement[] = [];
+const findAssignmentFeedbackTransition = (node: ts.Node): void => {
+  if (ts.isIfStatement(node) && node.expression.getText(assignmentFeedbackAst) === "assignPending !== prevAssignPending") assignmentFeedbackTransitions.push(node);
+  ts.forEachChild(node, findAssignmentFeedbackTransition);
+};
+findAssignmentFeedbackTransition(assignmentFeedbackAst);
+assert.equal(assignmentFeedbackTransitions.length, 1);
+const assignmentFeedbackTransition = new Function("state", "callbacks",   "with (state) { with (callbacks) { " + assignmentFeedbackTransitions[0].getText(assignmentFeedbackAst) + " } }");
+for (const scenario of [
+  { state: { ok: true, message: null, feedbackStatus: "success" }, expected: ["تم ربط الموديول بالصفحة.", "success"] },
+  { state: { ok: true, message: "accepted", feedbackStatus: "success" }, expected: ["accepted", "success"] },
+  { state: { ok: true, message: "cache warning", feedbackStatus: "warning" }, expected: ["cache warning", "warning"] },
+  { state: { ok: false, message: "rejected" }, expected: ["rejected"] },
+]) {
+  const messages: unknown[][] = [], dismissals: number[] = [];
+  assignmentFeedbackTransition({ assignPending: false, prevAssignPending: true, showAssignModal: true, activeAssignState: scenario.state, assignModalSession: 7, assignSubmitSession: 7 }, {
+    setPrevAssignPending() {}, setAssignSubmitSession() {}, setAssignVisible() {},
+    setAssignDismissSession(value: number) { dismissals.push(value); },
+    setActionMessage(...args: unknown[]) { messages.push(args); },
+  });
+  assert.deepEqual(messages, [scenario.expected]);
+  assert.deepEqual(dismissals, scenario.state.ok ? [7] : []);
+}
+check("Submitted assignment success survives modal dismissal; warning and rejection keep their outcomes", true);
+
 const assignmentCreateActions = read("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
 check(
   "Page assignment creation consumes the canonical revalidated Action render without an extra refresh roundtrip",
@@ -1409,12 +1438,82 @@ check(
     !assignmentModalOwner.includes("assignRefreshNonce") &&
     assignmentModalOwner.includes("setAssignDismissSession(assignModalSession)") &&
     assignmentModalOwner.includes("templateOptions.filter((template) => !assignedTemplateIds.has(template.id))") &&
-    assignmentCreateActions.includes("await revalidatePageBlocksPath(options.pageId);") &&
-    assignmentCreateActions.includes("await revalidatePageBlocksPath(pageId);") &&
     ["assignPageBlock", "assignHeroModule", "assignMediaSidebarModule", "assignMediaHubModule"].every(
       (action) => assignmentModalOwner.replace(/\s+/gu, "").includes(`useActionState(${action},`) && assignmentCreateActions.includes(`export async function ${action}(`),
     ),
 );
+
+
+// Execute the current Actions and settlement owners; only Auth, persistence and
+// cache delivery are controlled ports. Cache-only retries must never repeat a write.
+function assignmentDeclarations(path: string, names: readonly string[]) {
+  const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+  return names.map((name) => {
+    const declaration = source.statements.find((node) =>
+      (ts.isFunctionDeclaration(node) && node.name?.text === name) ||
+      (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => ts.isIdentifier(item.name) && item.name.text === name)),
+    );
+    assert.ok(declaration, name + " remains owned by " + path);
+    return declaration.getText(source).replace(/^export\s+/u, "");
+  }).join("\n");
+}
+const assignmentActionNames = ["assignPageBlock", "assignHeroModule", "assignMediaSidebarModule", "assignMediaHubModule"] as const;
+const assignmentBehaviorSource = [
+  assignmentDeclarations("src/lib/admin/admin-action-result.ts", ["adminActionSuccess", "adminActionWarning", "withAdminActionCacheWarning"]),
+  assignmentDeclarations("src/lib/cache/revalidate-public-cache-tags.ts", ["PUBLIC_CACHE_REVALIDATION_MAX_ATTEMPTS", "runBoundedPublicCacheRevalidation"]),
+  assignmentDeclarations("src/lib/page-blocks/admin-revalidate.ts", ["revalidateCommittedPageBlockAction"]),
+  assignmentDeclarations("src/app/admin/pages-blocks/pages/page-actions/helpers.ts", ["success", "failure", "databaseAssignmentKind", "revalidateCommittedPageBlockResult"]),
+  assignmentDeclarations("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts", ["resolveRequestedSortOrder", "saveAssignment", ...assignmentActionNames]),
+].join("\n");
+const assignmentParsing = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>("../src/lib/page-blocks/admin-utils.ts");
+type AssignmentObservedResult = { ok: boolean; feedbackStatus?: string; message?: string };
+for (const actionName of assignmentActionNames) {
+  for (const outcome of ["healthy", "cache-failed", "write-rejected", "policy-denied"] as const) {
+    const events: string[] = [];
+    const ports = {
+      requireAdminSession: async () => ({ id: 77, username: "owned-assignment-control" }),
+      pageExists: async () => true,
+      positionPolicyFailure: async () => outcome === "policy-denied" ? { ok: false, message: "position denied" } : null,
+      mutatePageComposition: async (pageId: number, operation: string, payload: { template_id?: number; hero_id?: number }) => {
+        assert.equal(pageId, 813);
+        assert.equal(operation, actionName === "assignHeroModule" ? "save_hero_assignment" : "save_assignment");
+        assert.equal(payload.template_id ?? payload.hero_id, 421);
+        events.push("write");
+        if (outcome === "write-rejected") throw new Error("controlled write rejection");
+        events.push("committed");
+        return { id: 421 };
+      },
+      revalidatePageBlocksPath: async (pageId: number) => {
+        assert.equal(pageId, 813);
+        assert.ok(events.includes("committed"), "cache settlement requires an acknowledged write");
+        events.push("cache");
+        if (outcome === "cache-failed") throw new Error("controlled cache delivery failure");
+      },
+      nextPageCompositionSortOrder: async () => 4,
+      getHeroAssignmentConflicts: async () => [],
+      getDefaultAssignmentPosition: () => "body",
+      BLOCK_MODULE_REGISTRY: { cards: {} },
+      cleanText: assignmentParsing.cleanText,
+      parseNumber: assignmentParsing.parseNumber,
+      parseFormBoolean: assignmentParsing.parseFormBoolean,
+      console: { error: () => events.push("cache-warning-recorded") },
+    };
+    const actual = new Function(...Object.keys(ports), ts.transpileModule(
+      assignmentBehaviorSource + "\nreturn {" + assignmentActionNames.join(",") + "};",
+      { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } },
+    ).outputText)(...Object.values(ports)) as Record<typeof assignmentActionNames[number], (previous: { ok: false }, data: FormData) => Promise<AssignmentObservedResult>>;
+    const data = new FormData();
+    for (const [key, value] of Object.entries({ page_id: "813", template_id: "421", block_type: "cards", slot: "body", is_visible: "true" })) data.set(key, value);
+    const result = await actual[actionName]({ ok: false }, data);
+    const expectedEvents = outcome === "policy-denied" ? [] : outcome === "write-rejected" ? ["write"] : outcome === "cache-failed" ? ["write", "committed", "cache", "cache", "cache-warning-recorded"] : ["write", "committed", "cache"];
+    assert.deepEqual(events, expectedEvents, actionName + ": " + outcome);
+    assert.equal(result.ok, outcome === "healthy" || outcome === "cache-failed");
+    if (result.ok) assert.equal(result.feedbackStatus, outcome === "cache-failed" ? "warning" : "success");
+    if (outcome === "write-rejected") assert.equal(result.message, "controlled write rejection");
+    if (outcome === "policy-denied") assert.equal(result.message, "position denied");
+    check(actionName + " preserves " + outcome + " without replaying the domain command", true);
+  }
+}
 
 const retiredHint = resolve(
   ROOT,

@@ -1,7 +1,10 @@
 import "server-only";
 
+import { withAdminActionCacheWarning, type AdminActionResult } from "../admin/admin-action-result";
+
 import { revalidatePath, revalidateTag } from "next/cache";
 import {
+  runBoundedPublicCacheRevalidation,
   revalidateBlockModuleCache,
   revalidatePageCompositionCache,
 } from "../cache/revalidate-public-cache-tags";
@@ -71,7 +74,7 @@ async function readPublicPathsForPageIds(pageIds: readonly number[]) {
 }
 
 export async function revalidatePublicPagesWithBlockAssignments(affectedPageIds: readonly number[] = []) {
-  revalidatePageCompositionCache();
+  await revalidatePageCompositionCache();
   let paths: Set<string>;
   try {
     paths = await collectAssignedPublicPaths(affectedPageIds);
@@ -107,12 +110,12 @@ export async function revalidateBlockModulePaths(
   for (const pageId of new Set(affectedPageIds)) {
     revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
   }
-  revalidateBlockModuleCache(modulePath);
+  await revalidateBlockModuleCache(modulePath);
   await revalidatePublicPagesWithBlockAssignments(affectedPageIds);
 }
 
 export async function revalidatePageBlocksPath(pageId: number) {
-  revalidatePageCompositionCache();
+  await revalidatePageCompositionCache();
   revalidatePath("/admin/pages-blocks/pages", "layout");
   revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 
@@ -130,4 +133,16 @@ export async function revalidatePageBlocksPath(pageId: number) {
   for (const path of paths) {
     revalidateStoredPublicPagePath(path);
   }
+}
+
+/** Only an already-confirmed domain result reaches this cache-only boundary. */
+export async function revalidateCommittedPageBlockAction<T extends AdminActionResult>(
+  result: T,
+  revalidate: () => void | Promise<void>,
+): Promise<T> {
+  if (!result.ok) return result;
+  if (result.completion !== "committed") throw new Error("Cache settlement requires an acknowledged domain commit.");
+  const cache = await runBoundedPublicCacheRevalidation(revalidate);
+  if (!cache.ok) console.error("Page block mutation committed; cache revalidation failed", cache.error);
+  return withAdminActionCacheWarning(result, cache.ok);
 }

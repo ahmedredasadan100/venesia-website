@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 
 import { findPublicPageRouteByCmsSlug } from "../admin/links/static-routes";
 import type { Tables } from "../database.types";
@@ -77,7 +78,7 @@ export const getPublishedPageStateBySlug = cache(
     pageSlug: string,
   ): Promise<PublishedPageLookupResult> {
     try {
-      return await unstable_cache(
+      return await cachePublicRead(
         async () => queryPublishedPageStateBySlug(pageSlug),
         ["published-page-state-by-slug", pageSlug],
         {
