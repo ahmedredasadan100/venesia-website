@@ -595,6 +595,7 @@ let observedRegistrationRow = catalogRow(postUploadCatalogAsset, {
 });
 let registrationInventory = managedInventory;
 let registrationRuntimeState = completeRuntimeState;
+let registrationContext = runtimeContext;
 let registrationInsertAttempts = 0;
 let registrationInsertThrows = false;
 const registrationRaceSupabase = {
@@ -647,7 +648,7 @@ const registrationRaceCatalogModule = loadTypeScriptModule(
     "server-only": {},
     path: { default: nodePath },
     "../media-storage-adapter": {
-      resolveMediaStorageRuntimeContext: () => runtimeContext,
+      resolveMediaStorageRuntimeContext: () => registrationContext,
     },
     "../media-library": {
       listManagedMediaInventory: async () => registrationInventory,
@@ -682,6 +683,28 @@ const registrationRaceResult = {
   contentType: "image/png",
   sizeBytes: postUploadCatalogAsset.sizeBytes,
 };
+const storageContextOwner = loadTypeScriptModule("src/lib/admin/media-storage-adapter.ts", {});
+const sharedTargetUrl = "https://shared-catalog.supabase.co";
+const hostedContext = storageContextOwner.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: sharedTargetUrl,
+});
+registrationRuntimeState = { ...completeRuntimeState,
+  environment: hostedContext.environment, environmentKey: hostedContext.identity };
+registrationContext = storageContextOwner.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: sharedTargetUrl,
+});
+const localSharedTargetProof = await registrationRaceCatalogModule.prepareCatalogUploadRegistration(7);
+assert.equal(localSharedTargetProof.managedUploadRuntimeProof.environmentKey, hostedContext.identity);
+for (const foreignUrl of ["https://another-catalog.supabase.co", "http://127.0.0.1:54321", "invalid"]) {
+  registrationContext = storageContextOwner.resolveMediaStorageRuntimeContext({
+    NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: foreignUrl,
+  });
+  await assert.rejects(() => registrationRaceCatalogModule.prepareCatalogUploadRegistration(7),
+    (error) => error?.code === "media_catalog_upload_readiness_proof_unavailable");
+}
+registrationContext = runtimeContext;
+registrationRuntimeState = completeRuntimeState;
+check("actual Catalog upload guard accepts a shared target and rejects foreign or unproven targets", true);
 const preparedRegistrationProof = await registrationRaceCatalogModule.prepareCatalogUploadRegistration(7);
 assert.match(
   preparedRegistrationProof.managedUploadRuntimeProof.baselineIdentityFingerprint,
