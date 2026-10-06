@@ -103,7 +103,12 @@ export function extractMediaCandidateValues(value: unknown): string[] {
     if (typeof current === "string") {
       const trimmed = current.trim();
       if (!trimmed) return;
-      if (/^(https?:\/\/|\/images\/|\/files\/)/i.test(trimmed)) results.add(trimmed);
+      if (/^(https?:\/\/|\/images\/|\/files\/)/i.test(trimmed) && !/[<>"\r\n]/.test(trimmed)) {
+        // A scalar URL/path is one complete reference, including filename spaces.
+        // Embedded-text scanning would invent a second, truncated identity.
+        results.add(trimmed);
+        return;
+      }
       for (const match of trimmed.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)) {
         results.add(match[0].replace(/[),.;]+$/, ""));
       }

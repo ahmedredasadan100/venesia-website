@@ -80,6 +80,18 @@ const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/referen
 const managedUrl = "https://demo.supabase.co/storage/v1/object/public/cms-images/images/topics/a.png";
 assert.deepEqual(providerModule.extractMediaCandidateValues({ hero: managedUrl, legacy: "/images/legacy.png" }), [managedUrl, "/images/legacy.png"]);
 check("reference discovery walks nested JSON without fuzzy substring identities", true);
+const spacedProjectPath = "/images/projects/b84/progress-02 - copy (2).jpg";
+for (const value of [spacedProjectPath, `https://venesia.example${spacedProjectPath}`, encodeURI(spacedProjectPath)]) {
+  assert.deepEqual(providerModule.extractMediaCandidateValues({ image: value }), [value]);
+  const identities = providerModule.extractMediaCandidateValues(value).map(identityModule.parseLegacyPublicMediaAsset);
+  assert.deepEqual(identities.map(identityModule.getCanonicalMediaIdentityKey),
+    ["filesystem:public:images/projects/b84/progress-02 - copy (2).jpg"]);
+}
+assert.deepEqual(providerModule.extractMediaCandidateValues('<img src="/images/a.jpg"><a href="/files/b.pdf">file</a>'),
+  ["/images/a.jpg", "/files/b.pdf"]);
+check("scalar media paths with spaces and parentheses produce one complete identity; embedded discovery is preserved", true);
+if (process.argv.includes("--reference-candidates-only")) process.exit(checks.every(item => item.ok) ? 0 : 1);
+
 assert.deepEqual(
   providerModule.replaceMediaValue({ gallery: [managedUrl, "unchanged"] }, managedUrl, "https://cdn/new.png"),
   { gallery: ["https://cdn/new.png", "unchanged"] },
