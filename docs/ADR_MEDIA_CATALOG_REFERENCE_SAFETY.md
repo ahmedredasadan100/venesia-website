@@ -39,3 +39,21 @@ Runtime uploads already have one durable provider boundary, but a storage listin
 - `npm run ci:check`
 - authenticated RTL/keyboard/390px Browser QA when a trusted Admin session exists
 - separate, environment-proven migration application and reconciliation before any remote destructive use
+
+## Shared target runtime identity
+
+Catalog readiness belongs to the actual Supabase database/Storage endpoint used by
+`getSupabaseAdmin` and `getSupabaseStorageAdmin` (`NEXT_PUBLIC_SUPABASE_URL`).
+Local development connected to that same hosted target uses its existing hosted
+baseline, even though Next.js runs in development mode. `production` in the
+persisted hosted namespace is retained for compatibility; it identifies the hosted
+data target, not the application process. Preview execution against a different
+project remains isolated by project identity. Loopback targets include host and
+port and never adopt a hosted baseline. Execution environment still controls the
+read-only local filesystem inventory independently.
+
+Startup performs its existing read-only development preflight. It does not mutate
+or reconcile Catalog state. An existing synced baseline, matching registry version,
+exact target identity, live inventory and Catalog proof remain mandatory. Missing,
+uncertain or foreign-target baselines still fail closed; no execution environment
+label or explicit project-ref label can override the actual client endpoint.

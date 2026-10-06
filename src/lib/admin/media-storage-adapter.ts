@@ -93,34 +93,33 @@ export function resolveMediaRuntimeEnvironment(
   return "local";
 }
 
-function resolveSupabaseProjectReference(environment: MediaStorageEnvironment) {
-  const explicit = environment.SUPABASE_PROJECT_REF?.trim();
-  if (explicit) return explicit;
-
-  const rawUrl = environment.NEXT_PUBLIC_SUPABASE_URL?.trim() || environment.SUPABASE_URL?.trim();
-  if (!rawUrl) return null;
-  try {
-    const hostname = new URL(rawUrl).hostname;
-    const projectReference = hostname.split(".")[0]?.trim();
-    return projectReference || null;
-  } catch {
-    return null;
-  }
-}
-
 export function resolveMediaStorageRuntimeContext(
   environment: MediaStorageEnvironment = process.env,
 ): MediaStorageRuntimeContext {
+  // Catalog and Storage share this exact client endpoint. Execution labels
+  // (NODE_ENV / VERCEL_ENV) cannot partition a singleton in the same database.
+  // Keep the hosted namespace compatible with existing production baselines.
   const provider = "supabase" as const;
-  const runtimeEnvironment = resolveMediaRuntimeEnvironment(environment);
-  const projectReference = resolveSupabaseProjectReference(environment);
+  const rawUrl = environment.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  let target: URL | null = null;
+  try {
+    if (rawUrl) target = new URL(rawUrl);
+  } catch { /* An unproven target must remain unusable by Catalog guards. */ }
+  const loopback = target?.hostname === "localhost" || target?.hostname === "127.0.0.1";
+  const hosted = target?.protocol === "https:" && target.pathname === "/"
+    && !target.port && !target.username && !target.password && !target.search && !target.hash
+    ? /^([a-z0-9-]+)\.supabase\.co$/.exec(target.hostname)?.[1] ?? null
+    : null;
+  const local = loopback && target?.protocol === "http:" && target.pathname === "/"
+    && !target.username && !target.password && !target.search && !target.hash
+    ? target.host : null;
+  const targetEnvironment = local ? "local" : "production";
+  const projectReference = hosted ?? local;
   return {
     provider,
-    environment: runtimeEnvironment,
+    environment: targetEnvironment,
     projectReference,
-    identity: projectReference
-      ? `${runtimeEnvironment}:${provider}:${projectReference}`
-      : null,
+    identity: projectReference ? `${targetEnvironment}:${provider}:${projectReference}` : null,
   };
 }
 

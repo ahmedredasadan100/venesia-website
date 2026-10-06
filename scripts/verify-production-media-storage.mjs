@@ -77,6 +77,37 @@ check(
     storageContract.shouldIncludeLocalFilesystemReadThrough({ NODE_ENV: "production" }) === false,
 );
 
+// Catalog state belongs to the actual database/storage target, not the app host.
+const targetUrl = "https://catalog-target.supabase.co";
+const productionTarget = storageContract.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: targetUrl,
+});
+for (const execution of [
+  { NODE_ENV: "development" },
+  { NODE_ENV: "production", VERCEL_ENV: "preview" },
+]) {
+  assert.deepEqual(storageContract.resolveMediaStorageRuntimeContext({
+    ...execution, NEXT_PUBLIC_SUPABASE_URL: targetUrl,
+  }), productionTarget);
+}
+assert.equal(productionTarget.identity, "production:supabase:catalog-target");
+assert.notEqual(storageContract.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: "https://other-target.supabase.co",
+}).identity, productionTarget.identity);
+assert.equal(storageContract.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: targetUrl,
+  SUPABASE_PROJECT_REF: "stale-label",
+}).identity, productionTarget.identity);
+assert.equal(storageContract.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "development", SUPABASE_PROJECT_REF: "catalog-target",
+}).identity, null);
+const isolatedTarget = storageContract.resolveMediaStorageRuntimeContext({
+  NODE_ENV: "development", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
+});
+assert.equal(isolatedTarget.environment, "local");
+assert.notEqual(isolatedTarget.identity, productionTarget.identity);
+check("Catalog identity follows the client endpoint across app hosts and isolates other targets", true);
+
 assert.equal(mediaPaths.normalizeMediaFolder("images/topics"), "images/topics");
 for (const unsafeFolder of [
   "../images",
