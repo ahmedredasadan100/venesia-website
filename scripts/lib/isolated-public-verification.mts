@@ -485,7 +485,7 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
       "beforeSha256": "ea7f02cefea03676467e63eb1c2a8a8cd073568dd800aa9695bec580de214298",
       "beforeStatementsSha256": "83a1412c8ace3277ec70f9ea46f575c5dee7687afced5d3aaff2356918c839cd",
       "afterSha256": null,
-      "afterStatementsSha256": "8e200ebb2b92735fbdccd7df7adeb79e0def1b39ba7b4d100aba72eb90913736",
+      "afterStatementsSha256": "56ebcf57ee4ba47f0004af230a8d9534912fc862d4e0501b58edc712db9dc9ae",
       "role": "reviewed-verification-ledger-reconciliation"
     },
     "scripts/qa-admin-adoption-journeys.mjs": {
@@ -811,12 +811,12 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     assert.ok(sourceIncluded(row.file)); assert.match(row.sha256, /^[a-f0-9]{64}$/u);
     return [resolve(ROOT, row.file), row.sha256];
   }));
-  const artifactPath = (ref: FinalQualityArtifactRef) => {
+  const artifactPath = (ref: FinalQualityArtifactRef, inspect = true) => {
     assert.equal(typeof ref.path, "string"); assert.match(ref.sha256, /^[a-f0-9]{64}$/u);
     const path = resolve(ROOT, ref.path), boundary = resolve(ROOT, ".tmp-qa/core-final-closure") + sep;
     assert.ok(path.startsWith(boundary) || approvedTracked.get(path) === ref.sha256,
       "Evidence hashes outside the QA boundary require an exact finite current-source path and digest.");
-    assert.equal(realpathSync(path), path, "Evidence may not traverse a symlink or junction."); assert.ok(lstatSync(path).isFile());
+    if (inspect) { assert.equal(realpathSync(path), path, "Evidence may not traverse a symlink or junction."); assert.ok(lstatSync(path).isFile()); }
     return path;
   };
   const pin = (ref: FinalQualityArtifactRef) => {
@@ -825,7 +825,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     bindings.set(path, { path, sha256: ref.sha256 }); return bytes;
   };
   const read = <T,>(ref: FinalQualityArtifactRef): T => {
-    assert.ok(artifactPath(ref).startsWith(resolve(ROOT, ".tmp-qa/core-final-closure") + sep), "JSON authorities must remain inside the fixed QA evidence boundary.");
+    assert.ok(artifactPath(ref, false).startsWith(resolve(ROOT, ".tmp-qa/core-final-closure") + sep), "JSON authorities must remain inside the fixed QA evidence boundary.");
     return JSON.parse(pin(ref).toString("utf8")) as T;
   };
   const fixed = <T,>(ref: FinalQualityArtifactRef, name: string) => { assert.equal(ref.path, FINAL_QUALITY_ACCOUNTING + name); return read<T>(ref); };
@@ -1324,12 +1324,14 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   assert.equal(integrity.status, "FINAL_EVIDENCE_INTEGRITY_PASS"); assert.equal(integrity.sourceHead, expected.invocationHeadSha);
   assert.deepEqual(integrity.failedReferences, []); assert.equal(integrity.historicalFailedSealsPreserved, true); assert.equal(integrity.qualifiedSourceIdentitiesPreserved, true);
   assert.equal(integrity.remainingOwnedResources, 0); assert.equal(integrity.remainingOwnedProcesses, 0);
-  const normalized = (refs: FinalQualityArtifactRef[]) => refs.map(ref => ({ path: artifactPath(ref), sha256: ref.sha256 })).sort((a, b) => a.path.localeCompare(b.path));
+  // Normalization compares identities; pin below still validates every physical path and byte.
+  const normalized = (refs: FinalQualityArtifactRef[]) => refs.map(ref => ({ path: artifactPath(ref, false), sha256: ref.sha256 })).sort((a, b) => a.path.localeCompare(b.path));
   const required = normalized(integrity.requiredReferences), checked = normalized(integrity.checkedReferences);
   assert.equal(new Set(required.map(ref => ref.path)).size, required.length); assert.deepEqual(checked, required); assert.ok(required.length > 0);
   for (const ref of integrity.checkedReferences) pin(ref);
   const covered = new Map(required.map(ref => [ref.path, ref.sha256]));
-  for (const [path, ref] of bindings) if (path !== artifactPath(admissionRef) && path !== artifactPath(admission.integrity))
+  const admissionPath = artifactPath(admissionRef), integrityPath = artifactPath(admission.integrity);
+  for (const [path, ref] of bindings) if (path !== admissionPath && path !== integrityPath)
     assert.equal(covered.get(path), ref.sha256, "Final integrity must cover every consumed evidence binding.");
   const verify = () => { for (const ref of bindings.values()) assert.equal(digest(readFileSync(artifactPath(ref))), ref.sha256, "Retained Quality admission changed during execution."); };
   return { verify, receipt: { mode: "retained" as const, reexecuted: false, originalHookRun: "browser-r52", run: q.run,
