@@ -13,7 +13,8 @@ const failures = [];
 let assertionCount = 0;
 
 function read(path) {
-  return readFileSync(resolve(ROOT, path), "utf8");
+  // Source fixtures must be identical on Windows and CI before mutation proof.
+  return readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n?/gu, "\n");
 }
 
 function check(label, condition) {
@@ -119,7 +120,11 @@ check(
     entityList.includes("columnsControl={columnsControl}") &&
     entityList.includes("contextOverride={bulkBar}") &&
     entityList.includes(
-      'className={toolbar ? "!rounded-t-none !border-t-0" : undefined}',
+      'className={toolbar ? ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS : undefined}',
+    ) &&
+    entityList.includes("<AdminEntityListTableFrame") &&
+    read("src/components/admin/entity-list/AdminEntityListSurface.tsx").includes(
+      'ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS = "!rounded-t-none !border-t-0"',
     ),
 );
 
