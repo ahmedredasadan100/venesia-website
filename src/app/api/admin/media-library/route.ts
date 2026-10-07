@@ -7,6 +7,7 @@ import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actio
 import {
   buildMediaLibraryReadModel,
   createCatalogFolder,
+  retireEmptyCatalogFolder,
   getCatalogAssetById,
   getCatalogAssetByIdentity,
   getMediaCatalogRuntimeState,
@@ -18,7 +19,7 @@ import {
 } from "../../../../lib/admin/media-catalog/catalog";
 import { reconcileMediaCatalog } from "../../../../lib/admin/media-catalog/reconciliation";
 import { moveCatalogMediaAsset } from "../../../../lib/admin/media-catalog/physical-move";
-import { safelyDeleteMediaAsset } from "../../../../lib/admin/media-catalog/safe-delete";
+import { safelyDeleteMediaAsset, previewMediaDeletion } from "../../../../lib/admin/media-catalog/safe-delete";
 import { rebindAllSupportedMediaReferences } from "../../../../lib/admin/media-catalog/synchronization";
 import type { MediaSmartView } from "../../../../lib/admin/media-catalog/types";
 import {
@@ -247,8 +248,15 @@ export async function POST(request: Request) {
     const actor = await requireAdminSession();
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const body = (await request.json()) as { operation?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown;
+      const body = (await request.json()) as { operation?: unknown; assets?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown;
         file?: { name?: unknown; type?: unknown; size?: unknown }; kind?: unknown; receipt?: unknown };
+      if (body.operation === "delete_folder") {
+        if (typeof body.folder !== "string") return mediaJson({ error: "حدد مجلدًا صالحًا." }, { status: 400 });
+        const retired = await retireEmptyCatalogFolder(body.folder);
+        await recordCmsAdminAudit({ action: buildCmsAuditAction("media_asset", "delete"), entityType: "media_folder", entityLabel: body.folder, metadata: { retiredFolderCount: retired } }, actor);
+        return mediaJson({ deleted: true, folder: body.folder });
+      }
+      if (body.operation === "preview_delete") return mediaJson(await previewMediaDeletion(body));
       if (body.operation === "prepare_upload") {
         const file = body.file;
         if (!file || typeof file.name !== "string" || typeof file.type !== "string" || typeof file.size !== "number") {
@@ -468,11 +476,13 @@ export async function DELETE(request: Request) {
 
   try {
     const actor = await requireAdminSession();
-    const body = (await request.json()) as { asset?: unknown };
+    const body = (await request.json()) as { asset?: unknown; confirmReferenced?: unknown };
     const asset = typeof body.asset === "string" ? body.asset.trim() : "";
     if (!asset) return mediaJson({ error: "حدد رابط الملف المطلوب حذفه." }, { status: 400 });
 
+    if (body.confirmReferenced !== undefined && typeof body.confirmReferenced !== "boolean") return mediaJson({ error: "تأكيد الاستخدام غير صالح.", code: "invalid_usage_confirmation" }, { status: 400 });
     const result = await safelyDeleteMediaAsset(asset, {
+      confirmReferenced: body.confirmReferenced === true,
       actorId: actor.id,
       requestIdentity: request.headers.get("x-request-id") ?? undefined,
       onTransition: (transition) =>
@@ -505,7 +515,7 @@ export async function DELETE(request: Request) {
         workflow?.code === "media_delete_post_reservation_reference" ||
         reservationFailureCode === "media_delete_asset_in_use" ||
         result.eligibility.state === "in_use"
-          ? "لا يمكن حذف الملف قبل فك جميع مراجعه الحالية."
+          ? "هذا الملف مستخدم. راجع المواضع ثم أكّد حذف رغم الاستخدام؛ لن تتغير مراجع المحتوى."
           : workflow?.code === "media_delete_post_reservation_scan_failed"
             ? "تغيرت حالة فحص الارتباطات أثناء الحذف؛ أُلغي الحجز ولم يُحذف الملف."
             : workflow?.code === "media_delete_storage_failed" && workflow.repairRequired
@@ -574,6 +584,8 @@ export async function DELETE(request: Request) {
         entityLabel: result.eligibility.asset.displayName,
         metadata: {
           assetId: result.eligibility.asset.id,
+          usageConfirmed: body.confirmReferenced === true,
+          retainedReferenceCount: result.eligibility.references.length,
           bucket: result.eligibility.asset.bucket,
           objectKey: result.eligibility.asset.objectKey,
           reservationId: result.workflow.reservation.id,

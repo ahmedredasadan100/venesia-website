@@ -442,7 +442,8 @@ export async function reconcileAllMediaReferences(options: {
   runIdentity?: string;
 } = {}) {
   validateMediaReferenceProviderRegistry();
-  const assetMap = options.assetMap ?? await getAllCatalogAssetIdentityMap();
+  const assetMap = await getAllCatalogAssetIdentityMap({ includeConfirmedDeletions: true });
+  for (const [key, asset] of options.assetMap ?? []) assetMap.set(key, asset);
   const uncertainties: string[] = [];
   const runIdentity = options.runIdentity ?? crypto.randomUUID();
   let discoveredReferenceCount = 0;
@@ -493,7 +494,7 @@ export async function reconcileAllMediaReferences(options: {
     scannedProviderCount,
     synchronizedProviderCount,
     discoveredReferenceCount,
-    assetCount: assetMap.size,
+    assetCount: [...assetMap.values()].filter(asset => asset.status !== "deleted").length,
     uncertainties: [...new Set(uncertainties)],
     complete: uncertainties.length === 0,
     runIdentity,

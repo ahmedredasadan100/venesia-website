@@ -192,7 +192,7 @@ test.describe("Managed Media ownership lifecycle", () => {
   test("Signed Upload, picker save, usage, replacement and safe deletion", async ({ page, request, playwright }, testInfo) => {
     test.skip(!storageState || process.env.E2E_MEDIA_LIFECYCLE !== "1",
       "Explicit authorization and a trusted Admin session are required for disposable media/content fixtures.");
-    test.setTimeout(300_000);
+    test.setTimeout(600_000);
     const { randomUUID } = await import("node:crypto");
     const { default: sharp } = await import("sharp");
     const namespace = `qa-managed-media-${randomUUID()}`;
@@ -257,13 +257,22 @@ test.describe("Managed Media ownership lifecycle", () => {
       await button.click();
       const response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
       await page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
-      expect((await response).ok()).toBe(true);
-      receipts.push({ operation: "safe_delete", assetId: asset.id });
+      const deletedResponse = await response;
+      const deletedResult = await deletedResponse.json();
+      expect(deletedResponse.ok(), JSON.stringify(deletedResult)).toBe(true);
+      expect(deletedResult.catalogWarnings).toEqual([]);
+      await expect(page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true })).not.toBeVisible();
+      await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible();
+      receipts.push({ operation: "safe_delete", assetId: asset.id, referenced: deletedResult.eligibility.state === "in_use" });
     }
     // Readiness is a prerequisite, never silently repaired by this smoke test.
     const anonymous = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL, storageState: { cookies: [], origins: [] } });
     try {
       expect((await anonymous.post("/api/admin/media-library", { data: { operation: "prepare_upload" } })).status()).toBe(401);
+      expect((await anonymous.delete("/api/admin/media-library", { data: { asset: "https://invalid.example/image.png", confirmReferenced: true } })).status()).toBe(401);
+      for (const operation of ["preview_delete", "delete_folder"]) {
+        expect((await anonymous.post("/api/admin/media-library", { data: { operation, folder: "images/unauthorized" } })).status()).toBe(401);
+      }
     } finally { await anonymous.dispose(); }
     const initial = await request.get("/api/admin/media-library");
     const initialState = await initial.json();
@@ -291,16 +300,19 @@ test.describe("Managed Media ownership lifecycle", () => {
       const used = await usage(original);
       expect(used.hits.some((hit: { editHref: string }) => hit.editHref === topicPath)).toBe(true);
       await library(original);
-      // The normal confirmation reaches the authoritative server guard.
+      // Usage is a warning. Cancelling must never call DELETE or change Storage.
       await page.getByRole("button", { name: /^حذف آمن \(/u }).click();
-      const refused = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
       const deleteDialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
-      await deleteDialog.locator("[data-admin-confirm-submit]").click();
-      const refusal = await refused;
-      expect(refusal.status()).toBe(409);
-      expect((await refusal.json()).code).toMatch(/in_use/u);
+      await expect(deleteDialog.getByRole("button", { name: "حذف رغم الاستخدام", exact: true })).toBeEnabled();
+      await expect(deleteDialog.locator('[data-media-delete-preview]')).toContainText("سيترك هذه المراجع بدون أصل صالح");
+      await expect(deleteDialog.locator(`a[href="${topicPath}"]`)).toBeVisible();
       await deleteDialog.getByRole("button", { name: "إلغاء", exact: true }).click();
-      receipts.push({ operation: "in_use_delete_blocked", assetId: original.id });
+      await expect(deleteDialog).not.toBeVisible();
+      expect((await request.get(original.publicUrl)).ok()).toBe(true);
+      const unconfirmed = await request.delete("/api/admin/media-library", { data: { asset: original.publicUrl } });
+      expect(unconfirmed.status()).toBe(409);
+      expect((await unconfirmed.json()).code).toMatch(/in_use/u);
+      receipts.push({ operation: "referenced_warning_cancel_and_unconfirmed_refusal", assetId: original.id });
       const replacement = await upload(page.locator('main section').filter({ has: page.getByRole("heading", { name: "البيانات الوصفية", exact: true }) }).locator('input[type="file"]'), `${namespace}-replacement.png`);
       const replaced = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "PATCH" && r.request().postDataJSON()?.operation === "replace_all");
       await page.getByRole("dialog", { name: "استبدال كل المراجع المدعومة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
@@ -310,14 +322,76 @@ test.describe("Managed Media ownership lifecycle", () => {
       expect((await usage(original)).count).toBe(0);
       expect((await usage(replacement)).hits.some((hit: { editHref: string }) => hit.editHref === topicPath)).toBe(true);
       receipts.push({ operation: "picker_usage_replace", topicPath, originalId: original.id, replacementId: replacement.id });
+      // Establish a real baseline containing the owned fixtures, so deletion
+      // proves ordinary baseline members work as well as new upload extensions.
+      const baseline = await request.post("/api/admin/media-library", { data: { operation: "reconcile", dryRun: false } });
+      const baselineResult = await baseline.json();
+      expect(baseline.ok(), JSON.stringify(baselineResult)).toBe(true);
+      expect(baselineResult.complete).toBe(true);
       await removeAsset(original);
+      // Confirmed used deletion preserves the authored value until manual editing.
+      await removeAsset(replacement);
       await page.goto(topicPath);
+      await expect(imageField().locator('input[name="image"]')).toHaveValue(replacement.publicUrl);
+      receipts.push({ operation: "confirmed_referenced_delete_content_unchanged", assetId: replacement.id, topicPath });
       await imageField().getByRole("button", { name: "إزالة", exact: true }).click();
       await save();
       await page.reload();
       await expect(imageField().locator('input[name="image"]')).toHaveValue("");
       expect((await usage(replacement)).count).toBe(0);
-      await removeAsset(replacement);
+
+      // Mixed bulk usage and folder adoption share exactly the same preview and
+      // per-asset deletion API. A transport failure must leave a retryable result.
+      const ownedFolder = `images/${namespace}`;
+      const folderCreated = await request.post("/api/admin/media-library", { data: { operation: "create_folder", folder: ownedFolder, displayName: namespace } });
+      expect(folderCreated.ok()).toBe(true);
+      await page.goto(`/admin/media-library?folder=${encodeURIComponent(ownedFolder)}`);
+      const bulkUsed = await upload(page.locator('main input[type="file"][multiple]'), `${namespace}-bulk-used.png`);
+      const bulkUnused = await upload(page.locator('main input[type="file"][multiple]'), `${namespace}-bulk-unused.png`);
+      const folderAsset = await upload(page.locator('main input[type="file"][multiple]'), `${namespace}-folder.png`);
+      await page.goto(topicPath);
+      await imageField().getByRole("button").first().click();
+      const bulkPicker = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true });
+      await bulkPicker.getByRole("button", { name: "images", exact: true }).click();
+      await bulkPicker.getByPlaceholder(search).fill(bulkUsed.displayName);
+      await bulkPicker.locator('button[aria-pressed]').filter({ has: page.getByText(bulkUsed.displayName, { exact: true }) }).click();
+      await bulkPicker.getByRole("button", { name: "تأكيد الاختيار", exact: true }).click();
+      await save();
+      await page.goto(`/admin/media-library?folder=${encodeURIComponent(ownedFolder)}`);
+      for (const asset of [bulkUsed, bulkUnused]) {
+        await page.locator('main button[aria-pressed]').filter({ has: page.getByText(asset.displayName, { exact: true }) }).click();
+      }
+      let injectedFailure = false;
+      await page.route("**/api/admin/media-library", async route => {
+        if (!injectedFailure && route.request().method() === "DELETE" && route.request().postDataJSON()?.asset === bulkUnused.publicUrl) {
+          injectedFailure = true;
+          await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "تعذر حذف ملف الاختبار: فشل نقل معزول" }) });
+        } else await route.continue();
+      });
+      await page.getByRole("button", { name: /^حذف آمن \(/u }).click();
+      const bulkDialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
+      await expect(bulkDialog).toContainText("غير مستخدمة حاليًا");
+      await bulkDialog.getByRole("button", { name: "حذف رغم الاستخدام", exact: true }).click();
+      await expect(bulkDialog.locator('[data-media-delete-results]')).toContainText("Deleted: 1 / Failed: 1", { timeout: 60_000 });
+      await expect(bulkDialog).toContainText("فشل نقل معزول");
+      expect(injectedFailure).toBe(true);
+      await page.unroute("**/api/admin/media-library");
+      await bulkDialog.getByRole("button", { name: "إعادة الفحص", exact: true }).click();
+      await bulkDialog.getByRole("button", { name: "تأكيد الحذف", exact: true }).click();
+      await expect(bulkDialog).not.toBeVisible({ timeout: 60_000 });
+      await expect(page.locator('main button[aria-pressed]').filter({ has: page.getByText(bulkUnused.displayName, { exact: true }) })).toHaveCount(0);
+      receipts.push({ operation: "mixed_bulk_confirmed_usage_and_retry_after_injected_failure", assetIds: [bulkUsed.id, bulkUnused.id] });
+      await page.getByRole("button", { name: "حذف المجلد", exact: true }).click();
+      await bulkDialog.getByRole("button", { name: "تأكيد الحذف", exact: true }).click();
+      await expect(bulkDialog).not.toBeVisible({ timeout: 60_000 });
+      const afterFolder = await (await request.get("/api/admin/media-library")).json();
+      expect(afterFolder.folders.some((item: { path: string }) => item.path === ownedFolder)).toBe(false);
+      expect(afterFolder.readiness.safeDeleteReady).toBe(true);
+      receipts.push({ operation: "folder_delete", folder: ownedFolder, assetId: folderAsset.id });
+      await page.goto(topicPath);
+      await expect(imageField().locator('input[name="image"]')).toHaveValue(bulkUsed.publicUrl);
+      await imageField().getByRole("button", { name: "إزالة", exact: true }).click();
+      await save();
     } finally {
       // Persist identifiers on failure so cleanup always targets only this run's fixtures.
       await testInfo.attach("managed-media-lifecycle", { body: JSON.stringify({ namespace, topicPath, assets: owned.map(a => ({ id: a.id, publicUrl: a.publicUrl })), receipts }), contentType: "application/json" });

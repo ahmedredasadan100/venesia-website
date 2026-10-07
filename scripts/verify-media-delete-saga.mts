@@ -75,6 +75,31 @@ await test("A. Used asset is rejected before Storage mutation", async () => {
   assert.match(migration, /from public\.media_references[\s\S]*reference\.asset_id = p_asset_id/);
 });
 
+await test("Explicit usage confirmation permits referenced deletion through the same saga", async () => {
+  const calls: string[] = [];
+  const result = await runMediaDeleteSaga(dependencies({
+    confirmReferenced: true,
+    scanAfterReservation: async () => ({ referenceReasons: ["persisted_reference", "live_reference"], uncertainties: [] }),
+    deleteStorage: async () => { calls.push("storage"); return { storagePath: "images/qa.png" }; },
+    verifyStorageState: async () => "missing",
+    finalizeReservation: async () => { calls.push("finalize"); },
+  }));
+  assert.equal(result.deleted, true);
+  assert.deepEqual(calls, ["storage", "finalize"]);
+});
+
+await test("Usage confirmation never suppresses incomplete scan or runtime uncertainty", async () => {
+  let storageCalls = 0;
+  const result = await runMediaDeleteSaga(dependencies({
+    confirmReferenced: true,
+    scanAfterReservation: async () => ({ referenceReasons: ["live_reference"], uncertainties: ["provider_scan_failed"] }),
+    deleteStorage: async () => { storageCalls++; return { storagePath: "images/qa.png" }; },
+  }));
+  assert.equal(result.deleted, false);
+  assert.equal(storageCalls, 0);
+  assert.ok(!result.deleted && result.reasons.includes("provider_scan_failed"));
+});
+
 await test("B. Unlinked reserved asset completes Storage delete then finalization", async () => {
   const calls: string[] = [];
   const result = await runMediaDeleteSaga(
@@ -269,7 +294,7 @@ await test("Migration privileges, RLS, recovery state and scope are explicit", (
   assert.doesNotMatch(migration, /insert into public\.media_assets/);
 });
 
-console.log(`\nMedia delete Saga: ${passed}/11 contract checks passed.`);
+console.log(`\nMedia delete Saga: ${passed} contract checks passed.`);
 console.log(
   "INFO Database concurrency, real Storage mutation, and Browser acceptance remain separate environment-bound proofs.",
 );

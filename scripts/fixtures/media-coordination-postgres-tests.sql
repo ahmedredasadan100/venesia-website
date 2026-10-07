@@ -1385,7 +1385,7 @@ select media_coordination_test.assert_true(
   )
   and has_function_privilege(
     'service_role',
-    'public.reserve_media_asset_deletion(uuid,bigint,text,text,text,text,text,text,text,text)',
+    'public.reserve_media_asset_deletion(uuid,bigint,text,text,text,text,text,text,text,text,boolean)',
     'EXECUTE'
   )
   and has_function_privilege(
@@ -1484,6 +1484,96 @@ begin
   end;
 end;
 $$;
+rollback;
+
+-- Current deletion contract: explicit usage consent does not mutate authored
+-- references, relax Storage evidence, or allow new leases on deleted assets.
+begin;
+insert into public.media_folders (normalized_path, parent_path, display_name)
+values ('images/delete-contract', 'images', 'Delete contract');
+insert into public.media_assets (
+ id, provider, bucket, object_key, public_url, original_filename, display_name,
+ media_kind, mime_type, extension, byte_size, folder_path, status, reconciliation_state, missing_object
+) values ('00000000-0000-4000-8000-000000000119', 'supabase', 'images',
+ 'images/delete-contract/used.png', '/images/delete-contract/used.png', 'used.png', 'used.png',
+ 'image', 'image/png', '.png', 100, 'images/delete-contract', 'active', 'synced', false);
+create table media_coordination_test.authored_content (id text, image text);
+insert into media_coordination_test.authored_content values ('used', '/images/delete-contract/used.png');
+insert into public.media_references(asset_id,domain_key,entity_type,entity_identity,field_key)
+values ('00000000-0000-4000-8000-000000000119','delete_contract','topic','used','image');
+select media_coordination_test.expect_error($sql$
+ select public.retire_empty_media_folder('images/delete-contract')
+$sql$, 'media_folder_not_empty');
+select media_coordination_test.expect_error($sql$
+ select public.retire_empty_media_folder('images')
+$sql$, 'invalid_media_folder_delete_target');
+select media_coordination_test.expect_error($sql$
+ select * from public.reserve_media_asset_deletion('00000000-0000-4000-8000-000000000119', null,
+ 'used-unconfirmed', 'supabase','images','images/delete-contract/used.png',
+ 'supabase','ci','postgres15:venesia_media_coordination_ci','ci-registry-v1')
+$sql$, 'media_delete_asset_in_use');
+insert into media_coordination_test.runtime_state(key,value)
+select 'usage_confirmed_reservation', reservation_id::text
+from public.reserve_media_asset_deletion('00000000-0000-4000-8000-000000000119', null,
+ 'used-confirmed', 'supabase','images','images/delete-contract/used.png',
+ 'supabase','ci','postgres15:venesia_media_coordination_ci','ci-registry-v1', true);
+select media_coordination_test.assert_true(
+ (select usage_confirmed from public.media_delete_reservations where asset_id='00000000-0000-4000-8000-000000000119'),
+ 'explicit consent was not retained by the reservation');
+select media_coordination_test.expect_error(format($sql$
+ select public.finalize_media_asset_deletion('00000000-0000-4000-8000-000000000119', %L::uuid,'exists',clock_timestamp())
+$sql$, (select value from media_coordination_test.runtime_state where key='usage_confirmed_reservation')),
+ 'media_delete_storage_absence_not_proven');
+select media_coordination_test.assert_true(public.finalize_media_asset_deletion(
+ '00000000-0000-4000-8000-000000000119',
+ (select value::uuid from media_coordination_test.runtime_state where key='usage_confirmed_reservation'),
+ 'missing',clock_timestamp())='deleted', 'confirmed used deletion did not finalize');
+select media_coordination_test.assert_true(
+ (select image='/images/delete-contract/used.png' from media_coordination_test.authored_content where id='used')
+ and (select count(*)=1 from public.media_references where asset_id='00000000-0000-4000-8000-000000000119'),
+ 'deletion modified authored or indexed references');
+-- Missing consent metadata is not consent (including SQL NULL semantics).
+update public.media_assets set metadata = '{}'::jsonb where id='00000000-0000-4000-8000-000000000119';
+select media_coordination_test.expect_error($sql$
+ select public.replace_media_references_for_entity('delete_contract','topic','used',
+ '[{"assetId":"00000000-0000-4000-8000-000000000119","fieldKey":"image"}]',null,null)
+$sql$, 'media_reference_asset_not_active');
+select media_coordination_test.expect_error($sql$
+ select public.replace_media_references_for_provider('delete_contract',
+ '[{"assetId":"00000000-0000-4000-8000-000000000119","entityType":"topic","entityIdentity":"used","fieldKey":"image"}]',
+ gen_random_uuid(),public.get_media_reference_provider_revision('delete_contract'))
+$sql$, 'media_reference_asset_not_active');
+update public.media_assets set metadata=jsonb_build_object('usageConfirmedDeletion',true)
+where id='00000000-0000-4000-8000-000000000119';
+select media_coordination_test.expect_error($sql$
+ select * from public.acquire_media_reference_write_lease(
+ '[{"provider":"supabase","bucket":"images","objectKey":"images/delete-contract/used.png","domainKey":"delete_contract","entityType":"topic","entityIdentity":"new-bind"}]',
+ null,'deleted-new-bind',180,'supabase','ci','postgres15:venesia_media_coordination_ci','ci-registry-v1')
+$sql$, 'media_write_lease_asset_not_active');
+select media_coordination_test.assert_true(public.replace_media_references_for_entity('delete_contract','topic','used',
+ '[{"assetId":"00000000-0000-4000-8000-000000000119","fieldKey":"image"}]',null,null)=1,
+ 'known intentional deletion broke retained reference synchronization');
+select media_coordination_test.assert_true(public.replace_media_references_for_provider('delete_contract',
+ '[{"assetId":"00000000-0000-4000-8000-000000000119","entityType":"topic","entityIdentity":"used","fieldKey":"image"}]',
+ gen_random_uuid(),public.get_media_reference_provider_revision('delete_contract'))=1,
+ 'known intentional deletion broke provider reconciliation');
+select media_coordination_test.assert_true(public.retire_empty_media_folder('images/delete-contract')=1,
+ 'empty managed folder was not retired');
+select media_coordination_test.assert_true(not exists(select 1 from public.admin_media_folders_catalog
+ where normalized_path='images/delete-contract'), 'retired folder remains visible');
+-- A later managed registration restores the same folder owner atomically.
+insert into public.media_assets (
+ id, provider, bucket, object_key, public_url, original_filename, display_name,
+ media_kind, mime_type, extension, byte_size, folder_path, status, reconciliation_state, missing_object
+) values ('00000000-0000-4000-8000-000000000120', 'supabase', 'images',
+ 'images/delete-contract/new.png', '/images/delete-contract/new.png', 'new.png', 'new.png',
+ 'image', 'image/png', '.png', 100, 'images/delete-contract', 'active', 'synced', false);
+select media_coordination_test.assert_true(exists(select 1 from public.admin_media_folders_catalog
+ where normalized_path='images/delete-contract'), 'new managed registration did not revive its folder');
+select media_coordination_test.assert_true(
+ not has_function_privilege('anon','public.reserve_media_asset_deletion(uuid,bigint,text,text,text,text,text,text,text,text,boolean)','EXECUTE')
+ and not has_function_privilege('authenticated','public.retire_empty_media_folder(text)','EXECUTE'),
+ 'usage confirmation or folder retirement exposed a browser RPC');
 rollback;
 
 select 'PASS media coordination PostgreSQL 17 integration assertions' as result;
