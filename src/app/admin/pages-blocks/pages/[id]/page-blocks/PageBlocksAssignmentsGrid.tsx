@@ -12,6 +12,7 @@ import {
   AdminDataGridPrimaryCell,
   AdminDataGridSortLabel,
 } from "../../../../../../components/admin/ui";
+import { ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS } from "../../../../../../components/admin/entity-list/AdminEntityListSurface";
 import type { AdminTableSortDirection } from "../../../../../../components/admin/table-engine";
 import { normalizeBoolean } from "../../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
@@ -93,7 +94,7 @@ export default function PageBlocksAssignmentsGrid({
   }
 
   return (
-    <AdminDataGrid surface="embedded">
+    <AdminDataGrid className={ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS}>
       <AdminDataGridHeader columns={gridColumns}>
         <AdminDataGridCheckboxCell>
           <AdminDataGridCheckbox

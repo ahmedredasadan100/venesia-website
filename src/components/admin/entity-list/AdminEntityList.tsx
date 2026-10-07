@@ -37,7 +37,11 @@ import AdminEntityListTable, {
 import AdminEntityListFilters, {
   type AdminEntityListFiltersProps,
 } from "./AdminEntityListFilters";
-import { AdminEntityListPrimarySection } from "./AdminEntityListSurface";
+import {
+  ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS,
+  AdminEntityListTableFrame,
+  AdminEntityListPrimarySection,
+} from "./AdminEntityListSurface";
 import {
   AdminFloatingLayerProvider,
   type AdminEntityListConfirmationSnapshot,
@@ -495,12 +499,10 @@ function AdminEntityListInner<
   );
 
   return (
-    <section
+    <AdminEntityListTableFrame
       id={listId}
-      className={`scroll-mt-6 flex flex-col ${toolbar ? "gap-0" : "gap-7"}`}
       data-admin-entity-list=""
-    >
-      {toolbar ? (
+      toolbar={toolbar ? (
         <AdminEntityListFilters
           {...toolbar}
           columnsControl={columnsControl}
@@ -508,7 +510,7 @@ function AdminEntityListInner<
           contextOverrideActive={selectionActive}
         />
       ) : null}
-
+    >
       {showLegacyToolbar ? (
         <AdminEntityListPrimarySection>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -563,11 +565,11 @@ function AdminEntityListInner<
           empty={resolveAdminEntityListEmptyState(emptyState)}
           getRowDepth={getRowDepth}
           rowClassName={rowClassName}
-          className={toolbar ? "!rounded-t-none !border-t-0" : undefined}
+          className={toolbar ? ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS : undefined}
           onMutationResult={handleMutationResult}
         />
       </AdminEntityListPrimarySection>
-    </section>
+    </AdminEntityListTableFrame>
   );
 }
 

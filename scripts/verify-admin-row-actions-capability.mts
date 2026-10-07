@@ -4915,10 +4915,11 @@ check(
     entityListSurfaceSource.includes("AdminEntityListPageLayout") &&
     entityListSurfaceSource.includes("gap-7") &&
     entityListSource.includes("AdminEntityListPrimarySection") &&
-    entityListSource.includes('toolbar ? "gap-0" : "gap-7"') &&
+    entityListSurfaceSource.includes('toolbar ? "gap-0" : "gap-7"') &&
+    entityListSource.includes("<AdminEntityListTableFrame") &&
     entityListSource.includes("<AdminEntityListFilters") &&
     entityListSource.includes(
-      'toolbar ? "!rounded-t-none !border-t-0" : undefined',
+      'toolbar ? ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS : undefined',
     ) &&
     !entityListSource.includes("primary-section]:mt-") &&
     !read(paths.pagination).includes("className={`mt-4") &&

@@ -127,3 +127,61 @@ test.describe("Admin global Footer shared layout", () => {
     expect(Math.abs(bottom.footer - bottom.expected)).toBeLessThan(1);
   });
 });
+
+
+test.describe("Admin collection shared table surface", () => {
+  test.use({ deviceScaleFactor: 1.25 });
+  test("standalone and specialized collections adopt the same frame contract", async ({ page }) => {
+    test.skip(!storageState, "A trusted Admin session is required for read-only surface proof.");
+    test.setTimeout(90_000);
+    await page.goto("/admin/pages-blocks/pages");
+    const link = page.locator('table a[href^="/admin/pages-blocks/pages/"]').first();
+    await expect(link).toBeVisible();
+    const editorHref = await link.getAttribute("href");
+    expect(editorHref).toBeTruthy();
+    const reference = new Map<number, unknown>();
+    for (const route of ["/admin/pages-blocks/pages", `${editorHref!.split("?")[0]}?tab=modules`]) {
+      await page.goto(route);
+      const frame = page.locator("[data-admin-entity-list-table-frame]").first();
+      await expect(frame).toBeVisible();
+      await expect(frame.locator('[data-admin-data-grid-surface="standalone"]')).toHaveCount(1);
+      await expect(frame.locator('[data-admin-collection-toolbar-surface="standalone"]')).toHaveCount(1);
+      for (const width of [1536, 1920, 1440, 1280, 768, 390]) {
+        await page.setViewportSize({ width, height: 760 });
+        const result = await frame.evaluate(node => {
+          const toolbar = node.querySelector("[data-admin-collection-toolbar-surface]")!;
+          const grid = node.querySelector("[data-admin-data-grid-surface]")!;
+          const scroll = grid.querySelector("[data-admin-data-grid-scroll]")!;
+          const properties = ["borderTopLeftRadius", "borderBottomLeftRadius", "borderTopWidth", "borderLeftWidth", "borderColor", "backgroundColor", "paddingTop", "paddingLeft", "boxShadow", "overflowX"] as const;
+          const styles = (element: Element) => {
+            const css = getComputedStyle(element);
+            return Object.fromEntries(properties.map(key => [key, css[key]]));
+          };
+          const rect = scroll.getBoundingClientRect();
+          const css = getComputedStyle(scroll);
+          return {
+            surface: { toolbar: styles(toolbar), grid: styles(grid), scroll: styles(scroll), gap: getComputedStyle(node).rowGap },
+            seam: Math.abs(toolbar.getBoundingClientRect().bottom - grid.getBoundingClientRect().top),
+            aligned: Math.abs(toolbar.getBoundingClientRect().left - grid.getBoundingClientRect().left),
+            scrollOwner: css.overflowX,
+            scrollbar: (scroll as HTMLElement).offsetHeight - scroll.clientHeight - parseFloat(css.borderTopWidth) - parseFloat(css.borderBottomWidth),
+            innerWidth: rect.width - parseFloat(css.borderLeftWidth) - parseFloat(css.borderRightWidth),
+            viewport: innerWidth, document: document.documentElement.scrollWidth,
+            zoom: visualViewport?.scale,
+            frameOverflow: getComputedStyle(node).overflowX,
+          };
+        });
+        expect(result.zoom).toBe(1);
+        expect(result.seam).toBeLessThan(0.02);
+        expect(result.aligned).toBeLessThan(0.02);
+        expect(result.scrollOwner).toBe("auto");
+        expect(result.frameOverflow).toBe("visible");
+        expect(result.document).toBeLessThanOrEqual(result.viewport);
+        // The requested laptop baseline must fit; narrower widths retain real overflow.
+        if (width === 1536 || width === 1920) expect(result.scrollbar).toBeLessThan(1);
+        if (reference.has(width)) expect(result.surface).toEqual(reference.get(width));
+        else reference.set(width, result.surface);
+      }
+    }
+  });
+});
