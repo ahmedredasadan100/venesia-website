@@ -521,7 +521,7 @@ begin
   from public.media_assets asset
   where asset.id = any(coordination_asset_ids)
     and asset.status <> 'active'
-    and not (asset.status = 'deleted' and asset.metadata->>'usageConfirmedDeletion' = 'true')
+    and not (asset.status = 'deleted' and coalesce(asset.metadata->>'usageConfirmedDeletion', 'false') = 'true')
   order by asset.id
   limit 1;
 
@@ -682,7 +682,7 @@ begin
     where coalesce(entry->>'assetId', '') <> ''
   )
     and asset.status <> 'active'
-    and not (asset.status = 'deleted' and asset.metadata->>'usageConfirmedDeletion' = 'true')
+    and not (asset.status = 'deleted' and coalesce(asset.metadata->>'usageConfirmedDeletion', 'false') = 'true')
   order by asset.id
   limit 1;
 

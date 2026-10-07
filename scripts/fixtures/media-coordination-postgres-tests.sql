@@ -1532,6 +1532,24 @@ select media_coordination_test.assert_true(
  (select image='/images/delete-contract/used.png' from media_coordination_test.authored_content where id='used')
  and (select count(*)=1 from public.media_references where asset_id='00000000-0000-4000-8000-000000000119'),
  'deletion modified authored or indexed references');
+-- Missing consent metadata is not consent (including SQL NULL semantics).
+update public.media_assets set metadata = '{}'::jsonb where id='00000000-0000-4000-8000-000000000119';
+select media_coordination_test.expect_error($sql$
+ select public.replace_media_references_for_entity('delete_contract','topic','used',
+ '[{"assetId":"00000000-0000-4000-8000-000000000119","fieldKey":"image"}]',null,null)
+$sql$, 'media_reference_asset_not_active');
+select media_coordination_test.expect_error($sql$
+ select public.replace_media_references_for_provider('delete_contract',
+ '[{"assetId":"00000000-0000-4000-8000-000000000119","entityType":"topic","entityIdentity":"used","fieldKey":"image"}]',
+ gen_random_uuid(),public.get_media_reference_provider_revision('delete_contract'))
+$sql$, 'media_reference_asset_not_active');
+update public.media_assets set metadata=jsonb_build_object('usageConfirmedDeletion',true)
+where id='00000000-0000-4000-8000-000000000119';
+select media_coordination_test.expect_error($sql$
+ select * from public.acquire_media_reference_write_lease(
+ '[{"provider":"supabase","bucket":"images","objectKey":"images/delete-contract/used.png","domainKey":"delete_contract","entityType":"topic","entityIdentity":"new-bind"}]',
+ null,'deleted-new-bind',180,'supabase','ci','postgres15:venesia_media_coordination_ci','ci-registry-v1')
+$sql$, 'media_write_lease_asset_not_active');
 select media_coordination_test.assert_true(public.replace_media_references_for_entity('delete_contract','topic','used',
  '[{"assetId":"00000000-0000-4000-8000-000000000119","fieldKey":"image"}]',null,null)=1,
  'known intentional deletion broke retained reference synchronization');
