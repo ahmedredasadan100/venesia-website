@@ -132,9 +132,29 @@ check(
 );
 check(
   "Shell owns the canonical 28px transition without a local header margin",
-  shell.includes(
-    'className="flex min-w-0 flex-1 flex-col gap-7 px-4 py-4 sm:px-6 lg:px-7"',
+  ["flex", "min-w-0", "flex-1", "flex-col", "gap-7", "px-4", "py-4", "sm:px-6", "lg:px-7"].every(
+    (token) => /<main className="([^"]+)"/.exec(shell)?.[1].split(" ").includes(token),
   ) && !shell.includes("admin-premium-card mb-5"),
+);
+check(
+  "One global Footer belongs to the authenticated Shell after route content",
+  (shell.match(/<footer\b/g) ?? []).length === 1 &&
+    shell.indexOf("<footer") > shell.indexOf("</AdminPageExperience>") &&
+    shell.indexOf("</footer>") < shell.indexOf("</main>") &&
+    shell.includes("data-admin-shell-footer") &&
+    authenticatedLayout.includes("<AdminShell") && access.includes("<AdminAuthenticatedLayout"),
+);
+check(
+  "Footer uses the current year and isolated LTR branding inside the RTL Shell",
+  shell.includes('© {new Date().getFullYear()} {company.name}.') &&
+    shell.includes('<bdi dir="ltr">') && shell.includes('جميع الحقوق محفوظة.'),
+);
+const footerClass = /<footer[\s\S]*?className="([^"]+)"/.exec(shell)?.[1].split(" ") ?? [];
+check(
+  "Short pages fill the viewport and Footer stays in normal flow after long content",
+  /<main className="[^"]*min-h-screen/.test(shell) &&
+    ["mt-auto", "min-w-0", "shrink-0"].every(token => footerClass.includes(token)) &&
+    !footerClass.some(token => ["fixed", "absolute", "overflow-hidden", "overflow-x-hidden"].includes(token)),
 );
 check(
   "Block editors delegate Chrome and feedback to the shared owners",

@@ -389,7 +389,7 @@ export default function AdminShell({
           </div>
         ) : null}
 
-        <main className="flex min-w-0 flex-1 flex-col gap-7 px-4 py-4 sm:px-6 lg:px-7">
+        <main className="flex min-h-screen min-w-0 flex-1 flex-col gap-7 px-4 py-4 sm:px-6 lg:px-7">
           <header className="admin-premium-card rounded-[28px] p-4" data-admin-shell-header>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -434,6 +434,13 @@ export default function AdminShell({
               />
             </div>
           </AdminPageExperience>
+          <footer
+            data-admin-shell-footer
+            className="mt-auto min-w-0 shrink-0 border-t border-white/10 py-5 text-center text-xs leading-6 text-white/45"
+          >
+            <bdi dir="ltr">© {new Date().getFullYear()} {company.name}.</bdi>{" "}
+            <span>جميع الحقوق محفوظة.</span>
+          </footer>
         </main>
       </div>
     </section>
