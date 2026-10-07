@@ -250,11 +250,21 @@ test.describe("Managed Media ownership lifecycle", () => {
       await page.locator('form[data-admin-form-runtime] button[type="submit"]').click();
       await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible({ timeout: 60_000 });
     }
+    async function inspectDeletion(trigger: ReturnType<typeof page.getByRole>) {
+      // A complete usage scan is asynchronous; assert its response before the
+      // resulting confirmation UI instead of racing the default assertion timer.
+      const preview = responseFor("preview_delete");
+      await trigger.click();
+      const response = await preview;
+      const result = await response.json();
+      expect(response.ok(), JSON.stringify(result)).toBe(true);
+      expect(Array.isArray(result.checks)).toBe(true);
+    }
     async function removeAsset(asset: typeof owned[number]) {
       await library(asset);
       const button = page.getByRole("button", { name: /^حذف آمن \(/u });
       await expect(button).toBeEnabled();
-      await button.click();
+      await inspectDeletion(button);
       const response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
       await page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
       const deletedResponse = await response;
@@ -301,7 +311,7 @@ test.describe("Managed Media ownership lifecycle", () => {
       expect(used.hits.some((hit: { editHref: string }) => hit.editHref === topicPath)).toBe(true);
       await library(original);
       // Usage is a warning. Cancelling must never call DELETE or change Storage.
-      await page.getByRole("button", { name: /^حذف آمن \(/u }).click();
+      await inspectDeletion(page.getByRole("button", { name: /^حذف آمن \(/u }));
       const deleteDialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
       await expect(deleteDialog.getByRole("button", { name: "حذف رغم الاستخدام", exact: true })).toBeEnabled();
       await expect(deleteDialog.locator('[data-media-delete-preview]')).toContainText("سيترك هذه المراجع بدون أصل صالح");
@@ -368,7 +378,7 @@ test.describe("Managed Media ownership lifecycle", () => {
           await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "تعذر حذف ملف الاختبار: فشل نقل معزول" }) });
         } else await route.continue();
       });
-      await page.getByRole("button", { name: /^حذف آمن \(/u }).click();
+      await inspectDeletion(page.getByRole("button", { name: /^حذف آمن \(/u }));
       const bulkDialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
       await expect(bulkDialog).toContainText("غير مستخدمة حاليًا");
       await bulkDialog.getByRole("button", { name: "حذف رغم الاستخدام", exact: true }).click();
@@ -376,12 +386,12 @@ test.describe("Managed Media ownership lifecycle", () => {
       await expect(bulkDialog).toContainText("فشل نقل معزول");
       expect(injectedFailure).toBe(true);
       await page.unroute("**/api/admin/media-library");
-      await bulkDialog.getByRole("button", { name: "إعادة الفحص", exact: true }).click();
+      await inspectDeletion(bulkDialog.getByRole("button", { name: "إعادة الفحص", exact: true }));
       await bulkDialog.getByRole("button", { name: "تأكيد الحذف", exact: true }).click();
       await expect(bulkDialog).not.toBeVisible({ timeout: 60_000 });
       await expect(page.locator('main button[aria-pressed]').filter({ has: page.getByText(bulkUnused.displayName, { exact: true }) })).toHaveCount(0);
       receipts.push({ operation: "mixed_bulk_confirmed_usage_and_retry_after_injected_failure", assetIds: [bulkUsed.id, bulkUnused.id] });
-      await page.getByRole("button", { name: "حذف المجلد", exact: true }).click();
+      await inspectDeletion(page.getByRole("button", { name: "حذف المجلد", exact: true }));
       await bulkDialog.getByRole("button", { name: "تأكيد الحذف", exact: true }).click();
       await expect(bulkDialog).not.toBeVisible({ timeout: 60_000 });
       const afterFolder = await (await request.get("/api/admin/media-library")).json();
@@ -403,7 +413,15 @@ test.describe("Managed Media ownership lifecycle", () => {
       await expect(row).toHaveCount(1);
       await row.locator('[aria-haspopup="menu"]').click();
       await page.getByRole("menuitem", { name: trash ? "حذف نهائي" : "نقل إلى المحذوفات", exact: true }).click();
+      // Row removal is optimistic. Wait for the server action to finish before
+      // navigating to trash, otherwise navigation aborts its response/read-back.
+      const mutation = page.waitForResponse(response =>
+        new URL(response.url()).pathname === "/admin/content/topics" &&
+        response.request().method() === "POST" &&
+        Boolean(response.request().headers()["next-action"]));
       await page.getByRole("dialog").locator("[data-admin-confirm-submit]").click();
+      expect((await mutation).ok()).toBe(true);
+      await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible();
       await expect(row).toHaveCount(0);
     }
   });
