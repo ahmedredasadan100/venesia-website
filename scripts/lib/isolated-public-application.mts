@@ -269,8 +269,9 @@ export async function runApplicationHandoff(
         "20260926153347_public_cache_invalidation_generation.sql",
         "20260930204331_integration_configuration_terminal_conflicts.sql",
         "20261006200447_cms_image_upload_configurable_ceiling.sql",
+        "20261007165732_retire_legacy_content_image_catalog.sql",
       ],
-      "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, terminal integration conflict, and configurable image ceiling extensions may follow the SEO security declaration.",
+      "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, terminal integration conflict, configurable image ceiling, and legacy content image retirement extensions may follow the SEO security declaration.",
     );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);
