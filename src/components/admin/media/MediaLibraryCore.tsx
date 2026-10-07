@@ -884,7 +884,7 @@ export default function MediaLibraryCore({
 
         <aside className="order-3 min-w-0 space-y-4 xl:order-none">
           {selectedAssets.length > 1 ? (
-            <section className="rounded-[24px] border border-[#D8B87A]/20 bg-[#080B10]/92 p-5"><h2 className="font-semibold text-white">تحديد متعدد</h2><p className="mt-2 text-3xl font-semibold text-[#D8B87A]">{selectedAssets.length}</p><p className="mt-1 text-sm text-white/45">الحجم الإجمالي: {formatBytes(selectedAssets.reduce((total, asset) => total + (asset.sizeBytes ?? 0), 0))}</p><p className="mt-4 text-xs leading-6 text-white/35">يمكن تنفيذ الحذف الآمن كملخص واحد؛ يُفحص كل أصل منفردًا ويفشل الإجراء عند أول حالة غير آمنة.</p><button type="button" onClick={() => setSelectedIds([])} className="mt-4 w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60">مسح التحديد</button></section>
+            <section className="rounded-[24px] border border-[#D8B87A]/20 bg-[#080B10]/92 p-5"><h2 className="font-semibold text-white">تحديد متعدد</h2><p className="mt-2 text-3xl font-semibold text-[#D8B87A]">{selectedAssets.length}</p><p className="mt-1 text-sm text-white/45">الحجم الإجمالي: {formatBytes(selectedAssets.reduce((total, asset) => total + (asset.sizeBytes ?? 0), 0))}</p><p className="mt-4 text-xs leading-6 text-white/35">تُعرض استخدامات الملفات قبل التأكيد، ثم تظهر نتيجة كل ملف. لا يمنع فشل ملف إكمال بقية الدفعة.</p><button type="button" onClick={() => setSelectedIds([])} className="mt-4 w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60">مسح التحديد</button></section>
           ) : !focusedAsset ? (
             data ? (
               <section className="rounded-[24px] border border-white/10 bg-[#080B10]/92 p-5">
