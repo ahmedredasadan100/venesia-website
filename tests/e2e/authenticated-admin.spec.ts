@@ -73,3 +73,57 @@ test.describe("Admin table responsive width contract", () => {
     });
   }
 });
+
+
+test.describe("Admin global Footer shared layout", () => {
+  test.use({ deviceScaleFactor: 1.25 });
+  test("adopts the Footer across lists, create, settings and Page Blocks editing", async ({ page }) => {
+    test.skip(!storageState, "A trusted Admin session is required; this proof never saves data.");
+    test.setTimeout(90_000);
+    await page.goto("/admin/pages-blocks/pages");
+    const editLink = page.locator('table a[href^="/admin/pages-blocks/pages/"]').first();
+    await expect(editLink).toBeVisible();
+    const editorHref = await editLink.getAttribute("href");
+    expect(editorHref).toBeTruthy();
+    const routes = ["/admin/pages-blocks/pages", "/admin/content/series/new", "/admin/settings/media", editorHref!];
+    for (const route of routes) {
+      await page.goto(route);
+      const footer = page.locator("[data-admin-shell-footer]");
+      await expect(footer).toHaveCount(1);
+      const companyName = await page.locator("[data-admin-shell-header] span[aria-label]").first().getAttribute("aria-label");
+      const year = await page.evaluate(() => new Date().getFullYear());
+      await expect(footer).toHaveText(`© ${year} ${companyName}. جميع الحقوق محفوظة.`);
+      for (const width of [1536, 1920, 390]) {
+        await page.setViewportSize({ width, height: 760 });
+        const geometry = await footer.evaluate(node => {
+          const content = document.querySelector("[data-admin-route-content]")!;
+          const main = node.parentElement!;
+          const style = getComputedStyle(node);
+          return { position:style.position, direction:style.direction,
+            top:node.getBoundingClientRect().top, contentBottom:content.getBoundingClientRect().bottom,
+            width:document.documentElement.scrollWidth, viewport:innerWidth,
+            mainHeight:main.getBoundingClientRect().height, viewportHeight:innerHeight,
+            last:main.lastElementChild===node };
+        });
+        expect(geometry.position).toBe("static");
+        expect(geometry.direction).toBe("rtl");
+        expect(geometry.last).toBe(true);
+        expect(geometry.top).toBeGreaterThanOrEqual(geometry.contentBottom - 0.02);
+        expect(geometry.width).toBeLessThanOrEqual(geometry.viewport);
+        expect(geometry.mainHeight).toBeGreaterThanOrEqual(geometry.viewportHeight - 0.02);
+      }
+    }
+    // Give the real content more than enough height: the same owner must keep
+    // a short page balanced without introducing a page-height scrollbar.
+    await page.goto("/admin/pages-blocks/pages");
+    await expect(page.locator("[data-admin-shell-footer]")).toBeVisible();
+    const roomyHeight = await page.evaluate(() => document.documentElement.scrollHeight + 300);
+    await page.setViewportSize({ width:1536, height:roomyHeight });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
+    const bottom = await page.locator("[data-admin-shell-footer]").evaluate(node => ({
+      footer:node.getBoundingClientRect().bottom,
+      expected:innerHeight - parseFloat(getComputedStyle(node.parentElement!).paddingBottom),
+    }));
+    expect(Math.abs(bottom.footer - bottom.expected)).toBeLessThan(1);
+  });
+});
