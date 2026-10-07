@@ -146,7 +146,12 @@ export default function AdminEntityListTable<
 
     const primaryStickyMedia = window.matchMedia("(min-width: 641px)");
     const updateAvailableWidth = () => {
-      const nextWidth = scrollport.clientWidth;
+      // clientWidth rounds to whole CSS pixels. At fractional display scaling
+      // that can allocate more space than the scrollport actually contains.
+      const style = window.getComputedStyle(scrollport);
+      const nextWidth = scrollport.getBoundingClientRect().width
+        - Number.parseFloat(style.borderLeftWidth)
+        - Number.parseFloat(style.borderRightWidth);
       setPrimaryColumnsPinned(primaryStickyMedia.matches);
       setAvailableTableWidth((currentWidth) =>
         currentWidth === nextWidth ? currentWidth : nextWidth,
