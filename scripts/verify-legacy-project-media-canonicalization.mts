@@ -367,7 +367,7 @@ const managedSnapshot = async () => (await db.query(`select to_jsonb(a) as asset
   from public.media_assets a where provider='supabase' order by id`)).rows;
 const beforeContent = await contentSnapshot();
 const beforeManaged = await managedSnapshot();
-const retirement = readFileSync(join(ROOT, "sql/migrations/20261007040000_retire_legacy_content_image_catalog.sql"), "utf8");
+const retirement = readFileSync(join(ROOT, "sql/migrations/20261007165732_retire_legacy_content_image_catalog.sql"), "utf8");
 await db.exec(`insert into public.media_reference_write_leases
   select id,'active',now()+interval '1 hour' from public.media_assets where provider='filesystem' and object_key like 'images/%' limit 1`);
 await assert.rejects(db.exec(retirement), /legacy_content_image_retirement_has_active_write_lease/);

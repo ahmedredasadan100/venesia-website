@@ -33,7 +33,7 @@ with retired as (
   set status = 'deleted', reconciliation_state = 'synced', missing_object = false,
       metadata = metadata || jsonb_build_object(
         'retirement', 'legacy-content-images',
-        'retirement_migration', '20261007040000',
+        'retirement_migration', '20261007165732',
         'authored_references_preserved', true
       ), updated_at = now()
   where provider = 'filesystem' and bucket = 'public'
@@ -41,7 +41,7 @@ with retired as (
   returning id, object_key
 )
 insert into public.admin_audit_logs (actor_username, action, entity_type, entity_label, metadata)
-select 'migration:20261007040000', 'media_asset.delete', 'media_catalog',
+select 'migration:20261007165732', 'media_asset.delete', 'media_catalog',
        'legacy-content-images-retirement',
        jsonb_build_object('retired_count', count(*), 'retired_assets', jsonb_agg(to_jsonb(retired)),
          'scope', 'filesystem:public:images/', 'authored_references_preserved', true,

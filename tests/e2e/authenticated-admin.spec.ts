@@ -268,8 +268,9 @@ test.describe("Managed Media ownership lifecycle", () => {
       const original = await upload(page.locator('main input[type="file"][multiple]'), `${namespace}-original.png`);
       await page.goto("/admin/content/topics/new");
       await page.locator('input[name="title"]').fill(namespace);
-      await page.getByRole("button", { name: "اختر التصنيف", exact: true }).click();
-      await page.getByRole("option").filter({ hasNot: page.locator('[aria-disabled="true"]') }).first().click();
+      await page.locator('input[name="slug"]').fill(namespace);
+      await page.getByRole("combobox", { name: "اختر التصنيف", exact: true }).click();
+      await page.locator('[role="option"]:not([aria-disabled="true"])').first().click();
       await imageField().getByRole("button").first().click();
       const picker = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true });
       await picker.getByPlaceholder(search).fill(original.display_name);
@@ -284,7 +285,7 @@ test.describe("Managed Media ownership lifecycle", () => {
       expect(used.hits.some((hit: { editHref: string }) => hit.editHref === topicPath)).toBe(true);
       await library(original);
       // The normal UI must prevent deleting an asset while the new draft uses it.
-      await expect(page.getByRole("button", { name: /^حذف آمن \(/u })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "الحذف الآمن غير جاهز", exact: true })).toBeDisabled();
       const replacement = await upload(page.locator('main section').filter({ has: page.getByRole("heading", { name: "البيانات الوصفية", exact: true }) }).locator('input[type="file"]'), `${namespace}-replacement.png`);
       const replaced = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "PATCH" && r.request().postDataJSON()?.operation === "replace_all");
       await page.getByRole("dialog", { name: "استبدال كل المراجع المدعومة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
