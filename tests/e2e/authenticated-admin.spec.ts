@@ -261,7 +261,7 @@ test.describe("Managed Media ownership lifecycle", () => {
       receipts.push({ operation: "safe_delete", assetId: asset.id });
     }
     // Readiness is a prerequisite, never silently repaired by this smoke test.
-    const anonymous = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL });
+    const anonymous = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL, storageState: { cookies: [], origins: [] } });
     try {
       expect((await anonymous.post("/api/admin/media-library", { data: { operation: "prepare_upload" } })).status()).toBe(401);
     } finally { await anonymous.dispose(); }
@@ -278,6 +278,8 @@ test.describe("Managed Media ownership lifecycle", () => {
       await page.locator('[role="option"]:not([aria-disabled="true"])').first().click();
       await imageField().getByRole("button").first().click();
       const picker = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true });
+      // Topic pickers start in their consumer folder; search the uploaded root explicitly.
+      await picker.getByRole("button", { name: "images", exact: true }).click();
       await picker.getByPlaceholder(search).fill(original.displayName);
       await picker.locator('button[aria-pressed]').filter({ has: page.getByText(original.displayName, { exact: true }) }).click();
       await picker.getByRole("button", { name: "تأكيد الاختيار", exact: true }).click();
