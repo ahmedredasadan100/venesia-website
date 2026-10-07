@@ -29,7 +29,7 @@ export function absoluteUrlWithBase(path = "/", baseUrl = SEO_SITE.defaultUrl): 
 }
 
 export function absoluteAssetUrl(path?: string, baseUrl?: string): string {
-  if (!path) return absoluteUrlWithBase(SEO_SITE.defaultImage, baseUrl);
+  if (!path) return "";
 
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;

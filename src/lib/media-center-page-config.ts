@@ -34,7 +34,7 @@ export const MEDIA_CENTER_CMS_PAGES = Object.fromEntries(
     {
       cmsPageSlug: route.cmsPageSlug,
       publicPath: route.href,
-      heroImage: "/images/venesia-5.png",
+      heroImage: "",
     },
   ]),
 ) as Record<MediaCenterCmsPageSlug, MediaCenterShellConfig>;

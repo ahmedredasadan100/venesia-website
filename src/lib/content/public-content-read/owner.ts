@@ -42,8 +42,8 @@ import {
 } from "./contract";
 
 const PUBLIC_CONTENT_CACHE_TAG = "public-content";
-const ARTICLE_IMAGE_FALLBACK = "/images/topics/default.jpg";
-const MEDIA_IMAGE_FALLBACK = "/images/venesia-5.png";
+const ARTICLE_IMAGE_FALLBACK = "";
+const MEDIA_IMAGE_FALLBACK = "";
 
 /** Exact projection for every Public Collection read. Body and SEO fields are excluded. */
 export const PUBLIC_CONTENT_COLLECTION_SELECT =

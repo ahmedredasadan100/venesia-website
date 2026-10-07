@@ -116,7 +116,7 @@ export function buildArticleSchema(
     "@type": "Article",
     headline: input.title,
     description: input.description,
-    image: absoluteAssetUrl(input.image, baseUrl),
+    ...(input.image ? { image: absoluteAssetUrl(input.image, baseUrl) } : {}),
     datePublished: input.publishedAt,
     dateModified: input.updatedAt ?? input.publishedAt,
     author: {

@@ -3,7 +3,7 @@
 import Image, { getImageProps, type ImageProps } from "next/image";
 import { useState } from "react";
 
-export const PUBLIC_MEDIA_IMAGE_FALLBACK = "/images/venesia-5.png";
+export const PUBLIC_MEDIA_IMAGE_FALLBACK = null;
 
 export const PUBLIC_MEDIA_COMPOSITIONS = {
   "cover-center": { objectFit: "cover", objectPosition: "50% 50%" },
@@ -50,7 +50,7 @@ export default function PublicMediaImage({
   const [failedSourceKey, setFailedSourceKey] = useState<string | null>(null);
   const failed = failedSourceKey === sourceKey;
 
-  if (failed && fallbackSrc == null) return null;
+  if (!sourceKey || (failed && fallbackSrc == null)) return null;
 
   return (
     <Image
@@ -76,7 +76,7 @@ type PublicArtDirectedMediaImageProps = {
   className?: string;
   style?: React.CSSProperties;
   composition?: PublicMediaComposition;
-  fallbackSrc?: ImageProps["src"];
+  fallbackSrc?: ImageProps["src"] | null;
 };
 
 const TRANSPARENT_IMAGE_FALLBACK =
@@ -116,6 +116,7 @@ export function PublicArtDirectedMediaImage({
   }
 
   if (failedSourceKey === sourceKey) {
+    if (fallbackSrc == null) return null;
     return (
       <PublicMediaImage
         src={fallbackSrc}

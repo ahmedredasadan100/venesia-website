@@ -13,7 +13,7 @@ import type {
   TopicsFeedType,
 } from "./types";
 
-const DEFAULT_IMAGE = "/images/topics/default.jpg";
+const DEFAULT_IMAGE = "";
 
 function getCategoryFilterHref(slug: string) {
   return `/topics?category=${encodeURIComponent(slug)}`;

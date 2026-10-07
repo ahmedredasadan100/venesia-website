@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
@@ -42,34 +41,9 @@ check(
     .filter((row) => row.objectKey.startsWith("images/projects/"))
     .every((row) => row.objectKey === row.objectKey.toLowerCase()),
 );
-check(
-  "every canonical Project identity maps to the exact physical public asset",
-  seedRows.every((row) => {
-    const absolutePath = join(ROOT, "public", ...row.objectKey.split("/"));
-    if (!existsSync(absolutePath)) return false;
-    const bytes = readFileSync(absolutePath);
-    return (
-      bytes.byteLength === row.byteSize
-      && createHash("sha256").update(bytes).digest("hex") === row.checksum
-      && extname(absolutePath).slice(1).toLowerCase() === row.extension
-    );
-  }),
-);
-
-const projectAssetsRoot = join(ROOT, "public", "images", "projects");
-const physicalProjectPaths: string[] = [];
-function collectProjectPaths(absolutePath: string, relativePath = "") {
-  for (const entry of readdirSync(absolutePath, { withFileTypes: true })) {
-    const nextRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
-    physicalProjectPaths.push(nextRelativePath);
-    if (entry.isDirectory()) collectProjectPaths(join(absolutePath, entry.name), nextRelativePath);
-  }
-}
-collectProjectPaths(projectAssetsRoot);
-check(
-  "all physical Project media paths use the lowercase convention",
-  physicalProjectPaths.every((itemPath) => itemPath === itemPath.toLowerCase()),
-);
+// The historical migration still has its immutable seed contract. Current
+// deployments must no longer depend on the physical compatibility directory.
+check("retired public/images inventory is absent", !existsSync(join(ROOT, "public", "images")));
 
 const trackedProjectAssets = seedRows.filter((row) => row.objectKey.startsWith("images/projects/"));
 check("all 276 canonical Project-folder images are cataloged", trackedProjectAssets.length === 276);
@@ -367,6 +341,47 @@ const unresolved = await db.query<{ count: number }>(`
     and asset.id is null
 `);
 check("no legacy Project reference remains outside canonical Media identity", unresolved.rows[0]?.count === 0);
+
+// Forward retirement is exercised against the real historical Catalog fixture.
+await db.exec(`
+  create table public.admin_audit_logs (
+    id bigserial primary key, actor_username text not null, action text not null,
+    entity_type text, entity_label text, metadata jsonb not null default '{}'
+  );
+  create table public.media_reference_write_leases (
+    asset_id uuid references public.media_assets(id), status text, expires_at timestamptz
+  );
+  insert into public.media_folders (normalized_path, display_name) values ('files', 'files');
+  insert into public.media_assets (provider,bucket,object_key,public_url,original_filename,
+    display_name,media_kind,extension,folder_path)
+  values ('filesystem','public','files/keep.pdf','/files/keep.pdf','keep.pdf','keep.pdf','document','pdf','files');
+`);
+const contentSnapshot = async () => (await db.query(`select jsonb_build_object(
+  'projects',(select jsonb_agg(to_jsonb(x) order by id) from public.projects x),
+  'media',(select jsonb_agg(to_jsonb(x) order by id) from public.project_media x),
+  'plans',(select jsonb_agg(to_jsonb(x) order by id) from public.project_floor_plans x),
+  'videos',(select jsonb_agg(to_jsonb(x) order by id) from public.project_videos x)
+) as value`)).rows;
+const managedSnapshot = async () => (await db.query(`select to_jsonb(a) as asset,
+  (select jsonb_agg(to_jsonb(r) order by id) from public.media_references r where r.asset_id=a.id) as refs
+  from public.media_assets a where provider='supabase' order by id`)).rows;
+const beforeContent = await contentSnapshot();
+const beforeManaged = await managedSnapshot();
+const retirement = readFileSync(join(ROOT, "sql/migrations/20261007040000_retire_legacy_content_image_catalog.sql"), "utf8");
+await db.exec(`insert into public.media_reference_write_leases
+  select id,'active',now()+interval '1 hour' from public.media_assets where provider='filesystem' and object_key like 'images/%' limit 1`);
+await assert.rejects(db.exec(retirement), /legacy_content_image_retirement_has_active_write_lease/);
+await db.exec("rollback; update public.media_reference_write_leases set status='completed'");
+await db.exec(retirement);
+assert.deepEqual(await contentSnapshot(), beforeContent);
+assert.deepEqual(await managedSnapshot(), beforeManaged);
+const retired = await db.query<{count:number}>("select count(*)::int as count from public.media_assets where provider='filesystem' and object_key like 'images/%' and status='deleted'");
+assert.equal(retired.rows[0].count, seedRows.length);
+assert.equal((await db.query<{count:number}>("select count(*)::int as count from public.media_references r join public.media_assets a on a.id=r.asset_id where a.provider='filesystem' and a.object_key like 'images/%'")).rows[0].count, 0);
+assert.equal((await db.query<{status:string}>("select status from public.media_assets where object_key='files/keep.pdf'")).rows[0].status, 'active');
+assert.equal((await db.query<{count:number}>("select count(*)::int as count from public.admin_audit_logs where action='media_asset.delete' and (metadata->>'retired_count')::int > 0")).rows[0].count, 1);
+await assert.rejects(db.exec("update public.media_assets set status='active' where provider='filesystem' and object_key like 'images/%'"), /media_assets_retired_content_images_check/);
+check("retirement preserves authored references, Managed assets and static documents; audits and prevents re-adoption", true);
 
 await db.close();
 console.log(`OK: ${passed} legacy Project media canonicalization checks passed.`);

@@ -385,7 +385,11 @@ export async function runCoreMediaJourneys(ctx) {
   async function upload(files, replacement = false) {
     const input = replacement ? main().locator("section").filter({ has: page.getByRole("heading", { name: "البيانات الوصفية", exact: true }) }).locator('input[type="file"]') : main().locator('input[type="file"][multiple]');
     const responses = [];
-    const listener = response => { if (new URL(response.url()).pathname === "/api/admin/media-library" && response.request().method() === "POST") responses.push(response); };
+    const listener = response => { if (new URL(response.url()).pathname !== "/api/admin/media-library" || response.request().method() !== "POST") return;
+      // Signed images have preparation + completion; documents keep multipart.
+      const request = response.request();
+      if (request.headers()["content-type"]?.includes("application/json") && request.postDataJSON()?.operation !== "complete_upload") return;
+      responses.push(response); };
     page.on("response", listener);
     try {
       await input.setInputFiles(files);

@@ -198,3 +198,13 @@ assert.ok(manifest.providerRegistry.some((provider: { domainKey: string }) => pr
 assert.ok(!manifest.providerRegistry.some((provider: { domainKey: string }) => provider.domainKey === "legacy_media_items"));
 
 console.log("PASS Public Media Truth: one topics source, one content/link contract, shared metadata/sitemap/cache consumers, diagnostics, and guarded legacy removal.");
+
+// The shared renderer must not invent a legacy image for empty authored content.
+const { createJiti } = await import("jiti");
+const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false, jsx: { runtime: "automatic" } });
+const { default: PublicMediaImage, PUBLIC_MEDIA_IMAGE_FALLBACK } = await jiti.import<typeof import("../src/components/public/PublicMediaImage")>("../src/components/public/PublicMediaImage.tsx");
+const { createElement } = await import("react");
+const { renderToStaticMarkup } = await import("react-dom/server");
+assert.equal(PUBLIC_MEDIA_IMAGE_FALLBACK, null);
+assert.equal(renderToStaticMarkup(createElement(PublicMediaImage, { src: "", alt: "No authored image", width: 20, height: 20 })), "");
+console.log("PASS shared Public Media renderer keeps absent authored images absent.");

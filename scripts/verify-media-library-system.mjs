@@ -84,8 +84,7 @@ const spacedProjectPath = "/images/projects/b84/progress-02 - copy (2).jpg";
 for (const value of [spacedProjectPath, `https://venesia.example${spacedProjectPath}`, encodeURI(spacedProjectPath)]) {
   assert.deepEqual(providerModule.extractMediaCandidateValues({ image: value }), [value]);
   const identities = providerModule.extractMediaCandidateValues(value).map(identityModule.parseLegacyPublicMediaAsset);
-  assert.deepEqual(identities.map(identityModule.getCanonicalMediaIdentityKey),
-    ["filesystem:public:images/projects/b84/progress-02 - copy (2).jpg"]);
+  assert.deepEqual(identities, [null], "retired content images are not Catalog identities");
 }
 assert.deepEqual(providerModule.extractMediaCandidateValues('<img src="/images/a.jpg"><a href="/files/b.pdf">file</a>'),
   ["/images/a.jpg", "/files/b.pdf"]);
@@ -109,11 +108,11 @@ check(
 const legacyDocument = "/files/projects/document-1782017403551.pdf";
 assert.equal(providerModule.extractMediaCandidateValues(`download ${legacyDocument} now`).includes(legacyDocument), true);
 check("reference candidate extraction includes embedded legacy /images and /files paths", true);
-assert.deepEqual(identityModule.parseLegacyPublicMediaAsset("/images/projects/c35/hero.jpg?preview=1"), {
-  provider: "filesystem",
-  bucket: "public",
-  objectKey: "images/projects/c35/hero.jpg",
+assert.equal(identityModule.parseLegacyPublicMediaAsset("/images/projects/c35/hero.jpg?preview=1"), null);
+assert.deepEqual(identityModule.parseLegacyPublicMediaAsset(legacyDocument), {
+  provider: "filesystem", bucket: "public", objectKey: legacyDocument.slice(1),
 });
+check("retired content images are excluded while static documents retain identity", true);
 assert.equal(
   identityModule.getCanonicalMediaIdentityKey({
     provider: "filesystem",
@@ -369,33 +368,34 @@ assert.equal(deduplicatedPage.assets[0].id, "catalog-asset");
 assert.equal(deduplicatedPage.assets[0].source, "catalog_storage");
 check("read-through deduplicates by canonical provider bucket and object key", true);
 
-const canonicalLegacyProjectAsset = {
+const canonicalLegacyDocumentAsset = {
   ...catalogAsset,
-  id: "legacy-project-c35-hero",
+  id: "legacy-project-document",
+  kind: "document",
   provider: "filesystem",
   bucket: "public",
-  objectKey: "images/projects/c35/hero.jpg",
-  publicUrl: "/images/projects/c35/hero.jpg",
-  displayName: "hero.jpg",
-  originalFilename: "hero.jpg",
-  folderPath: "images/projects/c35",
+  objectKey: "files/projects/document.pdf",
+  publicUrl: "/files/projects/document.pdf",
+  displayName: "document.pdf",
+  originalFilename: "document.pdf",
+  folderPath: "files/projects",
   sizeBytes: 1024,
-  checksum: "legacy-project-checksum",
+  checksum: "legacy-document-checksum",
   source: "catalog",
   referenceCount: 5,
 };
 const productionPickerPage = catalogModule.buildMediaLibraryReadModel(
-  { ...emptyCatalogSnapshot, assets: [canonicalLegacyProjectAsset] },
+  { ...emptyCatalogSnapshot, assets: [canonicalLegacyDocumentAsset] },
   managedInventory,
-  { smartView: "all", folder: "images/projects", context: runtimeContext },
+  { smartView: "all", folder: "files/projects", context: runtimeContext },
 );
 assert.equal(productionPickerPage.assets.length, 1);
-assert.equal(productionPickerPage.assets[0].publicUrl, "/images/projects/c35/hero.jpg");
+assert.equal(productionPickerPage.assets[0].publicUrl, "/files/projects/document.pdf");
 assert.equal(productionPickerPage.assets[0].provider, "filesystem");
 assert.equal(productionPickerPage.assets[0].catalogRegistered, true);
 assert.equal(productionPickerPage.assets[0].missingObject, false);
 assert.equal(productionPickerPage.summary.readOnlyAssetCount, 1);
-check("production picker read model includes canonical read-only legacy Project assets without a parallel inventory", true);
+check("production picker read model includes read-only static documents without a parallel inventory", true);
 
 const incompleteUsedPage = catalogModule.buildMediaLibraryReadModel(
   {

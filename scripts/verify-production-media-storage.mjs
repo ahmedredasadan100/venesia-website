@@ -448,6 +448,43 @@ check(
   clientTokenLeaks.join(", "),
 );
 
+// Runtime scope proof: static documents remain readable; images cannot be
+// enumerated or written through the retired filesystem compatibility adapter.
+const fsReads = [];
+const retiredFs = loadTypeScriptModule("src/lib/admin/media-library-fs.ts", {
+  "server-only": {},
+  fs: { existsSync: () => true, readdirSync: (path) => { fsReads.push(path); return []; } },
+  path: nativeRequire("node:path"),
+  "./media-catalog/settings": {},
+  "./media-intelligence/cms-upload-policy": uploadPolicy,
+  "./media-library-paths": mediaPaths,
+  "./media-storage-adapter": storageContract,
+});
+assert.deepEqual(retiredFs.listPublicImagePathsFromFs("images"), []);
+assert.deepEqual(retiredFs.listPublicMediaFolderFromFs("images/projects").items, []);
+const documentInventory = retiredFs.listPublicMediaInventoryFromFs();
+assert.deepEqual(documentInventory.folders, ["files"]);
+assert.equal(fsReads.length, 1);
+assert.equal(nativeRequire("node:path").basename(fsReads[0]), "files");
+await assert.rejects(retiredFs.createFilesystemMediaStorageAdapter().uploadImage("images", new File(["unused"], "unused.png", { type: "image/png" })),
+  error => error.code === "managed_media_provider_must_be_supabase");
+check("filesystem image enumeration and writes are retired while document read-through remains", true);
+
+// Only concrete content asset literals count: namespace validators and negative
+// compatibility tests are not image sources. A new fallback anywhere must fail.
+const legacySourceImages = [];
+for (const file of walkSourceFiles(resolve(ROOT, "src"))) {
+  if (![".ts", ".tsx", ".js", ".jsx"].includes(extname(file))) continue;
+  const parsed = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true,
+    file.endsWith("tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  function visit(node) {
+    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && /^\/images\/.+\.(?:png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/i.test(node.text)) legacySourceImages.push(file);
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+}
+check("current source/config/fallback contains no retired content image literals", legacySourceImages.length === 0, legacySourceImages.join(", "));
+
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nProduction media storage: ${passed}/${checks.length} checks passed.`);
 if (passed !== checks.length) process.exitCode = 1;

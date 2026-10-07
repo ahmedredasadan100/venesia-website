@@ -11,7 +11,7 @@ export const SEO_SITE = {
   defaultUrl:
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
     "https://www.venesia-developments.net",
-  defaultImage: "/images/venesia-5.png",
+  defaultImage: "",
   logo: "/logo.png",
   themeColor: "#0B0B0B",
   twitterHandle: "",

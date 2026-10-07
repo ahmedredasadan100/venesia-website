@@ -60,7 +60,7 @@ function buildAssetItem(
 export function listPublicMediaFolderFromFs(folder = "images"): PublicMediaFolderListing {
   const { normalized, target } = resolvePublicFolder(folder);
 
-  if (!fs.existsSync(target)) {
+  if (normalized === "images" || normalized.startsWith("images/") || !fs.existsSync(target)) {
     return {
       folder: normalized,
       parentFolder: getMediaParentFolder(normalized),
@@ -123,6 +123,7 @@ export function listPublicImagePathsFromFs(folder = "images", limit = 240) {
   const publicRoot = path.join(process.cwd(), "public");
   const normalized = normalizeMediaFolder(folder);
   const results: string[] = [];
+  if (normalized === "images" || normalized.startsWith("images/")) return results;
 
   function walkImages(dir: string) {
     if (results.length >= limit) return;
@@ -153,9 +154,9 @@ export function listPublicImagePathsFromFs(folder = "images", limit = 240) {
 }
 
 export function listPublicMediaInventoryFromFs(): PublicMediaInventory {
-  const folders = new Set<string>(["images", "files"]);
+  const folders = new Set<string>(["files"]);
   const items: MediaAssetItem[] = [];
-  const queue = ["images", "files"];
+  const queue = ["files"];
 
   while (queue.length) {
     const folder = queue.shift()!;
@@ -173,33 +174,6 @@ export function listPublicMediaInventoryFromFs(): PublicMediaInventory {
     provider: "filesystem",
     folders: Array.from(folders).sort((left, right) => left.localeCompare(right)),
     items: items.sort((left, right) => left.path.localeCompare(right.path)),
-  };
-}
-
-export async function savePublicMediaUploadToFs(
-  folder: string,
-  file: File,
-  options?: MediaUploadOptions,
-) {
-  const validation = validateCmsUploadFile(file, "image", mediaSettingsToUploadPolicy(await loadMediaSettings()));
-  if (!validation.ok) throw new Error(validation.message);
-
-  const { normalized, target } = resolvePublicFolder(folder);
-
-  if (!fs.existsSync(target)) {
-    fs.mkdirSync(target, { recursive: true });
-  }
-
-  void options?.replacePath;
-  const filename = sanitizeCmsUploadFilename(file.name, IMAGE_EXTENSIONS, "image");
-  const destination = path.join(target, filename);
-  const bytes = Buffer.from(await file.arrayBuffer());
-
-  fs.writeFileSync(destination, bytes);
-
-  return {
-    path: `/${path.posix.join(normalized, filename)}`,
-    filename,
   };
 }
 
@@ -242,7 +216,9 @@ export function createFilesystemMediaStorageAdapter(): MediaStorageAdapter {
     async listImagePaths(folder = "images", limit = 240) {
       return listPublicImagePathsFromFs(folder, limit);
     },
-    uploadImage: savePublicMediaUploadToFs,
+    async uploadImage() {
+      throw new MediaStorageError("managed_media_provider_must_be_supabase", "صور المحتوى تُرفع من مكتبة الوسائط إلى التخزين المُدار فقط.", 400);
+    },
     uploadDocument: savePublicDocumentUploadToFs,
     isManagedAsset() {
       // Files under public/ are legacy/static assets without an ownership ledger.

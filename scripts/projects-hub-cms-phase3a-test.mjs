@@ -825,3 +825,20 @@ console.log(
     2,
   ),
 );
+
+// Consume the same configured image identity parser as Storage, not a URL-shaped fixture.
+const { assertSafeCmsMediaPath } = loadTs("src/lib/page-blocks/projects-hub-config.ts");
+const previousEndpoint = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const previousBucket = process.env.SUPABASE_STORAGE_BUCKET_IMAGES;
+try {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://owned-media.supabase.co";
+  process.env.SUPABASE_STORAGE_BUCKET_IMAGES = "configured-images";
+  const managed = "https://owned-media.supabase.co/storage/v1/object/public/configured-images/images/map.png";
+  assert.equal(assertSafeCmsMediaPath(managed, "Map"), managed);
+  assert.equal(assertSafeCmsMediaPath("/images/old.png", "Map"), "/images/old.png");
+  for (const value of [managed.replace("owned-media", "foreign"), managed.replace("configured-images", "cms-images"), managed.replace("images/map", "files/map"), "https://user:secret@owned-media.supabase.co/storage/v1/object/public/configured-images/images/map.png", "javascript:alert(1)", "data:image/png;base64,AA", ""]) assert.throws(() => assertSafeCmsMediaPath(value, "Map"));
+} finally {
+  if (previousEndpoint === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL; else process.env.NEXT_PUBLIC_SUPABASE_URL = previousEndpoint;
+  if (previousBucket === undefined) delete process.env.SUPABASE_STORAGE_BUCKET_IMAGES; else process.env.SUPABASE_STORAGE_BUCKET_IMAGES = previousBucket;
+}
+console.log("PASS Projects Map uses configured managed Storage identity; foreign hosts/buckets and unsafe paths fail closed.");

@@ -48,12 +48,12 @@ export function buildMetadataFromResolved(resolved: ResolvedSeoMetadata): Metada
       card: "summary_large_image",
       title,
       description,
-      images: [
+      images: resolved.twitterImage ? [
         {
           url: resolved.twitterImage,
           alt: resolved.imageAlt,
         },
-      ],
+      ] : [],
       creator: resolved.twitterHandle,
     },
     verification: Object.keys(verification).length ? verification : undefined,
