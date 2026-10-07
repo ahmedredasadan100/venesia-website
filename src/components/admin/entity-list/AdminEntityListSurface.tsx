@@ -11,6 +11,27 @@ const PRIMARY_SECTION_MARKER_CLASS = "admin-entity-list-primary-section";
 const SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7";
 const TABLE_REGION_LAYOUT_CLASSES = "flex flex-col gap-4";
 
+/** Shared join between a standalone collection toolbar and its table card. */
+export const ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS = "!rounded-t-none !border-t-0";
+
+export function AdminEntityListTableFrame({
+  toolbar,
+  children,
+  className = "",
+  ...props
+}: ComponentPropsWithoutRef<"section"> & { toolbar?: ReactNode }) {
+  return (
+    <section
+      {...props}
+      className={`scroll-mt-6 flex min-w-0 flex-col ${toolbar ? "gap-0" : "gap-7"} ${className}`.trim()}
+      data-admin-entity-list-table-frame=""
+    >
+      {toolbar}
+      {children}
+    </section>
+  );
+}
+
 /**
  * Page-level cadence for list pages whose header and list surface are direct
  * siblings. Every direct child is a visible primary section, so the shared

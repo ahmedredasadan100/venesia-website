@@ -521,6 +521,16 @@ check(
     dataGrid.includes('const embedded = surface === "embedded"'),
 );
 
+check(
+  "Collection frame owns toolbar adjacency and the shared joined card seam",
+  entitySurface.includes("export function AdminEntityListTableFrame") &&
+    entitySurface.includes('toolbar ? "gap-0" : "gap-7"') &&
+    appearsInOrder(entitySurface, ["data-admin-entity-list-table-frame", "{toolbar}", "{children}"]) &&
+    entitySurface.includes('ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS = "!rounded-t-none !border-t-0"') &&
+    entityList.includes("<AdminEntityListTableFrame") &&
+    entityList.includes("toolbar ? ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS : undefined"),
+);
+
 const coreSources = [
   entityList,
   entityTable,

@@ -677,23 +677,21 @@ assert.match(compositionClient, /updatePageBlockAssignment\(/u);
 assert.match(assignmentRow, /AdminListboxSelect/u);
 assert.match(
   compositionClient,
-  /<PageCompositionTableSurface[\s\S]*toolbar=\{[\s\S]*<AdminEntityListFilters[\s\S]*surface="embedded"[\s\S]*table=\{[\s\S]*<PageBlocksAssignmentsGrid[\s\S]*pagination=\{[\s\S]*<AdminTablePagination/u,
+  /<PageCompositionTableSurface[\s\S]*toolbar=\{[\s\S]*<AdminEntityListFilters[\s\S]*table=\{[\s\S]*<PageBlocksAssignmentsGrid[\s\S]*pagination=\{[\s\S]*<AdminTablePagination/u,
 );
 assert.doesNotMatch(
   compositionClient,
   /data-page-composition-table-shell|className="flex flex-col gap-0"/u,
 );
-assert.match(
-  compositionSurface,
-  /data-page-composition-table-surface=""[\s\S]*data-page-composition-table-frame=""/u,
-);
-assert.equal(
-  (compositionSurface.match(/rounded-\[20px\]/gu) ?? []).length,
-  1,
-  "Page Composition table surface must own exactly one rounded card boundary.",
-);
-assert.match(assignmentGrid, /<AdminDataGrid surface="embedded">/u);
-assert.doesNotMatch(assignmentGrid, /!rounded-t-none|!border-t-0/u);
+// The specialized collection reuses the same frame and joined card contract as
+// generic lists; domain rows, toolbar controls and pagination remain its own.
+assert.match(compositionSurface, /<AdminEntityListTableRegion[\s\S]*<AdminEntityListTableFrame toolbar=\{toolbar\}>[\s\S]*<AdminEntityListPrimarySection>\{table\}<\/AdminEntityListPrimarySection>/u);
+assert.doesNotMatch(compositionSurface, /rounded-|border-|bg-|shadow-|overflow-hidden/u);
+assert.match(entityList, /<AdminEntityListTableFrame/u);
+assert.match(entityList, /className=\{toolbar \? ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS : undefined\}/u);
+assert.match(assignmentGrid, /<AdminDataGrid className=\{ADMIN_ENTITY_LIST_JOINED_TABLE_CLASS\}>/u);
+assert.doesNotMatch(compositionClient, /surface="embedded"/u);
+assert.doesNotMatch(assignmentGrid, /surface="embedded"/u);
 assert.match(entityListFilters, /surface\?: "standalone" \| "embedded"/u);
 assert.match(entityListFilters, /surface = "standalone"/u);
 assert.match(entityListFilters, /surface === "embedded"[\s\S]*overflow-visible border-b/u);

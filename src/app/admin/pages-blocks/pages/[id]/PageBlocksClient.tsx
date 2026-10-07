@@ -881,7 +881,6 @@ export default function PageBlocksClient({
                 }
                 toolbar={
                   <AdminEntityListFilters
-                    surface="embedded"
                     basePath={`/admin/pages-blocks/pages/${page.id}`}
                     search={{
                       value: search,
