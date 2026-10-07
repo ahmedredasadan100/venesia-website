@@ -601,7 +601,15 @@ let registrationInsertThrows = false;
 const registrationRaceSupabase = {
   from(table) {
     if (table === "media_folders") {
-      return { upsert: async () => ({ error: null }) };
+      return {
+        upsert: async () => ({ error: null }),
+        update(value) { assert.deepEqual(value, { deleted_at: null }); return this; },
+        eq(column, value) { assert.equal(column, "normalized_path"); assert.ok(value); return this; },
+        async not(column, operator, value) {
+          assert.deepEqual([column, operator, value], ["deleted_at", "is", null]);
+          return { error: null };
+        },
+      };
     }
     if (table === "site_settings") {
       const query = {
@@ -1181,6 +1189,7 @@ const identityProjectionSupabase = {
     return {
       select(columns) { call.select = columns; return this; },
       neq(column, value) { call.filter = [column, value]; return this; },
+      or(filter) { call.filter = filter; return this; },
       order(column, options) { call.order.push([column, options]); return this; },
       async range(from, to) {
         call.range = [from, to];
@@ -1188,7 +1197,7 @@ const identityProjectionSupabase = {
           return { data: null, error: identityProjectionError };
         }
         const rows = identityProjectionRows
-          .filter((row) => row.status !== call.filter?.[1])
+          .filter((row) => row.status !== "deleted" || (typeof call.filter === "string" && call.filter.includes("usageConfirmedDeletion") && row.metadata?.usageConfirmedDeletion === true))
           .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id))
           .slice(from, to + 1);
         const columns = call.select === "*" ? null : call.select.split(", ");
@@ -1236,13 +1245,20 @@ assert.deepEqual(fullIdentityCalls.map((call) => call.range), [[0, 499], [500, 9
 assert.deepEqual(narrowIdentityCalls.map((call) => call.range), [[0, 499], [500, 999]]);
 for (const call of narrowIdentityCalls) {
   assert.equal(call.select, "id, provider, bucket, object_key");
-  assert.deepEqual(call.filter, ["status", "deleted"]);
+  assert.equal(call.filter, "status.neq.deleted,and(status.eq.deleted,metadata->>usageConfirmedDeletion.eq.true)");
   assert.deepEqual(call.order, [["created_at", { ascending: true }], ["id", { ascending: true }]]);
 }
 check("identity-only projection keeps the exact filter, order and pagination contract", true);
 assert.ok(Object.keys(fullIdentityMap.values().next().value).length > 4);
 assert.deepEqual(Object.keys(narrowIdentityMap.values().next().value), ["id", "provider", "bucket", "objectKey"]);
 check("full Catalog consumers retain the complete asset contract", true);
+identityProjectionRows.find(row => row.status === "deleted").metadata = { usageConfirmedDeletion: true };
+const confirmedDeletionMap = await identityProjectionCatalog.getCatalogAssetIdentityMapForSynchronization();
+assert.ok(confirmedDeletionMap.has("supabase:cms-images:images/catalog/deleted.png"));
+assert.equal((await identityProjectionCatalog.getAllCatalogAssetIdentityMap()).has("supabase:cms-images:images/catalog/deleted.png"), false);
+assert.ok((await identityProjectionCatalog.getAllCatalogAssetIdentityMap({ includeConfirmedDeletions: true })).has("supabase:cms-images:images/catalog/deleted.png"));
+check("confirmed deletion retains reference identity without restoring the asset to selectable Catalog", true);
+
 identityProjectionError = { code: "42P01", message: "catalog view unavailable" };
 identityProjectionErrorOffset = 0;
 await assert.rejects(
@@ -1269,9 +1285,64 @@ check(
 );
 check(
   "reconciliation remains a full-Catalog consumer under the existing safety contract",
-  synchronization.includes("options.assetMap ?? await getAllCatalogAssetIdentityMap()") &&
+  synchronization.includes("getAllCatalogAssetIdentityMap({ includeConfirmedDeletions: true })") &&
     source("src/lib/admin/media-catalog/reconciliation.ts").includes("await getAllCatalogAssetIdentityMap()"),
 );
+
+// Exercise the real delete owner and saga with isolated Storage/DB ports.
+// This proves current usage is a warning while uncertainty remains fail closed.
+{
+  const target = { ...catalogAsset, folderPath: "images/contract", objectKey: "images/contract/a.png" };
+  let present = true, active = true, lease = false, uncertain = false, used = true;
+  let storageDeletes = 0, reservations = 0, reconciliations = 0;
+  const audit = [];
+  let runtime = { ...completeRuntimeState };
+  const reference = { identity: target, domainKey: "topics", entityType: "topic", entityIdentity: "owned",
+    entityLabel: "Owned fixture", fieldKey: "image", editHref: "/admin/content/topics/owned", referenceState: "active", restorable: false };
+  const snapshot = () => ({ ...emptyCatalogSnapshot, assets: active ? [target] : [],
+    folders: [...emptyCatalogSnapshot.folders, { ...emptyCatalogSnapshot.folders[0], path: "images/contract" }] });
+  const inventory = () => ({ ...managedInventory, items: present ? [{ ...managedInventory.items[0], storagePath: target.objectKey }] : [] });
+  const safeOwner = loadTypeScriptModule("src/lib/admin/media-catalog/safe-delete.ts", {
+    "server-only": {}, "node:crypto": { randomUUID: () => "owned-request" },
+    "../../storage/upload-cms-asset": { verifyManagedStorageAssetExists: async () => ({ managed: true, exists: present }) },
+    "../../supabase-admin": { getSupabaseAdmin: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, or() { return this; }, async limit() { return { data: lease ? [{ id: "lease" }] : [], error: null }; } }) }) },
+    "../media-library": { isManagedPublicMediaAsset: async () => true,
+      resolveMediaStorageRuntimeContext: () => runtimeContext, listPublicMediaInventory: async () => inventory(),
+      deletePublicMediaAsset: async () => { storageDeletes++; present = false; return { path: target.publicUrl }; } },
+    "./catalog": { getCatalogAssetByPublicValue: async () => target,
+      getMediaCatalogRuntimeState: async () => runtime, listMediaCatalogSnapshot: async () => snapshot(),
+      listCatalogReferences: async () => used ? [reference] : [] },
+    "./delete-reservation": { MediaDeleteReservationError: class extends Error {},
+      reserveCatalogAssetDeletion: async input => { reservations++; assert.equal(input.confirmReferenced, used); return { id: "reservation", assetId: target.id, publicValue: target.publicUrl }; },
+      finalizeCatalogAssetDeletion: async () => { active = false; }, cancelCatalogAssetDeletion: async () => {}, markCatalogAssetDeleteRecovery: async () => {} },
+    "./delete-saga": loadTypeScriptModule("src/lib/admin/media-catalog/delete-saga.ts", {}),
+    "./readiness": readinessModule, "./identity": identityModule,
+    "./reference-providers": { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry", scanAllMediaReferenceProviders: async () => ({ references: used ? [reference] : [], uncertainties: uncertain ? ["scan_failed"] : [] }) },
+    "../media-library-paths": { normalizeMediaFolder: value => value }, "../media-storage-adapter": { MediaStorageError: TestMediaStorageError },
+    "./reconciliation": { reconcileMediaCatalog: async () => { reconciliations++; runtime = { ...runtime, storageAssetCount: 0, catalogAssetCount: 0 }; return { complete: true, uncertainties: [] }; } },
+  });
+  const preview = await safeOwner.previewMediaDeletion({ folder: "images/contract" });
+  assert.equal(preview.checks[0].state, "in_use");
+  assert.equal(preview.checks[0].references[0].editHref, reference.editHref);
+  assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl)).deleted, false);
+  assert.equal(reservations, 0); assert.equal(storageDeletes, 0);
+  lease = true;
+  assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl, { confirmReferenced: true })).deleted, false);
+  lease = false; uncertain = true;
+  assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl, { confirmReferenced: true })).deleted, false);
+  assert.equal(storageDeletes, 0);
+  uncertain = false;
+  const deleted = await safeOwner.safelyDeleteMediaAsset(target.publicUrl, { confirmReferenced: true, onTransition: async event => { audit.push(event.operation); } });
+  assert.equal(deleted.deleted, true); assert.deepEqual(deleted.catalogWarnings, []);
+  assert.equal(storageDeletes, 1); assert.equal(reconciliations, 1);
+  assert.deepEqual(audit, ["reserve", "finalize"]);
+  assert.equal(reference.identity.publicUrl, target.publicUrl);
+  present = active = true; used = false; runtime = { ...completeRuntimeState };
+  assert.equal((await safeOwner.previewMediaDeletion({ assets: [target.publicUrl] })).checks[0].state, "safe_to_delete");
+  assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl)).deleted, true);
+  assert.equal(storageDeletes, 2);
+  check("single/folder preview and real delete owner require explicit usage consent, retain leases/uncertainty guards, audit and refresh the baseline", true);
+}
 
 await verifyMediaUploadLimitContract();
 

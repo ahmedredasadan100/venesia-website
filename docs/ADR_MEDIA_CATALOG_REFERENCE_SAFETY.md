@@ -15,7 +15,7 @@ Runtime uploads already have one durable provider boundary, but a storage listin
 - Identify a managed asset by `(provider, bucket, object_key)`, never by a fuzzy URL match.
 - Treat Supabase Storage as the object source and Media Catalog as the administrative/reference read model.
 - Discover references through a typed provider registry. Domain writes synchronize their provider; reconciliation is the repair and initial-backfill path.
-- Delete only when catalog state and provider-registry version are synchronized, persisted references are zero, a fresh exhaustive provider scan is complete with zero matching references, and the object still exists. Any error or drift fails closed.
+- Delete only when catalog state and provider-registry version are synchronized, a fresh exhaustive provider scan is complete, and the exact managed object exists. Usage is advisory: show its count and locations and require explicit `حذف رغم الاستخدام` confirmation for referenced targets. A reservation retains that decision through finalization and recovery. Query errors, identity drift and unresolved write leases still fail closed. Authored content references are never changed by deletion.
 - Replacement uploads a new unique object, then rebinds every supported reference with compensation on partial failure. It never overwrites the existing object path and never deletes the old asset automatically.
 - Folder paths are normalized catalog records backed by Storage prefixes. Empty folders may exist only in the catalog; Storage has no physical empty-directory object.
 - Legacy `/images/**` and `/files/**` values remain unmanaged and undeletable through the managed Storage endpoint.
@@ -57,3 +57,24 @@ or reconcile Catalog state. An existing synced baseline, matching registry versi
 exact target identity, live inventory and Catalog proof remain mandatory. Missing,
 uncertain or foreign-target baselines still fail closed; no execution environment
 label or explicit project-ref label can override the actual client endpoint.
+
+## Managed deletion usage confirmation (2026-10-07)
+
+Single, bulk and recursive folder deletion use the same preview and per-asset Saga.
+The preview is read-only. Each referenced target requires explicit usage consent;
+unused targets do not inherit another asset's consent. Bulk execution records each
+success/failure and retries only remaining targets after a new preview. Folder
+retirement is atomic and requires no remaining live Catalog assets; a later upload
+revives the existing folder identity, including after concurrent retirement.
+
+Confirmed deleted assets remain tombstones for retained reference discovery and
+reconciliation, never selectable active assets. Newly acquired write leases still
+reject deleted assets. If a successful deletion contracts the reconciled dataset,
+the existing full reconciliation owner refreshes the baseline automatically; no
+count-only exception or manual user step establishes readiness. A refresh failure
+is surfaced separately from a proven Storage/Catalog deletion.
+
+Migration `20261007193823_media_delete_usage_confirmation.sql` adds persisted
+consent and folder retirement metadata and updates the existing coordination RPCs.
+It does not alter authored content references or Storage objects. Runtime deletion
+continues through the existing Storage adapter with audit evidence.

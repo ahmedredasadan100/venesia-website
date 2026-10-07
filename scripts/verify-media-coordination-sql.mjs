@@ -10,9 +10,7 @@ const read = (relativePath) =>
 const migration = read(
   "sql/migrations/20260725180000_media_delete_reservation_saga.sql",
 );
-const mixedProviderLeaseScopeMigration = read(
-  "sql/migrations/20260824022000_media_reference_mixed_provider_lease_scope.sql",
-);
+const usageConfirmationMigration = read("sql/migrations/20261007193823_media_delete_usage_confirmation.sql");
 const runner = read("scripts/verify-media-coordination-postgres.mts");
 const fixture = read(
   "scripts/fixtures/media-coordination-postgres-bootstrap.sql",
@@ -39,9 +37,10 @@ const postgresJob = qualityWorkflow.slice(
 );
 
 const checks = [];
+
 const check = (description, condition) => checks.push({ description, condition });
 
-const functionBody = (name, source = migration) => {
+const functionBody = (name, source = usageConfirmationMigration.includes(`create or replace function public.${name}(`) ? usageConfirmationMigration : migration) => {
   const marker = `create or replace function public.${name}`;
   const start = source.indexOf(marker);
   if (start < 0) return "";
@@ -64,9 +63,13 @@ const repair = functionBody("repair_media_delete_reservation");
 const providerRevision = functionBody("get_media_reference_provider_revision");
 const entitySync = functionBody(
   "replace_media_references_for_entity",
-  mixedProviderLeaseScopeMigration,
+  usageConfirmationMigration,
 );
 const providerSync = functionBody("replace_media_references_for_provider");
+check("usage confirmation defaults to false and only narrows the reference gate", reserve.includes("p_confirm_referenced boolean default false") && reserve.includes("not coalesce(p_confirm_referenced, false)") && reserve.includes("usage_confirmed"));
+check("finalization and repair retain the reservation's explicit usage decision", finalize.includes("not target_reservation.usage_confirmed") && repair.includes("not target_reservation.usage_confirmed"));
+check("known intentional deletion remains a reference identity, not an active asset", entitySync.includes("usageConfirmedDeletion") && providerSync.includes("usageConfirmedDeletion"));
+
 
 check("write-lease table exists", migration.includes("create table if not exists public.media_reference_write_leases"));
 check("delete-reservation table exists", migration.includes("create table if not exists public.media_delete_reservations"));

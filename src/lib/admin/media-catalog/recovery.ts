@@ -73,6 +73,7 @@ type RecoveryActionReservationRow = Pick<
   | "id"
   | "asset_id"
   | "status"
+  | "usage_confirmed"
   | "provider"
   | "reserved_bucket"
   | "reserved_object_key"
@@ -372,7 +373,7 @@ async function loadReservationAndAsset(reservationId: string): Promise<{
   const supabase = getSupabaseAdmin();
   const { data: reservation, error } = await supabase
     .from("media_delete_reservations")
-    .select("id,asset_id,status,provider,reserved_bucket,reserved_object_key,reserved_public_url,updated_at")
+    .select("id,asset_id,status,usage_confirmed,provider,reserved_bucket,reserved_object_key,reserved_public_url,updated_at")
     .eq("id", reservationId)
     .maybeSingle();
   if (error || !reservation) {
@@ -419,7 +420,7 @@ async function verifyRecoveryAsset(
   };
 }
 
-function assertRecoveryMutationSafe(verification: Awaited<ReturnType<typeof verifyRecoveryAsset>>) {
+function assertRecoveryMutationSafe(verification: Awaited<ReturnType<typeof verifyRecoveryAsset>>, usageConfirmed: boolean) {
   if (verification.uncertainties.length) {
     throw new MediaRecoveryError(
       "media_recovery_provider_uncertain",
@@ -427,7 +428,7 @@ function assertRecoveryMutationSafe(verification: Awaited<ReturnType<typeof veri
       503,
     );
   }
-  if (verification.persistedReferenceCount || verification.liveReferenceCount) {
+  if (!usageConfirmed && (verification.persistedReferenceCount || verification.liveReferenceCount)) {
     throw new MediaRecoveryError(
       "media_recovery_asset_in_use",
       "ظهرت ارتباطات حالية بالملف؛ لم يتم تغيير الحالة.",
@@ -511,7 +512,7 @@ export async function executeMediaRecoveryAction(input: {
   if (input.action === "retry_verification" || input.action === "preview_scoped_reconciliation") {
     return { mutated: false, state: text(asset.status), verification };
   }
-  assertRecoveryMutationSafe(verification);
+  assertRecoveryMutationSafe(verification, reservation.usage_confirmed === true);
 
   const repairAction = input.action === "cancel_reservation"
     ? "cancel"

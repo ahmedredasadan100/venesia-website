@@ -15,6 +15,7 @@ import {
 import type {
   MediaCatalogAsset,
   MediaCatalogPage,
+  MediaDeleteEligibility,
   MediaSmartView,
 } from "../../../lib/admin/media-catalog/types";
 import {
@@ -45,7 +46,7 @@ type ViewMode = "grid" | "list";
 type PageSize = 10 | 20 | 30 | 50 | 100;
 
 type PendingConfirmation =
-  | { kind: "delete"; assets: MediaCatalogAsset[] }
+  | { kind: "delete"; assets: MediaCatalogAsset[]; folder?: string | null; phase: "checking" | "ready" | "failed"; checks: MediaDeleteEligibility[]; results: { name: string; deleted: boolean; error?: string }[]; error?: string }
   | { kind: "replace"; previous: MediaCatalogAsset; next: MediaCatalogAsset }
   | { kind: "move"; asset: MediaCatalogAsset; targetFolder: string; targetFilename: string }
   | null;
@@ -541,39 +542,67 @@ export default function MediaLibraryCore({
     }
   }
 
+  async function previewDelete(assets: MediaCatalogAsset[], targetFolder?: string | null) {
+    setConfirmation({ kind: "delete", assets, folder: targetFolder, phase: "checking", checks: [], results: [] });
+    setBusy("delete-preview");
+    try {
+      const response = await fetch("/api/admin/media-library", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "preview_delete", ...(targetFolder ? { folder: targetFolder } : { assets: assets.map(asset => asset.publicUrl) }) }) });
+      const payload = await response.json() as { assets: MediaCatalogAsset[]; checks: MediaDeleteEligibility[]; folder: string | null; error?: string };
+      if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدامات.");
+      setConfirmation({ kind: "delete", assets: payload.assets, folder: payload.folder, phase: "ready", checks: payload.checks, results: [] });
+    } catch (error) {
+      setConfirmation({ kind: "delete", assets, folder: targetFolder, phase: "failed", checks: [], results: [], error: error instanceof Error ? error.message : "تعذر فحص الاستخدامات." });
+    } finally { setBusy(null); }
+  }
+
   async function executeConfirmation() {
     const activeConfirmation = confirmation;
     if (!activeConfirmation) return;
     if (activeConfirmation.kind === "delete") {
+      if (activeConfirmation.phase === "failed") return previewDelete(activeConfirmation.assets, activeConfirmation.folder);
+      if (activeConfirmation.phase !== "ready") return;
       setBusy("delete");
-      let completedCount = 0;
+      const results: { name: string; deleted: boolean; error?: string }[] = [];
+      const remaining: MediaCatalogAsset[] = [];
+
+      let folderError: string | undefined;
+      const catalogWarnings: string[] = [];
       try {
         for (const asset of activeConfirmation.assets) {
-          const response = await fetch("/api/admin/media-library", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ asset: asset.publicUrl }),
-          });
-          const payload = (await response.json()) as { error?: string; state?: string };
-          if (!response.ok) throw new Error(payload.error || `تعذر حذف ${asset.displayName}.`);
-          completedCount += 1;
+          try {
+            const response = await fetch("/api/admin/media-library", { method: "DELETE", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ asset: asset.publicUrl, confirmReferenced: activeConfirmation.checks.some(check => check.state === "in_use" && check.asset.id === asset.id) }) });
+            const payload = await response.json() as { error?: string; catalogWarnings?: string[] };
+            if (!response.ok) throw new Error(payload.error || `تعذر حذف ${asset.displayName}.`);
+            catalogWarnings.push(...(payload.catalogWarnings ?? []));
+            results.push({ name: asset.displayName, deleted: true });
+          } catch (error) {
+            results.push({ name: asset.displayName, deleted: false, error: error instanceof Error ? error.message : "تعذر الحذف." });
+            remaining.push(asset);
+          }
+          setConfirmation({ ...activeConfirmation, results: [...results] });
+        }
+        if (activeConfirmation.folder && remaining.length === 0) {
+          try {
+            const response = await fetch("/api/admin/media-library", { method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ operation: "delete_folder", folder: activeConfirmation.folder }) });
+            const payload = await response.json() as { error?: string };
+            if (!response.ok) throw new Error(payload.error || "تعذر إنهاء حذف المجلد.");
+          } catch (error) { folderError = error instanceof Error ? error.message : "تعذر إنهاء حذف المجلد."; }
         }
         setSelectedIds([]);
-        setConfirmation(null);
         await loadPage();
-        announce("success", "تم الحذف الآمن", "حُذفت فقط الملفات التي ثبت عدم ارتباطها بأي محتوى.");
-      } catch (deleteError) {
-        const remainingAssets = activeConfirmation.assets.slice(completedCount);
-        setConfirmation({
-          kind: "delete",
-          assets: remainingAssets.length ? remainingAssets : activeConfirmation.assets,
-        });
-        await loadPage();
-        announce("danger", "تم منع الحذف", deleteError instanceof Error ? deleteError.message : "تعذر إثبات سلامة الحذف.");
-        throw deleteError;
-      } finally {
-        setBusy(null);
-      }
+        const deleted = results.filter(result => result.deleted).length;
+        if (remaining.length || folderError) {
+          setConfirmation({ ...activeConfirmation, assets: remaining, phase: "failed", results, error: folderError });
+          announce("danger", "نتيجة الحذف", `تم حذف ${deleted}؛ تعذر حذف ${remaining.length}. ${folderError ?? "راجع أسباب الفشل في نافذة الحذف."}`);
+        } else {
+          setConfirmation(null);
+          if (activeConfirmation.folder) openFolder(activeConfirmation.folder.split("/").slice(0, -1).join("/"));
+          announce(catalogWarnings.length ? "warning" : "success", "تم الحذف", `تم حذف ${deleted} ملف${activeConfirmation.folder ? " والمجلد" : ""}. لم تتغير مراجع المحتوى؛ يمكنك ربط صور بديلة يدويًا.${catalogWarnings.length ? " تعذر تحديث جاهزية المكتبة: " + catalogWarnings.join("، ") : ""}`);
+        }
+      } finally { setBusy(null); }
       return;
     }
 
@@ -646,7 +675,8 @@ export default function MediaLibraryCore({
     ? `سيتم تحديث مواضع الاستخدام المدعومة من «${confirmation.previous.displayName}» إلى «${confirmation.next.displayName}». سيبقى الملف القديم محفوظًا.`
     : confirmation?.kind === "move"
       ? `سينتقل الملف إلى ${confirmation.targetFolder}/${confirmation.targetFilename} مع تحديث مواضع الاستخدام المدعومة. لن يعتمد التغيير إذا لم يكتمل كله.`
-      : `سيتم فحص ارتباطات ${confirmation?.kind === "delete" ? confirmation.assets.length : 0} ملف قبل حذفه. إذا تعذر إثبات سلامة أحد الملفات ستتوقف الدفعة، وتبقى الملفات غير المنفذة متاحة لإعادة المحاولة.`;
+      : confirmation?.kind === "delete" && confirmation.phase === "checking" ? "جارٍ فحص الاستخدامات الحالية…"
+      : "راجع الملفات ومواضع استخدامها. الحذف نهائي، ولن يفك مراجع المحتوى أو يغيرها تلقائيًا.";
 
   return (
     <div
@@ -707,6 +737,7 @@ export default function MediaLibraryCore({
               <button type="button" onClick={() => setViewMode("list")} aria-pressed={viewMode === "list"} className={`rounded-lg px-3 py-1.5 text-xs ${viewMode === "list" ? "bg-white/10 text-white" : "text-white/45"}`}>قائمة</button>
             </div>
           </div>
+          {mode === "manage" && folder?.includes("/") ? <button type="button" disabled={Boolean(busy) || !data?.readiness.safeDeleteReady} onClick={() => void previewDelete([], folder)} className="mb-3 rounded-xl border border-red-300/25 px-3 py-2 text-sm text-red-200 disabled:opacity-40">حذف المجلد</button> : null}
           <AdminEntityListFilters
             basePath="/admin/media-library"
             search={{
@@ -721,7 +752,7 @@ export default function MediaLibraryCore({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-white/58">تم تحديد {selectedAssets.length}</span>
                 {mode === "manage" && selectedAssets.length ? (
-                  <button ref={deleteConfirmationTriggerRef} type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => setConfirmation({ kind: "delete", assets: selectedAssets })} className="rounded-xl border border-red-300/25 px-3 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
+                  <button ref={deleteConfirmationTriggerRef} type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => void previewDelete(selectedAssets)} className="rounded-xl border border-red-300/25 px-3 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
                 ) : null}
                 {mode === "manage" && selectedAssets.length === 1 ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => setShowPhysicalForm(true)} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">نقل / إعادة تسمية</button> : null}
                 <button type="button" onClick={() => setSelectedIds([])} className="ms-auto rounded-xl border border-white/10 px-3 py-2 text-sm text-white/55">مسح التحديد</button>
@@ -918,8 +949,9 @@ export default function MediaLibraryCore({
         open={confirmation !== null}
         title={confirmation?.kind === "replace" ? "استبدال كل المراجع المدعومة؟" : confirmation?.kind === "move" ? "تنفيذ تغيير فعلي لمسار التخزين؟" : "حذف الأصول المحددة؟"}
         description={confirmDescription}
-        confirmLabel={confirmation?.kind === "replace" ? "تأكيد الاستبدال" : confirmation?.kind === "move" ? "تأكيد النقل / التسمية" : "فحص ثم حذف"}
-        pending={busy === "delete" || busy === "replace" || busy === "move"}
+        confirmLabel={confirmation?.kind === "replace" ? "تأكيد الاستبدال" : confirmation?.kind === "move" ? "تأكيد النقل / التسمية" : confirmation?.kind === "delete" && confirmation.phase === "failed" ? "إعادة الفحص" : confirmation?.kind === "delete" && confirmation.checks.some(check => check.state === "in_use") ? "حذف رغم الاستخدام" : "تأكيد الحذف"}
+        pending={busy === "delete-preview" || busy === "delete" || busy === "replace" || busy === "move"}
+        confirmDisabled={confirmation?.kind === "delete" && (confirmation.phase === "checking" || (confirmation.phase === "ready" && confirmation.assets.length > 0 && !confirmation.checks.some(check => check.state === "safe_to_delete" || check.state === "in_use")))}
         returnFocusRef={
           confirmation?.kind === "delete"
             ? deleteConfirmationTriggerRef
@@ -930,7 +962,20 @@ export default function MediaLibraryCore({
         fallbackFocusRef={libraryRootRef}
         onCancel={() => setConfirmation(null)}
         onConfirm={executeConfirmation}
-      />
+      >
+        {confirmation?.kind === "delete" ? <div className="max-h-[40vh] space-y-3 overflow-y-auto" aria-live="polite" data-media-delete-preview="">
+          {confirmation.phase === "checking" ? <p role="status">جارٍ فحص الاستخدامات…</p> : null}
+          {confirmation.error ? <p role="alert" className="text-sm text-red-200">{confirmation.error}</p> : null}
+          {confirmation.checks.map((check, index) => <div key={check.asset?.id ?? index} className="rounded-lg border border-white/10 p-3 text-sm">
+            <p className="break-words font-semibold">{check.asset?.displayName ?? "ملف غير متاح"}</p>
+            {check.state === "in_use" ? <><p className="mt-2 text-amber-200">هذه الصورة مستخدمة في {check.references.length} مواضع. حذفها سيترك هذه المراجع بدون أصل صالح.</p>
+              <ul className="mt-2 space-y-1">{check.references.map((reference, i) => <li key={i}>{reference.editHref ? <Link href={reference.editHref} target="_blank" className="underline">{reference.entityLabel ?? reference.entityIdentity}</Link> : reference.entityLabel ?? reference.entityIdentity} — {reference.fieldKey}</li>)}</ul></>
+              : check.state === "safe_to_delete" ? <p className="text-emerald-200">غير مستخدمة حاليًا.</p>
+              : <p className="text-red-200">تعذر إثبات جاهزية هذا الأصل للحذف: {"reasons" in check ? check.reasons.join("، ") : check.state}</p>}
+          </div>)}
+          {confirmation.results.length ? <div data-media-delete-results=""><p>Deleted: {confirmation.results.filter(result => result.deleted).length} / Failed: {confirmation.results.filter(result => !result.deleted).length}</p><ul>{confirmation.results.map((result, index) => <li key={index} className={result.deleted ? "text-emerald-200" : "text-red-200"}>{result.name}: {result.deleted ? "تم الحذف" : result.error}</li>)}</ul></div> : null}
+        </div> : null}
+      </AdminConfirmDialog>
     </div>
   );
 }

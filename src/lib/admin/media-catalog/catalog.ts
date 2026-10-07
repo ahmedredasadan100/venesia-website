@@ -722,6 +722,8 @@ export async function ensureCatalogFolderHierarchy(folderPath: string, actorId?:
     );
     if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
     if (error) throw new Error(error.message);
+    const revival = await supabase.from("media_folders").update({ deleted_at: null }).eq("normalized_path", normalizedPath).not("deleted_at", "is", null);
+    if (revival.error) throw new Error(revival.error.message);
     parentPath = normalizedPath;
   }
 }
@@ -913,7 +915,7 @@ export async function createCatalogFolder(folderPath: string, actorId?: number |
   return mapCatalogFolder(data);
 }
 
-export async function getAllCatalogAssetIdentityMap() {
+export async function getAllCatalogAssetIdentityMap(options: { includeConfirmedDeletions?: boolean } = {}) {
   const result = new Map<string, MediaCatalogAsset>();
   const supabase = getSupabaseAdmin();
   const pageSize = 500;
@@ -923,7 +925,7 @@ export async function getAllCatalogAssetIdentityMap() {
     const { data, error } = await supabase
       .from("admin_media_assets_catalog")
       .select("*")
-      .neq("status", "deleted")
+      .or(options.includeConfirmedDeletions ? "status.neq.deleted,and(status.eq.deleted,metadata->>usageConfirmedDeletion.eq.true)" : "status.neq.deleted")
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .range(offset, offset + pageSize - 1);
@@ -952,7 +954,7 @@ export async function getCatalogAssetIdentityMapForSynchronization() {
     const { data, error } = await supabase
       .from("admin_media_assets_catalog")
       .select("id, provider, bucket, object_key")
-      .neq("status", "deleted")
+      .or("status.neq.deleted,and(status.eq.deleted,metadata->>usageConfirmedDeletion.eq.true)")
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .range(offset, offset + pageSize - 1);
@@ -1018,4 +1020,10 @@ export async function setMediaCatalogRuntimeState(state: MediaCatalogRuntimeStat
   );
   if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
   if (error) throw new Error(error.message);
+}
+
+export async function retireEmptyCatalogFolder(folder: string) {
+  const { data, error } = await getSupabaseAdmin().rpc("retire_empty_media_folder", { p_folder: folder });
+  if (error) throw new Error(error.message);
+  return data;
 }

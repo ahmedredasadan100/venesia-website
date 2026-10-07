@@ -203,12 +203,12 @@ Before deletion:
 2. verify the path is a managed asset;
 3. validate provider and bucket;
 4. require synchronized catalog state and the exact provider-registry version;
-5. check persisted references;
-6. complete a fresh exhaustive provider scan and reject every query error, drift, or matching reference;
+5. check persisted references and show fresh usage count and locations;
+6. complete an exhaustive provider scan, reject every query error or drift, and require explicit usage confirmation for referenced targets;
 7. verify that the exact managed Storage object exists;
 8. reject unsafe, external, unmanaged, missing, or uncertain assets;
 9. delete through the adapter;
-10. update catalog state and record audit.
+10. update catalog state and record audit, preserving authored references; refresh a contracted baseline through the existing reconciliation owner.
 
 Replacement always creates a new `(provider, bucket, object_key)`. Rebind supported references only after the new catalog row exists, compensate partial failures, and retain the old object. Same-path overwrite and automatic old-object deletion are prohibited.
 

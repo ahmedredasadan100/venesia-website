@@ -1072,6 +1072,7 @@ export type Database = {
       }
       media_delete_reservations: {
         Row: {
+          usage_confirmed: boolean
           actor_id: number | null
           asset_id: string
           created_at: string
@@ -1095,6 +1096,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          usage_confirmed?: boolean
           actor_id?: number | null
           asset_id: string
           created_at?: string
@@ -1118,6 +1120,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          usage_confirmed?: boolean
           actor_id?: number | null
           asset_id?: string
           created_at?: string
@@ -1166,6 +1169,7 @@ export type Database = {
       }
       media_folders: {
         Row: {
+          deleted_at: string | null
           created_at: string
           created_by: number | null
           display_name: string
@@ -1176,6 +1180,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          deleted_at?: string | null
           created_at?: string
           created_by?: number | null
           display_name: string
@@ -1186,6 +1191,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          deleted_at?: string | null
           created_at?: string
           created_by?: number | null
           display_name?: string
@@ -4129,8 +4135,13 @@ export type Database = {
         }
         Returns: number
       }
+      retire_empty_media_folder: {
+        Args: { p_folder: string }
+        Returns: number
+      }
       reserve_media_asset_deletion: {
         Args: {
+          p_confirm_referenced?: boolean
           p_actor_id?: number
           p_asset_id: string
           p_expected_asset_bucket?: string

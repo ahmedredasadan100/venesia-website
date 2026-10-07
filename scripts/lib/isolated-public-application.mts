@@ -270,6 +270,7 @@ export async function runApplicationHandoff(
         "20260930204331_integration_configuration_terminal_conflicts.sql",
         "20261006200447_cms_image_upload_configurable_ceiling.sql",
         "20261007165732_retire_legacy_content_image_catalog.sql",
+  "20261007193823_media_delete_usage_confirmation.sql",
       ],
       "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, terminal integration conflict, configurable image ceiling, and legacy content image retirement extensions may follow the SEO security declaration.",
     );

@@ -47,6 +47,7 @@ export async function reserveCatalogAssetDeletion(input: {
   expectedProvider: string;
   expectedBucket: string;
   expectedObjectKey: string;
+  confirmReferenced?: boolean;
   actorId?: number | null;
   requestIdentity: string;
 }): Promise<MediaDeleteReservation> {
@@ -56,6 +57,7 @@ export async function reserveCatalogAssetDeletion(input: {
   }
   const { data, error } = await getSupabaseAdmin().rpc("reserve_media_asset_deletion", {
     p_asset_id: input.assetId,
+    p_confirm_referenced: input.confirmReferenced === true,
     ...(input.actorId == null ? {} : { p_actor_id: input.actorId }),
     p_request_identity: input.requestIdentity,
     p_expected_asset_provider: input.expectedProvider,

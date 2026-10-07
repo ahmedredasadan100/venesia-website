@@ -34,6 +34,7 @@ export type MediaDeleteSagaSuccess<TResult> = {
 };
 
 export type MediaDeleteSagaDependencies<TResult> = {
+  confirmReferenced?: boolean;
   reserve(): Promise<MediaDeleteReservation>;
   scanAfterReservation(): Promise<MediaDeletePostReservationScan>;
   deleteStorage(reservation: MediaDeleteReservation): Promise<TResult>;
@@ -162,14 +163,14 @@ export async function runMediaDeleteSaga<TResult>(
   }
 
   const scanReasons = [
-    ...postReservationScan.referenceReasons,
+    ...(dependencies.confirmReferenced === true ? [] : postReservationScan.referenceReasons),
     ...postReservationScan.uncertainties,
   ];
   if (scanReasons.length) {
     return cancelBeforeStorage(
       dependencies,
       reservation,
-      postReservationScan.referenceReasons.length
+      postReservationScan.referenceReasons.length && dependencies.confirmReferenced !== true
         ? "media_delete_post_reservation_reference"
         : "media_delete_post_reservation_scan_failed",
       scanReasons,

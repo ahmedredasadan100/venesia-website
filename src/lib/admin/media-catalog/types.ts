@@ -191,7 +191,7 @@ export type MediaCatalogPage = {
 
 export type MediaDeleteEligibility =
   | { state: "safe_to_delete"; asset: MediaCatalogAsset; references: [] }
-  | { state: "in_use"; asset: MediaCatalogAsset; references: MediaReferenceRecord[] }
+  | { state: "in_use"; asset: MediaCatalogAsset; references: Omit<MediaReferenceRecord, "id" | "assetId">[] }
   | { state: "uncertain"; asset: MediaCatalogAsset | null; reasons: string[] }
   | { state: "unmanaged"; asset: null }
   | { state: "already_missing"; asset: MediaCatalogAsset }
