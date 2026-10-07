@@ -56,9 +56,9 @@ export async function seedOwnedAdminInteractionFixtures(handle: OwnedLocalHandle
   const topic = topicRow && {id:topicRow.id,title:topicRow.title,slug:topicRow.slug};
   assert.ok(topic, "The existing canonical Public seed provides a fully authored article.");
   originalTopicByHandle.set(handle,topicRow);
-  const image="/images/projects/c35/hero.jpg";
-  const registeredImage=(await handle.query("select id from public.admin_media_assets_catalog where object_key=$1 and provider='filesystem' and bucket='public' and status='active' and reconciliation_state='synced'",["images/projects/c35/hero.jpg"])).rows;
-  assert.ok(registeredImage.length>0,"The published canonical filesystem fixture asset must already exist in the Catalog");
+  const image=String(topicRow.image);
+  const registeredImage=(await handle.query("select id from public.admin_media_assets_catalog where public_url=$1 and provider='supabase' and bucket='cms-images' and status='active' and reconciliation_state='synced'",[image])).rows;
+  assert.equal(registeredImage.length,1,"Admin fixtures must adopt the real managed image provisioned by the Public fixture owner");
   const restoredTopic={...topicRow,image,category_id:categories[0].id,category:categories[0].name,category_slug:categories[0].slug,series_id:series.id};
   Object.assign(restoredTopic,seo.deriveEntitySeoScore(seo.toTopicSeoScoreInput(restoredTopic as unknown as TopicSeoSource)));
   const topicFields=["title","content","excerpt","image","category_id","category","category_slug","series_id","seo_title","seo_description","seo_keywords","focus_keyword","seo_score","seo_score_version","seo_score_input_hash"];

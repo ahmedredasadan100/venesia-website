@@ -8,6 +8,8 @@ import * as nodeModule from "node:module";
 import net from "node:net";
 import { Worker } from "node:worker_threads";
 import ts from "typescript";
+import { createClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
@@ -1597,8 +1599,25 @@ export async function prepareOwnedPublicVerification(context: PrivatePublicVerif
   let syntheticTopicCreated = false, syntheticCategoryCreated = false;
   if (!article) {
     assert.equal((await handle.query("select id from public.topics where slug=$1", [FIXTURE_SLUG])).rows.length, 0, "An incompatible existing fixture must not be repaired.");
+    // A real isolated Storage object replaces the retired repository image fixture.
+    // This is fixture provisioning, not Signed Upload behavioral evidence.
+    await context.assertOwned();
+    const origin = `http://127.0.0.1:${context.apiPort}`;
+    const storage = createClient(origin, context.serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const imageBytes = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#245670" } }).png().toBuffer();
+    const objectKey = `images/${FIXTURE_SLUG}.png`;
+    const uploaded = await storage.storage.from("cms-images").upload(objectKey, imageBytes, { contentType: "image/png", upsert: false });
+    assert.equal(uploaded.error, null, "Owned fixture must exist in real Storage before Catalog registration.");
+    const imageUrl = storage.storage.from("cms-images").getPublicUrl(objectKey).data.publicUrl;
+    const imageReadback = await fetch(imageUrl, { redirect: "error", signal: AbortSignal.timeout(15_000) });
+    assert.equal(imageReadback.status, 200);
+    assert.deepEqual(Buffer.from(await imageReadback.arrayBuffer()), imageBytes);
     await handle.query("begin");
     try {
+      await handle.query(`insert into public.media_assets(provider,bucket,object_key,public_url,original_filename,display_name,
+        media_kind,mime_type,extension,byte_size,width,height,checksum,folder_path,status,reconciliation_state,metadata)
+        values('supabase','cms-images',$1,$2,$3,$3,'image','image/png','.png',$4,64,64,$5,'images','active','synced',
+        '{"fixture":"isolated-public-verification"}'::jsonb)`, [objectKey,imageUrl,`${FIXTURE_SLUG}.png`,imageBytes.length,digest(imageBytes)]);
       // This category is synthetic fixture data, never an application default.
       let category = (await handle.query(`with recursive media as (
         select id from public.topic_categories where slug='media-center'
@@ -1615,7 +1634,7 @@ export async function prepareOwnedPublicVerification(context: PrivatePublicVerif
         slug: FIXTURE_SLUG, title: "ملكية العقارات: دليل اصطناعي للتحقق من القراءة والبحث",
         excerpt: "مقال اصطناعي داخل بيئة الاختبار المعزولة للتحقق من عرض المحتوى العربي والبحث فيه والتنقل بين صفحاته.",
         content: "## ملكية العقارات\n\nهذا المقال بيانات اصطناعية للاختبار المعزول، ويتيح التحقق من القراءة والبحث دون استخدام بيانات حقيقية.\n\n### مراجعة المعلومات\n\nتعرض الفقرة بنية دلالية واضحة مع عنوان فرعي ومحتوى قابل للقراءة. يمكن العودة إلى [الموضوعات](/topics) لمتابعة التنقل.\n\n### التخطيط للخطوات التالية\n\nنستخدم هذه البيانات للتحقق من عرض المحتوى العربي وترتيب العناوين وسلوك الاقتراحات في البحث فقط.",
-        image: "/images/venesia-5.png", image_alt: "صورة توضيحية لمقال التحقق المعزول",
+        image: imageUrl, image_alt: "صورة توضيحية لمقال التحقق المعزول",
         category: category.name, category_slug: category.slug, category_id: category.id,
         content_type: "article", status: "published", deleted_at: null,
         seo_title: "دليل ملكية العقارات وفهم خطوات الشراء والاستثمار الآمن",
@@ -1625,7 +1644,7 @@ export async function prepareOwnedPublicVerification(context: PrivatePublicVerif
         show_title_on_page: true, show_image_on_page: true, show_excerpt_on_page: true,
         created_at: FIXTURE_DATE, updated_at: FIXTURE_DATE, published_at: FIXTURE_DATE,
       };
-      assert.ok(existsSync(join(ROOT, "public", String(row.image))));
+      assert.equal(row.image, imageUrl, "Public fixture consumes the verified managed object.");
       assert.equal(owner.getTopicPublishValidationError(owner.topicRowToPublishInput(row)), null, "Synthetic article must satisfy the current publication owner.");
       Object.assign(row, seo.deriveEntitySeoScore(seo.toTopicSeoScoreInput(row as TopicSeoSource)));
       const fields = Object.keys(row);
