@@ -17,7 +17,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "weekly",
     openGraph: {
       type: "website",
-      image: "/images/venesia-5.png",
+      image: "",
     },
   },
   {
@@ -30,7 +30,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "monthly",
     openGraph: {
       type: "website",
-      image: "/images/about/about-hero.png",
+      image: "",
     },
   },
   {
@@ -52,7 +52,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "weekly",
     openGraph: {
       type: "website",
-      image: "/images/venesia-3.png",
+      image: "",
     },
   },
   {

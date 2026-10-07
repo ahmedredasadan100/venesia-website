@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { chromium } from "playwright";
+import sharp from "sharp";
 import { browserAtomicReadiness } from "./fixtures/admin-atomic-readiness.mjs";
 import { assertFreshMeasurementControl, createAdminMeasurementRestoreTransition, readCompletedRestoreReceipt } from "./fixtures/admin-measurement-restore-transition.mjs";
 
@@ -196,8 +197,10 @@ const act = async action => {
   else if(action.op === "upload") {
     assert.equal(phase,"after");assert.equal(new URL(page.url()).origin,origin);assert.equal(new URL(page.url()).pathname,"/admin/media-library");
     assert.equal(action.fixture,"project-hero");assert.equal(action.fileName,"qa-admin-interaction-managed-hero.jpg");
-    const bytes=readFileSync(resolve("public/images/projects/c35/hero.jpg"));
-    assert.equal(bytes.length,502238);assert.equal(createHash("sha256").update(bytes).digest("hex"),"cf60677938acaeef1c835f56fac83f8f0d864f9d7813866d5cc21b02c87f7b04");
+    // Reusable valid upload fixture, independent of retired authored/Git images.
+    const bytes=await sharp({create:{width:1600,height:900,channels:3,background:"#245670"}}).jpeg().toBuffer();
+    const metadata=await sharp(bytes).metadata();
+    assert.equal(metadata.format,"jpeg");assert.equal(metadata.width,1600);assert.equal(metadata.height,900);
     const target=locator(action.target);assert.equal(await target.getAttribute("type"),"file");
     await target.setInputFiles({name:action.fileName,mimeType:"image/jpeg",buffer:bytes});
     checkpoint({type:"fixed-file-input",job:activeJob,fixture:action.fixture,fileName:action.fileName,bytes:bytes.length});

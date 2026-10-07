@@ -15,6 +15,10 @@ const only = process.argv.find(argument => argument.startsWith("--only="))?.slic
 const require = createRequire(import.meta.url);
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error("Unexpected owner network request blocked before transport"); };
+// Isolated configured Storage identity; the browser route serves the actual fixture bytes.
+process.env.NEXT_PUBLIC_SUPABASE_URL = "https://media-fixture.supabase.co";
+const managedImageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/cms-images/images/map-proof.svg`;
+const proofSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="#888"/></svg>';
 const owners = createRemainingContentOwnerHarness(root);
 const form = entries => { const result = new FormData(); for (const [key, value] of entries) result.append(key, value); return result; };
 const entry = String.raw`
@@ -102,6 +106,7 @@ async function check(name, run) {
   const blocked = [];
   await context.route("**/*", route => {
     const url = new URL(route.request().url());
+    if (url.href === managedImageUrl) return route.fulfill({ contentType: "image/svg+xml", body: proofSvg });
     if (url.origin === origin && ["/", "/fixture.js", "/proof.svg"].includes(url.pathname)) return route.continue();
     blocked.push(url.pathname); return route.abort();
   });
@@ -144,7 +149,7 @@ const branches = [
   { key: "projects-hub-hero", fields: { limit: "3", autoplay_ms: "7500", empty_state: "Scoped empty projects" }, config: {} },
   { key: "projects-hub-featured", fields: { title: "Scoped featured title", autoplay_ms: "8500" }, config: {} },
   { key: "projects-hub-listing", fields: { title: "Scoped listing title" }, config: {} },
-  { key: "projects-hub-map", fields: { title: "Scoped map title", pin_0_district: "Scoped district", pin_0_right: "35%" }, config: { mapPins: [{ code: "P101", district: "Original", right: "50%", top: "50%" }] } },
+  { key: "projects-hub-map", fields: { title: "Scoped map title", pin_0_district: "Scoped district", pin_0_right: "35%" }, config: { mapImage: managedImageUrl, mapPins: [{ code: "P101", district: "Original", right: "50%", top: "50%" }] } },
 ];
 try {
   for (const fixture of branches) await check(fixture.key, async page => {
@@ -161,7 +166,13 @@ try {
     for (const value of Object.values(fixture.fields).filter(value => !/^\d+$/.test(value))) assert.ok(JSON.stringify(parsed).includes(value), `Current parser retains ${value}`);
     await mount(page, fixture.key, JSON.parse(JSON.stringify(parsed)));
     for (const [name, value] of Object.entries(fixture.fields)) assert.equal(await page.locator(`[name="${name}"]`).inputValue(), value, `${fixture.key} read-back ${name}`);
-    if (fixture.key === "projects-hub-map") { const invalid = form(submitted); invalid.set("pin_0_right", "invalid"); await assert.rejects(() => owners.content.buildContentConfig(invalid, fixture.key, parsed)); }
+    if (fixture.key === "projects-hub-map") {
+      assert.equal(parsed.mapImage, managedImageUrl);
+      const missing = form(submitted); missing.set("map_image", "");
+      await assert.rejects(() => owners.content.buildContentConfig(missing, fixture.key, parsed), /مطلوب/u);
+      const foreign = form(submitted); foreign.set("map_image", managedImageUrl.replace("media-fixture.supabase.co", "foreign.invalid"));
+      await assert.rejects(() => owners.content.buildContentConfig(foreign, fixture.key, parsed));
+      const invalid = form(submitted); invalid.set("pin_0_right", "invalid"); await assert.rejects(() => owners.content.buildContentConfig(invalid, fixture.key, parsed)); }
     if (fixture.key === "projects-hub-listing") { const invalid = form(submitted); invalid.set("default_filter", "missing"); await assert.rejects(() => owners.content.buildContentConfig(invalid, fixture.key, parsed)); }
     return { fields: fixture.fields, mountedInputRetention: true, parserReadBack: true, redirectSaveAcknowledged: false, config: parsed };
   });

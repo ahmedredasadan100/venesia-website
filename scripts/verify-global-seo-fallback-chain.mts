@@ -18,3 +18,22 @@ assert.ok(editor.includes("!source.persisted") && editor.includes("لا يحفظ
 assert.ok(health.includes("effectiveSources") && health.includes("source: field.source") && health.includes("persisted: field.persisted"));
 
 console.log("PASS Global SEO fallback chain: resolver order, invalid-candidate fallthrough, truthful Admin fields and diagnostic source proof.");
+
+// Missing authored images must remain absent across the shared metadata owners.
+const { createJiti } = await import("jiti");
+const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
+const { buildOpenGraph } = await jiti.import<typeof import("../src/lib/seo/build-open-graph")>("../src/lib/seo/build-open-graph.ts");
+const { absoluteAssetUrl } = await jiti.import<typeof import("../src/lib/seo/seo-utils")>("../src/lib/seo/seo-utils.ts");
+const { buildArticleSchema } = await jiti.import<typeof import("../src/lib/seo/build-jsonld")>("../src/lib/seo/build-jsonld.ts");
+const { buildMetadataFromResolved } = await jiti.import<typeof import("../src/lib/seo/build-metadata-from-resolved")>("../src/lib/seo/build-metadata-from-resolved.ts");
+const identity = { path: "/example", title: "Example", description: "Description", metadataBase: "https://example.test" };
+assert.equal(absoluteAssetUrl("", identity.metadataBase), "");
+assert.deepEqual(buildOpenGraph(identity).images, []);
+const managedImage = "https://example.supabase.co/storage/v1/object/public/cms-images/example.png";
+assert.equal(buildOpenGraph({ ...identity, image: managedImage }).images[0].url, managedImage);
+const article = buildArticleSchema({ ...identity, image: "" });
+assert.equal(Object.hasOwn(article, "image"), false);
+const metadata = buildMetadataFromResolved({ ...identity, canonical: "https://example.test/example", siteName: "Example", image: "", twitterImage: "", imageAlt: "Example", type: "website", robots: { index: true, follow: true } } as Parameters<typeof buildMetadataFromResolved>[0]);
+assert.deepEqual(metadata.openGraph?.images, []);
+assert.deepEqual(metadata.twitter?.images, []);
+console.log("PASS absent image metadata remains absent; explicitly authored managed images remain intact.");

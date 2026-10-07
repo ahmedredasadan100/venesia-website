@@ -701,7 +701,7 @@ const PROVIDER_CONFIGS = [
 ] satisfies ProviderConfig[];
 
 export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
-export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v5-project-tracking";
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v6-managed-content-images";
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;

@@ -67,7 +67,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       fallbackTitle="مركز المعرفة"
       fallbackEyebrow="Knowledge Center"
       fallbackSubtitle="محتوى توعوي واستثماري وهندسي يساعدك على اتخاذ قرارات عقارية أكثر وعيًا."
-      fallbackImage="/images/venesia-5.png"
+      fallbackImage=""
     />
   );
 

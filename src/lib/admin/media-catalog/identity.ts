@@ -69,6 +69,10 @@ export function parseLegacyPublicMediaAsset(value: string): CanonicalMediaIdenti
     // Keep the original path when it contains a literal percent character.
   }
 
+  // Retired content images remain authored data, never managed Catalog assets.
+  // Static documents keep their existing read-only compatibility contract.
+  if (decodedPath.startsWith("images/")) return null;
+
   try {
     return createCanonicalMediaIdentity({
       provider: "filesystem",

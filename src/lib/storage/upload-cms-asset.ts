@@ -11,6 +11,9 @@ import {
 } from "../admin/media-intelligence/cms-upload-policy";
 import {
   MediaStorageError,
+  parseManagedMediaUrl,
+  hasSafeMediaObjectPath,
+  getCmsStorageBuckets,
   type MediaStorageAdapter,
   type MediaUploadOptions,
   type MediaUploadResult,
@@ -29,10 +32,8 @@ import { loadMediaSettings, mediaSettingsToUploadPolicy } from "../admin/media-c
 const IMAGE_EXTENSIONS = CMS_IMAGE_EXTENSION_SET;
 const PDF_EXTENSIONS = CMS_PDF_EXTENSION_SET;
 
-export const CMS_IMAGES_BUCKET =
-  process.env.SUPABASE_STORAGE_BUCKET_IMAGES?.trim() || "cms-images";
-export const CMS_DOCUMENTS_BUCKET =
-  process.env.SUPABASE_STORAGE_BUCKET_DOCUMENTS?.trim() || "cms-documents";
+export const CMS_IMAGES_BUCKET = getCmsStorageBuckets().images;
+export const CMS_DOCUMENTS_BUCKET = getCmsStorageBuckets().documents;
 
 type SupabaseAdminClient = ReturnType<typeof getSupabaseStorageAdmin>;
 
@@ -138,22 +139,6 @@ function publicUrlForObject(
   return data.publicUrl;
 }
 
-function hasSafeObjectPath(objectPath: string, expectedRoot: "images" | "files") {
-  const segments = objectPath.split("/");
-  return (
-    segments[0] === expectedRoot &&
-    segments.length >= 2 &&
-    segments.every(
-      (segment) =>
-        Boolean(segment) &&
-        segment !== "." &&
-        segment !== ".." &&
-        !segment.includes("\\") &&
-        !segment.includes("\0"),
-    )
-  );
-}
-
 function publicUrlPrefix(
   supabase: SupabaseAdminClient,
   bucket: string,
@@ -170,38 +155,10 @@ export function parseManagedStorageAsset(
   value: string,
   supabase: SupabaseAdminClient = getSupabaseStorageAdmin(),
 ): ManagedStorageAsset | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-
-  let candidate: URL;
-  try {
-    candidate = new URL(trimmed);
-  } catch {
-    return null;
-  }
-
-  for (const [bucket, kind, root] of [
-    [CMS_IMAGES_BUCKET, "image", "images"],
-    [CMS_DOCUMENTS_BUCKET, "document", "files"],
-  ] as const) {
-    const prefix = publicUrlPrefix(supabase, bucket);
-    if (candidate.origin !== prefix.origin || !candidate.pathname.startsWith(prefix.pathname)) {
-      continue;
-    }
-
-    const encodedPath = candidate.pathname.slice(prefix.pathname.length);
-    let objectPath: string;
-    try {
-      objectPath = decodeURIComponent(encodedPath);
-    } catch {
-      return null;
-    }
-
-    if (!hasSafeObjectPath(objectPath, root)) return null;
-    return { bucket, objectPath, kind };
-  }
-
-  return null;
+  return parseManagedMediaUrl(value, [
+    { bucket: CMS_IMAGES_BUCKET, kind: "image", root: "images", ...publicUrlPrefix(supabase, CMS_IMAGES_BUCKET) },
+    { bucket: CMS_DOCUMENTS_BUCKET, kind: "document", root: "files", ...publicUrlPrefix(supabase, CMS_DOCUMENTS_BUCKET) },
+  ]);
 }
 
 function uniqueStorageFilename(
@@ -567,7 +524,7 @@ export async function moveManagedStorageAsset(
   }
   const normalizedTarget = targetObjectKey.replace(/\\/g, "/").replace(/^\/+/, "").trim();
   const expectedRoot = managed.kind === "document" ? "files" : "images";
-  if (!hasSafeObjectPath(normalizedTarget, expectedRoot)) {
+  if (!hasSafeMediaObjectPath(normalizedTarget, expectedRoot)) {
     throw new MediaStorageError("media_move_invalid_target", "مسار النقل أو إعادة التسمية غير صالح.", 400);
   }
   if (normalizedTarget === managed.objectPath) {

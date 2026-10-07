@@ -144,3 +144,42 @@ export function getPublicMediaStorageError(
     code: "media_storage_error",
   };
 }
+
+/** Shared URL identity contract; callers supply prefixes from the configured Storage owner. */
+export function parseManagedMediaUrl(value: string, prefixes: readonly { bucket: string; kind: "image" | "document"; root: "images" | "files"; origin: string; pathname: string }[]) {
+  let candidate: URL;
+  try { candidate = new URL(value.trim()); } catch { return null; }
+  if (candidate.username || candidate.password) return null;
+  for (const prefix of prefixes) {
+    if (candidate.origin !== prefix.origin || !candidate.pathname.startsWith(prefix.pathname)) continue;
+    let objectPath: string;
+    try { objectPath = decodeURIComponent(candidate.pathname.slice(prefix.pathname.length)); } catch { return null; }
+    if (!hasSafeMediaObjectPath(objectPath, prefix.root)) return null;
+    return { bucket: prefix.bucket, objectPath, kind: prefix.kind };
+  }
+  return null;
+}
+
+export function hasSafeMediaObjectPath(objectPath: string, expectedRoot: "images" | "files") {
+  const segments = objectPath.split("/");
+  return segments[0] === expectedRoot && segments.length >= 2 && segments.every(segment =>
+    Boolean(segment) && segment !== "." && segment !== ".." && !segment.includes("\\") && !segment.includes("\0"));
+}
+
+export function getCmsStorageBuckets() {
+  return {
+    images: process.env.SUPABASE_STORAGE_BUCKET_IMAGES?.trim() || "cms-images",
+    documents: process.env.SUPABASE_STORAGE_BUCKET_DOCUMENTS?.trim() || "cms-documents",
+  };
+}
+
+/** Safe for shared config parsing; credentials never enter the public URL contract. */
+export function parseConfiguredCmsImageUrl(value: string) {
+  const endpoint = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!endpoint) return null;
+  const bucket = getCmsStorageBuckets().images;
+  let origin: string;
+  try { origin = new URL(endpoint).origin; } catch { return null; }
+  return parseManagedMediaUrl(value, [{ bucket, kind: "image", root: "images", origin,
+    pathname: `/storage/v1/object/public/${bucket}/` }]);
+}

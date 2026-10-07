@@ -2,6 +2,8 @@
  * Typed config shared by Projects Hub Admin editors and the public `/projects` renderer.
  */
 
+import { parseConfiguredCmsImageUrl } from "../admin/media-storage-adapter";
+
 import type { Json } from "../database.types";
 import {
   resolvePageBlockTextFormat,
@@ -46,7 +48,7 @@ export type ProjectsHubViewMode = (typeof PROJECTS_HUB_VIEW_MODES)[number];
 export const PROJECTS_HUB_SORT_MODES = ["homepage_order"] as const;
 export type ProjectsHubSortMode = (typeof PROJECTS_HUB_SORT_MODES)[number];
 
-export const PROJECTS_HUB_DEFAULT_MAP_IMAGE = "/images/projects/beit-elwatan-map1.webp";
+export const PROJECTS_HUB_DEFAULT_MAP_IMAGE = "";
 
 export type ProjectsHubMapPinConfig = {
   code: string;
@@ -890,6 +892,7 @@ export function assertSafeCmsMediaPath(path: string, fieldLabel: string) {
   if (!trimmed) {
     throw new Error(`${fieldLabel} مطلوب.`);
   }
+  if (parseConfiguredCmsImageUrl(trimmed)) return trimmed;
   if (UNSAFE_MEDIA_PATTERN.test(trimmed) || trimmed.includes("://")) {
     throw new Error(`${fieldLabel} غير صالح.`);
   }

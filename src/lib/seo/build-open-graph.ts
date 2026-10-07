@@ -19,6 +19,7 @@ export function buildOpenGraph(input: {
   const metadataBase = input.metadataBase ?? SEO_SITE.defaultUrl;
   const siteName = input.siteName ?? SEO_SITE.name;
   const imageAlt = input.imageAlt ?? input.title;
+  const image = input.image?.trim() || SEO_SITE.defaultImage;
 
   const base = {
     title: input.title,
@@ -27,14 +28,14 @@ export function buildOpenGraph(input: {
     siteName,
     locale: SEO_SITE.defaultLocale,
     type,
-    images: [
+    images: image ? [
       {
-        url: absoluteAssetUrl(input.image ?? SEO_SITE.defaultImage, metadataBase),
+        url: absoluteAssetUrl(image, metadataBase),
         width: 1200,
         height: 630,
         alt: imageAlt,
       },
-    ],
+    ] : [],
   };
 
   if (type === "article") {

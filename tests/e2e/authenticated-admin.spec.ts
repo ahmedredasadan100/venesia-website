@@ -1,4 +1,5 @@
 import { expect, test } from "playwright/test";
+import type { MediaCatalogAsset } from "../../src/lib/admin/media-catalog/types";
 
 const storageState = process.env.E2E_ADMIN_STORAGE_STATE?.trim();
 
@@ -182,6 +183,152 @@ test.describe("Admin collection shared table surface", () => {
         if (reference.has(width)) expect(result.surface).toEqual(reference.get(width));
         else reference.set(width, result.surface);
       }
+    }
+  });
+});
+
+
+test.describe("Managed Media ownership lifecycle", () => {
+  test("Signed Upload, picker save, usage, replacement and safe deletion", async ({ page, request, playwright }, testInfo) => {
+    test.skip(!storageState || process.env.E2E_MEDIA_LIFECYCLE !== "1",
+      "Explicit authorization and a trusted Admin session are required for disposable media/content fixtures.");
+    test.setTimeout(300_000);
+    const { randomUUID } = await import("node:crypto");
+    const { default: sharp } = await import("sharp");
+    const namespace = `qa-managed-media-${randomUUID()}`;
+    const buffer = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#245670" } }).png().toBuffer();
+    const owned: MediaCatalogAsset[] = [];
+    let topicPath: string | null = null;
+    const search = "ابحث بالاسم أو المسار أو الوصف البديل…";
+    const receipts: object[] = [];
+    const responseFor = (operation: string) => page.waitForResponse(response =>
+      new URL(response.url()).pathname === "/api/admin/media-library" &&
+      response.request().method() === "POST" &&
+      response.request().headers()["content-type"]?.includes("application/json") === true &&
+      response.request().postDataJSON()?.operation === operation);
+    const imageField = () => page.locator('[data-admin-media-image-field="image"]');
+    async function upload(input: ReturnType<typeof page.locator>, name: string) {
+      const prepared = responseFor("prepare_upload");
+      const completed = responseFor("complete_upload");
+      const storage = page.waitForResponse(response => response.url().includes("/storage/v1/object/upload/sign/") && ["PUT", "POST"].includes(response.request().method()));
+      await input.setInputFiles({ name, mimeType: "image/png", buffer });
+      const preparation = await prepared;
+      expect(preparation.ok()).toBe(true);
+      const stored = await storage;
+      expect(stored.ok()).toBe(true);
+      const response = await completed;
+      const result = await response.json();
+      expect(response.status(), JSON.stringify(result)).toBe(201);
+      expect(result.asset.provider).toBe("supabase");
+      expect(result.asset.status).toBe("active");
+      expect(result.asset.reconciliationState).toBe("synced");
+      owned.push(result.asset);
+      receipts.push({ operation: "signed_upload", assetId: result.asset.id, storageStatus: stored.status(), catalogStatus: response.status() });
+      const object = await request.get(result.asset.publicUrl);
+      expect(object.ok()).toBe(true);
+      expect(await object.body()).toEqual(buffer);
+      return result.asset as typeof owned[number];
+    }
+    async function library(asset?: typeof owned[number]) {
+      await page.goto(`/admin/media-library?q=${encodeURIComponent(asset?.displayName ?? namespace)}`);
+      if (asset) {
+        const button = page.locator('main button[aria-pressed]').filter({ has: page.getByText(asset.displayName, { exact: true }) });
+        await expect(button).toHaveCount(1);
+        await button.click();
+        await expect(page.getByRole("heading", { name: asset.displayName, exact: true })).toBeVisible();
+      }
+    }
+    async function usage(asset: typeof owned[number]) {
+      const response = await request.get(`/api/admin/media-usage?asset=${encodeURIComponent(asset.publicUrl)}`);
+      expect(response.ok()).toBe(true);
+      const result = await response.json();
+      expect(result.authoritative).toBe(true);
+      expect(result.catalogRegistered).toBe(true);
+      return result;
+    }
+    async function save() {
+      await page.locator('form[data-admin-form-runtime] button[type="submit"]').click();
+      await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible({ timeout: 60_000 });
+    }
+    async function removeAsset(asset: typeof owned[number]) {
+      await library(asset);
+      const button = page.getByRole("button", { name: /^حذف آمن \(/u });
+      await expect(button).toBeEnabled();
+      await button.click();
+      const response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
+      await page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
+      expect((await response).ok()).toBe(true);
+      receipts.push({ operation: "safe_delete", assetId: asset.id });
+    }
+    // Readiness is a prerequisite, never silently repaired by this smoke test.
+    const anonymous = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL });
+    try {
+      expect((await anonymous.post("/api/admin/media-library", { data: { operation: "prepare_upload" } })).status()).toBe(401);
+    } finally { await anonymous.dispose(); }
+    const initial = await request.get("/api/admin/media-library");
+    const initialState = await initial.json();
+    expect(initialState.readiness.usageResultsAuthoritative).toBe(true);
+    try {
+      await library();
+      const original = await upload(page.locator('main input[type="file"][multiple]'), `${namespace}-original.png`);
+      await page.goto("/admin/content/topics/new");
+      await page.locator('input[name="title"]').fill(namespace);
+      await page.locator('input[name="slug"]').fill(namespace);
+      await page.getByRole("combobox", { name: "اختر التصنيف", exact: true }).click();
+      await page.locator('[role="option"]:not([aria-disabled="true"])').first().click();
+      await imageField().getByRole("button").first().click();
+      const picker = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true });
+      await picker.getByPlaceholder(search).fill(original.displayName);
+      await picker.locator('button[aria-pressed]').filter({ has: page.getByText(original.displayName, { exact: true }) }).click();
+      await picker.getByRole("button", { name: "تأكيد الاختيار", exact: true }).click();
+      await save();
+      await expect(page).toHaveURL(/\/admin\/content\/topics\/\d+/u);
+      topicPath = new URL(page.url()).pathname;
+      await page.reload();
+      await expect(imageField().locator('input[name="image"]')).toHaveValue(original.publicUrl);
+      const used = await usage(original);
+      expect(used.hits.some((hit: { editHref: string }) => hit.editHref === topicPath)).toBe(true);
+      await library(original);
+      // The normal confirmation reaches the authoritative server guard.
+      await page.getByRole("button", { name: /^حذف آمن \(/u }).click();
+      const refused = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
+      const deleteDialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
+      await deleteDialog.locator("[data-admin-confirm-submit]").click();
+      const refusal = await refused;
+      expect(refusal.status()).toBe(409);
+      expect((await refusal.json()).code).toMatch(/in_use/u);
+      await deleteDialog.getByRole("button", { name: "إلغاء", exact: true }).click();
+      receipts.push({ operation: "in_use_delete_blocked", assetId: original.id });
+      const replacement = await upload(page.locator('main section').filter({ has: page.getByRole("heading", { name: "البيانات الوصفية", exact: true }) }).locator('input[type="file"]'), `${namespace}-replacement.png`);
+      const replaced = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "PATCH" && r.request().postDataJSON()?.operation === "replace_all");
+      await page.getByRole("dialog", { name: "استبدال كل المراجع المدعومة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
+      expect((await replaced).ok()).toBe(true);
+      await page.goto(topicPath);
+      await expect(imageField().locator('input[name="image"]')).toHaveValue(replacement.publicUrl);
+      expect((await usage(original)).count).toBe(0);
+      expect((await usage(replacement)).hits.some((hit: { editHref: string }) => hit.editHref === topicPath)).toBe(true);
+      receipts.push({ operation: "picker_usage_replace", topicPath, originalId: original.id, replacementId: replacement.id });
+      await removeAsset(original);
+      await page.goto(topicPath);
+      await imageField().getByRole("button", { name: "إزالة", exact: true }).click();
+      await save();
+      await page.reload();
+      await expect(imageField().locator('input[name="image"]')).toHaveValue("");
+      expect((await usage(replacement)).count).toBe(0);
+      await removeAsset(replacement);
+    } finally {
+      // Persist identifiers on failure so cleanup always targets only this run's fixtures.
+      await testInfo.attach("managed-media-lifecycle", { body: JSON.stringify({ namespace, topicPath, assets: owned.map(a => ({ id: a.id, publicUrl: a.publicUrl })), receipts }), contentType: "application/json" });
+    }
+    // Remove only this run's disposable draft through the existing row-action owner.
+    for (const trash of [false, true]) {
+      await page.goto(`/admin/content/topics?q=${encodeURIComponent(namespace)}${trash ? "&view=trash" : ""}`);
+      const row = page.getByRole("row").filter({ has: page.getByText(namespace, { exact: true }) });
+      await expect(row).toHaveCount(1);
+      await row.locator('[aria-haspopup="menu"]').click();
+      await page.getByRole("menuitem", { name: trash ? "حذف نهائي" : "نقل إلى المحذوفات", exact: true }).click();
+      await page.getByRole("dialog").locator("[data-admin-confirm-submit]").click();
+      await expect(row).toHaveCount(0);
     }
   });
 });

@@ -171,7 +171,7 @@ export function mapContactDepartmentsBlock(block: ResolvedPageBlock): ContactDep
     items: (config.items ?? []).map((item) => ({
       title: item.title ?? "",
       text: item.body ?? "",
-      image: item.href ?? "/images/111.png",
+      image: item.href ?? "",
     })),
   };
 }
@@ -198,7 +198,7 @@ export function mapContactCtaBlock(block: ResolvedPageBlock): ContactCtaContent 
     primaryHref: config.primaryCta?.href ?? "#",
     secondaryLabel: config.secondaryCta?.label ?? "",
     secondaryHref: config.secondaryCta?.href ?? "#",
-    image: config.backgroundImage ?? "/images/111.png",
+    image: config.backgroundImage ?? "",
   };
 }
 
