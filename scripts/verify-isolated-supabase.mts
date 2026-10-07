@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import sharp from "sharp";
 import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application-cli-pulse.mjs";
 import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
 
@@ -632,7 +633,7 @@ async function verifyOwnedPublicImageConfig(network = false) {
   const { ImageOptimizerCache, fetchExternalImage, imageOptimizer } = require("next/dist/server/image-optimizer.js");
   const temporaryRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-image-config-")));
   const beforeDirectory = path.join(temporaryRoot, "before"), afterDirectory = path.join(temporaryRoot, "after");
-  const png = readFileSync(path.join(root, "public/images/venesia-5.png"));
+  const png = await sharp({ create: { width: 96, height: 64, channels: 3, background: "#245670" } }).png().toBuffer();
   const requests: string[] = [];
   const server = network ? createServer((req, res) => {
     requests.push(req.url ?? "");
