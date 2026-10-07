@@ -1363,6 +1363,40 @@ check(
     types.includes("AdminEntityFilterDef"),
 );
 
+// Exercise the live measurement callback, including widths rounded up by clientWidth.
+function verifyFractionalScrollportBudget(source) {
+  const ast = ts.createSourceFile('AdminEntityListTable.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'updateAvailableWidth') callback = node.initializer?.getText(ast);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  if (!callback) throw new Error('Missing canonical scrollport measurement');
+  const compiled = ts.transpileModule(`const measure = ${callback}; measure();`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const run = Function('scrollport','window','primaryStickyMedia','setPrimaryColumnsPinned','setAvailableTableWidth',compiled);
+  for (const width of [330, 635.2, 978, 1135.2, 1531.6]) {
+    for (const border of [0, 0.8, 1, 1.6]) {
+      const available = width - border * 2;
+      let actual = null;
+      run({clientWidth: Math.round(available), getBoundingClientRect: () => ({width})},
+        {getComputedStyle: () => ({borderLeftWidth: `${border}px`, borderRightWidth: `${border}px`})},
+        {matches:true}, () => {}, update => { actual = update(null); });
+      if (Math.abs(actual - available) > 0.00001) return false;
+    }
+  }
+  return true;
+}
+check('Shared table preserves fractional scrollport space instead of allocating rounded clientWidth', verifyFractionalScrollportBudget(entityTable));
+check('Fractional width regression rejects the previous integer measurement',
+  !verifyFractionalScrollportBudget(entityTable.replace(
+    /const nextWidth = scrollport\.getBoundingClientRect\(\)\.width[\s\S]*?;/u,
+    'const nextWidth = scrollport.clientWidth;',
+  )));
+
+
 // Execute the canonical table's real derived budget and rendered JSX values.
 // Geometry is exercised by the bounded Chromium regression; this gate keeps
 // the policy, both render branches, and resize lifecycle reachable in CI.
