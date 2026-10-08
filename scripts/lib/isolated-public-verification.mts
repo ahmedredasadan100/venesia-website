@@ -1,3 +1,4 @@
+import { createCoreDownloadPdfFixture, CORE_DOWNLOAD_MEDIA_KEY } from "../fixtures/admin-core-download-media-adoption.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection } from "../fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection } from "../fixtures/admin-core-domain-form-journeys.mjs";
 import assert from "node:assert/strict";
@@ -1872,7 +1873,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
   let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;
+  const downloadFixture = adoption && ["template-controls", "navigation-settings"].includes(request.adoptionCohort ?? "") ? createCoreDownloadPdfFixture() : null;
   const verifySource = () => {
+    if (downloadFixture) assert.equal(digest(readFileSync(join(sourceDirectory, "public", CORE_DOWNLOAD_MEDIA_KEY))), digest(downloadFixture));
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
     assert.equal(digest(readFileSync(join(sourceDirectory, imageConfig.file))), imageConfig.sha256,
       "The owned image environment configuration changed after binding.");
@@ -1907,6 +1910,12 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   try {
     for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(sourcePath(row.file)), { flag: "wx" }); }
     await context.assertOwned();
+    if (downloadFixture) {
+      const target = join(sourceDirectory, "public", CORE_DOWNLOAD_MEDIA_KEY);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, downloadFixture, { flag: "wx" });
+      receipt(context, "owned-download-fixture.json", { path: CORE_DOWNLOAD_MEDIA_KEY, sha256: digest(downloadFixture), deployedContentDependency: false });
+    }
     writeFileSync(join(sourceDirectory, imageConfig.file), imageConfigSource, { flag: "wx", mode: 0o600 });
     symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
     const headSha = await gitHead(context);

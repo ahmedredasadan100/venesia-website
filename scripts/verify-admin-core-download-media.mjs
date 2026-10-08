@@ -2,7 +2,7 @@ import {CORE_TEMPLATE_DUAL_LINK_CONTROLS_SELECTION} from './fixtures/admin-core-
 import {coreDownloadFixture} from './verify-admin-core-download-media-isolated.mts';
 
 import assert from 'node:assert/strict';import {randomUUID}from'node:crypto';import {readFileSync}from'node:fs';import {resolve}from'node:path';import{createJiti}from'jiti';
-import {CORE_DOWNLOAD_MEDIA_KEY,CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK,CORE_DOWNLOAD_OPERATIONS,assertCoreDownloadAsset,assertCoreDownloadReceipt,assertCoreDownloadJoin}from'./fixtures/admin-core-download-media-adoption.mjs';
+import {createCoreDownloadPdfFixture,CORE_DOWNLOAD_MEDIA_KEY,CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK,CORE_DOWNLOAD_OPERATIONS,assertCoreDownloadAsset,assertCoreDownloadReceipt,assertCoreDownloadJoin}from'./fixtures/admin-core-download-media-adoption.mjs';
 const root=resolve(import.meta.dirname,'..'),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
 const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:forms}=await jiti.import('../src/lib/admin/form-system/adoption-manifest.ts');
 const {ADMIN_COLLECTION_SURFACE_ADOPTION:collections}=await jiti.import('../src/lib/admin/interaction-system/adoption-manifest.ts');
@@ -18,7 +18,11 @@ test('Template clear selectors use actual default and CTA-only override',()=>{
  assert.match(readFileSync(resolve(root,'src/components/admin/page-blocks/CtaModuleEditClient.tsx'),'utf8'),/clearLinkLabel="مسح"/u);
 });
 test('Actual Menu projection retains selected PDF and target on first save',()=>assert.deepEqual(adminLinkToMenuItemColumns(CORE_DOWNLOAD_LINK,CORE_DOWNLOAD_MEDIA_HREF),{itemType:'custom',href:CORE_DOWNLOAD_MEDIA_HREF,linkedType:null,linkedId:null,anchor:null,target:'_blank'}));
-test('Existing filesystem PDF signature is present without writing bytes',()=>assert.equal(readFileSync(resolve(root,'public',CORE_DOWNLOAD_MEDIA_KEY)).subarray(0,5).toString(),'%PDF-'));
+test('Owned PDF has a real page, valid xref offsets and deterministic bytes without a deployed file',()=>{
+ const bytes=createCoreDownloadPdfFixture(),pdf=bytes.toString();assert.deepEqual(bytes,createCoreDownloadPdfFixture());assert.equal(pdf.slice(0,5),'%PDF-');assert.match(pdf,/\/Type \/Page /u);
+ const xref=Number(pdf.match(/startxref\n(\d+)/u)[1]);assert.equal(pdf.slice(xref,xref+4),'xref');
+ const entries=pdf.slice(xref).split('\n').slice(3,8);entries.forEach((entry,index)=>assert.equal(pdf.slice(Number(entry.slice(0,10)),Number(entry.slice(0,10))+7),`${index+1} 0 obj`));
+});
 test('Actual read-through unmanaged identity accepted',()=>assert.equal(assertCoreDownloadAsset(selected,asset).id,asset.id));
 for(const[key,value]of Object.entries({id:'other',objectKey:'files/foreign.pdf',publicUrl:'https://example.invalid/file.pdf',displayName:'other',provider:'supabase',bucket:'foreign',kind:'image',mimeType:'image/png',sizeBytes:124,missingObject:true,catalogRegistered:true}))
  test('Wrong selected asset rejects '+key,()=>assert.throws(()=>assertCoreDownloadAsset({...selected,[key]:value},asset)));
