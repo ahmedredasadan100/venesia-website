@@ -499,7 +499,7 @@ export async function DELETE(request: Request) {
                   request.headers.get("x-request-id") ?? undefined, snapshot);
                 const result = await response.json();
                 if (result.deleted) deleted++;
-                send({ type: "result", asset: target.asset, ...result });
+                send({ type: "result", asset: target.asset, ...result, deleted: result.deleted === true });
               } catch (error) {
                 const failure = safeError(error, "تعذر حذف الملف.");
                 send({ type: "result", asset: target.asset, deleted: false, error: failure.message, code: failure.code });
