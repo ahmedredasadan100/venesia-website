@@ -3,7 +3,18 @@ import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {expect} from 'playwright/test';
 
-export const CORE_DOWNLOAD_MEDIA_KEY='files/projects/document-1782017403551.pdf';
+export const CORE_DOWNLOAD_MEDIA_KEY='files/projects/download-contract.pdf';
+/** Deterministic owned PDF fixture; never a deployed content dependency. */
+export function createCoreDownloadPdfFixture(){
+ const stream='BT /F1 12 Tf 20 50 Td (Owned download contract fixture) Tj ET';
+ const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`];
+ let pdf='%PDF-1.4\n';const offsets=[0];
+ objects.forEach((body,index)=>{offsets.push(Buffer.byteLength(pdf));pdf+=`${index+1} 0 obj\n${body}\nendobj\n`;});
+ const xref=Buffer.byteLength(pdf);pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
+ for(const offset of offsets.slice(1))pdf+=String(offset).padStart(10,'0')+' 00000 n \n';
+ pdf+=`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+ return Buffer.from(pdf);
+}
 export const CORE_DOWNLOAD_MEDIA_HREF='/'+CORE_DOWNLOAD_MEDIA_KEY;
 export const CORE_DOWNLOAD_LINK=Object.freeze({link_kind:'download',linked_type:null,linked_id:null,href:CORE_DOWNLOAD_MEDIA_HREF,anchor:null,target:'_blank',meta:null});
 export const CORE_DOWNLOAD_OPERATIONS=Object.freeze(['nested-cancel-original','outer-cancel-after-selection','replace-external-with-pdf','cancel-existing-pdf','clear','reselect-final-pdf']);
@@ -30,7 +41,7 @@ export async function exerciseCoreDownloadField({page,origin,owner,asset,assertC
  await open();await choose(false);await assertCurrent(originalHref,'external');await acceptOuter();await assertCurrent(CORE_DOWNLOAD_MEDIA_HREF,'download');
  await open();await choose(true);await cancelOuter();await assertCurrent(CORE_DOWNLOAD_MEDIA_HREF,'download');
  await owner.getByRole('button',{name:clearLabel,exact:true}).click();await assertCurrent('','none');await open();await choose(false);await acceptOuter();await assertCurrent(CORE_DOWNLOAD_MEDIA_HREF,'download');
- return {receiptId:randomUUID(),sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,field,routePathname:new URL(page.url()).pathname,asset,servedFile,selected,operations:[...CORE_DOWNLOAD_OPERATIONS],nestedPdfMode:true,selectionBeforeOuterConfirmationPreserved:true,exactNestedFocusReturn:true,exactOuterFocusReturn:true,unmanagedFileUnmodifiedRequired:true,originalHref,finalHref:CORE_DOWNLOAD_MEDIA_HREF,finalTarget:'_blank',distinctPdfReplacement:false,limitation:'Only one existing PDF; replacement is existing external destination to this PDF, not two distinct PDF assets.',automaticCoverage:[],globalClosed:false,requiresNativeSaveReload:true};
+ return {receiptId:randomUUID(),sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,field,routePathname:new URL(page.url()).pathname,asset,servedFile,selected,operations:[...CORE_DOWNLOAD_OPERATIONS],nestedPdfMode:true,selectionBeforeOuterConfirmationPreserved:true,exactNestedFocusReturn:true,exactOuterFocusReturn:true,unmanagedFileUnmodifiedRequired:true,originalHref,finalHref:CORE_DOWNLOAD_MEDIA_HREF,finalTarget:'_blank',distinctPdfReplacement:false,limitation:'One owned fixture PDF; replacement is existing external destination to this PDF, not two distinct PDF assets.',automaticCoverage:[],globalClosed:false,requiresNativeSaveReload:true};
 }
 export function assertCoreDownloadReceipt(row,{field,routePathname,asset,sourceSha256}){
  assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(row.sourceSha256,sourceSha256);assert.match(row.receiptId,/^[a-f0-9-]{36}$/iu);assert.equal(row.field,field);assert.equal(row.routePathname,routePathname);assert.deepEqual(row.asset,asset);assert.deepEqual(row.servedFile,{status:200,href:CORE_DOWNLOAD_MEDIA_HREF,contentType:'application/pdf',sha256:asset.fileSha256,sizeBytes:asset.sizeBytes});assert.deepEqual(row.operations,CORE_DOWNLOAD_OPERATIONS);assert.equal(row.selected.length,5);for(const selected of row.selected)assertCoreDownloadAsset(selected,asset);for(const key of ['nestedPdfMode','selectionBeforeOuterConfirmationPreserved','exactNestedFocusReturn','exactOuterFocusReturn','unmanagedFileUnmodifiedRequired','requiresNativeSaveReload'])assert.equal(row[key],true);assert.equal(row.finalHref,CORE_DOWNLOAD_MEDIA_HREF);assert.equal(row.finalTarget,'_blank');assert.equal(row.distinctPdfReplacement,false);assert.ok(row.limitation.length);assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);return {status:'partial-not-global-pass',field,routePathname,automaticCoverage:[],globalClosed:false};

@@ -533,8 +533,8 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     const control = factory(lease, { selection: "admin-adoption" }, { async assertOwned() {} }, { async query() { heartbeats++; events.push("heartbeat"); } }, () => {}, abort, (error: unknown) => error) as { tick(): void; drain(): Promise<void>; pending(): Promise<void> };
     const bytes = Buffer.from("exact-source"), digest = sha256(bytes), manifest = [{ file: "owner.mts", sha256: digest }];
     let stall = false;
-    const sourceGuard = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert",
-      transpile(`return ${verify.initializer!.getText(publicFile)};`))(manifest, sha256, () => { sourceReads++; events.push("source-read"); if (stall) { stall = false; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60); } return bytes; }, (file: string) => file, path.join, "owned", { file: "next.config.mjs", sha256: digest }, () => ["next.config.ts", "next.config.mjs"], assert) as () => void;
+    const sourceGuard = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture",
+      transpile(`return ${verify.initializer!.getText(publicFile)};`))(manifest, sha256, () => { sourceReads++; events.push("source-read"); if (stall) { stall = false; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60); } return bytes; }, (file: string) => file, path.join, "owned", { file: "next.config.mjs", sha256: digest }, () => ["next.config.ts", "next.config.mjs"], assert, null) as () => void;
     return { control, abort, events, sourceGuard, setStall: () => { stall = true; }, release: () => { assert.ok(release); release(); }, started: () => connectStarted,
       state: () => ({ connections, heartbeats, sourceReads, oldClosed }) };
   }
@@ -686,9 +686,9 @@ async function verifyOwnedPublicImageConfig(network = false) {
     const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(file) === "verifySource") verifyNode = node; ts.forEachChild(node, visit); };
     visit(file); assert.ok(verifyNode?.initializer);
     const verifyCode = ts.transpileModule("const verify = " + verifyNode.initializer.getText(file) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    const verifySnapshot = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", verifyCode + ";return verify;")(
+    const verifySnapshot = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture", verifyCode + ";return verify;")(
       [{ file: "next.config.ts", sha256: originalSha256 }], sha256, readFileSync, () => path.join(beforeDirectory, "next.config.ts"),
-      path.join, afterDirectory, { file: "next.config.mjs", sha256: generatedConfigSha256 }, readdirSync, assert);
+      path.join, afterDirectory, { file: "next.config.mjs", sha256: generatedConfigSha256 }, readdirSync, assert, null);
     verifySnapshot();
     writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated + "\n// tampered\n"); assert.throws(verifySnapshot, /changed after binding/u);
     writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated);
