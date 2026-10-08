@@ -425,6 +425,21 @@ export async function runCoreMediaJourneys(ctx) {
     const after = await snapshot(prefix + "folder-after-" + root);
     assert.ok(after.folders.some(row => row.normalized_path === root + "/" + plan.namespace));
     assertCoreMediaAudit(before, after, "media_folder.create", row => row.metadata.folder === root + "/" + plan.namespace);
+    const assertNavigation = async () => {
+      const response = await page.request.get(origin + "/api/admin/media-library");
+      assert.equal(response.status(), 200);
+      const model = await response.json();
+      assert.equal(model.summary.folderCount, model.folders.length);
+      await expect(main().locator("[data-media-folder-path]")).toHaveCount(model.folders.length);
+      await expect(main().locator(`[data-media-folder-path="${root}/${plan.namespace}"]`)).toBeVisible();
+    };
+    await assertNavigation();
+    await folder(root === "images" ? "files" : "images");
+    await assertNavigation();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await assertNavigation();
+    await folder(root);
+
   }
   async function prepareHeldPrerequisite() {
     assert.ok(isCoreMediaSelection(selection)); assert.equal(checkpoints.length, 0);
@@ -765,4 +780,107 @@ export async function runCoreMediaJourneys(ctx) {
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
   return { completed, checkpoints, ...(prerequisite ? { prerequisite } : {}), relatedRequiredCases: plan.relatedRequiredCases, automaticCoverage: [], globalClosed: false,
     limits: ["Media only; sibling Activity/Sitemap remain separate.", "No Production, original assets, external provider or generic Form/Row Actions closure."] };
+}
+
+
+/** Scoped folder lifecycle proof using the existing Media UI and mutation owners.
+ * The caller supplies an authenticated page; only fresh, run-owned folders are mutated.
+ */
+export async function verifyManagedMediaFolderLifecycle({ page, origin, namespace = `qa-folder-${randomUUID()}` }) {
+  assert.match(namespace, /^qa-folder-[a-z0-9-]+$/);
+  const apiUrl = origin + "/api/admin/media-library";
+  const main = () => page.locator('[data-media-library-mode="manage"]');
+  const ownedFolders = new Set();
+  const uploaded = [];
+  const responseFor = operation => page.waitForResponse(r => r.url() === apiUrl && r.request().method() === "POST"
+    && r.request().postDataJSON()?.operation === operation, { timeout: 120_000 });
+  async function model() {
+    const response = await page.request.get(apiUrl);
+    assert.equal(response.status(), 200, await response.text());
+    return response.json();
+  }
+  async function visibility(expected) {
+    const current = await model();
+    assert.equal(current.summary.folderCount, current.folders.length);
+    await expect(main().locator("[data-media-folder-path]")).toHaveCount(current.folders.length);
+    for (const path of expected) await expect(main().locator(`[data-media-folder-path="${path}"]`)).toBeVisible();
+    return current;
+  }
+  async function open(path) {
+    await main().locator(`[data-media-folder-path="${path}"]`).click();
+    await expect(main().locator(`[data-media-folder-path="${path}"]`)).toHaveAttribute("aria-current", "page");
+  }
+  async function create(root) {
+    const path = root + "/" + namespace;
+    assert.ok(!(await model()).folders.some(row => row.path === path));
+    await open(root);
+    await main().getByRole("button", { name: "+ جديد", exact: true }).click();
+    await main().getByPlaceholder("اسم المجلد", { exact: true }).fill(namespace);
+    const pending = responseFor("create_folder");
+    await main().getByRole("button", { name: "إنشاء داخل " + root, exact: true }).click();
+    const response = await pending;
+    assert.equal(response.status(), 201, await response.text()); ownedFolders.add(path);
+    await visibility([path]);
+    await open(root === "files" ? "images" : "files");
+    await visibility([path]);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await visibility([path]);
+    return path;
+  }
+  async function remove(path) {
+    assert.ok(ownedFolders.has(path));
+    await open(path);
+    const preview = responseFor("preview_delete");
+    await main().getByRole("button", { name: "حذف المجلد", exact: true }).click();
+    const previewResponse = await preview;
+    assert.equal(previewResponse.status(), 200, await previewResponse.text());
+    const previewModel = await previewResponse.json();
+    assert.ok(previewModel.assets.every(asset => asset.folderPath === path));
+    const submit = page.locator("[data-admin-confirm-submit]");
+    await expect(submit).toBeEnabled({ timeout: 120_000 });
+    const retired = responseFor("delete_folder");
+    await submit.click();
+    const response = await retired;
+    assert.equal(response.status(), 200, await response.text());
+    await expect(page.locator("[data-admin-confirm-dialog]")).toHaveCount(0, { timeout: 120_000 });
+    await expect(main().locator(`[data-media-folder-path="${path}"]`)).toHaveCount(0);
+    assert.ok(!(await model()).folders.some(row => row.path === path)); ownedFolders.delete(path);
+  }
+  await page.goto(origin + "/admin/media-library", { waitUntil: "domcontentloaded" });
+  await expect(main()).toBeVisible({ timeout: 60_000 });
+  const before = await visibility([]);
+  try {
+    const empty = await create("files");
+    await remove(empty);
+    const populated = await create("images");
+    await open(populated);
+    const prepared = responseFor("prepare_upload");
+    const completed = responseFor("complete_upload");
+    void completed.catch(() => {});
+    const bytes = coreMediaSyntheticPng();
+    await main().locator('input[type="file"][multiple]').setInputFiles({ name: namespace + ".png", mimeType: "image/png", buffer: bytes });
+    const preparation = await prepared;
+    assert.equal(preparation.status(), 200, await preparation.text());
+    const response = await completed;
+    assert.equal(response.status(), 201, await response.text());
+    const { asset } = await response.json(); uploaded.push(asset);
+    assert.equal(asset.folderPath, populated); assert.equal(asset.provider, "supabase");
+    assert.equal(asset.status, "active"); assert.equal(asset.reconciliationState, "synced");
+    const binary = await page.request.get(asset.publicUrl);
+    assert.equal(binary.status(), 200); assert.deepEqual(await binary.body(), bytes);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await visibility([populated]);
+    await expect(main().getByText(namespace + ".png", { exact: true }).first()).toBeVisible();
+    await remove(populated);
+    // A public CDN response can outlive deletion; authoritative Storage deletion is read separately.
+    assert.ok(!(await model()).assets.some(row => row.id === asset.id));
+    const after = await visibility([]);
+    assert.deepEqual(after.folders.map(row => row.path).sort(), before.folders.map(row => row.path).sort());
+    return { status: "PASS", namespace, uploaded: uploaded.map(({ id, folderPath, objectKey }) => ({ id, folderPath, objectKey })),
+      storageDeletionRequiresAuthoritativeRead: true,
+      checks: ["create", "empty_visibility", "other_root_visibility", "reload", "navigation", "signed_upload_inside", "storage_bytes", "active_synced_catalog", "empty_delete", "populated_delete", "count_consistency", "cleanup"] };
+  } finally {
+    // Never force-delete: cleanup is confined to this run and uses the same official UI contract.
+    for (const path of [...ownedFolders]) await remove(path);
+  }
 }
