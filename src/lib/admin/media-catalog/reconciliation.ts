@@ -16,7 +16,7 @@ import {
   setMediaCatalogRuntimeState,
 } from "./catalog";
 import { getCanonicalMediaIdentityKey } from "./identity";
-import { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } from "./reference-providers";
+import { MEDIA_REFERENCE_PROVIDER_REGISTRY, MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } from "./reference-providers";
 import { reconcileAllMediaReferences } from "./synchronization";
 import type { MediaCatalogAsset, MediaCatalogRuntimeState } from "./types";
 
@@ -278,6 +278,8 @@ export async function reconcileMediaCatalog(options: {
       lastSuccessfulReconciliationRunIdentity: completed
         ? runIdentity
         : previousState.lastSuccessfulReconciliationRunIdentity,
+      lastSuccessfulReconciliationStartedAt: completed ? scanStartedAt : previousState.lastSuccessfulReconciliationStartedAt ?? null,
+      lastSuccessfulReconciliationDomains: completed ? MEDIA_REFERENCE_PROVIDER_REGISTRY.map(provider => provider.domainKey) : previousState.lastSuccessfulReconciliationDomains ?? [],
       lastSuccessfulReconciliationAt: completed
         ? completedAt
         : previousState.lastSuccessfulReconciliationAt,

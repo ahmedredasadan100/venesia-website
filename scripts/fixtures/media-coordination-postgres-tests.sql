@@ -1026,7 +1026,7 @@ select media_coordination_test.assert_true(
 );
 
 -- A committed failed lease can resolve only with a later successful run in the
--- exact provider/environment/registry context captured by that lease.
+-- exact provider/environment context, with explicit current-registry domain coverage.
 insert into media_coordination_test.runtime_state (key, value)
 select 'failed_lease', lease_token::text
 from public.acquire_media_reference_write_lease(
@@ -1072,6 +1072,8 @@ set value = jsonb_build_object(
   'provider', 'supabase',
   'environment', 'ci',
   'environmentKey', 'wrong-environment-key',
+  'lastSuccessfulReconciliationStartedAt', clock_timestamp(),
+  'lastSuccessfulReconciliationDomains', jsonb_build_array('content'),
   'providerRegistryVersion', 'ci-registry-v1',
   'lastSuccessfulReconciliationRunIdentity', '20000000-0000-0000-0000-000000000001',
   'lastSuccessfulReconciliationAt', clock_timestamp()
@@ -1574,6 +1576,55 @@ select media_coordination_test.assert_true(
  not has_function_privilege('anon','public.reserve_media_asset_deletion(uuid,bigint,text,text,text,text,text,text,text,text,boolean)','EXECUTE')
  and not has_function_privilege('authenticated','public.retire_empty_media_folder(text)','EXECUTE'),
  'usage confirmation or folder retirement exposed a browser RPC');
+
+-- Delete recovery fences an expired writer before a new complete scan; active
+-- leases cannot be failed by the automatic path or resolved by a scan.
+update public.site_settings set value=jsonb_build_object('state','synced','provider','supabase',
+ 'environment','ci','environmentKey','postgres15:venesia_media_coordination_ci','providerRegistryVersion','ci-registry-v1')
+ where key='media.catalog_state';
+insert into public.media_assets (id,provider,bucket,object_key,public_url,original_filename,display_name,
+ media_kind,mime_type,extension,byte_size,folder_path,status,reconciliation_state,missing_object)
+ values ('00000000-0000-4000-8000-000000000130','supabase','images','coordination/stale-delete.png',
+ '/images/coordination/stale-delete.png','stale-delete.png','stale-delete.png','image','image/png','.png',100,'images','active','synced',false);
+insert into media_coordination_test.runtime_state(key,value)
+ select 'automatic_stale_lease',lease_token::text from public.acquire_media_reference_write_lease(
+ '[{"provider":"supabase","bucket":"images","objectKey":"coordination/stale-delete.png","domainKey":"content","entityType":"topic","entityIdentity":"stale-delete-owner"}]',
+ null,'automatic-stale-delete',180,'supabase','ci','postgres15:venesia_media_coordination_ci','ci-registry-v1');
+select media_coordination_test.expect_error(format(
+ 'select public.fail_media_reference_write_lease(%L::uuid, %L, %L, %L::jsonb, true)',
+ (select value from media_coordination_test.runtime_state where key='automatic_stale_lease'),
+ 'stale-delete-owner','media_write_lease_expired_before_delete','{}'), 'media_write_lease_still_active');
+select media_coordination_test.expect_error(format(
+ 'select public.resolve_media_reference_write_lease(%L::uuid, %L::uuid, %L)',
+ (select value from media_coordination_test.runtime_state where key='automatic_stale_lease'),
+ '20000000-0000-4000-8000-000000000130','automatic-delete'), 'media_write_lease_still_active');
+update public.media_reference_write_leases set started_at=clock_timestamp()-interval '2 minutes',
+ expires_at=clock_timestamp()-interval '1 minute' where request_identity='automatic-stale-delete';
+select public.fail_media_reference_write_lease(
+ (select value::uuid from media_coordination_test.runtime_state where key='automatic_stale_lease'),
+ 'stale-delete-owner','media_write_lease_expired_before_delete','{}',true);
+select media_coordination_test.expect_error(format(
+ 'select public.complete_media_reference_write_lease(%L::uuid, %L)',
+ (select value from media_coordination_test.runtime_state where key='automatic_stale_lease'),
+ 'stale-delete-owner'), 'media_write_lease_not_active');
+select pg_sleep(0.01);
+update public.site_settings set value=value||jsonb_build_object(
+ 'providerRegistryVersion','ci-registry-v2','lastSuccessfulReconciliationRunIdentity','20000000-0000-4000-8000-000000000130',
+ 'lastSuccessfulReconciliationStartedAt',clock_timestamp(),'lastSuccessfulReconciliationAt',clock_timestamp(),
+ 'lastSuccessfulReconciliationDomains',jsonb_build_array('unrelated')) where key='media.catalog_state';
+select media_coordination_test.expect_error(format(
+ 'select public.resolve_media_reference_write_lease(%L::uuid, %L::uuid, %L)',
+ (select value from media_coordination_test.runtime_state where key='automatic_stale_lease'),
+ '20000000-0000-4000-8000-000000000130','automatic-delete'), 'media_write_lease_reconciliation_coverage_missing');
+update public.site_settings set value=value||jsonb_build_object('lastSuccessfulReconciliationDomains',jsonb_build_array('content'))
+ where key='media.catalog_state';
+select media_coordination_test.assert_true(public.resolve_media_reference_write_lease(
+ (select value::uuid from media_coordination_test.runtime_state where key='automatic_stale_lease'),
+ '20000000-0000-4000-8000-000000000130','automatic-delete')=1, 'stale lease did not adopt newer covered registry');
+select * from public.reserve_media_asset_deletion('00000000-0000-4000-8000-000000000130',null,'after-stale-resolution',
+ 'supabase','images','coordination/stale-delete.png','supabase','ci','postgres15:venesia_media_coordination_ci','ci-registry-v2');
+select media_coordination_test.assert_true(exists(select 1 from public.media_delete_reservations
+ where request_identity='after-stale-resolution' and status='reserved'), 'resolved lease still blocked delete');
 rollback;
 
 select 'PASS media coordination PostgreSQL 17 integration assertions' as result;

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   runMediaDeleteSaga,
+  runBoundedMediaDeletes, readMediaDeleteResults, MEDIA_DELETE_CONCURRENCY,
   type MediaDeleteReservation,
   type MediaDeleteSagaDependencies,
 } from "../src/lib/admin/media-catalog/delete-saga.ts";
@@ -292,6 +293,52 @@ await test("Migration privileges, RLS, recovery state and scope are explicit", (
   assert.match(migration, /reconciliation_state = 'uncertain'/);
   assert.doesNotMatch(migration, /storage\.objects/);
   assert.doesNotMatch(migration, /insert into public\.media_assets/);
+});
+
+await test("bounded delete workers settle independent outcomes before a slow peer", async () => {
+  let running = 0, peak = 0;
+  const results: number[] = [];
+  let release!: () => void;
+  const slow = new Promise<void>(resolve => { release = resolve; });
+  const batch = runBoundedMediaDeletes([0, 1, 2, 3, 4], async item => {
+    running++; peak = Math.max(peak, running);
+    try { if (item === 0) await slow; else await Promise.resolve(); results.push(item); }
+    finally { running--; }
+  });
+  for (let tick = 0; tick < 10; tick++) await Promise.resolve();
+  assert.deepEqual(results, [1, 2, 3, 4]);
+  assert.equal(peak, MEDIA_DELETE_CONCURRENCY);
+  release(); await batch;
+  assert.equal(results.at(-1), 0); assert.equal(running, 0);
+});
+
+await test("unexpected worker failure still settles independent targets and releases every worker", async () => {
+  const completed: number[] = [];
+  let running = 0;
+  await assert.rejects(runBoundedMediaDeletes([0, 1, 2, 3], async item => {
+    running++;
+    try { if (item === 1) throw new Error("fixture_failure"); completed.push(item); }
+    finally { running--; }
+  }), AggregateError);
+  assert.deepEqual(completed.sort(), [0, 2, 3]);
+  assert.equal(running, 0);
+});
+
+await test("streaming results expose mixed success/failure immediately and reject truncated completion", async () => {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const events: string[] = [];
+  const read = readMediaDeleteResults(new Response(stream), event => events.push(`${event.asset}:${event.deleted}`));
+  controller.enqueue(encoder.encode(JSON.stringify({ type: "result", asset: "a", deleted: true }) + "\n"));
+  for (let tick = 0; tick < 5; tick++) await Promise.resolve();
+  assert.deepEqual(events, ["a:true"]);
+  controller.enqueue(encoder.encode(JSON.stringify({ type: "result", asset: "b", deleted: false, error: "active lease" }) + "\n"));
+  controller.enqueue(encoder.encode(JSON.stringify({ type: "complete", catalogWarnings: [] }) + "\n"));
+  controller.close(); assert.deepEqual(await read, []);
+  assert.deepEqual(events, ["a:true", "b:false"]);
+  await assert.rejects(readMediaDeleteResults(new Response('{"type":"result","asset":"a","deleted":true}\n'), () => {}), /انقطع/);
+  await assert.rejects(readMediaDeleteResults(new Response(new ReadableStream({ start(value) { value.error(new Error("timeout")); } })), () => {}), /timeout/);
 });
 
 console.log(`\nMedia delete Saga: ${passed} contract checks passed.`);

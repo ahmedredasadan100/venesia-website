@@ -734,11 +734,17 @@ export async function scanAllMediaReferenceProviders() {
   const references: DiscoveredMediaReference[] = [];
   const uncertainties: string[] = [];
 
-  for (const provider of MEDIA_REFERENCE_PROVIDER_REGISTRY) {
-    try {
-      references.push(...(await provider.scanAll()));
-    } catch (error) {
-      uncertainties.push(error instanceof Error ? error.message : `media_reference_provider:${provider.domainKey}:failed`);
+  // Match the existing usage scanner's bounded reads. Every provider still
+  // settles, and any failed read remains an uncertainty that blocks deletion.
+  for (let index = 0; index < MEDIA_REFERENCE_PROVIDER_REGISTRY.length; index += 4) {
+    const results = await Promise.all(MEDIA_REFERENCE_PROVIDER_REGISTRY.slice(index, index + 4).map(async provider => {
+      try { return { references: await provider.scanAll(), uncertainty: null }; }
+      catch (error) { return { references: [] as DiscoveredMediaReference[],
+        uncertainty: error instanceof Error ? error.message : `media_reference_provider:${provider.domainKey}:failed` }; }
+    }));
+    for (const result of results) {
+      references.push(...result.references);
+      if (result.uncertainty) uncertainties.push(result.uncertainty);
     }
   }
 

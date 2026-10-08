@@ -1000,6 +1000,9 @@ export async function getMediaCatalogRuntimeState(): Promise<MediaCatalogRuntime
     lastSuccessfulReconciliationRunIdentity: nullableText(
       value.lastSuccessfulReconciliationRunIdentity,
     ),
+    lastSuccessfulReconciliationStartedAt: nullableText(value.lastSuccessfulReconciliationStartedAt),
+    lastSuccessfulReconciliationDomains: Array.isArray(value.lastSuccessfulReconciliationDomains)
+      ? value.lastSuccessfulReconciliationDomains.filter((item): item is string => typeof item === "string") : [],
     lastSuccessfulReconciliationAt: nullableText(
       value.lastSuccessfulReconciliationAt,
     ),

@@ -393,3 +393,52 @@ export async function runMediaDeleteSaga<TResult>(
     storageResult,
   };
 }
+
+/** The delete owner's bounded scheduler: independent failures never stop peers. */
+export const MEDIA_DELETE_CONCURRENCY = 3;
+export async function runBoundedMediaDeletes<T>(items: readonly T[], execute: (item: T, index: number) => Promise<void>) {
+  let next = 0;
+  const failures: unknown[] = [];
+  await Promise.all(Array.from({ length: Math.min(MEDIA_DELETE_CONCURRENCY, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      try { await execute(items[index], index); } catch (error) { failures.push(error); }
+    }
+  }));
+  if (failures.length) throw new AggregateError(failures, "media_delete_worker_failed");
+}
+
+export type MediaDeleteStreamEvent =
+  | { type: "result"; asset: string; deleted: boolean; error?: string; code?: string }
+  | { type: "complete"; catalogWarnings: string[] }
+  | { type: "error"; error: string };
+
+export async function readMediaDeleteResults(response: Response, onResult: (event: Extract<MediaDeleteStreamEvent, { type: "result" }>) => void) {
+  if (!response.ok) {
+    const failure = await response.json();
+    throw new Error(failure.error || "تعذر بدء الحذف.");
+  }
+  if (!response.body) throw new Error("تعذر قراءة نتائج الحذف.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "", complete = false;
+  let warnings: string[] = [];
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line) as MediaDeleteStreamEvent;
+        if (event.type === "result") onResult(event);
+        else if (event.type === "complete") { complete = true; warnings = event.catalogWarnings; }
+        else if (event.type === "error") throw new Error(event.error);
+      }
+      if (done) break;
+    }
+    if (!complete || pending.trim()) throw new Error("انقطع اتصال الحذف قبل اكتمال النتائج؛ أعد فحص الملفات المتبقية قبل المحاولة.");
+    return warnings;
+  } finally { reader.releaseLock(); }
+}

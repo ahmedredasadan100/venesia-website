@@ -136,6 +136,8 @@ export type MediaCatalogRuntimeState = {
   lastDryRun: string | null;
   lastSuccessfulReconciliationRunIdentity: string | null;
   lastSuccessfulReconciliationAt: string | null;
+  lastSuccessfulReconciliationStartedAt?: string | null;
+  lastSuccessfulReconciliationDomains?: string[];
   storageAssetCount: number | null;
   catalogAssetCount: number | null;
   warnings: string[];

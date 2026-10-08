@@ -1,5 +1,6 @@
 "use client";
 
+import { readMediaDeleteResults } from "../../../lib/admin/media-catalog/delete-saga";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -46,7 +47,7 @@ type ViewMode = "grid" | "list";
 type PageSize = 10 | 20 | 30 | 50 | 100;
 
 type PendingConfirmation =
-  | { kind: "delete"; assets: MediaCatalogAsset[]; folder?: string | null; phase: "checking" | "ready" | "failed"; checks: MediaDeleteEligibility[]; results: { name: string; deleted: boolean; error?: string }[]; error?: string }
+  | { kind: "delete"; assets: MediaCatalogAsset[]; folder?: string | null; phase: "checking" | "ready" | "failed"; checks: MediaDeleteEligibility[]; results: { name: string; deleted: boolean; error?: string }[]; total?: number; error?: string }
   | { kind: "replace"; previous: MediaCatalogAsset; next: MediaCatalogAsset }
   | { kind: "move"; asset: MediaCatalogAsset; targetFolder: string; targetFilename: string }
   | null;
@@ -547,7 +548,7 @@ export default function MediaLibraryCore({
     setBusy("delete-preview");
     try {
       const response = await fetch("/api/admin/media-library", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operation: "preview_delete", ...(targetFolder ? { folder: targetFolder } : { assets: assets.map(asset => asset.publicUrl) }) }) });
+        signal: AbortSignal.timeout(120_000), body: JSON.stringify({ operation: "preview_delete", ...(targetFolder ? { folder: targetFolder } : { assets: assets.map(asset => asset.publicUrl) }) }) });
       const payload = await response.json() as { assets: MediaCatalogAsset[]; checks: MediaDeleteEligibility[]; folder: string | null; error?: string };
       if (!response.ok) throw new Error(payload.error || "تعذر فحص الاستخدامات.");
       setConfirmation({ kind: "delete", assets: payload.assets, folder: payload.folder, phase: "ready", checks: payload.checks, results: [] });
@@ -569,19 +570,32 @@ export default function MediaLibraryCore({
       let folderError: string | undefined;
       const catalogWarnings: string[] = [];
       try {
-        for (const asset of activeConfirmation.assets) {
+        const outcomes = new Map<string, { name: string; deleted: boolean; error?: string }>();
+        const receive = (publicUrl: string, deleted: boolean, error?: string) => {
+          const asset = activeConfirmation.assets.find(item => item.publicUrl === publicUrl);
+          if (!asset || outcomes.has(publicUrl)) return;
+          outcomes.set(publicUrl, { name: asset.displayName, deleted, error });
+          results.push(outcomes.get(publicUrl)!);
+          if (deleted) {
+            setData(current => current ? { ...current, assets: current.assets.filter(item => item.id !== asset.id) } : current);
+            setSelectedIds(current => current.filter(id => id !== asset.id));
+          } else remaining.push(asset);
+          setConfirmation({ ...activeConfirmation, total: activeConfirmation.assets.length, results: [...results] });
+        };
+        // Share preflight and refresh in bounded batches; stream settled results.
+        for (let start = 0; start < activeConfirmation.assets.length; start += 100) {
+          const batch = activeConfirmation.assets.slice(start, start + 100);
           try {
             const response = await fetch("/api/admin/media-library", { method: "DELETE", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ asset: asset.publicUrl, confirmReferenced: activeConfirmation.checks.some(check => check.state === "in_use" && check.asset.id === asset.id) }) });
-            const payload = await response.json() as { error?: string; catalogWarnings?: string[] };
-            if (!response.ok) throw new Error(payload.error || `تعذر حذف ${asset.displayName}.`);
-            catalogWarnings.push(...(payload.catalogWarnings ?? []));
-            results.push({ name: asset.displayName, deleted: true });
+              signal: AbortSignal.timeout(300_000),
+              body: JSON.stringify({ assets: batch.map(asset => ({ asset: asset.publicUrl,
+                confirmReferenced: activeConfirmation.checks.some(check => check.state === "in_use" && check.asset.id === asset.id) })) }) });
+            catalogWarnings.push(...await readMediaDeleteResults(response, event => receive(event.asset, event.deleted, event.error)));
+            for (const asset of batch) if (!outcomes.has(asset.publicUrl)) receive(asset.publicUrl, false, "لم تصل نتيجة مؤكدة؛ أعد الفحص قبل المحاولة.");
           } catch (error) {
-            results.push({ name: asset.displayName, deleted: false, error: error instanceof Error ? error.message : "تعذر الحذف." });
-            remaining.push(asset);
+            for (const asset of batch) if (!outcomes.has(asset.publicUrl)) receive(asset.publicUrl, false,
+              error instanceof Error ? error.message : "تعذر إكمال الحذف؛ أعد الفحص.");
           }
-          setConfirmation({ ...activeConfirmation, results: [...results] });
         }
         if (activeConfirmation.folder && remaining.length === 0) {
           try {
@@ -591,11 +605,11 @@ export default function MediaLibraryCore({
             if (!response.ok) throw new Error(payload.error || "تعذر إنهاء حذف المجلد.");
           } catch (error) { folderError = error instanceof Error ? error.message : "تعذر إنهاء حذف المجلد."; }
         }
-        setSelectedIds([]);
+        setSelectedIds(remaining.map(asset => asset.id));
         await loadPage();
         const deleted = results.filter(result => result.deleted).length;
         if (remaining.length || folderError) {
-          setConfirmation({ ...activeConfirmation, assets: remaining, phase: "failed", results, error: folderError });
+          setConfirmation({ ...activeConfirmation, assets: remaining, phase: "failed", total: activeConfirmation.assets.length, results, error: folderError });
           announce("danger", "نتيجة الحذف", `تم حذف ${deleted}؛ تعذر حذف ${remaining.length}. ${folderError ?? "راجع أسباب الفشل في نافذة الحذف."}`);
         } else {
           setConfirmation(null);
@@ -971,9 +985,9 @@ export default function MediaLibraryCore({
             {check.state === "in_use" ? <><p className="mt-2 text-amber-200">هذه الصورة مستخدمة في {check.references.length} مواضع. حذفها سيترك هذه المراجع بدون أصل صالح.</p>
               <ul className="mt-2 space-y-1">{check.references.map((reference, i) => <li key={i}>{reference.editHref ? <Link href={reference.editHref} target="_blank" className="underline">{reference.entityLabel ?? reference.entityIdentity}</Link> : reference.entityLabel ?? reference.entityIdentity} — {reference.fieldKey}</li>)}</ul></>
               : check.state === "safe_to_delete" ? <p className="text-emerald-200">غير مستخدمة حاليًا.</p>
-              : <p className="text-red-200">تعذر إثبات جاهزية هذا الأصل للحذف: {"reasons" in check ? check.reasons.join("، ") : check.state}</p>}
+              : <p className="text-red-200">تعذر إثبات جاهزية هذا الأصل للحذف: {"reasons" in check ? check.reasons.map(reason => reason === "media_delete_write_lease_active" ? "عملية حفظ أخرى ما زالت نشطة؛ انتظر انتهاءها ثم أعد المحاولة." : reason === "media_delete_write_lease_unresolved" ? "تعذر حسم عملية حفظ سابقة بأمان؛ أعد الفحص للمحاولة مجددًا." : reason).join("، ") : check.state}</p>}
           </div>)}
-          {confirmation.results.length ? <div data-media-delete-results=""><p>Deleted: {confirmation.results.filter(result => result.deleted).length} / Failed: {confirmation.results.filter(result => !result.deleted).length}</p><ul>{confirmation.results.map((result, index) => <li key={index} className={result.deleted ? "text-emerald-200" : "text-red-200"}>{result.name}: {result.deleted ? "تم الحذف" : result.error}</li>)}</ul></div> : null}
+          {confirmation.results.length ? <div data-media-delete-results=""><p data-media-delete-progress="">Completed: {confirmation.results.filter(result => result.deleted).length} / Failed: {confirmation.results.filter(result => !result.deleted).length} / Remaining: {(confirmation.total ?? confirmation.assets.length) - confirmation.results.length}</p><ul>{confirmation.results.map((result, index) => <li key={index} className={result.deleted ? "text-emerald-200" : "text-red-200"}>{result.name}: {result.deleted ? "تم الحذف" : result.error}</li>)}</ul></div> : null}
         </div> : null}
       </AdminConfirmDialog>
     </div>

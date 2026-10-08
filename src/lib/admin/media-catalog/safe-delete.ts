@@ -1,5 +1,8 @@
 import "server-only";
 
+import { recordCmsAdminAudit } from "../audit-log";
+import { failMediaReferenceWriteLease, resolveMediaReferenceWriteLease } from "./write-lease";
+import { runBoundedMediaDeletes } from "./delete-saga";
 import { randomUUID } from "node:crypto";
 
 import { verifyManagedStorageAssetExists } from "../../storage/upload-cms-asset";
@@ -34,15 +37,85 @@ import {
   resolveMediaStorageRuntimeContext,
 } from "../media-library";
 
+async function readDeleteLeases() {
+  const rows = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await getSupabaseAdmin().from("media_reference_write_leases")
+      .select("lease_token,asset_id,status,expires_at,completed_at,write_targets")
+      .or("status.eq.active,and(status.in.(failed,expired),resolved_at.is.null)")
+      .order("id").range(offset, offset + 499);
+    if (error) throw new Error(`media_write_lease_state_unavailable:${error.code ?? "unknown"}`);
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < 500) return rows;
+  }
+}
+
 async function readDeleteContext() {
-  const [runtimeState, catalog, inventory, live] = await Promise.all([
-    getMediaCatalogRuntimeState(), listMediaCatalogSnapshot(), listPublicMediaInventory(), scanAllMediaReferenceProviders(),
+  const [runtimeState, catalog, inventory, live, leases] = await Promise.all([
+    getMediaCatalogRuntimeState(), listMediaCatalogSnapshot(), listPublicMediaInventory(), scanAllMediaReferenceProviders(), readDeleteLeases(),
   ]);
-  return { runtimeState, catalog, inventory, live };
+  return { runtimeState, catalog, inventory, live, leases };
+}
+
+type DeleteContext = Awaited<ReturnType<typeof readDeleteContext>>;
+
+async function settleStaleDeleteLeases(snapshot: DeleteContext, assetIds: Set<string>) {
+  const now = Date.now();
+  const tokens = new Set(snapshot.leases.filter(lease => assetIds.has(lease.asset_id)
+    && (lease.status !== "active" || Date.parse(lease.expires_at) <= now)).map(lease => lease.lease_token));
+  if (!tokens.size) return snapshot;
+  // A token owns a group: never resolve it while any member is still active.
+  for (const token of tokens) if (snapshot.leases.some(lease => lease.lease_token === token
+    && lease.status === "active" && Date.parse(lease.expires_at) > now)) tokens.delete(token);
+  if (!tokens.size) return snapshot;
+  for (const token of tokens) {
+    const group = snapshot.leases.filter(lease => lease.lease_token === token);
+    if (!group.every(lease => lease.status === "active")) continue;
+    const target = (group[0].write_targets as { entityIdentity?: string }[])[0];
+    try {
+      await failMediaReferenceWriteLease({ lease: { token, assetCount: group.length,
+        startedAt: "", expiresAt: group[0].expires_at, primaryEntityIdentity: target?.entityIdentity ?? "" },
+        failureCode: "media_write_lease_expired_before_delete", reasons: ["write_window_expired"], domainWriteCommitted: true });
+      await recordCmsAdminAudit({ action: "media_asset.update", entityType: "media_asset",
+        entityLabel: "Media write lease recovery", metadata: { operation: "expire_write_lease", leaseToken: token } });
+    } catch { tokens.delete(token); }
+  }
+  if (!tokens.size) return { ...snapshot, leases: await readDeleteLeases() };
+  snapshot = { ...snapshot, leases: await readDeleteLeases() };
+  const lastWrite = Math.max(...snapshot.leases.filter(lease => tokens.has(lease.lease_token)).map(lease =>
+    Date.parse(lease.status === "active" ? lease.expires_at : lease.completed_at ?? lease.expires_at)));
+  const runtime = snapshot.runtimeState;
+  const context = resolveMediaStorageRuntimeContext();
+  if (runtime.state !== "synced" || runtime.environmentKey !== context.identity
+    || runtime.providerRegistryVersion !== MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION
+    || !runtime.lastSuccessfulReconciliationStartedAt
+    || Date.parse(runtime.lastSuccessfulReconciliationStartedAt) <= lastWrite
+    || !runtime.lastSuccessfulReconciliationDomains?.length
+    || snapshot.leases.filter(lease => tokens.has(lease.lease_token)).some(lease =>
+      (lease.write_targets as { domainKey: string }[]).some(target => !runtime.lastSuccessfulReconciliationDomains?.includes(target.domainKey)))) {
+    const reconciliation = await reconcileMediaCatalog();
+    if (!reconciliation.complete) return { ...snapshot, live: { ...snapshot.live,
+      uncertainties: [...snapshot.live.uncertainties, ...reconciliation.uncertainties] } };
+    snapshot = await readDeleteContext();
+  }
+  for (const token of tokens) {
+    try {
+      await resolveMediaReferenceWriteLease({ leaseToken: token,
+        reconciliationRunIdentity: snapshot.runtimeState.lastSuccessfulReconciliationRunIdentity!,
+        resolutionCode: "media_write_lease_reconciled_before_delete" });
+      await recordCmsAdminAudit({ action: "media_asset.update", entityType: "media_asset",
+        entityLabel: "Media write lease recovery", metadata: { operation: "resolve_write_lease", leaseToken: token,
+          reconciliationRunIdentity: snapshot.runtimeState.lastSuccessfulReconciliationRunIdentity } });
+    } catch {
+      // A racing writer or missing proof remains a real blocker. Re-read the
+      // official state rather than turning recovery errors into permission.
+    }
+  }
+  return { ...snapshot, leases: await readDeleteLeases() };
 }
 
 export async function previewMediaDeletion(input: { assets?: unknown; folder?: unknown }) {
-  const snapshot = await readDeleteContext();
+  let snapshot = await readDeleteContext();
   let assets;
   let folder: string | null = null;
   if (typeof input.folder === "string") {
@@ -57,6 +130,7 @@ export async function previewMediaDeletion(input: { assets?: unknown; folder?: u
     assets = snapshot.catalog.assets.filter(asset => values.has(asset.publicUrl));
     if (assets.length !== values.size) throw new MediaStorageError("invalid_delete_targets", "تعذر إثبات هوية أحد الملفات المحددة.", 400);
   }
+  snapshot = await settleStaleDeleteLeases(snapshot, new Set(assets.map(asset => asset.id)));
   const checks: MediaDeleteEligibility[] = [];
   for (const asset of assets) checks.push(await getMediaDeleteEligibility(asset.publicUrl, snapshot));
   return { folder, assets, checks };
@@ -69,7 +143,7 @@ export async function getMediaDeleteEligibility(publicValue: string, snapshot?: 
 
   let asset;
   try {
-    asset = await getCatalogAssetByPublicValue(publicValue);
+    asset = snapshot ? snapshot.catalog.assets.find(item => item.publicUrl === publicValue) : await getCatalogAssetByPublicValue(publicValue);
   } catch (error) {
     return {
       state: "uncertain",
@@ -99,7 +173,8 @@ export async function getMediaDeleteEligibility(publicValue: string, snapshot?: 
   let read;
   try { read = snapshot ?? await readDeleteContext(); }
   catch (error) { return { state: "uncertain", asset, reasons: [error instanceof Error ? error.message : "media_catalog_state_unavailable"] }; }
-  const { runtimeState, catalog, inventory, live } = read;
+  if (!snapshot) read = await settleStaleDeleteLeases(read, new Set([asset.id]));
+  const { runtimeState, catalog, inventory, live, leases } = read;
   const readiness = buildMediaCatalogReadiness(
     catalog,
     inventory,
@@ -119,29 +194,10 @@ export async function getMediaDeleteEligibility(publicValue: string, snapshot?: 
     };
   }
 
-  const [leaseResult] = await Promise.all([
-    getSupabaseAdmin()
-      .from("media_reference_write_leases")
-      .select("id")
-      .eq("asset_id", asset.id)
-      .or("status.eq.active,and(status.in.(failed,expired),resolved_at.is.null)")
-      .limit(1),
-  ]);
-  if (leaseResult.error) {
-    return {
-      state: "uncertain",
-      asset,
-      reasons: [`media_write_lease_state_unavailable:${leaseResult.error.code ?? "unknown"}`],
-    };
-  }
-  const unresolvedLease = (leaseResult.data ?? []).length > 0;
-  if (unresolvedLease) {
-    return {
-      state: "uncertain",
-      asset,
-      reasons: ["media_delete_write_lease_unresolved"],
-    };
-  }
+  const unresolved = leases.filter(lease => lease.asset_id === asset.id);
+  if (unresolved.length) return { state: "uncertain", asset, reasons: [unresolved.some(lease =>
+    lease.status === "active" && Date.parse(lease.expires_at) > Date.now())
+      ? "media_delete_write_lease_active" : "media_delete_write_lease_unresolved"] };
   if (live.uncertainties.length) {
     return { state: "uncertain", asset, reasons: live.uncertainties };
   }
@@ -150,18 +206,8 @@ export async function getMediaDeleteEligibility(publicValue: string, snapshot?: 
     (reference) => getCanonicalMediaIdentityKey(reference.identity) === identityKey,
   );
 
-  try {
-    const storage = await verifyManagedStorageAssetExists(publicValue);
-    if (!storage.managed) return { state: "unmanaged", asset: null };
-    if (!storage.exists) return { state: "already_missing", asset };
-  } catch (error) {
-    return {
-      state: "uncertain",
-      asset,
-      reasons: [error instanceof Error ? error.message : "media_storage_verification_failed"],
-    };
-  }
-
+  // The complete inventory above already proves this exact identity exists.
+  // Storage is verified again after removal by the saga, never by redundant polling.
   if (driftReferences.length) return { state: "in_use", asset, references: driftReferences.map(reference => ({
     domainKey: reference.domainKey, entityType: reference.entityType, entityIdentity: reference.entityIdentity,
     entityLabel: reference.entityLabel ?? null, fieldKey: reference.fieldKey, editHref: reference.editHref ?? null,
@@ -173,6 +219,8 @@ export async function getMediaDeleteEligibility(publicValue: string, snapshot?: 
 export async function safelyDeleteMediaAsset(
   publicValue: string,
   options: {
+    snapshot?: DeleteContext;
+    deferCatalogRefresh?: boolean;
     confirmReferenced?: boolean;
     actorId?: number | null;
     requestIdentity?: string;
@@ -185,7 +233,7 @@ export async function safelyDeleteMediaAsset(
     }) => Promise<void>;
   } = {},
 ) {
-  const eligibility = await getMediaDeleteEligibility(publicValue);
+  const eligibility = await getMediaDeleteEligibility(publicValue, options.snapshot);
   if (eligibility.state !== "safe_to_delete" && !(eligibility.state === "in_use" && options.confirmReferenced === true)) return { deleted: false as const, eligibility };
 
   try {
@@ -292,23 +340,7 @@ export async function safelyDeleteMediaAsset(
       };
     }
 
-    // A completed deletion can remove a member of the reconciled baseline.
-    // Re-establish it through the existing complete reconciliation owner; never
-    // reinterpret stale counts as proof or ask users to run a manual repair.
-    const catalogWarnings: string[] = [];
-    try {
-      const [catalog, inventory, runtimeState] = await Promise.all([
-        listMediaCatalogSnapshot(), listPublicMediaInventory(), getMediaCatalogRuntimeState(),
-      ]);
-      const readiness = buildMediaCatalogReadiness(catalog, inventory, runtimeState,
-        resolveMediaStorageRuntimeContext(), MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION);
-      if (!readiness.runtimeDatasetMatches) {
-        const reconciliation = await reconcileMediaCatalog({ actorId: options.actorId });
-        if (!reconciliation.complete) catalogWarnings.push(...reconciliation.uncertainties);
-      }
-    } catch (error) {
-      catalogWarnings.push(error instanceof Error ? error.message : "media_delete_catalog_refresh_failed");
-    }
+    const catalogWarnings = options.deferCatalogRefresh ? [] : await refreshMediaDeleteCatalog(options.actorId);
     return {
       deleted: true as const,
       catalogWarnings,
@@ -331,3 +363,30 @@ export async function safelyDeleteMediaAsset(
     throw error;
   }
 }
+
+export async function refreshMediaDeleteCatalog(actorId?: number | null) {
+    const catalogWarnings: string[] = [];
+    try {
+      const [catalog, inventory, runtimeState] = await Promise.all([
+        listMediaCatalogSnapshot(), listPublicMediaInventory(), getMediaCatalogRuntimeState(),
+      ]);
+      const readiness = buildMediaCatalogReadiness(catalog, inventory, runtimeState,
+        resolveMediaStorageRuntimeContext(), MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION);
+      if (!readiness.runtimeDatasetMatches) {
+        const reconciliation = await reconcileMediaCatalog({ actorId: actorId });
+        if (!reconciliation.complete) catalogWarnings.push(...reconciliation.uncertainties);
+      }
+    } catch (error) {
+      catalogWarnings.push(error instanceof Error ? error.message : "media_delete_catalog_refresh_failed");
+    }
+
+  return catalogWarnings;
+}
+
+export async function prepareMediaDeleteBatch(values: string[]) {
+  const snapshot = await readDeleteContext();
+  return settleStaleDeleteLeases(snapshot, new Set(snapshot.catalog.assets
+    .filter(asset => values.includes(asset.publicUrl)).map(asset => asset.id)));
+}
+
+export { runBoundedMediaDeletes };

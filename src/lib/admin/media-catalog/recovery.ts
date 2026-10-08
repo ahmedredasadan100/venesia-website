@@ -311,9 +311,10 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
       && runtime.environmentKey === context.identity
       && runtime.providerRegistryVersion === MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION
       && runtime.lastSuccessfulReconciliationRunIdentity
-      && runtime.lastSuccessfulReconciliationAt
+      && runtime.lastSuccessfulReconciliationStartedAt
+      && runtime.lastSuccessfulReconciliationDomains?.length
       && failureAt
-      && Date.parse(runtime.lastSuccessfulReconciliationAt) > Date.parse(failureAt),
+      && Date.parse(runtime.lastSuccessfulReconciliationStartedAt) > Date.parse(failureAt),
     );
     items.push({
       id: token,
@@ -468,9 +469,10 @@ export async function executeMediaRecoveryAction(input: {
       || runtime.provider !== context.provider
       || runtime.environment !== context.environment
       || !runtime.lastSuccessfulReconciliationRunIdentity
-      || !runtime.lastSuccessfulReconciliationAt
+      || !runtime.lastSuccessfulReconciliationStartedAt
+      || !runtime.lastSuccessfulReconciliationDomains?.length
       || !failureAt
-      || Date.parse(runtime.lastSuccessfulReconciliationAt) <= Date.parse(failureAt)
+      || Date.parse(runtime.lastSuccessfulReconciliationStartedAt) <= Date.parse(failureAt)
     ) {
       throw new MediaRecoveryError(
         "media_write_lease_reconciliation_required",
