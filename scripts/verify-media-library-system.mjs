@@ -6,6 +6,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -946,6 +948,34 @@ check("physical move acquires coordination before Storage mutation", physicalMov
 check("physical move retains the new identity when Domain compensation is incomplete", physicalMove.includes("rebind.nextAssetRequired") && physicalMove.includes("retainMovedIdentity") && synchronization.includes("nextAssetRequired: domainCompensationFailures.length > 0"));
 
 const core = source("src/components/admin/media/MediaLibraryCore.tsx");
+// Execute the actual shared navigation JSX against the Catalog read model.
+const coreAst = ts.createSourceFile("core.tsx", core, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let navigationExpression;
+function findNavigation(node) {
+  if (ts.isJsxExpression(node) && node.expression && ts.isCallExpression(node.expression)
+      && node.getText(coreAst).includes("data-media-folder-path")) navigationExpression = node.expression;
+  ts.forEachChild(node, findNavigation);
+}
+findNavigation(coreAst);
+assert.ok(navigationExpression);
+const renderNavigation = new Function("React", "data", "folder", "openFolder", ts.transpileModule(
+  "return " + navigationExpression.getText(coreAst),
+  { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 }, fileName: "navigation.tsx" },
+).outputText);
+const emptyFolderFixture = ["images/empty-child", "files/empty-child", "images/empty-child/nested"].map((path, index) => ({
+  id: `folder-${index}`, path, parentPath: path.slice(0, path.lastIndexOf("/")), displayName: `Empty ${index}`,
+  reconciliationState: "synced", childFolderCount: 0, directAssetCount: 0, directTotalBytes: 0, totalAssetCount: 0, totalBytes: 0,
+}));
+for (const selected of [null, "images", "files", "images/empty-child", "images/empty-child/nested"]) {
+  const model = catalogModule.buildMediaLibraryReadModel({ ...emptyCatalogSnapshot, folders: emptyFolderFixture },
+    { provider: "supabase", folders: [], items: [] }, { folder: selected, smartView: "all", kind: "all", context: runtimeContext });
+  const markup = renderToStaticMarkup(renderNavigation(React, model, selected, () => {}));
+  assert.equal((markup.match(/data-media-folder-path=/g) ?? []).length, model.summary.folderCount);
+  for (const item of model.folders) assert.ok(markup.includes(`data-media-folder-path="${item.path}"`));
+  assert.equal((markup.match(/aria-current="page"/g) ?? []).length, selected ? 1 : 0);
+}
+check("empty and nested folders remain visible in every selection with count/list consistency", true);
+
 const picker = source("src/components/admin/media/AdminMediaPickerModal.tsx");
 const sharedModal = source("src/components/admin/VenesiaModal.tsx");
 check("Manage and Select reuse one Media Library core", core.includes("data-media-library-mode") && picker.includes("<MediaLibraryCore"));

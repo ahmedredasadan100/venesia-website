@@ -348,10 +348,7 @@ export default function MediaLibraryCore({
   const safeDeleteUnavailableReason = safeDeleteReadinessMessages
     .map((item) => item.label)
     .join(" ");
-  const rootFolders = useMemo(
-    () => (data?.folders ?? []).filter((item) => item.parentPath === null),
-    [data?.folders],
-  );
+
   const childFolders = useMemo(
     () => folder ? (data?.folders ?? []).filter((item) => item.parentPath === folder) : [],
     [data?.folders, folder],
@@ -726,14 +723,18 @@ export default function MediaLibraryCore({
             </div>
           ) : null}
           <nav className="mt-4 space-y-1" aria-label="مجلدات الوسائط">
-            {rootFolders.map((item) => (
-              <button key={item.id} type="button" onClick={() => openFolder(item.path)} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm ${folder === item.path ? "bg-[#D8B87A]/14 text-[#D8B87A]" : "text-white/60 hover:bg-white/5"}`}>
-                <span>{item.displayName}</span><span className="text-xs text-white/35">{item.totalAssetCount}</span>
-              </button>
-            ))}
-            {childFolders.map((item) => (
-              <button key={item.id} type="button" onClick={() => openFolder(item.path)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 pe-6 text-sm text-white/55 hover:bg-white/5">
-                <span>⌞ {item.displayName}</span><span className="text-xs text-white/30">{item.totalAssetCount}</span>
+            {(data?.folders ?? []).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                data-media-folder-path={item.path}
+                aria-current={folder === item.path ? "page" : undefined}
+                onClick={() => openFolder(item.path)}
+                style={{ paddingInlineStart: `${0.75 + Math.min(item.path.split("/").length - 1, 5) * 0.75}rem` }}
+                className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm ${folder === item.path ? "bg-[#D8B87A]/14 text-[#D8B87A]" : "text-white/60 hover:bg-white/5"}`}
+              >
+                <span className="min-w-0 break-words text-start">{item.parentPath ? "⌞ " : ""}{item.displayName}</span>
+                <span className="shrink-0 text-xs text-white/35">{item.totalAssetCount}</span>
               </button>
             ))}
           </nav>
