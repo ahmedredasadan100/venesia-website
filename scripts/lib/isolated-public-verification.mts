@@ -1873,7 +1873,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
   let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;
-  const downloadFixture = adoption && ["template-controls", "navigation-settings"].includes(request.adoptionCohort ?? "") ? createCoreDownloadPdfFixture() : null;
+  const downloadFixture = adoption && (request.adoptionCohort === undefined || ["template-controls", "navigation-settings"].includes(request.adoptionCohort)) ? createCoreDownloadPdfFixture() : null;
   const verifySource = () => {
     if (downloadFixture) assert.equal(digest(readFileSync(join(sourceDirectory, "public", CORE_DOWNLOAD_MEDIA_KEY))), digest(downloadFixture));
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
