@@ -268,13 +268,14 @@ test.describe("Managed Media ownership lifecycle", () => {
       const response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
       await page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
       const deletedResponse = await response;
-      const { readMediaDeleteResults } = await import("../../src/lib/admin/media-catalog/delete-saga");
-      const settled: { deleted: boolean }[] = [];
-      const warnings = await readMediaDeleteResults(new Response(await deletedResponse.text(), { status: deletedResponse.status() }), result => settled.push(result));
-      expect(settled).toHaveLength(1);
-      expect(settled[0].deleted).toBe(true);
-      expect(warnings).toEqual([]);
-      await expect(page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true })).not.toBeVisible();
+      expect(deletedResponse.ok()).toBe(true);
+      // Browser streaming bodies are not retained by CDP. Observe the consumer's
+      // terminal UI, then independently read the real Catalog and Storage state.
+      await expect(page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true })).not.toBeVisible({ timeout: 60_000 });
+      const after = await (await request.get("/api/admin/media-library")).json();
+      expect(after.assets.some((item: { id: string }) => item.id === asset.id)).toBe(false);
+      expect(after.readiness.safeDeleteReady).toBe(true);
+      expect((await request.get(`${asset.publicUrl}?verify-deleted=${Date.now()}`)).ok()).toBe(false);
       await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible();
       receipts.push({ operation: "safe_delete", assetId: asset.id, referenced: deletedResponse.request().postDataJSON().assets[0].confirmReferenced === true });
     }
