@@ -77,6 +77,34 @@ const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/referen
   "./identity": identityModule,
 });
 
+// Exercise the canonical exhaustive scan with deterministic blocked reads.
+{
+  const registry = providerModule.MEDIA_REFERENCE_PROVIDER_REGISTRY;
+  const original = registry.map(provider => provider.scanAll);
+  let running = 0, peak = 0, visited = 0;
+  let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  try {
+    registry.forEach((provider, index) => { provider.scanAll = async () => {
+      running++; visited++; peak = Math.max(peak, running);
+      try {
+        if (index < 4) await barrier;
+        if (index === registry.length - 1) throw new Error("last_provider_unavailable");
+        return [{ fixtureIndex: index }];
+      } finally { running--; }
+    }; });
+    const pending = providerModule.scanAllMediaReferenceProviders();
+    await Promise.resolve();
+    assert.equal(visited, 4); assert.equal(peak, 4);
+    release();
+    const result = await pending;
+    assert.equal(visited, registry.length); assert.equal(running, 0);
+    assert.deepEqual(result.references.map(item => item.fixtureIndex), original.slice(0, -1).map((_, index) => index));
+    assert.deepEqual(result.uncertainties, ["last_provider_unavailable"]);
+    check("exhaustive discovery uses bounded reads without losing late failures or provider order", true);
+  } finally { registry.forEach((provider, index) => { provider.scanAll = original[index]; }); }
+}
+
 const managedUrl = "https://demo.supabase.co/storage/v1/object/public/cms-images/images/topics/a.png";
 assert.deepEqual(providerModule.extractMediaCandidateValues({ hero: managedUrl, legacy: "/images/legacy.png" }), [managedUrl, "/images/legacy.png"]);
 check("reference discovery walks nested JSON without fuzzy substring identities", true);
@@ -1294,7 +1322,7 @@ check(
 {
   const target = { ...catalogAsset, folderPath: "images/contract", objectKey: "images/contract/a.png" };
   let present = true, active = true, lease = false, uncertain = false, used = true;
-  let storageDeletes = 0, reservations = 0, reconciliations = 0;
+  let storageDeletes = 0, reservations = 0, reconciliations = 0, leaseResolutions = 0, staleLease = false;
   const audit = [];
   let runtime = { ...completeRuntimeState };
   const reference = { identity: target, domainKey: "topics", entityType: "topic", entityIdentity: "owned",
@@ -1304,8 +1332,13 @@ check(
   const inventory = () => ({ ...managedInventory, items: present ? [{ ...managedInventory.items[0], storagePath: target.objectKey }] : [] });
   const safeOwner = loadTypeScriptModule("src/lib/admin/media-catalog/safe-delete.ts", {
     "server-only": {}, "node:crypto": { randomUUID: () => "owned-request" },
+    "../audit-log": { recordCmsAdminAudit: async () => {} },
+    "./write-lease": { resolveMediaReferenceWriteLease: async () => { leaseResolutions++; staleLease = false; },
+      failMediaReferenceWriteLease: async () => {} },
     "../../storage/upload-cms-asset": { verifyManagedStorageAssetExists: async () => ({ managed: true, exists: present }) },
-    "../../supabase-admin": { getSupabaseAdmin: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, or() { return this; }, async limit() { return { data: lease ? [{ id: "lease" }] : [], error: null }; } }) }) },
+    "../../supabase-admin": { getSupabaseAdmin: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, or() { return this; }, order() { return this; }, async range() { return { data: lease || staleLease ? [{ lease_token: "lease", asset_id: target.id,
+      status: staleLease ? "failed" : "active", expires_at: lease ? "2099-01-01T00:00:00Z" : "2000-01-01T00:00:00Z",
+      completed_at: "2000-01-01T00:00:00Z", write_targets: [{ entityIdentity: "owned", domainKey: "topics" }] }] : [], error: null }; } }) }) },
     "../media-library": { isManagedPublicMediaAsset: async () => true,
       resolveMediaStorageRuntimeContext: () => runtimeContext, listPublicMediaInventory: async () => inventory(),
       deletePublicMediaAsset: async () => { storageDeletes++; present = false; return { path: target.publicUrl }; } },
@@ -1328,6 +1361,13 @@ check(
   assert.equal(reservations, 0); assert.equal(storageDeletes, 0);
   lease = true;
   assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl, { confirmReferenced: true })).deleted, false);
+  lease = false; staleLease = true;
+  runtime = { ...runtime, lastSuccessfulReconciliationStartedAt: "2001-01-01T00:00:00Z", lastSuccessfulReconciliationDomains: ["topics"] };
+  assert.equal((await safeOwner.previewMediaDeletion({ assets: [target.publicUrl] })).checks[0].state, "in_use");
+  assert.equal(leaseResolutions, 1); assert.equal(reconciliations, 0);
+  assert.equal((await safeOwner.previewMediaDeletion({ assets: [target.publicUrl] })).checks[0].state, "in_use");
+  assert.equal(leaseResolutions, 1);
+  check("stale lease adopts the official resolver once; active lease remains blocked and released lease retries without manual reconciliation", true);
   lease = false; uncertain = true;
   assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl, { confirmReferenced: true })).deleted, false);
   assert.equal(storageDeletes, 0);

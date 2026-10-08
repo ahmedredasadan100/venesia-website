@@ -1,5 +1,5 @@
 import { expect, test } from "playwright/test";
-import type { MediaCatalogAsset } from "../../src/lib/admin/media-catalog/types";
+import type { MediaCatalogAsset, MediaDeleteEligibility } from "../../src/lib/admin/media-catalog/types";
 
 const storageState = process.env.E2E_ADMIN_STORAGE_STATE?.trim();
 
@@ -268,12 +268,15 @@ test.describe("Managed Media ownership lifecycle", () => {
       const response = page.waitForResponse(r => new URL(r.url()).pathname === "/api/admin/media-library" && r.request().method() === "DELETE");
       await page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true }).locator("[data-admin-confirm-submit]").click();
       const deletedResponse = await response;
-      const deletedResult = await deletedResponse.json();
-      expect(deletedResponse.ok(), JSON.stringify(deletedResult)).toBe(true);
-      expect(deletedResult.catalogWarnings).toEqual([]);
+      const { readMediaDeleteResults } = await import("../../src/lib/admin/media-catalog/delete-saga");
+      const settled: { deleted: boolean }[] = [];
+      const warnings = await readMediaDeleteResults(new Response(await deletedResponse.text(), { status: deletedResponse.status() }), result => settled.push(result));
+      expect(settled).toHaveLength(1);
+      expect(settled[0].deleted).toBe(true);
+      expect(warnings).toEqual([]);
       await expect(page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true })).not.toBeVisible();
       await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible();
-      receipts.push({ operation: "safe_delete", assetId: asset.id, referenced: deletedResult.eligibility.state === "in_use" });
+      receipts.push({ operation: "safe_delete", assetId: asset.id, referenced: deletedResponse.request().postDataJSON().assets[0].confirmReferenced === true });
     }
     // Readiness is a prerequisite, never silently repaired by this smoke test.
     const anonymous = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL, storageState: { cookies: [], origins: [] } });
@@ -373,16 +376,21 @@ test.describe("Managed Media ownership lifecycle", () => {
       }
       let injectedFailure = false;
       await page.route("**/api/admin/media-library", async route => {
-        if (!injectedFailure && route.request().method() === "DELETE" && route.request().postDataJSON()?.asset === bulkUnused.publicUrl) {
+        const targets = route.request().method() === "DELETE" ? route.request().postDataJSON()?.assets : null;
+        if (!injectedFailure && Array.isArray(targets) && targets.some((item: { asset: string }) => item.asset === bulkUnused.publicUrl)) {
           injectedFailure = true;
-          await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "تعذر حذف ملف الاختبار: فشل نقل معزول" }) });
+          const response = await route.fetch({ postData: { assets: targets.filter((item: { asset: string }) => item.asset !== bulkUnused.publicUrl) } });
+          // Isolate one target's transport failure while the others use the real
+          // shared server batch. Keep its Storage object for the retry assertion.
+          const failure = JSON.stringify({ type: "result", asset: bulkUnused.publicUrl, deleted: false, error: "تعذر حذف ملف الاختبار: فشل نقل معزول" }) + "\n";
+          await route.fulfill({ response, body: failure + await response.text() });
         } else await route.continue();
       });
       await inspectDeletion(page.getByRole("button", { name: /^حذف آمن \(/u }));
       const bulkDialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
       await expect(bulkDialog).toContainText("غير مستخدمة حاليًا");
       await bulkDialog.getByRole("button", { name: "حذف رغم الاستخدام", exact: true }).click();
-      await expect(bulkDialog.locator('[data-media-delete-results]')).toContainText("Deleted: 1 / Failed: 1", { timeout: 60_000 });
+      await expect(bulkDialog.locator('[data-media-delete-results]')).toContainText("Completed: 1 / Failed: 1 / Remaining: 0", { timeout: 60_000 });
       await expect(bulkDialog).toContainText("فشل نقل معزول");
       expect(injectedFailure).toBe(true);
       await page.unroute("**/api/admin/media-library");
@@ -423,6 +431,70 @@ test.describe("Managed Media ownership lifecycle", () => {
       expect((await mutation).ok()).toBe(true);
       await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible();
       await expect(row).toHaveCount(0);
+    }
+  });
+});
+
+
+test.describe("Managed Media delete throughput", () => {
+  test("measures the official delete contract with disposable managed fixtures", async ({ request }, testInfo) => {
+    const mode = process.env.E2E_MEDIA_DELETE_THROUGHPUT;
+    test.skip(!storageState || !["single", "batch"].includes(mode ?? ""), "Explicit throughput fixture authorization required.");
+    test.setTimeout(300_000);
+    const { randomUUID } = await import("node:crypto");
+    const { default: sharp } = await import("sharp");
+    const namespace = `qa-delete-throughput-${randomUUID()}`;
+    const buffer = await sharp({ create: { width: 32, height: 32, channels: 3, background: "#346789" } }).png().toBuffer();
+    const assets: MediaCatalogAsset[] = [];
+    const deleted = new Set<string>();
+    const timings: { operation: string; ms: number; count: number }[] = [];
+    try {
+      for (let index = 0; index < 3; index++) {
+        const name = `${namespace}-${index}.png`;
+        const preparation = await request.post("/api/admin/media-library", { data: { operation: "prepare_upload", folder: "images", kind: "image", file: { name, type: "image/png", size: buffer.length } } });
+        expect(preparation.ok()).toBe(true);
+        const signed = await preparation.json();
+        const stored = await request.put(signed.signedUrl, { multipart: { cacheControl: "3600", "": { name, mimeType: "image/png", buffer } } });
+        expect(stored.ok()).toBe(true);
+        const completed = await request.post("/api/admin/media-library", { data: { operation: "complete_upload", receipt: signed.receipt } });
+        expect(completed.status()).toBe(201);
+        assets.push((await completed.json()).asset);
+      }
+      // Include the fixtures in a real baseline to measure ordinary assets,
+      // rather than only the special additive-upload dataset case.
+      const reconciled = await request.post("/api/admin/media-library", { data: { operation: "reconcile", dryRun: false } });
+      expect((await reconciled.json()).complete).toBe(true);
+      const previewAt = Date.now();
+      const preview = await request.post("/api/admin/media-library", { data: { operation: "preview_delete", assets: assets.map(asset => asset.publicUrl) } });
+      expect((await preview.json()).checks.every((check: MediaDeleteEligibility) => check.state === "safe_to_delete")).toBe(true);
+      timings.push({ operation: "preview", ms: Date.now() - previewAt, count: assets.length });
+      const deleteAt = Date.now();
+      if (mode === "single") {
+        for (const asset of assets) {
+          const startedAt = Date.now();
+          const response = await request.delete("/api/admin/media-library", { data: { asset: asset.publicUrl, confirmReferenced: false } });
+          expect((await response.json()).deleted).toBe(true);
+          deleted.add(asset.publicUrl);
+          timings.push({ operation: "single", ms: Date.now() - startedAt, count: 1 });
+        }
+      } else {
+        const response = await request.delete("/api/admin/media-library", { data: { assets: assets.map(asset => ({ asset: asset.publicUrl, confirmReferenced: false })) } });
+        const { readMediaDeleteResults } = await import("../../src/lib/admin/media-catalog/delete-saga");
+        const warnings = await readMediaDeleteResults(new Response(await response.text(), { status: response.status() }), event => {
+          expect(event.deleted, event.error).toBe(true); deleted.add(event.asset);
+        });
+        expect(warnings).toEqual([]);
+      }
+      timings.push({ operation: mode!, ms: Date.now() - deleteAt, count: assets.length });
+      expect(deleted.size).toBe(assets.length);
+      const after = await (await request.get("/api/admin/media-library")).json();
+      expect(after.readiness.safeDeleteReady).toBe(true);
+    } finally {
+      await testInfo.attach("media-delete-throughput", { body: JSON.stringify({ namespace, mode, assets: assets.map(asset => ({ id: asset.id, publicUrl: asset.publicUrl })), timings }), contentType: "application/json" });
+      for (const asset of assets) if (!deleted.has(asset.publicUrl)) {
+        const cleanup = await request.delete("/api/admin/media-library", { data: { asset: asset.publicUrl, confirmReferenced: false } });
+        expect((await cleanup.json()).deleted).toBe(true);
+      }
     }
   });
 });

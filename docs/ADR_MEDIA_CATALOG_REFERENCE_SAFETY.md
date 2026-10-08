@@ -61,7 +61,7 @@ label or explicit project-ref label can override the actual client endpoint.
 ## Managed deletion usage confirmation (2026-10-07)
 
 Single, bulk and recursive folder deletion use the same preview and per-asset Saga.
-The preview is read-only. Each referenced target requires explicit usage consent;
+The preview never deletes assets or changes content; it may settle stale leases through the official fenced recovery contract. Each referenced target requires explicit usage consent;
 unused targets do not inherit another asset's consent. Bulk execution records each
 success/failure and retries only remaining targets after a new preview. Folder
 retirement is atomic and requires no remaining live Catalog assets; a later upload
@@ -78,3 +78,25 @@ Migration `20261007193823_media_delete_usage_confirmation.sql` adds persisted
 consent and folder retirement metadata and updates the existing coordination RPCs.
 It does not alter authored content references or Storage objects. Runtime deletion
 continues through the existing Storage adapter with audit evidence.
+
+
+## Delete lease recovery and bounded execution (2026-10-08)
+
+Expired active leases first enter the existing failed/unknown-write transition under
+asset locks and a database-clock expiry check. They remain blockers until a complete
+same-target reconciliation starts after that transition. Resolution requires that
+run identity, current registry domain coverage for every original write target, and
+matching provider/environment. Active leases cannot be automatically failed or
+resolved. Historical registry identities remain unchanged; the resolved registry is
+recorded as evidence. No reference is cleared by this transition.
+
+The existing deletion endpoint accepts either one asset or a bounded batch. A batch
+shares one complete preflight, executes at most three independent Sagas, streams
+settled per-asset results, then refreshes the baseline once after all workers settle.
+Each Saga retains database reservation, post-reservation reference/runtime checks,
+exact Storage removal/absence proof, finalization and Audit. The complete inventory
+already proves pre-delete existence; no duplicate per-file existence query is needed.
+The UI removes successful rows immediately and retains failed selections with their
+reasons; a truncated stream is a visible failure, never a success. Retry previews only
+the failed/unknown targets. The same owner handles folder assets before atomic empty
+folder retirement. No consumer bypasses the readiness or usage-confirmation gates.

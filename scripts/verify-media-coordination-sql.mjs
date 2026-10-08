@@ -10,6 +10,7 @@ const read = (relativePath) =>
 const migration = read(
   "sql/migrations/20260725180000_media_delete_reservation_saga.sql",
 );
+const leaseResolutionMigration = read("sql/migrations/20261008084745_media_delete_lease_resolution.sql");
 const usageConfirmationMigration = read("sql/migrations/20261007193823_media_delete_usage_confirmation.sql");
 const runner = read("scripts/verify-media-coordination-postgres.mts");
 const fixture = read(
@@ -40,7 +41,7 @@ const checks = [];
 
 const check = (description, condition) => checks.push({ description, condition });
 
-const functionBody = (name, source = usageConfirmationMigration.includes(`create or replace function public.${name}(`) ? usageConfirmationMigration : migration) => {
+const functionBody = (name, source = leaseResolutionMigration.includes(`create or replace function public.${name}(`) ? leaseResolutionMigration : usageConfirmationMigration.includes(`create or replace function public.${name}(`) ? usageConfirmationMigration : migration) => {
   const marker = `create or replace function public.${name}`;
   const start = source.indexOf(marker);
   if (start < 0) return "";
@@ -82,11 +83,11 @@ check("reservation validates the exact canonical identity", reserve.includes("p_
 check("reservation lifecycle remains bound to the immutable canonical identity", [cancel, finalize, recovery, repair].every((body) => body.includes("target_reservation.reserved_bucket") && body.includes("target_reservation.reserved_object_key") && body.includes("target_reservation.reserved_public_url") && body.includes("media_delete_asset_identity_changed")));
 check("lease acquisition rejects active delete reservations", acquire.includes("media_write_lease_delete_reserved"));
 check("delete reservation rejects unresolved write leases", reserve.includes("media_delete_write_lease_unresolved"));
-check("safe-delete preflight surfaces unresolved leases with a bounded query", safeDeleteRuntime.includes('.from("media_reference_write_leases")') && safeDeleteRuntime.includes('reasons: ["media_delete_write_lease_unresolved"]') && safeDeleteRuntime.includes(".limit(1)"));
+check("delete preflight shares complete paginated lease state and distinguishes active writers", safeDeleteRuntime.includes('.from("media_reference_write_leases")') && safeDeleteRuntime.includes("media_delete_write_lease_active") && safeDeleteRuntime.includes(".range(offset, offset + 499)"));
 check("lease captures provider/environment/registry context", acquire.includes("p_expected_provider_registry_version") && acquire.includes("trim(p_expected_environment_key)"));
 check("batch completion requires all declared targets to be synchronized", complete.includes("media_write_lease_sync_incomplete") && complete.includes("jsonb_array_elements(lease.synchronized_targets)"));
 check("failed/expired recovery requires a later run identity", resolve.includes("lastSuccessfulReconciliationRunIdentity") && resolve.includes("lastSuccessfulReconciliationAt") && resolve.includes("media_write_lease_reconciliation_not_proven"));
-check("failed/expired recovery requires exact provider context", resolve.includes("media_write_lease_reconciliation_context_mismatch") && resolve.includes("lease.provider_registry_version"));
+check("failed/expired recovery requires exact provider context", resolve.includes("media_write_lease_reconciliation_context_mismatch") && resolve.includes("lastSuccessfulReconciliationDomains") && resolve.includes("resolvedProviderRegistryVersion"));
 check("active expired leases cannot be resolved from time alone", !resolve.includes("lease.status = 'active' and lease.expires_at <= now()"));
 check("entity synchronization rejects NULL references", entitySync.includes("p_references is null") && entitySync.includes("invalid_media_reference_synchronization_input"));
 check("entity synchronization enforces the matching lease target", entitySync.includes("media_reference_write_lease_required") && entitySync.includes("media_reference_write_lease_mismatch"));

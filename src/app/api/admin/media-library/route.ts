@@ -19,7 +19,7 @@ import {
 } from "../../../../lib/admin/media-catalog/catalog";
 import { reconcileMediaCatalog } from "../../../../lib/admin/media-catalog/reconciliation";
 import { moveCatalogMediaAsset } from "../../../../lib/admin/media-catalog/physical-move";
-import { safelyDeleteMediaAsset, previewMediaDeletion } from "../../../../lib/admin/media-catalog/safe-delete";
+import { safelyDeleteMediaAsset, previewMediaDeletion, prepareMediaDeleteBatch, runBoundedMediaDeletes, refreshMediaDeleteCatalog } from "../../../../lib/admin/media-catalog/safe-delete";
 import { rebindAllSupportedMediaReferences } from "../../../../lib/admin/media-catalog/synchronization";
 import type { MediaSmartView } from "../../../../lib/admin/media-catalog/types";
 import {
@@ -47,7 +47,7 @@ import type { Json } from "../../../../lib/database.types";
 import type { AdminUserRecord } from "../../../../lib/admin/auth/admin-users";
 import { resolveMediaStorageProvider } from "../../../../lib/admin/media-storage-adapter";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const PRIVATE_MEDIA_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -476,15 +476,65 @@ export async function DELETE(request: Request) {
 
   try {
     const actor = await requireAdminSession();
-    const body = (await request.json()) as { asset?: unknown; confirmReferenced?: unknown };
+    const body = (await request.json()) as { asset?: unknown; confirmReferenced?: unknown; assets?: unknown };
+    if (body.assets !== undefined) {
+      if (!Array.isArray(body.assets) || body.assets.length < 1 || body.assets.length > 100
+        || body.assets.some(item => !item || typeof item.asset !== "string" || !item.asset.trim()
+          || typeof item.confirmReferenced !== "boolean")
+        || new Set(body.assets.map(item => item.asset)).size !== body.assets.length) {
+        return mediaJson({ error: "اختر من 1 إلى 100 ملف بهويات فريدة وتأكيد واضح لكل ملف.", code: "invalid_delete_targets" }, { status: 400 });
+      }
+      const targets = body.assets as { asset: string; confirmReferenced: boolean }[];
+      const snapshot = await prepareMediaDeleteBatch(targets.map(item => item.asset));
+      let disconnected = false;
+      const encoder = new TextEncoder();
+      return new Response(new ReadableStream({
+        async start(controller) {
+          const send = (event: object) => { if (!disconnected) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n")); };
+          let deleted = 0;
+          try {
+            await runBoundedMediaDeletes(targets, async target => {
+              try {
+                const response = await deleteMediaResponse(target.asset, target.confirmReferenced, actor,
+                  request.headers.get("x-request-id") ?? undefined, snapshot);
+                const result = await response.json();
+                if (result.deleted) deleted++;
+                send({ type: "result", asset: target.asset, ...result });
+              } catch (error) {
+                const failure = safeError(error, "تعذر حذف الملف.");
+                send({ type: "result", asset: target.asset, deleted: false, error: failure.message, code: failure.code });
+              }
+            });
+            // All reservations have settled before refreshing the shared baseline.
+            // Independent workers never race a reconciliation against each other.
+            const catalogWarnings = deleted ? await refreshMediaDeleteCatalog(actor.id) : [];
+            send({ type: "complete", catalogWarnings });
+          } catch (error) {
+            send({ type: "error", error: safeError(error, "تعذر إكمال الحذف.").message });
+          } finally { if (!disconnected) controller.close(); }
+        },
+        cancel() { disconnected = true; },
+      }), { headers: { ...PRIVATE_MEDIA_HEADERS, "Content-Type": "application/x-ndjson; charset=utf-8" } });
+    }
     const asset = typeof body.asset === "string" ? body.asset.trim() : "";
     if (!asset) return mediaJson({ error: "حدد رابط الملف المطلوب حذفه." }, { status: 400 });
 
     if (body.confirmReferenced !== undefined && typeof body.confirmReferenced !== "boolean") return mediaJson({ error: "تأكيد الاستخدام غير صالح.", code: "invalid_usage_confirmation" }, { status: 400 });
+    return await deleteMediaResponse(asset, body.confirmReferenced === true, actor, request.headers.get("x-request-id") ?? undefined);
+  } catch (error) {
+    const publicError = safeError(error, "تعذر حذف الملف من التخزين الدائم.");
+    return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });
+  }
+}
+
+async function deleteMediaResponse(asset: string, confirmReferenced: boolean, actor: AdminUserRecord,
+  requestIdentity?: string, snapshot?: Awaited<ReturnType<typeof prepareMediaDeleteBatch>>) {
     const result = await safelyDeleteMediaAsset(asset, {
-      confirmReferenced: body.confirmReferenced === true,
+      snapshot,
+      deferCatalogRefresh: Boolean(snapshot),
+      confirmReferenced: confirmReferenced === true,
       actorId: actor.id,
-      requestIdentity: request.headers.get("x-request-id") ?? undefined,
+      requestIdentity: requestIdentity,
       onTransition: (transition) =>
         recordCmsAdminAudit(
           {
@@ -511,8 +561,12 @@ export async function DELETE(request: Request) {
         : workflow?.repairRequired || result.eligibility.state === "uncertain"
           ? 503
           : 409;
-      const message =
-        workflow?.code === "media_delete_post_reservation_reference" ||
+      const leaseReasons = "reasons" in result.eligibility ? result.eligibility.reasons : [];
+      const message = leaseReasons.includes("media_delete_write_lease_active")
+        ? "عملية حفظ أخرى ما زالت نشطة على هذا الملف؛ انتظر انتهاءها ثم أعد المحاولة."
+        : leaseReasons.includes("media_delete_write_lease_unresolved")
+          ? "تعذر حسم عملية حفظ سابقة بأمان؛ أعد الفحص للمحاولة مجددًا."
+        : workflow?.code === "media_delete_post_reservation_reference" ||
         reservationFailureCode === "media_delete_asset_in_use" ||
         result.eligibility.state === "in_use"
           ? "هذا الملف مستخدم. راجع المواضع ثم أكّد حذف رغم الاستخدام؛ لن تتغير مراجع المحتوى."
@@ -584,7 +638,7 @@ export async function DELETE(request: Request) {
         entityLabel: result.eligibility.asset.displayName,
         metadata: {
           assetId: result.eligibility.asset.id,
-          usageConfirmed: body.confirmReferenced === true,
+          usageConfirmed: confirmReferenced === true,
           retainedReferenceCount: result.eligibility.references.length,
           bucket: result.eligibility.asset.bucket,
           objectKey: result.eligibility.asset.objectKey,
@@ -594,8 +648,4 @@ export async function DELETE(request: Request) {
       actor,
     );
     return mediaJson(result);
-  } catch (error) {
-    const publicError = safeError(error, "تعذر حذف الملف من التخزين الدائم.");
-    return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });
-  }
 }

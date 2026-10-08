@@ -66,6 +66,7 @@ const setupSqlFiles = [
   "scripts/fixtures/media-coordination-postgres-acl-after.sql",
   "sql/migrations/20260824022000_media_reference_mixed_provider_lease_scope.sql",
   "sql/migrations/20261007193823_media_delete_usage_confirmation.sql",
+  "sql/migrations/20261008084745_media_delete_lease_resolution.sql",
   "scripts/fixtures/media-coordination-postgres-concurrency-setup.sql",
 ];
 
