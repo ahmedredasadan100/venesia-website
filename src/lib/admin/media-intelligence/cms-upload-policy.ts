@@ -25,6 +25,18 @@ const CMS_PDF_MIME_TYPES = new Set(["application/pdf"]);
 
 export type CmsUploadKind = "image" | "pdf";
 
+/** Client destination hints never change the server's folder/MIME validation. */
+export function isCmsUploadFolderCompatible(folder: string, kind: CmsUploadKind) {
+  const root = kind === "pdf" ? "files" : "images";
+  return folder === root || folder.startsWith(root + "/");
+}
+
+export function resolveCmsUploadFolder(folder: string | null | undefined, kind: CmsUploadKind) {
+  return folder && isCmsUploadFolderCompatible(folder, kind)
+    ? folder
+    : kind === "pdf" ? "files" : "images";
+}
+
 export type CmsUploadValidationPolicy = {
   maxImageBytes?: number;
   maxPdfBytes?: number;

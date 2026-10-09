@@ -28,6 +28,9 @@ import {
   CMS_IMAGE_ACCEPT,
   CMS_PDF_ACCEPT,
   validateCmsUploadFile,
+  resolveCmsUploadKind,
+  resolveCmsUploadFolder,
+  isCmsUploadFolderCompatible,
   type CmsUploadValidationPolicy,
 } from "../../../lib/admin/media-intelligence/cms-upload-policy";
 import { formatAdminDateTime } from "../../../lib/content-dates";
@@ -162,16 +165,18 @@ export default function MediaLibraryCore({
   className = "",
 }: MediaLibraryCoreProps) {
   const searchParams = useSearchParams();
+  const pickerKind = mode === "manage" ? null : initialKind === "document" ? "pdf" : "image";
   const safeDeleteStatusId = useId();
   const { clearFeedback, publishFeedback } = useAdminFeedback();
   const [folder, setFolder] = useState<string | null>(() =>
     mode === "manage"
       ? (searchParams.get("folder") ?? (searchParams.has("view") ? null : initialFolder))
-      : initialFolder,
+      : resolveCmsUploadFolder(initialFolder, pickerKind ?? "image"),
   );
   const [kind, setKind] = useState<KindFilter>(() => {
     const value = mode === "manage" ? searchParams.get("kind") : null;
-    return value === "image" || value === "document" ? value : initialKind;
+    return pickerKind ? (pickerKind === "pdf" ? "document" : "image")
+      : value === "image" || value === "document" ? value : initialKind;
   });
   const [smartView, setSmartView] = useState<MediaSmartView>(() =>
     mode === "manage"
@@ -297,7 +302,8 @@ export default function MediaLibraryCore({
   );
   const selectionCanBeConfirmed =
     selectedAssets.length > 0 &&
-    selectedAssets.every((asset) => asset.status === "active" && !asset.missingObject);
+    selectedAssets.every((asset) => asset.status === "active" && !asset.missingObject
+      && (!pickerKind || asset.kind === (pickerKind === "pdf" ? "document" : "image")));
   const focusedAsset = selectedAssets.at(-1) ?? null;
   const selectedAssetsManaged =
     data?.catalogState === "available" && selectedAssets.length > 0 && selectedAssets.every(isManaged);
@@ -349,6 +355,9 @@ export default function MediaLibraryCore({
     .map((item) => item.label)
     .join(" ");
 
+  const availableFolders = (data?.folders ?? []).filter((item) =>
+    !pickerKind || isCmsUploadFolderCompatible(item.path, pickerKind));
+
   const childFolders = useMemo(
     () => folder ? (data?.folders ?? []).filter((item) => item.parentPath === folder) : [],
     [data?.folders, folder],
@@ -366,6 +375,7 @@ export default function MediaLibraryCore({
   }
 
   function openFolder(nextFolder: string) {
+    if (pickerKind && !isCmsUploadFolderCompatible(nextFolder, pickerKind)) return;
     updateLibraryHistory({ folder: nextFolder, view: null });
     setFolder(nextFolder);
     setSmartView("all");
@@ -382,6 +392,7 @@ export default function MediaLibraryCore({
   }
 
   function chooseAsset(asset: MediaCatalogAsset) {
+    if (pickerKind && asset.kind !== (pickerKind === "pdf" ? "document" : "image")) return;
     if (mode !== "manage" && (asset.status !== "active" || asset.missingObject)) return;
     setSelectedIds((current) => {
       if (mode === "select-one") return current.includes(asset.id) ? [] : [asset.id];
@@ -412,7 +423,7 @@ export default function MediaLibraryCore({
   }
 
   async function uploadOne(file: File, targetFolder = folder) {
-    const requestedKind = file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "image";
+    const requestedKind = pickerKind ?? resolveCmsUploadKind(file.name, file.type);
     // Read the runtime policy for every upload, including an already-open picker.
     const policyResponse = await fetch("/api/admin/media-library?policy=upload", { cache: "no-store" });
     const policyPayload = (await policyResponse.json()) as { uploadPolicy?: CmsUploadValidationPolicy; error?: string };
@@ -424,7 +435,7 @@ export default function MediaLibraryCore({
     const prepared = await fetch("/api/admin/media-library", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ operation: "prepare_upload", file: { name: file.name, type: file.type, size: file.size },
-        folder: targetFolder ?? (requestedKind === "pdf" ? "files" : "images"), kind: requestedKind }),
+        folder: resolveCmsUploadFolder(targetFolder, requestedKind), kind: requestedKind }),
     });
     const upload = (await prepared.json()) as { signedUrl?: string; receipt?: string; error?: string };
     if (!prepared.ok || !upload.signedUrl || !upload.receipt) throw new Error(upload.error || `تعذر تجهيز رفع ${file.name}.`);
@@ -449,10 +460,12 @@ export default function MediaLibraryCore({
     setUploadRows(Array.from(files).map((file) => ({ name: file.name, state: "pending" })));
     let completed = 0;
     const failures: string[] = [];
+    const uploadedFolders = new Set<string>();
     for (const file of Array.from(files)) {
       setUploadRows((current) => current.map((row) => row.name === file.name && row.state === "pending" ? { ...row, state: "uploading" } : row));
       try {
-        await uploadOne(file);
+        const asset = await uploadOne(file);
+        uploadedFolders.add(asset.folderPath);
         completed += 1;
         setUploadRows((current) => current.map((row) => row.name === file.name && row.state === "uploading" ? { ...row, state: "complete" } : row));
       } catch (uploadError) {
@@ -463,6 +476,17 @@ export default function MediaLibraryCore({
       setUploadSummary(`${completed} / ${files.length}`);
     }
     setBusy(null);
+    if (uploadedFolders.size === 1 && !uploadedFolders.has(folder ?? "")) {
+      openFolder([...uploadedFolders][0]);
+      if (mode === "manage") {
+        setKind("all");
+        updateLibraryHistory({ kind: null }, "replace");
+      }
+    } else if (uploadedFolders.size > 1) {
+      openSmartView("all");
+      setKind("all");
+      updateLibraryHistory({ kind: null }, "replace");
+    }
     await loadPage();
     if (failures.length) {
       announce("warning", "اكتمل الرفع جزئيًا", `نجح ${completed} وفشل ${failures.length}. ${failures[0]}`);
@@ -723,7 +747,7 @@ export default function MediaLibraryCore({
             </div>
           ) : null}
           <nav className="mt-4 space-y-1" aria-label="مجلدات الوسائط">
-            {(data?.folders ?? []).map((item) => (
+            {availableFolders.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -745,7 +769,7 @@ export default function MediaLibraryCore({
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-4">
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={Boolean(busy)} className="rounded-xl bg-[#D8B87A] px-4 py-2 text-sm font-bold text-[#05070B] disabled:opacity-50">{busy === "upload" ? `جارٍ الرفع ${uploadSummary ?? ""}` : "رفع ملفات"}</button>
-              <input ref={uploadInputRef} type="file" multiple accept={`${CMS_IMAGE_ACCEPT},${CMS_PDF_ACCEPT}`} className="hidden" onChange={(event) => { void uploadFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+              <input ref={uploadInputRef} type="file" multiple accept={pickerKind === "image" ? CMS_IMAGE_ACCEPT : pickerKind === "pdf" ? CMS_PDF_ACCEPT : `${CMS_IMAGE_ACCEPT},${CMS_PDF_ACCEPT}`} className="hidden" onChange={(event) => { void uploadFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
             </div>
             <div className="flex gap-1 rounded-xl border border-white/10 p-1">
               <button type="button" onClick={() => setViewMode("grid")} aria-pressed={viewMode === "grid"} className={`rounded-lg px-3 py-1.5 text-xs ${viewMode === "grid" ? "bg-white/10 text-white" : "text-white/45"}`}>شبكة</button>
@@ -760,7 +784,7 @@ export default function MediaLibraryCore({
               placeholder: "ابحث بالاسم أو المسار أو الوصف البديل…",
               debounceMs: 350,
             }}
-            filters={MEDIA_LIBRARY_FILTERS}
+            filters={pickerKind ? [] : MEDIA_LIBRARY_FILTERS}
             values={{ kind }}
             contextOverrideActive={selectedAssets.length > 0}
             contextOverride={
@@ -776,7 +800,7 @@ export default function MediaLibraryCore({
             onQueryPatch={(patch, behavior = "push") => {
               updateLibraryHistory(patch, behavior);
               if (Object.hasOwn(patch, "q")) setQuery(patch.q ?? "");
-              if (Object.hasOwn(patch, "kind")) {
+              if (!pickerKind && Object.hasOwn(patch, "kind")) {
                 const nextKind = patch.kind;
                 setKind(nextKind === "image" || nextKind === "document" ? nextKind : "all");
               }

@@ -81,7 +81,7 @@ export async function verifyMediaUploadLimitContract() {
   const form = size => {
     const data = new FormData();
     for (const [key, value] of [['maxImageMb', String(size)], ['maxDocumentMb', '12'], ['allowedKinds', 'image'],
-      ['allowedImageExtensions', '.jpg'], ['allowedDocumentExtensions', '.pdf'], ['mimeVerification', 'on']]) data.append(key, value);
+      ['allowedImageExtensions', '.jpg'], ['allowedImageExtensions', '.png'], ['allowedImageExtensions', '.webp'], ['allowedDocumentExtensions', '.pdf'], ['mimeVerification', 'on']]) data.append(key, value);
     return data;
   };
   const initial = { status: 'idle', mode: 'edit', revision: 0, message: '' };
@@ -124,16 +124,34 @@ export async function verifyMediaUploadLimitContract() {
   findUpload(coreSource); assert.ok(uploadNode);
   const uploadCode = ts.transpileModule(uploadNode.getText(coreSource), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   let clientPosts = 0;
-  const uploadOne = new Function('fetch', 'validateCmsUploadFile', 'folder', `${uploadCode}; return uploadOne;`)(
+  const uploadOne = new Function('fetch', 'validateCmsUploadFile', 'resolveCmsUploadKind', 'resolveCmsUploadFolder', 'pickerKind', 'folder', `${uploadCode}; return uploadOne;`)(
     async (url, init) => {
       if (url.endsWith('?policy=upload')) { assert.equal(init.cache, 'no-store'); return getPolicy(); }
       if (url.startsWith('https://fixture.invalid/storage/')) return receiveTransfer(new Request(url, init));
       clientPosts++; return route.POST(new Request(`http://localhost${url}`, init));
-    }, policy.validateCmsUploadFile, 'images');
+    }, policy.validateCmsUploadFile, policy.resolveCmsUploadKind, policy.resolveCmsUploadFolder, 'image', 'files/home');
   await uploadOne(file(10 * MiB));
   assert.equal(clientPosts, 2);
   await assert.rejects(uploadOne(file(10 * MiB + 1)), /10 ميجابايت/);
   assert.equal(clientPosts, 2);
+  // Reproduce the screenshot's files/home + image/jpeg mismatch at the unchanged server.
+  await assert.rejects(storageOwner.createSignedCmsUpload('files/home', file(MiB), 'image', 17, 1, {}), /نوع الملف لا يطابق/);
+  assert.equal(policy.resolveCmsUploadFolder('files/home', 'image'), 'images');
+  assert.equal(policy.resolveCmsUploadFolder('images/home', 'image'), 'images/home');
+  assert.equal(policy.resolveCmsUploadFolder('images', 'pdf'), 'files');
+  assert.equal(policy.resolveCmsUploadFolder('files/projects', 'pdf'), 'files/projects');
+  assert.equal(policy.isCmsUploadFolderCompatible('files/home', 'image'), false);
+  assert.equal(policy.isCmsUploadFolderCompatible('images-other', 'image'), false);
+  assert.equal(policy.isCmsUploadFolderCompatible('images/home', 'image'), true);
+  for (const [name, type] of [['slide-1.jpg', 'image/jpeg'], ['slide.png', 'image/png'], ['slide.webp', 'image/webp']]) {
+    const asset = await uploadOne(new File([new Uint8Array(32)], name, { type }));
+    assert.ok(asset.objectKey.startsWith('images/'));
+  }
+  const acceptedPosts = clientPosts;
+  await assert.rejects(uploadOne(new File(['pdf'], 'wrong.pdf', { type: 'application/pdf' })), /امتداد غير مدعوم/);
+  await assert.rejects(uploadOne(new File(['svg'], 'wrong.svg', { type: 'image/svg+xml' })), /SVG/);
+  await assert.rejects(uploadOne(new File(['pdf'], 'wrong.jpg', { type: 'application/pdf' })), /غير متطابقين/);
+  assert.equal(clientPosts, acceptedPosts, 'Rejected image-picker files never prepare or transfer.');
   // Receipts bind the existing Admin identity and session; stored bytes are revalidated.
   const signed = await storageOwner.createSignedCmsUpload('images', file(MiB), 'image', 17, 1, {});
   const receipt = storageOwner.readSignedCmsUploadReceipt(signed.receipt, 17, 1);
@@ -155,7 +173,7 @@ export async function verifyMediaUploadLimitContract() {
   runtimePolicy = (await (await getPolicy()).json()).uploadPolicy;
   assert.equal(runtimePolicy.maxImageBytes, 2 * MiB);
   await assert.rejects(uploadOne(file(3 * MiB)), /2 ميجابايت/);
-  assert.equal(clientPosts, 2);
+  assert.equal(clientPosts, acceptedPosts);
   assert.equal((await post(file(3 * MiB))).status, 400);
   await assert.rejects(adapter.uploadImage('images', file(3 * MiB)), /2 ميجابايت/);
   for (const value of [undefined, null, {}, { maxImageBytes: 'bad' }, { maxImageBytes: -1 },
