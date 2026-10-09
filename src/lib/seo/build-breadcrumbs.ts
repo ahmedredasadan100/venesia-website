@@ -1,4 +1,4 @@
-import { absoluteUrl, absoluteUrlWithBase, normalizePath } from "./seo-utils";
+import { absoluteUrl, absoluteUrlWithBase } from "./seo-utils";
 
 export type BreadcrumbItem = {
   name: string;
@@ -19,8 +19,8 @@ export function buildBreadcrumbItems(items: BreadcrumbItem[], baseUrl?: string) 
     position: index + 1,
     name: item.name,
     item: baseUrl
-      ? absoluteUrlWithBase(normalizePath(item.path), baseUrl)
-      : absoluteUrl(normalizePath(item.path)),
+      ? absoluteUrlWithBase(item.path, baseUrl)
+      : absoluteUrl(item.path),
   }));
 }
 

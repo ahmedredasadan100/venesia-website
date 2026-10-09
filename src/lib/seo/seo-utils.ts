@@ -1,3 +1,4 @@
+import { SEO_OUTPUT_LIMITS } from "../../config/seo/seo-rules";
 import { SEO_SITE } from "../../config/seo/seo-site";
 import type { GlobalSeoSettings } from "./global-seo-types";
 
@@ -17,7 +18,7 @@ export function absoluteUrl(path = "/"): string {
   return `${SEO_SITE.defaultUrl}${normalizedPath === "/" ? "" : normalizedPath}`;
 }
 
-export function absoluteUrlWithBase(path = "/", baseUrl = SEO_SITE.defaultUrl): string {
+export function absoluteUrlWithBase(path = "/", baseUrl: string = SEO_SITE.defaultUrl): string {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
@@ -38,7 +39,7 @@ export function absoluteAssetUrl(path?: string, baseUrl?: string): string {
   return absoluteUrlWithBase(path, baseUrl);
 }
 
-export function buildCanonicalWithBase(path: string, baseUrl = SEO_SITE.defaultUrl): string {
+export function buildCanonicalWithBase(path: string, baseUrl: string = SEO_SITE.defaultUrl): string {
   return absoluteUrlWithBase(path, baseUrl);
 }
 
@@ -121,4 +122,12 @@ export function trimToSeoLength(value: string, maxLength: number): string {
   if (cleaned.length <= maxLength) return cleaned;
 
   return `${cleaned.slice(0, maxLength - 1).trim()}…`;
+}
+
+/** Shared final text presentation for HTML/social metadata and Admin previews. */
+export function presentSeoText(input: { title: string; description: string }) {
+  return {
+    title: trimToSeoLength(input.title, SEO_OUTPUT_LIMITS.title),
+    description: trimToSeoLength(input.description, SEO_OUTPUT_LIMITS.description),
+  };
 }

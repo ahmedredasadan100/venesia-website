@@ -1,5 +1,8 @@
 import "server-only";
 
+import { resolveSeoUrlPolicy } from "./resolve-seo-metadata";
+import { entitySeoDataFromPersistence, type EntitySeoData } from "./entity-seo-types";
+import type { GlobalSeoSettings } from "./global-seo-types";
 import { SEO_ROUTES } from "../../config/seo/seo-routes";
 import { loadPublicContentSitemapRows } from "../content/public-content-read/owner";
 import { logError } from "../logging";
@@ -47,14 +50,30 @@ function mapSourceFromRouteKind(kind: string | undefined, path: string): Sitemap
   return "static_pages";
 }
 
-/** Published catch-all CMS pages; reserved/static/project paths are excluded. */
-async function getPublishedCmsPageEntries(baseUrl: string): Promise<SitemapEntry[]> {
+/** Only published, self-canonical, effectively indexable identities enter sitemap.
+ * An override to another URL is respected by excluding the alias, never by
+ * inventing an entry for a target whose publication/indexability is unknown.
+ */
+export function resolveSitemapCandidate(
+  entry: SitemapEntry,
+  entitySeo: EntitySeoData | null,
+  global: GlobalSeoSettings,
+): SitemapEntry | null {
+  if (!entry.path.startsWith("/") || /[?#]/.test(entry.path)) return null;
+  const resolved = resolveSeoUrlPolicy({ path: entry.path, entitySeo }, global);
+  const selfUrl = buildSitemapAbsoluteUrl(entry.path, resolved.metadataBase);
+  if (!resolved.robots.index || resolved.canonical.replace(/\/$/, "") !== selfUrl.replace(/\/$/, "")) return null;
+  return { ...entry, url: resolved.canonical };
+}
+
+/** Existing Pages own core and catch-all publication and SEO, not the registry. */
+async function getPublishedPageEntries(global: GlobalSeoSettings): Promise<SitemapEntry[]> {
   const data = [];
   let afterId: number | undefined;
   for (;;) {
     const request = getSupabaseAdmin()
       .from("pages")
-      .select("id, slug, path, status, updated_at, canonical_url, robots_index")
+      .select("id, slug, path, status, updated_at, canonical_url, robots_index, robots_follow")
       .eq("status", "published")
       .not("path", "is", null)
       .order("id", { ascending: true })
@@ -68,25 +87,22 @@ async function getPublishedCmsPageEntries(baseUrl: string): Promise<SitemapEntry
   }
 
   const entries: SitemapEntry[] = [];
-  for (const page of data ?? []) {
+  for (const page of data) {
     const path = typeof page.path === "string" ? page.path.trim() : "";
-    if (!path.startsWith("/") || path === "/") continue;
-    if (isReservedPublicPath(path)) continue;
-    if (page.robots_index === false) continue;
-
-    entries.push({
-      url: buildSitemapAbsoluteUrl(path, baseUrl),
-      path,
-      source: "cms_pages",
+    const route = SEO_ROUTES.find((candidate) => candidate.path === path);
+    if (!route && isReservedPublicPath(path)) continue;
+    const entry = resolveSitemapCandidate({
+      url: "", path,
+      source: route ? mapSourceFromRouteKind(route.kind, path) : "cms_pages",
       entityId: page.id,
       slug: page.slug ?? undefined,
-      canonicalOverride: typeof page.canonical_url === "string" ? page.canonical_url : undefined,
+      canonicalOverride: page.canonical_url ?? undefined,
       lastModified: safeDate(page.updated_at ?? undefined),
-      changeFrequency: "monthly",
-      priority: 0.6,
-    });
+      changeFrequency: route?.changeFrequency ?? "monthly",
+      priority: route?.priority ?? 0.6,
+    }, entitySeoDataFromPersistence(page), global);
+    if (entry) entries.push(entry);
   }
-
   return entries;
 }
 
@@ -97,7 +113,7 @@ async function loadSourceEntries(
   try {
     return { entries: await loader() };
   } catch (error) {
-    // Single warning per failed source; static core routes still ship.
+    // Preserve usable sources, but never invent indexability after a source failure.
     logError(`sitemap: ${source} source failed — continuing without it`, error);
     return {
       entries: [],
@@ -120,24 +136,15 @@ function dedupeByUrl(entries: SitemapEntry[]): SitemapEntry[] {
 
 export async function generateSitemapEntries(): Promise<SitemapGenerationResult> {
   const generatedAt = new Date().toISOString();
-  const baseUrl = await resolveCanonicalBaseUrl();
-
-  // Static core routes never depend on Supabase and must always be present.
-  const staticEntries: SitemapEntry[] = SEO_ROUTES.map((route) => ({
-    url: buildSitemapAbsoluteUrl(route.path, baseUrl),
-    path: route.path,
-    source: mapSourceFromRouteKind(route.kind, route.path),
-    changeFrequency: route.changeFrequency ?? "monthly",
-    priority: route.priority ?? 0.7,
-  }));
+  const global = await loadGlobalSeoSettings();
 
   const [projectsResult, publicContentResult, cmsResult] = await Promise.all([
     loadSourceEntries("projects", async () => {
       const projects = await loadPublishedProjectSitemapRows();
-      return projects.filter((project) => project.robotsIndex !== false).map((project) => {
+      return projects.flatMap((project) => {
         const path = getProjectHref(project);
-        return {
-          url: buildSitemapAbsoluteUrl(path, baseUrl),
+        const entry = resolveSitemapCandidate({
+          url: "",
           path,
           source: "projects" as const,
           slug: project.slug,
@@ -145,16 +152,17 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
           lastModified: safeDate(project.updatedAt),
           changeFrequency: "weekly" as const,
           priority: 0.85,
-        };
+        }, { canonical: project.canonicalUrl, robotsIndex: project.robotsIndex }, global);
+        return entry ? [entry] : [];
       });
     }),
     loadSourceEntries("articles", async () => {
       const items = await loadPublicContentSitemapRows();
-      return items.filter((item) => item.robotsIndex !== false).map((item) => {
+      return items.flatMap((item) => {
         const path = item.href;
         const isArticle = item.contentType === "article";
-        return {
-          url: buildSitemapAbsoluteUrl(path, baseUrl),
+        const entry = resolveSitemapCandidate({
+          url: "",
           path,
           source: isArticle ? ("articles" as const) : ("media" as const),
           entityId: item.id,
@@ -165,10 +173,11 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
           priority: isArticle
             ? item.isFeatured ? 0.75 : 0.65
             : item.isFeatured ? 0.8 : item.contentType === "site_update" ? 0.75 : 0.65,
-        };
+        }, { canonical: item.canonicalUrl, robotsIndex: item.robotsIndex }, global);
+        return entry ? [entry] : [];
       });
     }),
-    loadSourceEntries("cms_pages", () => getPublishedCmsPageEntries(baseUrl)),
+    loadSourceEntries("cms_pages", () => getPublishedPageEntries(global)),
   ]);
 
   const projectEntries = projectsResult.entries;
@@ -185,7 +194,6 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
   );
 
   const allEntries = [
-    ...staticEntries,
     ...projectEntries,
     ...mediaEntries,
     ...topicEntries,

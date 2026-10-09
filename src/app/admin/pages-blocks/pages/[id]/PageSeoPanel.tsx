@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
+
 import { AdminFormPendingFields } from "../../../../../components/admin/ui/AdminFormRuntime";
 
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
@@ -25,6 +27,7 @@ const PAGE_SEO_FIELD_IDS = {
 } satisfies AdminEntitySeoFieldIds;
 
 type PageSeoPanelProps = {
+  seoSettings?: GlobalSeoSettings;
   returnTo?: string;
   pageId: number;
   pageTitle: string;
@@ -98,6 +101,7 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
           <input type="hidden" name="page_image_alt" value="" />
 
           <AdminEntitySeoPanel
+            seoSettings={props.seoSettings}
             id="page-entity-seo-panel"
             entityLabel="الصفحة"
             publicPathPrefix=""

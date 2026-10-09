@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
+
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { adminFormEditHref } from "../../../../../lib/admin/form-runtime";
@@ -93,6 +95,7 @@ type PageBlocksClientProps = {
   assignments: PageBlockAssignmentRow[];
   initialContentTemplates: InitialContentTemplateOptions | null;
   seo: {
+    settings?: GlobalSeoSettings;
     content: string;
     titleSuffix: string;
     resolvedFallback: {
@@ -805,6 +808,7 @@ export default function PageBlocksClient({
             icon: "seo",
             content: (
               <PageSeoPanel
+                seoSettings={seo.settings}
                 returnTo={returnTo}
                 pageId={page.id}
                 pageTitle={page.title}

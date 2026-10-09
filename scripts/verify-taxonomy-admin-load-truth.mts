@@ -1013,6 +1013,9 @@ function topicDependencies(
     "../../../../../components/admin/content/editors/media/MediaContentForm":
       defaultModule(MediaContentForm),
     "../../../../../components/admin/ui": ui,
+    "../../../../../lib/seo/load-global-seo-settings": {
+      loadGlobalSeoSettings: async () => ({ siteName: "Managed fixture" }),
+    },
     "../../../../../lib/admin/content/category-hierarchy": categoryHierarchy,
     "../../../../../lib/admin/content/load-taxonomy-form-data": editorRouteMocks(loader),
     "../../../../../lib/admin/content/content-types": {

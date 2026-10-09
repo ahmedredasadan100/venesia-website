@@ -1,3 +1,4 @@
+import { loadGlobalSeoSettings } from "../../../../../lib/seo/load-global-seo-settings";
 import { notFound } from "next/navigation";
 import AdminNotice from "../../../../../components/admin/AdminNotice";
 import ArticleEditor from "../../../../../components/admin/content/editors/ArticleEditor";
@@ -43,6 +44,7 @@ type PageProps = {
 
 export default async function UnifiedContentEditorPage(props: PageProps) {
   await requireAdminSession();
+  const seoSettings = await loadGlobalSeoSettings();
   const { id } = await props.params;
   const query = await props.searchParams;
   const returnPath =
@@ -71,7 +73,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
 
   if (editorKind === "article") {
     return (
-      <ArticleEditor
+      <ArticleEditor seoSettings={seoSettings}
         topic={topic}
         categories={selectableCategories}
         series={selectableSeries}
@@ -121,7 +123,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       ) : query?.notice ? (
         <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." />
       ) : null}
-      <MediaContentForm
+      <MediaContentForm seoSettings={seoSettings}
         mode="edit"
         contentType={contentType}
         categories={flattenedCategories}

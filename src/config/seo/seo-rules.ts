@@ -6,15 +6,16 @@ export const NO_INDEX_ROBOTS: SeoRobotsDirective = {
   googleBot: {
     index: false,
     follow: false,
-    maxImagePreview: "none",
-    maxSnippet: 0,
-    maxVideoPreview: 0,
+    "max-image-preview": "none",
+    "max-snippet": 0,
+    "max-video-preview": 0,
   },
 };
 
 export const SEO_DEFAULTS = {
-  titleTemplate: "%s | Venesia Developments",
-  fallbackTitle: "فينيسيا للتطوير العقاري | Venesia Developments",
-  fallbackDescription:
-    "فينيسيا للتطوير العقاري شركة تطوير عقاري مصرية توثق تنفيذ مشروعاتها خطوة بخطوة، من الأرض إلى التسليم، بثقة قائمة على الفعل لا الوعود.",
+  fallbackTitle: "الموقع",
+  fallbackDescription: "",
 } as const;
+
+/** Existing public output policy; separate from authored-field validation limits. */
+export const SEO_OUTPUT_LIMITS = { title: 65, description: 165 } as const;

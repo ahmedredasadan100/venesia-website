@@ -9,7 +9,7 @@ import MaintenanceLoginForm from "./MaintenanceLoginForm";
 import { parseMaintenanceCountdownEnd } from "./parse-countdown-end";
 
 export const metadata: Metadata = {
-  title: "الموقع قيد الصيانة | فينيسيا للتطوير العقاري",
+  title: "الموقع قيد الصيانة",
   description: "الموقع قيد الصيانة مؤقتًا. أدخل بيانات الدخول للوصول.",
   robots: NO_INDEX_ROBOTS,
 };

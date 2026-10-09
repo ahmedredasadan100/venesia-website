@@ -95,6 +95,7 @@ export default async function ProjectDetailsPage({
   const pageJsonLd = buildPageJsonLd(
     {
       path: pagePath,
+      canonical: project.seo.canonicalUrl,
       title: project.seo.title || project.arabicName,
       description,
       image: project.seo.ogImage?.src ?? project.heroImage.src,

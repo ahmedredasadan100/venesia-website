@@ -1,3 +1,4 @@
+import { SEO_OUTPUT_LIMITS } from "../../config/seo/seo-rules";
 import {
   GLOBAL_SEO_FIELD_KEYS,
   type GlobalSeoSettings,
@@ -115,11 +116,11 @@ export function validateGlobalSeoSettingsInput(
       issues.push({ field: key, message: "كل مسار Robots يجب أن يبدأ بـ /." });
     }
   }
-  if (input.defaultTitle && input.defaultTitle.length > 65) {
-    issues.push({ field: "defaultTitle", message: "العنوان الافتراضي لا يتجاوز 65 حرفًا." });
+  if (input.defaultTitle && input.defaultTitle.length > SEO_OUTPUT_LIMITS.title) {
+    issues.push({ field: "defaultTitle", message: `العنوان الافتراضي لا يتجاوز ${SEO_OUTPUT_LIMITS.title} حرفًا.` });
   }
-  if (input.defaultDescription && input.defaultDescription.length > 165) {
-    issues.push({ field: "defaultDescription", message: "الوصف الافتراضي لا يتجاوز 165 حرفًا." });
+  if (input.defaultDescription && input.defaultDescription.length > SEO_OUTPUT_LIMITS.description) {
+    issues.push({ field: "defaultDescription", message: `الوصف الافتراضي لا يتجاوز ${SEO_OUTPUT_LIMITS.description} حرفًا.` });
   }
   return issues;
 }

@@ -1,4 +1,3 @@
-import { getSeoRoute } from "../../config/seo/seo-data";
 import { SEO_DEFAULTS } from "../../config/seo/seo-rules";
 import { SEO_SITE } from "../../config/seo/seo-site";
 import type { SeoRobotsDirective } from "../../config/seo/seo-types";
@@ -55,10 +54,31 @@ function buildRobotsDirective(
     googleBot: {
       index,
       follow,
-      maxImagePreview: index ? "large" : "none",
-      maxSnippet: index ? -1 : 0,
-      maxVideoPreview: index ? -1 : 0,
+      "max-image-preview": index ? "large" : "none",
+      "max-snippet": index ? -1 : 0,
+      "max-video-preview": index ? -1 : 0,
     },
+  };
+}
+
+/** URL and indexability authority shared by metadata, JSON-LD and sitemap. */
+export function resolveSeoUrlPolicy(
+  input: Pick<ResolveSeoMetadataInput, "path" | "entitySeo" | "robots">,
+  global: GlobalSeoSettings,
+) {
+  const metadataBase = pickString(global.canonicalBaseUrl, global.siteUrl, SEO_SITE.defaultUrl);
+  return {
+    metadataBase,
+    canonical: buildCanonicalWithBase(
+      pickString(input.entitySeo?.canonical, input.path),
+      metadataBase,
+    ),
+    robots: buildRobotsDirective(
+      input.robots,
+      input.entitySeo?.robotsIndex,
+      input.entitySeo?.robotsFollow,
+      global,
+    ),
   };
 }
 
@@ -66,18 +86,10 @@ export function resolveSeoMetadata(
   input: ResolveSeoMetadataInput,
   global: GlobalSeoSettings,
 ): ResolvedSeoMetadata {
-  const route = getSeoRoute(input.path);
-  const metadataBase = pickString(global.canonicalBaseUrl, global.siteUrl, SEO_SITE.defaultUrl);
+  const { metadataBase, canonical, robots } = resolveSeoUrlPolicy(input, global);
 
-  const hasRouteSeo = Boolean(
-    route?.title ||
-      route?.description ||
-      route?.openGraph?.image ||
-      route?.alternates?.canonical ||
-      route?.robots,
-  );
   const hasExplicitSeoWithoutEntityContract =
-    input.entitySeo === undefined &&
+    !hasEntitySeoData(input.entitySeo) &&
     Boolean(
       input.title?.trim() ||
         input.description?.trim() ||
@@ -88,13 +100,12 @@ export function resolveSeoMetadata(
     );
   const hasLocalSeo =
     hasEntitySeoData(input.entitySeo) ||
-    hasRouteSeo ||
     hasExplicitSeoWithoutEntityContract;
 
   const preferredTitle = pickString(
     input.entitySeo?.title,
   );
-  const fallbackTitle = pickString(input.title, route?.title);
+  const fallbackTitle = pickString(input.title);
   const titleSuffix = getSeoTitleSuffix(global);
   const normalizedPreferredTitle =
     preferredTitle && preferredTitle === global.defaultTitle
@@ -108,7 +119,6 @@ export function resolveSeoMetadata(
     ? pickString(
         input.entitySeo?.description,
         input.description,
-        route?.description,
         global.defaultDescription,
         SEO_DEFAULTS.fallbackDescription,
       )
@@ -125,7 +135,6 @@ export function resolveSeoMetadata(
         entityOgImage,
         input.image,
         input.entitySeo?.image,
-        route?.openGraph?.image,
       )
     : "";
   const image = pickString(
@@ -150,21 +159,6 @@ export function resolveSeoMetadata(
     SEO_SITE.defaultImage,
   );
 
-  const canonical = buildCanonicalWithBase(
-    pickString(
-      input.entitySeo?.canonical,
-      route?.alternates?.canonical,
-      input.path,
-    ),
-    metadataBase,
-  );
-
-  const robots = buildRobotsDirective(
-    input.robots ?? route?.robots,
-    input.entitySeo?.robotsIndex,
-    input.entitySeo?.robotsFollow,
-    global,
-  );
 
   return {
     path: input.path,
@@ -177,7 +171,7 @@ export function resolveSeoMetadata(
     image,
     imageAlt,
     twitterImage,
-    type: input.type ?? route?.openGraph?.type ?? "website",
+    type: input.type ?? "website",
     robots,
     twitterHandle: global.twitterHandle || undefined,
     googleSiteVerification: global.googleSiteVerification || undefined,
@@ -186,7 +180,7 @@ export function resolveSeoMetadata(
     modifiedTime: input.modifiedTime,
     authors: input.authors?.length
       ? input.authors
-      : (input.type ?? route?.openGraph?.type) === "article"
+      : (input.type) === "article"
         ? [global.organizationName]
         : undefined,
   };

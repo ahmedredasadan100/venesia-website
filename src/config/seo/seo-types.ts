@@ -12,9 +12,9 @@ export type SeoRobotsDirective = {
   googleBot?: {
     index: boolean;
     follow: boolean;
-    maxImagePreview?: "none" | "standard" | "large";
-    maxSnippet?: number;
-    maxVideoPreview?: number;
+    "max-image-preview"?: "none" | "standard" | "large";
+    "max-snippet"?: number;
+    "max-video-preview"?: number;
   };
 };
 
@@ -22,17 +22,7 @@ export type SeoOpenGraphType = "website" | "article";
 
 export type SeoRouteConfig = {
   path: string;
-  title: string;
-  description: string;
   kind: SeoRouteKind;
-  alternates?: {
-    canonical?: string;
-  };
-  openGraph?: {
-    type?: SeoOpenGraphType;
-    image?: string;
-  };
-  robots?: SeoRobotsDirective;
   priority?: number;
   changeFrequency?:
     | "always"

@@ -1,3 +1,4 @@
+import { loadGlobalSeoSettings } from "../../../../lib/seo/load-global-seo-settings";
 import {
   AdminActionButton,
   AdminPageContextHeader,
@@ -16,6 +17,7 @@ export default async function NewProjectPage({
   searchParams?: Promise<{ type?: string }>;
 }) {
   await requireAdminSession();
+  const seoSettings = await loadGlobalSeoSettings();
   const query = await searchParams;
   const type: ProjectType = query?.type === "commercial" ? "commercial" : "residential";
   const bundle = await loadEmptyProjectEntry(type);
@@ -29,7 +31,7 @@ export default async function NewProjectPage({
         description="المشاريع / إضافة مشروع جديد — نموذج واحد لإنشاء بيانات المشروع والموقع والنظرة العامة والمخططات والتسليم والوسائط وتحسين محركات البحث."
         actions={<AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>}
       />
-      <ProjectEditForm key={`${type}-new`} bundle={bundle} />
+      <ProjectEditForm key={`${type}-new`} bundle={bundle} seoSettings={seoSettings} />
     </AdminPageExperience>
   );
 }

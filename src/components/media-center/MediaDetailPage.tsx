@@ -59,6 +59,7 @@ export default async function MediaDetailPage({
   const pageJsonLd = buildPageJsonLd(
     {
       path: pagePath,
+      canonical: item.canonicalUrl,
       title: item.seoTitle || item.title,
       description: item.seoDescription || item.excerpt,
       type: "article",

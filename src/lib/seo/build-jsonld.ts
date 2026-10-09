@@ -1,3 +1,5 @@
+import { resolveSeoUrlPolicy } from "./resolve-seo-metadata";
+import { getGlobalSeoDefaults } from "./global-seo-defaults";
 import type { GlobalSeoSettings } from "./global-seo-types";
 import {
   getFallbackGlobalOrganizationIdentity,
@@ -9,7 +11,7 @@ import {
 } from "./build-breadcrumbs";
 import { buildFaqSchema, type FaqSchemaItem } from "./build-faq-schema";
 import type { JsonLdObject, JsonLdValue } from "./jsonld-types";
-import { absoluteAssetUrl, absoluteUrlWithBase } from "./seo-utils";
+import { absoluteAssetUrl } from "./seo-utils";
 
 export function buildOrganizationSchema(global?: GlobalSeoSettings): JsonLdObject {
   const identity = global
@@ -97,6 +99,7 @@ export function buildWebsiteSchema(global?: GlobalSeoSettings): JsonLdObject {
 export function buildArticleSchema(
   input: {
     path: string;
+    canonical?: string | null;
     title: string;
     description: string;
     image?: string;
@@ -138,7 +141,7 @@ export function buildArticleSchema(
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": absoluteUrlWithBase(input.path, baseUrl),
+      "@id": resolveSeoUrlPolicy({ path: input.path, entitySeo: { canonical: input.canonical } }, global ?? getGlobalSeoDefaults()).canonical,
     },
   };
 }
@@ -146,6 +149,7 @@ export function buildArticleSchema(
 export function buildProjectSchema(
   input: {
     path: string;
+    canonical?: string | null;
     name: string;
     description: string;
     image?: string;
@@ -160,7 +164,7 @@ export function buildProjectSchema(
     "@type": "RealEstateListing",
     name: input.name,
     description: input.description,
-    url: absoluteUrlWithBase(input.path, baseUrl),
+    url: resolveSeoUrlPolicy({ path: input.path, entitySeo: { canonical: input.canonical } }, global ?? getGlobalSeoDefaults()).canonical,
   };
 
   if (input.image) {
@@ -168,9 +172,12 @@ export function buildProjectSchema(
   }
 
   if (input.locationLabel) {
-    schema.address = {
-      "@type": "PostalAddress",
-      addressLocality: input.locationLabel,
+    schema.contentLocation = {
+      "@type": "Place",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: input.locationLabel,
+      },
     };
   }
 
@@ -180,6 +187,7 @@ export function buildProjectSchema(
 export function buildPageJsonLd(
   input: {
     path: string;
+    canonical?: string | null;
     title: string;
     description: string;
     type?: "website" | "article";
@@ -201,7 +209,11 @@ export function buildPageJsonLd(
   const schemas: JsonLdValue[] = [];
 
   if (input.breadcrumbs?.length) {
-    schemas.push(buildBreadcrumbSchema(input.breadcrumbs, baseUrl));
+    const canonical = resolveSeoUrlPolicy({ path: input.path, entitySeo: { canonical: input.canonical } }, global ?? getGlobalSeoDefaults()).canonical;
+    schemas.push(buildBreadcrumbSchema(
+      input.breadcrumbs.map((item, index) => index === input.breadcrumbs!.length - 1 ? { ...item, path: canonical } : item),
+      baseUrl,
+    ));
   }
 
   if (input.type === "article") {
@@ -209,6 +221,7 @@ export function buildPageJsonLd(
       buildArticleSchema(
         {
           path: input.path,
+          canonical: input.canonical,
           title: input.title,
           description: input.description,
           image: input.image,
@@ -225,6 +238,7 @@ export function buildPageJsonLd(
       buildProjectSchema(
         {
           path: input.path,
+          canonical: input.canonical,
           name: input.project.name,
           description: input.project.description,
           image: input.project.image,

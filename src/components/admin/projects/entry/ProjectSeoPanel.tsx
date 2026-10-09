@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../lib/seo/global-seo-types";
+
 import AdminEntitySeoPanel, {
   type AdminEntitySeoFieldIds,
   type AdminEntitySeoFieldNames,
@@ -25,9 +27,11 @@ const PROJECT_SEO_FIELD_IDS = {
   robotsFollowFocusTarget: "project-robots-follow",
 } satisfies AdminEntitySeoFieldIds;
 
-export default function ProjectSeoPanel({ project }: { project: ProjectEntryRoot }) {
+export default function ProjectSeoPanel({ project, seoSettings }: { project: ProjectEntryRoot; seoSettings?: GlobalSeoSettings }) {
   return (
     <AdminEntitySeoPanel
+      seoSettings={seoSettings}
+      previewDescription={{ fieldName: "short_description", value: project.short_description }}
       id="project-seo-panel"
       entityLabel="المشروع"
       publicPathPrefix="/projects"

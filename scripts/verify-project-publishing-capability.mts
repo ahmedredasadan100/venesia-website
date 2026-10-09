@@ -205,7 +205,7 @@ check(
   "sitemap consumes published rows with authoritative timestamps, crawl policy, and diagnostic canonical overrides",
   sitemap.includes("loadPublishedProjectSitemapRows") &&
     sitemap.includes("safeDate(project.updatedAt)") &&
-    sitemap.includes("project.robotsIndex !== false") &&
+    sitemap.includes("resolveSitemapCandidate") && sitemap.includes("robotsIndex: project.robotsIndex") &&
     sitemap.includes("canonicalOverride: project.canonicalUrl") &&
     publicLoader.includes('.select("id,slug,updated_at,canonical_url,robots_index")') &&
     publicLoader.includes('.eq("publication_status", "published")') &&

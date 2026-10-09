@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
+
 import { createAdminFormErrorState } from "../../../../../lib/admin/form-runtime";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
 import {
@@ -63,6 +65,7 @@ export type MediaContentFormValues = {
 };
 
 type MediaContentFormProps = {
+  seoSettings?: GlobalSeoSettings;
   mode: "create" | "edit";
   values?: MediaContentFormValues | null;
   contentType: MediaEditableContentType;
@@ -104,6 +107,7 @@ function getGalleryDefaults(payload?: MediaTopicPayload | null) {
 }
 
 export default function MediaContentForm({
+  seoSettings,
   mode,
   values,
   contentType,
@@ -288,7 +292,7 @@ export default function MediaContentForm({
           "استخدم عقد Entity SEO الموحد ومعايناته ومسار التصحيح نفسه.",
         icon: "seo" as const,
         content: (
-          <MediaEntitySeoPanel
+          <MediaEntitySeoPanel seoSettings={seoSettings}
             contentType={contentType}
             values={values}
             controlledValues={{

@@ -3,11 +3,10 @@ import type { Metadata } from "next";
 import { PWA_ICON_PATHS } from "../../config/pwa";
 import type { ResolvedSeoMetadata } from "./entity-seo-types";
 import { buildOpenGraph } from "./build-open-graph";
-import { cleanText, trimToSeoLength } from "./seo-utils";
+import { presentSeoText } from "./seo-utils";
 
 export function buildMetadataFromResolved(resolved: ResolvedSeoMetadata): Metadata {
-  const title = trimToSeoLength(resolved.title, 65);
-  const description = trimToSeoLength(resolved.description, 165);
+  const { title, description } = presentSeoText(resolved);
 
   const verification: Metadata["verification"] = {};
   if (resolved.googleSiteVerification) {
@@ -21,8 +20,8 @@ export function buildMetadataFromResolved(resolved: ResolvedSeoMetadata): Metada
 
   return {
     metadataBase: new URL(resolved.metadataBase),
-    title: cleanText(title),
-    description: cleanText(description),
+    title,
+    description,
     keywords: resolved.keywords?.length ? resolved.keywords : undefined,
     applicationName: resolved.siteName,
     generator: "Next.js",
@@ -33,6 +32,7 @@ export function buildMetadataFromResolved(resolved: ResolvedSeoMetadata): Metada
     robots: resolved.robots,
     openGraph: buildOpenGraph({
       path: resolved.path,
+      canonical: resolved.canonical,
       title,
       description,
       image: resolved.image,
