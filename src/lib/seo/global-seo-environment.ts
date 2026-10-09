@@ -13,8 +13,8 @@ export const GLOBAL_SEO_ENVIRONMENT_KEYS: Record<GlobalSeoFieldKey, string> = {
   defaultTwitterImage: "SEO_DEFAULT_TWITTER_IMAGE",
   defaultRobotsIndex: "SEO_DEFAULT_ROBOTS_INDEX",
   defaultRobotsFollow: "SEO_DEFAULT_ROBOTS_FOLLOW",
-  siteUrl: "NEXT_PUBLIC_SITE_URL",
-  canonicalBaseUrl: "SEO_CANONICAL_BASE_URL | NEXT_PUBLIC_SITE_URL",
+  siteUrl: "NEXT_PUBLIC_SITE_URL | VERCEL_PROJECT_PRODUCTION_URL",
+  canonicalBaseUrl: "SEO_CANONICAL_BASE_URL | NEXT_PUBLIC_SITE_URL | VERCEL_PROJECT_PRODUCTION_URL",
   organizationName: "SEO_ORGANIZATION_NAME",
   organizationAlternateName: "SEO_ORGANIZATION_ALTERNATE_NAME",
   organizationLegalName: "SEO_ORGANIZATION_LEGAL_NAME",
@@ -82,7 +82,8 @@ function envSocialLinks(key: string): GlobalSeoSocialLink[] | undefined {
 }
 
 export function readGlobalSeoEnvironmentSettings(): GlobalSeoSettingsInput {
-  const siteUrl = envString("NEXT_PUBLIC_SITE_URL")?.replace(/\/$/, "");
+  const siteUrl = (envString("NEXT_PUBLIC_SITE_URL")
+    || (envString("VERCEL_PROJECT_PRODUCTION_URL") ? `https://${envString("VERCEL_PROJECT_PRODUCTION_URL")}` : undefined))?.replace(/\/$/, "");
   const canonicalBaseUrl =
     envString("SEO_CANONICAL_BASE_URL")?.replace(/\/$/, "") || siteUrl;
 

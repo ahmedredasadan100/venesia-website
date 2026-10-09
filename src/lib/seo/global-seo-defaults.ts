@@ -2,6 +2,9 @@ import { SEO_DEFAULTS } from "../../config/seo/seo-rules";
 import { SEO_SITE } from "../../config/seo/seo-site";
 import type { GlobalSeoSettings } from "./global-seo-types";
 
+/** Emergency defaults after valid DB and environment values are exhausted.
+ * No business identity, marketing copy, contact details or claims live here.
+ */
 export function getGlobalSeoDefaults(): GlobalSeoSettings {
   const siteUrl = SEO_SITE.defaultUrl;
 
@@ -23,21 +26,14 @@ export function getGlobalSeoDefaults(): GlobalSeoSettings {
     organizationDescription: SEO_DEFAULTS.fallbackDescription,
     organizationLogo: SEO_SITE.logo,
     organizationPhone: SEO_SITE.contact.phone,
-    organizationEmail: "info@venesia-developments.com",
+    organizationEmail: "",
     organizationAddress: "",
     organizationAddressLocality: SEO_SITE.city,
-    organizationAddressRegion: "Cairo Governorate",
+    organizationAddressRegion: "",
     organizationPostalCode: "",
     organizationAddressCountry: SEO_SITE.country,
     organizationAreaServed: SEO_SITE.contact.areaServed,
-    organizationKnowsAbout: [
-      "Real estate development company in Egypt",
-      "New Cairo real estate developer",
-      "Residential and commercial projects",
-      "Construction progress documentation",
-      "Owned land and execution transparency",
-      "Project updates from construction sites",
-    ],
+    organizationKnowsAbout: [],
     organizationSocialLinks: [],
     twitterHandle: SEO_SITE.twitterHandle,
     googleSiteVerification: "",

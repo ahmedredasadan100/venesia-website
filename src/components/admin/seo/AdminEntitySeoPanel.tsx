@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../lib/seo/global-seo-types";
+
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
@@ -26,6 +28,11 @@ import {
 } from "../ui/AdminFormRuntime";
 import AdminSingleOpenAccordion from "../ui/AdminSingleOpenAccordion";
 import { stripSeoTitleSuffix } from "../../../lib/seo/seo-utils";
+import { getSeoRoute } from "../../../config/seo/seo-data";
+import { resolveSeoMetadata } from "../../../lib/seo/resolve-seo-metadata";
+import { getGlobalSeoDefaults } from "../../../lib/seo/global-seo-defaults";
+import { getSeoTitleSuffix, presentSeoText } from "../../../lib/seo/seo-utils";
+import { stripHtml } from "../../../lib/rich-text/html-utils";
 import { hasEntitySeoData } from "../../../lib/seo/entity-seo-types";
 
 export const ADMIN_ENTITY_SEO_TERMINOLOGY = {
@@ -90,6 +97,8 @@ export type AdminEntitySeoAnalysisExtension<TState> = {
 };
 
 export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
+  seoSettings?: GlobalSeoSettings;
+  previewDescription?: { fieldName: string; value: string };
   id?: string;
   entityLabel: string;
   publicPathPrefix: string;
@@ -410,6 +419,8 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   fieldNames,
   fieldIds,
   social,
+  seoSettings,
+  previewDescription,
   seoTitleSuffix = "",
   resolvedFallback,
   initial,
@@ -418,6 +429,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   onControlledValueChange,
   analysisExtension,
 }: AdminEntitySeoPanelProps<TAnalysisState>) {
+  const [publicDescription, setPublicDescription] = useState(previewDescription?.value);
   const initialSeoTitleSegment = stripSeoTitleSuffix(
     initial.seoTitle,
     seoTitleSuffix,
@@ -438,6 +450,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     if (!(form instanceof HTMLFormElement)) return;
 
     const read = () => {
+      if (previewDescription) setPublicDescription(readValue(form, previewDescription.fieldName, previewDescription.value));
       setObservedLive({
         profile: initial.profile,
         title: readValue(form, sourceFieldNames.title, initial.title),
@@ -502,7 +515,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       form.ownerDocument.removeEventListener("input", observe);
       form.ownerDocument.removeEventListener("change", observe);
     };
-  }, [analysisExtension, fieldNames, id, initial, initialSeoTitleSegment, social, sourceFieldNames]);
+  }, [analysisExtension, fieldNames, id, initial, initialSeoTitleSegment, social, sourceFieldNames, previewDescription]);
 
   const live = useMemo(
     () =>
@@ -552,7 +565,6 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     ],
   );
   const effectiveSeoTitle = analysisInput.seoTitle;
-  const effectiveSeoDescription = analysisInput.seoDescription;
   const analysis = useMemo(
     () => analyzeEntitySeo(analysisInput),
     [analysisInput],
@@ -562,12 +574,25 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   const previewImageAlt = live.ogImage.trim()
     ? live.ogImageAlt.trim()
     : live.imageAlt.trim() || resolvedFallback?.imageAlt || "";
-  const title = effectiveSeoTitle || `عنوان ${entityLabel}`;
-  const description =
-    effectiveSeoDescription ||
-    `سيظهر وصف ${entityLabel} هنا بعد إدخاله.`;
   const publicPath = `${publicPathPrefix}/${live.slug.trim() || slugPlaceholder}`;
-  const canonical = live.canonicalUrl.trim() || publicPath;
+  const settings = seoSettings ?? getGlobalSeoDefaults();
+  const previewSuffix = getSeoTitleSuffix(settings);
+  const resolvedPreview = resolveSeoMetadata({
+    path: publicPath,
+    entitySeo: {
+      title: live.seoTitle, description: live.seoDescription,
+      keywords: live.seoKeywords, focusKeyword: live.focusKeyword,
+      canonical: live.canonicalUrl, robotsIndex: live.robotsIndex, robotsFollow: live.robotsFollow,
+      ogImage: live.ogImage, ogImageAlt: live.ogImageAlt,
+      image: live.image, imageAlt: live.imageAlt,
+    },
+    // Core Pages own route fallbacks; entity details own their authored source copy.
+    ...(publicPathPrefix
+      ? { title: live.seoTitle || live.title, description: live.seoDescription || (publicDescription !== undefined ? stripHtml(publicDescription) : live.description) }
+      : getSeoRoute(publicPath) ? {} : { title: live.title }),
+  }, settings);
+  const { title, description } = presentSeoText(resolvedPreview);
+  const canonical = resolvedPreview.canonical;
 
   const seoBasicsContent = (
     <section
@@ -579,7 +604,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           id={fieldIds.seoTitle}
           name={fieldNames.seoTitle}
           label={
-            seoTitleSuffix
+            previewSuffix
               ? "عنوان صفحة محركات البحث (بدون اسم الموقع)"
               : ADMIN_ENTITY_SEO_TERMINOLOGY.seoTitle
           }
@@ -591,9 +616,9 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           liveValue={effectiveSeoTitle}
           standard={SEO_LENGTH_STANDARDS.title}
         />
-        {seoTitleSuffix ? (
+        {previewSuffix ? (
           <p className="-mt-3 text-xs leading-6 text-white/42" data-admin-seo-title-template>
-            يُضاف تلقائيًا: <span dir="auto" className="text-white/60">{seoTitleSuffix}</span>
+            يُضاف تلقائيًا: <span dir="auto" className="text-white/60">{previewSuffix}</span>
           </p>
         ) : null}
         <SeoTextField

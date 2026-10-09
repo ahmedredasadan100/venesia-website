@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../lib/seo/global-seo-types";
+
 import {
   AdminActionButton,
   AdminPageContextHeader,
@@ -27,10 +29,12 @@ import {
 } from "../../../../lib/admin/content/category-hierarchy";
 
 export default function ArticleCreateEditor({
+  seoSettings,
   categories,
   series,
   errorMessage,
 }: {
+  seoSettings?: GlobalSeoSettings;
   categories: ArticleEditorCategory[];
   series: ArticleEditorSeries[];
   errorMessage?: string | null;
@@ -103,7 +107,7 @@ export default function ArticleCreateEditor({
         sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
         icon: "seo" as const,
         content: (
-          <SeoPanel
+          <SeoPanel seoSettings={seoSettings}
             title=""
             excerpt=""
             slug=""

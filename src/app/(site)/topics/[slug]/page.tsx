@@ -108,6 +108,7 @@ export default async function TopicDetailsPage({
   const pageJsonLd = buildPageJsonLd(
     {
       path: pagePath,
+      canonical: topic.canonicalUrl,
       title: topic.seoTitle || topic.title,
       description: topic.seoDescription || topic.excerpt,
       type: "article",

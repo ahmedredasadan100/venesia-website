@@ -1,3 +1,4 @@
+import { loadGlobalSeoSettings } from "../../../../lib/seo/load-global-seo-settings";
 import { notFound } from "next/navigation";
 
 import AdminNotice from "../../../../components/admin/AdminNotice";
@@ -26,6 +27,7 @@ export default async function ProjectEditPage({
   searchParams?: Promise<{ return_to?: string | string[] }>;
 }) {
   await requireAdminSession();
+  const seoSettings = await loadGlobalSeoSettings();
   const { id } = await params;
   if (!/^\d+$/.test(id)) notFound();
 
@@ -76,7 +78,7 @@ export default async function ProjectEditPage({
           </>
         }
       />
-      <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} closeHref={closeHref} />
+      <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} closeHref={closeHref} seoSettings={seoSettings} />
     </AdminPageExperience>
   );
 }

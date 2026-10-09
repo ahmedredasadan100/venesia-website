@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../lib/seo/global-seo-types";
+
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AdminFormRuntimeHandle } from "../../../components/admin/ui/AdminFormRuntime";
 
@@ -521,9 +523,11 @@ function DeliveryTab({ bundle }: { bundle: ProjectEntryBundle }) {
 }
 
 export default function ProjectEditForm({
+  seoSettings,
   bundle: initialBundle,
   closeHref: requestedCloseHref,
 }: {
+  seoSettings?: GlobalSeoSettings;
   bundle: ProjectEntryBundle;
   closeHref?: string;
 }) {
@@ -727,7 +731,7 @@ export default function ProjectEditForm({
       sectionDescription:
         "بيانات الظهور في البحث والمشاركة الاجتماعية والتحليل المباشر.",
       icon: "seo" as const,
-      content: <ProjectSeoPanel project={bundle.project} />,
+      content: <ProjectSeoPanel seoSettings={seoSettings} project={bundle.project} />,
     },
     {
       id: PROJECT_ENTRY_TAB_IDS.review,
@@ -740,7 +744,7 @@ export default function ProjectEditForm({
         <ProjectPublishChecklistPanel formId={formId} initial={bundle} />
       ),
     },
-  ], [bundle, formId, mode]);
+  ], [bundle, formId, mode, seoSettings]);
 
   return (
     <AdminFormRuntime

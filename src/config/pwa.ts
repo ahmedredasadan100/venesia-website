@@ -12,9 +12,6 @@ export const PWA_ICON_PATHS = {
 } as const;
 
 export const PWA_CONFIG = {
-  name: SEO_SITE.name,
-  shortName: "Venesia",
-  description: SEO_SITE.tagline,
   startUrl: "/",
   scope: "/",
   display: "standalone" as const,

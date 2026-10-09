@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
+
 import { ENTITY_SEO_FIELD_NAMES } from "../../../../../lib/seo/entity-seo-types";
 import { resolvePublicContentBasePath } from "../../../../../lib/content/public-content-path";
 import AdminEntitySeoPanel, {
@@ -44,11 +46,13 @@ export type MediaEntitySeoValues = {
 };
 
 export default function MediaEntitySeoPanel({
+  seoSettings,
   contentType,
   values,
   controlledValues,
   onControlledValueChange,
 }: {
+  seoSettings?: GlobalSeoSettings;
   contentType: MediaEditableContentType;
   values?: MediaEntitySeoValues | null;
   controlledValues?: {
@@ -73,6 +77,7 @@ export default function MediaEntitySeoPanel({
 
   return (
     <AdminEntitySeoPanel
+      seoSettings={seoSettings}
       id="media-entity-seo-panel"
       entityLabel={getContentTypeLabel(contentType)}
       publicPathPrefix={resolvePublicContentBasePath(contentType)}

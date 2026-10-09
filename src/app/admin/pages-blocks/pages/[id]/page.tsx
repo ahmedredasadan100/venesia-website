@@ -141,6 +141,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       assignments={assignmentsData.assignments}
       initialContentTemplates={assignmentsData.initialContentTemplates}
       seo={{
+        settings: globalSeo,
         content: assignmentsData.seoContent,
         titleSuffix: getSeoTitleSuffix(globalSeo),
         resolvedFallback: {

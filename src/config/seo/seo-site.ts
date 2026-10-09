@@ -1,22 +1,22 @@
+/** Technical rendering defaults only. Managed identity comes from seo.global. */
 export const SEO_SITE = {
-  name: "Venesia Developments",
-  arabicName: "فينيسيا للتطوير العقاري",
-  legalName: "Venesia Developments",
-  tagline: "الثقة مش وعد… الثقة فعل.",
+  name: "الموقع",
+  arabicName: "",
+  legalName: "",
+  tagline: "",
   defaultLocale: "ar_EG",
   language: "ar",
   direction: "rtl",
-  country: "EG",
-  city: "New Cairo",
-  defaultUrl:
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://www.venesia-developments.net",
+  country: "",
+  city: "",
+  // Valid loopback safety base only. Deployment origins resolve through the validated environment owner.
+  defaultUrl: "http://localhost:3000",
   defaultImage: "",
   logo: "/logo.png",
   themeColor: "#0B0B0B",
   twitterHandle: "",
   contact: {
-    phone: "15875",
-    areaServed: "Egypt",
+    phone: "",
+    areaServed: "",
   },
 } as const;

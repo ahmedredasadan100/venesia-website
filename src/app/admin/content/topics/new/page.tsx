@@ -1,3 +1,4 @@
+import { loadGlobalSeoSettings } from "../../../../../lib/seo/load-global-seo-settings";
 import ArticleCreateEditor from "../../../../../components/admin/content/editors/ArticleCreateEditor";
 import {
   AdminActionButton,
@@ -26,6 +27,7 @@ export default async function NewUnifiedContentPage({
   searchParams?: Promise<SearchParams>;
 }) {
   await requireAdminSession();
+  const seoSettings = await loadGlobalSeoSettings();
   const query = await searchParams;
   const contentType = isContentType(query?.type) ? query.type : "article";
 
@@ -36,7 +38,7 @@ export default async function NewUnifiedContentPage({
 
   if (contentType === "article") {
     return (
-      <ArticleCreateEditor
+      <ArticleCreateEditor seoSettings={seoSettings}
         categories={categories}
         series={series}
         errorMessage={errorMessage}
@@ -63,7 +65,7 @@ export default async function NewUnifiedContentPage({
           </>
         }
       />
-      <MediaContentForm
+      <MediaContentForm seoSettings={seoSettings}
         mode="create"
         contentType={contentType}
         categories={flattenedCategories}

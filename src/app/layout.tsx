@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import { PWA_CONFIG } from "../config/pwa";
+import { resolveGlobalOrganizationIdentity } from "../lib/seo/resolve-global-organization-identity";
 import { SEO_SITE } from "../config/seo/seo-site";
 import { loadResolvedGlobalSeo } from "../lib/seo/generate-public-metadata";
 import "./globals.css";
@@ -50,7 +50,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(globalSeo.canonicalBaseUrl || globalSeo.siteUrl || SEO_SITE.defaultUrl),
     appleWebApp: {
       capable: true,
-      title: PWA_CONFIG.shortName,
+      title: resolveGlobalOrganizationIdentity(globalSeo).mobileShortName,
       statusBarStyle: "black-translucent",
     },
   };

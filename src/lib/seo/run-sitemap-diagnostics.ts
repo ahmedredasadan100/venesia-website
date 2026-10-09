@@ -1,3 +1,4 @@
+import { loadGlobalSeoSettings } from "./load-global-seo-settings";
 import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -5,6 +6,7 @@ import {
   countEntriesBySource,
   generateSitemapEntries,
   resolveCanonicalBaseUrl,
+  resolveSitemapCandidate,
 } from "./generate-sitemap-entries";
 import type {
   SitemapCheckItem,
@@ -124,18 +126,19 @@ async function loadExcludedCounts(): Promise<SitemapExcludedCounts> {
 
 async function findMissingPublishedRecords(entries: SitemapEntry[]) {
   const sitemapPaths = new Set(entries.map((entry) => entry.path));
+  const global = await loadGlobalSeoSettings();
   const missing: string[] = [];
 
   const { data: projects, error: projectsError } = await getSupabaseAdmin()
     .from("projects")
-    .select("slug,robots_index")
+    .select("slug,robots_index,canonical_url")
     .eq("publication_status", "published")
     .not("slug", "is", null);
 
   if (projectsError) throw new Error(projectsError.message);
   for (const project of projects ?? []) {
-    if (project.robots_index === false) continue;
     const path = getProjectHref(project);
+    if (!resolveSitemapCandidate({ path, url: "", source: "projects" }, { canonical: project.canonical_url, robotsIndex: project.robots_index }, global)) continue;
     if (!sitemapPaths.has(path)) {
       missing.push(path);
     }
@@ -143,7 +146,7 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
 
   const { data: topics, error: topicsError } = await getSupabaseAdmin()
     .from("topics")
-    .select("slug,robots_index")
+    .select("slug,robots_index,canonical_url")
     .eq("content_type", "article")
     .eq("status", "published")
     .is("deleted_at", null)
@@ -151,8 +154,8 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
 
   if (topicsError) throw new Error(topicsError.message);
   for (const topic of topics ?? []) {
-    if (topic.robots_index === false) continue;
     const path = resolvePublicContentPath("article", topic.slug);
+    if (!resolveSitemapCandidate({ path, url: "", source: "articles" }, { canonical: topic.canonical_url, robotsIndex: topic.robots_index }, global)) continue;
     if (!sitemapPaths.has(path)) {
       missing.push(path);
     }
@@ -168,7 +171,7 @@ async function findUnpublishedSitemapTargets(entries: SitemapEntry[]) {
   const topicEntries = entries.filter(
     (entry) => (entry.source === "articles" || entry.source === "media") && entry.entityId,
   );
-  const pageEntries = entries.filter((entry) => entry.source === "cms_pages" && entry.entityId);
+  const pageEntries = entries.filter((entry) => ["cms_pages", "static_pages", "track_your_project"].includes(entry.source) && entry.entityId);
   const supabase = getSupabaseAdmin();
   const [projects, topics, pages] = await Promise.all([
     projectEntries.length

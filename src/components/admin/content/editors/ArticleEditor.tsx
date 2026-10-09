@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../../../lib/seo/global-seo-types";
+
 import {
   AdminActionButton,
   AdminEntityPreviewActions,
@@ -96,12 +98,14 @@ function getFaq(value: unknown): TopicFaqItem[] {
 }
 
 export default function ArticleEditor({
+  seoSettings,
   topic,
   categories,
   series,
   errorMessage,
   returnPath = "/admin/content/topics",
 }: {
+  seoSettings?: GlobalSeoSettings;
   topic: ArticleEditorTopic;
   categories: ArticleEditorCategory[];
   series: ArticleEditorSeries[];
@@ -214,7 +218,7 @@ export default function ArticleEditor({
         sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
         icon: "seo" as const,
         content: (
-          <SeoPanel
+          <SeoPanel seoSettings={seoSettings}
             title={topic.title ?? ""}
             excerpt={topic.excerpt ?? ""}
             slug={topic.slug ?? ""}

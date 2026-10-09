@@ -3,10 +3,9 @@ import { getGlobalSeoDefaults } from "./global-seo-defaults";
 import type { GlobalSeoSettings, GlobalSeoSocialLink } from "./global-seo-types";
 
 /**
- * English navbar tagline — no dedicated field in site_settings.seo.global.
- * Explicit code fallback when global settings do not provide a short tagline.
+ * An absent managed tagline stays absent; emergency rendering must not invent copy.
  */
-export const NAVBAR_TAGLINE_FALLBACK = "Trust Built On Ground";
+export const NAVBAR_TAGLINE_FALLBACK = "";
 
 export type GlobalOrganizationIdentity = {
   displayName: string;
@@ -40,7 +39,7 @@ function pickNonEmpty(...values: Array<string | undefined | null>): string {
 
 function deriveMobileShortName(displayName: string): string {
   const firstWord = displayName.trim().split(/\s+/)[0];
-  return firstWord || SEO_SITE.name.split(/\s+/)[0] || "Venesia";
+  return firstWord || SEO_SITE.name.split(/\s+/)[0] || "الموقع";
 }
 
 /**

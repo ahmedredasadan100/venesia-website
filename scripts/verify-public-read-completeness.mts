@@ -23,7 +23,7 @@ modules._load = (request, parent, main) => {
   if (request === "next/cache") return { unstable_cache: (callback: unknown) => callback };
   if (request.endsWith("/cache/public-cache-generation")) return { cachePublicRead: (callback: unknown) => callback };
   if (request.endsWith("/supabase-admin")) return { getSupabaseAdmin: () => currentClient };
-  if (request.endsWith("/load-global-seo-settings")) return { loadGlobalSeoSettings: async () => ({ canonicalBaseUrl: "https://verification.invalid" }) };
+  if (request.endsWith("/load-global-seo-settings")) return { loadGlobalSeoSettings: async () => ({ canonicalBaseUrl: "https://verification.invalid", defaultRobotsIndex: true, defaultRobotsFollow: true }) };
   if (request.endsWith("/PublicMediaImage")) return { __esModule: true, default: () => null };
   if (request === "next/link") return { __esModule: true, default: "a" };
   return originalLoad(request, parent, main);

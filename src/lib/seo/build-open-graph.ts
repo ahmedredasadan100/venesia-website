@@ -4,6 +4,7 @@ import { absoluteAssetUrl, absoluteUrlWithBase } from "./seo-utils";
 
 export function buildOpenGraph(input: {
   path: string;
+  canonical?: string;
   title: string;
   description: string;
   image?: string;
@@ -24,7 +25,7 @@ export function buildOpenGraph(input: {
   const base = {
     title: input.title,
     description: input.description,
-    url: absoluteUrlWithBase(input.path, metadataBase),
+    url: input.canonical ?? absoluteUrlWithBase(input.path, metadataBase),
     siteName,
     locale: SEO_SITE.defaultLocale,
     type,

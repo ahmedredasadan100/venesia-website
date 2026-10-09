@@ -37,3 +37,56 @@ const metadata = buildMetadataFromResolved({ ...identity, canonical: "https://ex
 assert.deepEqual(metadata.openGraph?.images, []);
 assert.deepEqual(metadata.twitter?.images, []);
 console.log("PASS absent image metadata remains absent; explicitly authored managed images remain intact.");
+
+// Every configurable field has the same real DB -> Environment -> safety contract.
+const { resolveGlobalSeoEffectiveContract } = await jiti.import<typeof import("../src/lib/seo/resolve-global-seo-effective")>("../src/lib/seo/resolve-global-seo-effective.ts");
+const { GLOBAL_SEO_FIELD_KEYS } = await jiti.import<typeof import("../src/lib/seo/global-seo-types")>("../src/lib/seo/global-seo-types.ts");
+const { GLOBAL_SEO_ENVIRONMENT_KEYS } = await jiti.import<typeof import("../src/lib/seo/global-seo-environment")>("../src/lib/seo/global-seo-environment.ts");
+const { SEO_ROUTES } = await jiti.import<typeof import("../src/config/seo/seo-routes")>("../src/config/seo/seo-routes.ts");
+const { getGlobalSeoDefaults } = await jiti.import<typeof import("../src/lib/seo/global-seo-defaults")>("../src/lib/seo/global-seo-defaults.ts");
+const envKeys = [...new Set(Object.values(GLOBAL_SEO_ENVIRONMENT_KEYS).flatMap(value => value.split(" | ")))];
+const savedEnvironment = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+try {
+  for (const key of envKeys) delete process.env[key];
+  for (const key of GLOBAL_SEO_FIELD_KEYS) {
+    const sample = key === "defaultRobotsIndex" || key === "defaultRobotsFollow" ? false
+      : key === "organizationSocialLinks" ? [{ label: "Managed", href: "https://managed.test/social" }]
+      : key === "organizationKnowsAbout" ? ["Managed subject"]
+      : key === "robotsTxtAllow" || key === "robotsTxtDisallow" ? ["/managed/"]
+      : key === "siteUrl" || key === "canonicalBaseUrl" ? "https://managed.test"
+      : key === "organizationEmail" ? "managed@example.test"
+      : ["defaultOgImage", "defaultTwitterImage", "organizationLogo"].includes(key) ? "https://managed.test/image.png"
+      : "Managed value";
+    const envKey = GLOBAL_SEO_ENVIRONMENT_KEYS[key].split(" | ")[0];
+    process.env[envKey] = Array.isArray(sample) ? key === "organizationSocialLinks" ? JSON.stringify(sample) : sample.join("\n") : String(sample);
+    const environmental = resolveGlobalSeoEffectiveContract({ databaseStatus: "missing" });
+    assert.equal(environmental.fields[key].source, "environment", key);
+    assert.deepEqual(environmental.settings[key], sample, key);
+    const database = resolveGlobalSeoEffectiveContract({ databaseStatus: "loaded", databaseValue: { [key]: sample } });
+    assert.equal(database.fields[key].source, "database", key);
+    assert.deepEqual(database.settings[key], sample, key);
+    delete process.env[envKey];
+    assert.equal(resolveGlobalSeoEffectiveContract({ databaseStatus: "missing" }).fields[key].source, "code_fallback", key);
+  }
+  process.env.NEXT_PUBLIC_SITE_URL = "not a URL";
+  const invalidOrigin = resolveGlobalSeoEffectiveContract({ databaseStatus: "missing" });
+  assert.equal(invalidOrigin.fields.siteUrl.source, "code_fallback");
+  assert.equal(invalidOrigin.settings.siteUrl, "http://localhost:3000");
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+  process.env.VERCEL_PROJECT_PRODUCTION_URL = "production-origin.test";
+  const deploymentOrigin = resolveGlobalSeoEffectiveContract({ databaseStatus: "missing" });
+  assert.equal(deploymentOrigin.settings.canonicalBaseUrl, "https://production-origin.test");
+  assert.equal(deploymentOrigin.fields.canonicalBaseUrl.source, "environment");
+} finally {
+  for (const [key, value] of Object.entries(savedEnvironment)) {
+    if (value === undefined) delete process.env[key]; else process.env[key] = value;
+  }
+}
+const safety = getGlobalSeoDefaults();
+assert.equal(safety.defaultTitle, "الموقع");
+for (const key of ["defaultDescription", "organizationAlternateName", "organizationLegalName", "organizationTagline", "organizationDescription", "organizationPhone", "organizationEmail", "organizationAddress", "organizationAddressLocality", "organizationAddressRegion", "organizationAddressCountry", "organizationAreaServed", "twitterHandle"] as const) assert.equal(safety[key], "", key + " cannot invent manageable business copy");
+assert.deepEqual(safety.organizationKnowsAbout, []);
+for (const route of SEO_ROUTES) assert.ok(Object.keys(route).every(key => ["path", "kind", "priority", "changeFrequency"].includes(key)), "Registry cannot own managed SEO fields");
+assert.equal(read("src/config/pwa.ts").includes('shortName: "Venesia"'), false);
+assert.ok(read("src/app/manifest.ts").includes("resolveGlobalOrganizationIdentity(await loadResolvedGlobalSeo())"));
+console.log("PASS all managed SEO fields resolve DB -> Environment -> technical safety; route registry owns no business values and installation metadata adopts Global SEO.");

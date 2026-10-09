@@ -162,10 +162,10 @@ const emptyLocalPageSeo = resolveSeoMetadata(
   global,
 );
 check(
-  "an empty local Page SEO row preserves the exact Global SEO fallback",
-  emptyLocalPageSeo.title === global.defaultTitle &&
-    emptyLocalPageSeo.description === global.defaultDescription &&
-    emptyLocalPageSeo.image === global.defaultOgImage,
+  "an empty local SEO row preserves explicit consumer copy before Global SEO fallback",
+  emptyLocalPageSeo.title === composeSeoTitle("اسم الصفحة", "", globalTitleSuffix) &&
+    emptyLocalPageSeo.description === "وصف الصفحة" &&
+    emptyLocalPageSeo.image === "/images/page.jpg",
 );
 
 const descriptionOnlyLocalPageSeo = resolveSeoMetadata(

@@ -1,5 +1,7 @@
 "use client";
 
+import type { GlobalSeoSettings } from "../../lib/seo/global-seo-types";
+
 import { type FaqItem } from "../../lib/admin/seo-score";
 import AdminEntitySeoPanel, {
   type AdminEntitySeoAnalysisExtension,
@@ -11,6 +13,7 @@ import { ENTITY_SEO_FIELD_NAMES } from "../../lib/seo/entity-seo-types";
 import { CONTENT_EDITOR_NAVIGATION_EVENT } from "./content/editors/content-editor-navigation";
 
 type SeoPanelProps = {
+  seoSettings?: GlobalSeoSettings;
   title: string;
   excerpt: string;
   slug: string;
@@ -115,6 +118,7 @@ function createTopicAnalysisExtension(
 export default function SeoPanel(props: SeoPanelProps) {
   return (
     <AdminEntitySeoPanel
+      seoSettings={props.seoSettings}
       id="seo-command-center"
       entityLabel="الموضوع"
       publicPathPrefix="/topics"
