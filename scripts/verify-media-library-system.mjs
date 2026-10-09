@@ -958,7 +958,7 @@ function findNavigation(node) {
 }
 findNavigation(coreAst);
 assert.ok(navigationExpression);
-const renderNavigation = new Function("React", "data", "folder", "openFolder", ts.transpileModule(
+const renderNavigation = new Function("React", "availableFolders", "folder", "openFolder", ts.transpileModule(
   "return " + navigationExpression.getText(coreAst),
   { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 }, fileName: "navigation.tsx" },
 ).outputText);
@@ -969,12 +969,30 @@ const emptyFolderFixture = ["images/empty-child", "files/empty-child", "images/e
 for (const selected of [null, "images", "files", "images/empty-child", "images/empty-child/nested"]) {
   const model = catalogModule.buildMediaLibraryReadModel({ ...emptyCatalogSnapshot, folders: emptyFolderFixture },
     { provider: "supabase", folders: [], items: [] }, { folder: selected, smartView: "all", kind: "all", context: runtimeContext });
-  const markup = renderToStaticMarkup(renderNavigation(React, model, selected, () => {}));
+  const markup = renderToStaticMarkup(renderNavigation(React, model.folders, selected, () => {}));
   assert.equal((markup.match(/data-media-folder-path=/g) ?? []).length, model.summary.folderCount);
   for (const item of model.folders) assert.ok(markup.includes(`data-media-folder-path="${item.path}"`));
   assert.equal((markup.match(/aria-current="page"/g) ?? []).length, selected ? 1 : 0);
 }
 check("empty and nested folders remain visible in every selection with count/list consistency", true);
+let availableFoldersExpression;
+function findAvailableFolders(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(coreAst) === 'availableFolders') availableFoldersExpression = node.initializer;
+  ts.forEachChild(node, findAvailableFolders);
+}
+findAvailableFolders(coreAst); assert.ok(availableFoldersExpression);
+const uploadPolicy = loadTypeScriptModule('src/lib/admin/media-intelligence/cms-upload-policy.ts', {});
+const scopedFolders = new Function('data', 'pickerKind', 'isCmsUploadFolderCompatible',
+  ts.transpileModule('return ' + availableFoldersExpression.getText(coreAst), {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText);
+for (const [pickerKind, root] of [['image','images'],['pdf','files']]) {
+  const folders = scopedFolders({folders:emptyFolderFixture}, pickerKind, uploadPolicy.isCmsUploadFolderCompatible);
+  const markup = renderToStaticMarkup(renderNavigation(React, folders, root, () => {}));
+  assert.ok(folders.length > 0);
+  assert.ok(folders.every(item => item.path.startsWith(root + '/')));
+  assert.ok(!markup.includes('data-media-folder-path="' + (root === 'images' ? 'files' : 'images') + '/'));
+}
+assert.deepEqual(scopedFolders({folders:emptyFolderFixture}, null, uploadPolicy.isCmsUploadFolderCompatible),emptyFolderFixture);
+check('Image/PDF pickers execute kind-scoped folder navigation; Manage retains both roots', true);
 
 const picker = source("src/components/admin/media/AdminMediaPickerModal.tsx");
 const sharedModal = source("src/components/admin/VenesiaModal.tsx");

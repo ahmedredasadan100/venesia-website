@@ -258,6 +258,8 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(Number(bucket.file_size_limit), 50 * 1024 * 1024);
       await handle.preparePublicVerification();
       await handle.prepareAdminInteractions({ study: "media-upload-limit" });
+      await handle.query(`insert into public.hero_templates (id,name,slug,variant,status,source_type,config) values
+        (900001,'QA Slider upload','qa-slider-upload','home-cinematic','unpublished','manual','{"title":"QA Slider upload","images":[],"mobileImages":[]}'::jsonb)`);
       await handle.runPublicVerification({ selection: "media-upload-limit", additionalSourceFiles: files });
       const settings = (await handle.query("select value from public.site_settings where key='media.settings'")).rows[0];
       assert.equal((settings.value as { maxImageBytes: number }).maxImageBytes, 7 * 1024 * 1024);
@@ -265,9 +267,19 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(assets.length, 2);
       assert.ok(assets.every(row => Number(row.byte_size) > 5 * 1024 * 1024 && Number(row.byte_size) < 7 * 1024 * 1024 && Number(row.uploaded_by) > 0));
       const objects = (await handle.query("select name from storage.objects where bucket_id='cms-images'")).rows;
-      assert.equal(objects.length, 2, "Rejected changed-policy object must be removed.");
+      assert.equal(objects.length, 7, "One bootstrap image, two size fixtures and four scope images; rejected changed-policy object must be removed.");
       const audit = (await handle.query("select action,entity_label from public.admin_audit_logs where entity_type='media_asset' and action='media_asset.create'")).rows;
-      assert.equal(audit.length, 2);
+      assert.equal(audit.length, 7);
+      const slider = (await handle.query("select config from public.hero_templates where id=900001")).rows[0];
+      const sliderImages = (slider.config as { images: string[] }).images;
+      assert.equal(sliderImages.length, 3);
+      const sliderAssets = (await handle.query("select id,object_key from public.media_assets where original_filename like 'scope-slide-%' and status='active'")).rows;
+      assert.equal(sliderAssets.length, 3);
+      const refs = (await handle.query("select count(*)::int as count from public.media_references where entity_identity='900001'")).rows[0];
+      assert.equal(Number(refs.count), 3);
+      const scopeObjects = (await handle.query("select bucket_id,name from storage.objects where name like '%scope-%'")).rows;
+      assert.equal(scopeObjects.length, 5);
+      writeFileSync(resolve(output, "slider-upload-database-proof.json"), JSON.stringify({status:"pass",sliderImages,sliderAssets,references:refs.count,scopeObjects},null,2));
       writeFileSync(resolve(output, "media-upload-database-proof.json"), JSON.stringify({ status: "pass", assets, audit, bucketLimit: Number(bucket.file_size_limit), savedImageLimit: 7 * 1024 * 1024 }, null, 2));
     },
   });

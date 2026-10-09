@@ -1,3 +1,4 @@
+import {verifyPickerUploads} from './media-picker-upload-journey.mjs';
 // Reusable Browser journey owned by qa-isolated-supabase --media-upload-limit-proof.
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
@@ -92,6 +93,7 @@ try {
   await uploadViaUi('configured-limit-after-runtime-change.png');
   const illegal = await page.request.post(storageOrigin + '/storage/v1/object/cms-images/images/unauthorized.png', { data: image, headers: { 'Content-Type': 'image/png' } });
   assert.ok([400, 401, 403].includes(illegal.status()));
+  await verifyPickerUploads({page,origin,api,transfers});
   assert.deepEqual(errors, []);
   const proof = { status: 'pass', sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256, imageBytes: image.length,
     adminSaveReload: [10, 2, 7], realSignedStorageUploads: completions, directBrowserTransfers: transfers,
@@ -100,4 +102,8 @@ try {
     sameApplicationProcess: true, pageErrors: errors, productionAccess: false };
   writeFileSync(path.join(process.env.QA_ADMIN_OUTPUT, 'media-upload-browser-proof.json'), JSON.stringify(proof, null, 2));
   console.log(JSON.stringify({ status: 'pass', imageBytes: image.length, accepted: completions.length, adminSaveReload: proof.adminSaveReload }));
+} catch (error) {
+  await page.screenshot({path:path.join(process.env.QA_ADMIN_OUTPUT,'media-upload-failure.png'),fullPage:true}).catch(()=>{});
+  writeFileSync(path.join(process.env.QA_ADMIN_OUTPUT,'media-upload-failure.txt'),String(error)+'\n'+await page.locator('body').innerText().catch(()=>''));
+  throw error;
 } finally { await context.close(); await browser.close(); }
