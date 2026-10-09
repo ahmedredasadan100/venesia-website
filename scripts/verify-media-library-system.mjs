@@ -958,7 +958,7 @@ function findNavigation(node) {
 }
 findNavigation(coreAst);
 assert.ok(navigationExpression);
-const renderNavigation = new Function("React", "availableFolders", "folder", "openFolder", ts.transpileModule(
+const renderNavigation = new Function("React", "availableFolders", "folder", "openFolder", "busy", ts.transpileModule(
   "return " + navigationExpression.getText(coreAst),
   { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 }, fileName: "navigation.tsx" },
 ).outputText);
@@ -1433,6 +1433,16 @@ check(
 }
 
 await verifyMediaUploadLimitContract();
+
+// Direct folder browsing preserves nested folder navigation without flattening descendants.
+for (const folder of ['images','images/about']) {
+  const recursive = catalogModule.buildMediaLibraryReadModel(emptyCatalogSnapshot, filesystemInventory, {folder,context:runtimeContext});
+  const direct = catalogModule.buildMediaLibraryReadModel(emptyCatalogSnapshot, filesystemInventory, {folder,folderScope:'direct',context:runtimeContext});
+  assert.deepEqual(direct.assets,recursive.assets.filter(asset=>asset.folderPath===folder));
+  assert.deepEqual(direct.folders,recursive.folders);
+  if(folder==='images')assert.ok(recursive.assets.length>direct.assets.length);
+}
+check('direct folder browse keeps only current-level assets and retains the complete dynamic folder tree',true);
 
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nMedia Library system: ${passed}/${checks.length} checks passed.`);

@@ -275,8 +275,13 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(sliderImages.length, 3);
       const sliderAssets = (await handle.query("select id,object_key from public.media_assets where original_filename like 'scope-slide-%' and status='active'")).rows;
       assert.equal(sliderAssets.length, 3);
+      assert.ok(sliderAssets.every(row => String(row.object_key).startsWith("images/home/")));
+      assert.ok(sliderAssets.some(row => String(row.object_key).startsWith("images/home/nested/")));
+      const mobileImages = (slider.config as { mobileImages: string[] }).mobileImages;
+      assert.equal(mobileImages.length, 1);
+      assert.ok(sliderImages.includes(mobileImages[0]));
       const refs = (await handle.query("select count(*)::int as count from public.media_references where entity_identity='900001'")).rows[0];
-      assert.equal(Number(refs.count), 3);
+      assert.equal(Number(refs.count), 3); // Repeated use inside the same config field is one canonical reference.
       const scopeObjects = (await handle.query("select bucket_id,name from storage.objects where name like '%scope-%'")).rows;
       assert.equal(scopeObjects.length, 5);
       writeFileSync(resolve(output, "slider-upload-database-proof.json"), JSON.stringify({status:"pass",sliderImages,sliderAssets,references:refs.count,scopeObjects},null,2));
