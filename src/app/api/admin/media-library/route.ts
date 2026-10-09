@@ -63,7 +63,7 @@ const SMART_VIEWS = new Set<MediaSmartView>([
   "missing",
   "drift",
 ]);
-const MEDIA_LIBRARY_QUERY_KEYS = new Set(["folder", "view", "kind", "page", "pageSize", "q"]);
+const MEDIA_LIBRARY_QUERY_KEYS = new Set(["folder", "folderScope", "view", "kind", "page", "pageSize", "q"]);
 const MEDIA_LIBRARY_PAGE_SIZES = new Set([10, 20, 30, 50, 100]);
 
 class MediaUploadCompensationError extends Error {
@@ -122,6 +122,10 @@ export async function GET(request: Request) {
         { status: 400 },
       );
     }
+    const folderScope = searchParams.get("folderScope") ?? "recursive";
+    if (folderScope !== "direct" && folderScope !== "recursive") {
+      return mediaJson({ error: "نطاق المجلد غير صالح.", code: "invalid_folder_scope" }, { status: 400 });
+    }
     const requestedFolder = searchParams.get("folder");
     const folder = requestedFolder ? normalizeMediaFolder(requestedFolder) : null;
     const requestedSmartView = searchParams.get("view") as MediaSmartView | null;
@@ -173,6 +177,7 @@ export async function GET(request: Request) {
       : null;
     const result = buildMediaLibraryReadModel(catalog, inventory, {
       folder,
+      folderScope,
       query,
       kind,
       smartView,

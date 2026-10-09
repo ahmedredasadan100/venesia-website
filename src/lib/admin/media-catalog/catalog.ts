@@ -580,6 +580,7 @@ export function buildMediaLibraryReadModel(
   inventory: PublicMediaInventory,
   input: {
     folder?: string | null;
+    folderScope?: "direct" | "recursive";
     query?: string;
     kind?: "all" | "image" | "document";
     smartView?: MediaSmartView;
@@ -614,7 +615,7 @@ export function buildMediaLibraryReadModel(
           (asset) =>
             !input.folder ||
             asset.folderPath === input.folder ||
-            asset.folderPath.startsWith(`${input.folder}/`),
+            (input.folderScope !== "direct" && asset.folderPath.startsWith(`${input.folder}/`)),
         )
         .filter((asset) => !input.kind || input.kind === "all" || asset.kind === input.kind)
         .filter(

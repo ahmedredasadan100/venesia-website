@@ -191,6 +191,7 @@ export default function MediaLibraryCore({
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [data, setData] = useState<MediaCatalogPage | null>(null);
   const [dataRevision, setDataRevision] = useState(0);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -240,7 +241,10 @@ export default function MediaLibraryCore({
       page: String(pageNumber),
       pageSize: String(pageSize),
     });
-    if (folder) parameters.set("folder", folder);
+    if (folder) {
+      parameters.set("folder", folder);
+      parameters.set("folderScope", "direct");
+    }
     if (query) parameters.set("q", query);
     try {
       const response = await fetch(`/api/admin/media-library?${parameters}`, {
@@ -264,7 +268,7 @@ export default function MediaLibraryCore({
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => void loadPage());
     return () => window.cancelAnimationFrame(frame);
-  }, [loadPage]);
+  }, [loadPage, refreshRevision]);
 
   useEffect(() => {
     const scheduleLibraryRefresh = () => {
@@ -359,8 +363,9 @@ export default function MediaLibraryCore({
     !pickerKind || isCmsUploadFolderCompatible(item.path, pickerKind));
 
   const childFolders = useMemo(
-    () => folder ? (data?.folders ?? []).filter((item) => item.parentPath === folder) : [],
-    [data?.folders, folder],
+    () => folder ? (data?.folders ?? []).filter((item) => item.parentPath === folder
+      && (!pickerKind || isCmsUploadFolderCompatible(item.path, pickerKind))) : [],
+    [data?.folders, folder, pickerKind],
   );
 
   function updateLibraryHistory(patch: Record<string, string | null>, behavior: "push" | "replace" = "push") {
@@ -461,10 +466,14 @@ export default function MediaLibraryCore({
     let completed = 0;
     const failures: string[] = [];
     const uploadedFolders = new Set<string>();
+    const uploadDestination = folder; // Capture the destination for the entire batch.
+    setQuery("");
+    setPageNumber(1);
+    updateLibraryHistory({ q: null }, "replace");
     for (const file of Array.from(files)) {
       setUploadRows((current) => current.map((row) => row.name === file.name && row.state === "pending" ? { ...row, state: "uploading" } : row));
       try {
-        const asset = await uploadOne(file);
+        const asset = await uploadOne(file, uploadDestination);
         uploadedFolders.add(asset.folderPath);
         completed += 1;
         setUploadRows((current) => current.map((row) => row.name === file.name && row.state === "uploading" ? { ...row, state: "complete" } : row));
@@ -487,7 +496,7 @@ export default function MediaLibraryCore({
       setKind("all");
       updateLibraryHistory({ kind: null }, "replace");
     }
-    await loadPage();
+    setRefreshRevision((current) => current + 1);
     if (failures.length) {
       announce("warning", "اكتمل الرفع جزئيًا", `نجح ${completed} وفشل ${failures.length}. ${failures[0]}`);
     } else {
@@ -736,6 +745,7 @@ export default function MediaLibraryCore({
         <aside className="order-1 min-w-0 rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 xl:order-none">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-semibold text-white">المجلدات</h2>
+            <button type="button" disabled={loading || Boolean(busy)} onClick={() => setRefreshRevision((current) => current + 1)} className="text-xs text-[#D8B87A] disabled:opacity-40">تحديث المجلدات</button>
             {mode === "manage" && folder ? (
               <button type="button" onClick={() => setShowFolderForm((value) => !value)} className="rounded-xl border border-white/10 px-2.5 py-1 text-xs text-[#D8B87A]">+ جديد</button>
             ) : null}
@@ -746,12 +756,14 @@ export default function MediaLibraryCore({
               <button type="button" disabled={busy === "folder"} onClick={() => void createFolder()} className="w-full rounded-xl bg-[#D8B87A] px-3 py-2 text-xs font-bold text-[#05070B] disabled:opacity-50">إنشاء داخل {folder}</button>
             </div>
           ) : null}
+          {pickerKind ? <p className="mt-3 text-xs leading-6 text-white/50">{pickerKind === "image" ? "تظهر مجلدات الصور فقط. أنشئ مجلدات الصور داخل الصور من مكتبة الوسائط." : "تظهر مجلدات المستندات فقط."}</p> : null}
           <nav className="mt-4 space-y-1" aria-label="مجلدات الوسائط">
             {availableFolders.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 data-media-folder-path={item.path}
+                disabled={Boolean(busy)}
                 aria-current={folder === item.path ? "page" : undefined}
                 onClick={() => openFolder(item.path)}
                 style={{ paddingInlineStart: `${0.75 + Math.min(item.path.split("/").length - 1, 5) * 0.75}rem` }}
@@ -762,7 +774,7 @@ export default function MediaLibraryCore({
               </button>
             ))}
           </nav>
-          {mode === "manage" ? <><div className="my-4 h-px bg-white/8" /><h3 className="text-xs font-semibold text-white/48">عروض كل المكتبة</h3><p className="mb-2 mt-1 text-[10px] leading-5 text-white/28">تتجاهل هذه العروض المجلد الحالي وتفحص جميع الملفات.</p><div className="space-y-1">{SMART_VIEWS.map((item) => <button key={item.id} type="button" onClick={() => openSmartView(item.id)} title={item.description} className={`w-full rounded-xl px-3 py-2 text-right text-sm ${folder === null && smartView === item.id ? "bg-white/8 text-white" : "text-white/48 hover:text-white/75"}`}>{item.label}</button>)}</div><Link href="/admin/reports/topics-without-image" className="mt-4 block rounded-xl border border-white/10 px-3 py-2 text-xs leading-5 text-white/55 hover:text-white">تقرير الموضوعات بلا صورة ←</Link></> : null}
+          {mode === "manage" ? <><div className="my-4 h-px bg-white/8" /><h3 className="text-xs font-semibold text-white/48">عروض كل المكتبة</h3><p className="mb-2 mt-1 text-[10px] leading-5 text-white/28">تتجاهل هذه العروض المجلد الحالي وتفحص جميع الملفات.</p><div className="space-y-1">{SMART_VIEWS.map((item) => <button key={item.id} type="button" disabled={Boolean(busy)} onClick={() => openSmartView(item.id)} title={item.description} className={`w-full rounded-xl px-3 py-2 text-right text-sm ${folder === null && smartView === item.id ? "bg-white/8 text-white" : "text-white/48 hover:text-white/75"}`}>{item.label}</button>)}</div><Link href="/admin/reports/topics-without-image" className="mt-4 block rounded-xl border border-white/10 px-3 py-2 text-xs leading-5 text-white/55 hover:text-white">تقرير الموضوعات بلا صورة ←</Link></> : null}
         </aside>
 
         <section className="order-2 min-w-0 rounded-[24px] border border-white/10 bg-[#080B10]/92 p-4 xl:order-none">
@@ -832,16 +844,21 @@ export default function MediaLibraryCore({
           ) : null}
           {uploadRows.length ? <div className="mb-4 grid gap-2 rounded-2xl border border-white/8 bg-black/20 p-3 sm:grid-cols-2">{uploadRows.map((row, index) => <div key={`${row.name}-${index}`} className="min-w-0"><p className="truncate text-xs text-white/65">{row.name}</p><p className={`mt-1 text-[10px] ${row.state === "error" ? "text-red-200" : row.state === "complete" ? "text-emerald-300" : "text-white/35"}`}>{row.state === "pending" ? "في الانتظار" : row.state === "uploading" ? "جارٍ الرفع…" : row.state === "complete" ? "اكتمل" : row.error}</p></div>)}</div> : null}
 
-          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-white/38">
+          {folder ? <div className="mb-3 rounded-xl border border-[#D8B87A]/20 bg-[#D8B87A]/5 p-3 text-xs text-white/65" data-media-upload-destination={folder}>
+            <span>المجلد الحالي ووجهة الرفع: </span><bdi dir="ltr">{folder}</bdi>
+            {folder.includes("/") ? <button type="button" disabled={Boolean(busy)} onClick={() => openFolder(folder.split("/").slice(0, -1).join("/"))} className="ms-3 text-[#D8B87A]">المجلد الأعلى</button> : null}
+            <p className="mt-1 text-white/40">تُعرض ملفات هذا المجلد فقط. ادخل مجلدًا فرعيًا لعرض ملفاته أو الرفع داخله.</p>
+          </div> : null}
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-white/38" aria-label="مسار المجلد">
             {folder ? folder.split("/").map((segment, index, segments) => {
               const target = segments.slice(0, index + 1).join("/");
-              return <button key={target} type="button" onClick={() => openFolder(target)} className="rounded-full border border-white/8 px-2.5 py-1 hover:text-white">{segment}</button>;
+              return <button key={target} type="button" disabled={Boolean(busy)} onClick={() => openFolder(target)} className="rounded-full border border-white/8 px-2.5 py-1 hover:text-white">{segment}</button>;
             }) : <span className="rounded-full border border-[#D8B87A]/20 bg-[#D8B87A]/8 px-2.5 py-1 text-[#D8B87A]">{activeSmartView.label}</span>}
             <span>— {data?.total ?? 0} نتيجة</span>
           </div>
           {!folder ? <p className="mb-4 text-xs leading-6 text-white/38">{activeSmartView.description}</p> : null}
 
-          {folder && childFolders.length ? <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{childFolders.map((item) => <button key={item.id} type="button" onClick={() => openFolder(item.path)} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-right hover:border-[#D8B87A]/30"><span className="block text-lg text-[#D8B87A]/70">▰</span><span className="mt-2 block truncate text-sm font-semibold text-white">{item.displayName}</span><span className="mt-1 block text-[10px] text-white/35">{item.totalAssetCount} أصل — {formatBytes(item.totalBytes)}</span><span className="mt-1 block text-[10px] text-white/25">{item.directAssetCount} في المستوى الحالي</span></button>)}</div> : null}
+          {folder && childFolders.length ? <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{childFolders.map((item) => <button key={item.id} type="button" disabled={Boolean(busy)} onClick={() => openFolder(item.path)} className="rounded-2xl border border-white/10 bg-black/20 p-4 text-right hover:border-[#D8B87A]/30"><span className="block text-lg text-[#D8B87A]/70">▰</span><span className="mt-2 block truncate text-sm font-semibold text-white">{item.displayName}</span><span className="mt-1 block text-[10px] text-white/35">{item.totalAssetCount} أصل — {formatBytes(item.totalBytes)}</span><span className="mt-1 block text-[10px] text-white/25">{item.directAssetCount} في المستوى الحالي</span></button>)}</div> : null}
 
           {loading ? <div className="grid h-64 place-items-center text-sm text-white/45" role="status">جارٍ تحميل الملفات…</div> : null}
           {error ? (
