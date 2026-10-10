@@ -30,9 +30,13 @@ const retainedCaseFunctions=tree.statements.filter(node=>ts.isFunctionDeclaratio
 const requiredCases=new Function("assert","forms","collections","canonical","createHash",retainedCaseFunctions.map(node=>node.getText(tree)).join("\n")+"\n"+inventory.getText(tree)+";const requiredCases=[];"+loops.map(node=>node.getText(tree)).join("\n")+";requiredCases.push(...retainedTrackingMediaCases());assertHistoricalCoreCaseIdentity(requiredCases);return requiredCases;")(assert,forms,collections,canonical,createHash);
 const assertCurrentLedger=new Function("assert","createHash",retainedCaseFunctions.map(node=>node.getText(tree)).join("\n")+";return assertHistoricalCoreCaseIdentity;")(assert,createHash);
 assert.equal(assertCurrentLedger(requiredCases).historicalRequiredCases,959);
-assert.deepEqual(assertCurrentLedger(requiredCases).postHistoricalAdditionCases,["form:activity-sitemap-media-commands:capability:listbox"]);
-assert.throws(()=>assertCurrentLedger(requiredCases.filter(row=>row.key!=="form:activity-sitemap-media-commands:capability:listbox")));
-assert.throws(()=>assertCurrentLedger([...requiredCases,requiredCases.find(row=>row.key==="form:activity-sitemap-media-commands:capability:listbox")]));
+const postHistoricalKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar"];
+assert.deepEqual(assertCurrentLedger(requiredCases).postHistoricalAdditionCases.toSorted(),postHistoricalKeys.toSorted());
+for(const key of postHistoricalKeys){
+ assert.throws(()=>assertCurrentLedger(requiredCases.filter(row=>row.key!==key)));
+ assert.throws(()=>assertCurrentLedger([...requiredCases,requiredCases.find(row=>row.key===key)]));
+ assert.throws(()=>assertCurrentLedger(requiredCases.map(row=>row.key===key?{...row,declaration:"not_applicable"}:row)));
+}
 assert.throws(()=>assertCurrentLedger(requiredCases.slice(1)));
 const fixtures={category:{id:1,name:"QA"},project:{id:2,editorPath:"/admin/projects/2",locationIds:[3,4,5,6]},commercialProject:{id:7,editorPath:"/admin/projects/7"}};
 const all=buildCoreDomainFormPlan({manifest,requiredCases,fixtures,locationConfig}),selection="text-topic-forms",plan=selectCoreDomainFormPlan(all,selection),recipes=coreSelectedTopicRecipes(selection,manifest),ids=recipes.map(coreTopicJourneyId),checks=[];

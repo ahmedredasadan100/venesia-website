@@ -2526,7 +2526,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       id: "media-library",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_MEDIA_CONSUMER_CAPABILITIES,
-        {},
+        { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
       ),
       collectionAdoption: "not_applicable",
       gridOwner: "MediaCatalog",

@@ -119,11 +119,14 @@ function retainedTrackingMediaCases() {
  return [...tracking,...readonly,...confirmation,...readonlyConfirmation,...updateListbox];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
- const additionKey="form:activity-sitemap-media-commands:capability:listbox";
- const additions=cases.filter(row=>row.key===additionKey);
- assert.equal(additions.length,1,"Managed relocation must retain its newly applicable Listbox case.");
- assert.equal(additions[0].declaration,"adopted");
- const historical=cases.filter(row=>row.key!==additionKey);
+ const additionKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar"];
+ const additions=cases.filter(row=>additionKeys.includes(row.key));
+ for(const key of additionKeys){
+  const matching=additions.filter(row=>row.key===key);
+  assert.equal(matching.length,1,"Retain exactly one newly applicable capability case: "+key);
+  assert.equal(matching[0].declaration,"adopted");
+ }
+ const historical=cases.filter(row=>!additionKeys.includes(row.key));
  assert.equal(historical.length,959,"The bounded closure ledger must retain every historical case.");
  assert.equal(new Set(cases.map(row=>row.key)).size,cases.length,"Duplicate historical case identity.");
  assert.equal(createHash("sha256").update(JSON.stringify(historical.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
