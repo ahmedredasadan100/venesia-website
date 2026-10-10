@@ -45,6 +45,49 @@ const CANONICAL_REGISTRY_REPRESENTATIONS = Object.freeze({
     statementArraySha256: "c6b4d4b817a75dfe0f53ea55efabe4e824dd0885506f0e0a6d13a00ebda21645",
     reconstructedSourceSha256: "f024e3fda109b47c2251fc5ef6d4da49f2b4142fa697a5c50629d7241ec1c67c",
   }),
+  "20261006200447": Object.freeze({
+    version: "20261006200447",
+    name: "cms_image_upload_configurable_ceiling",
+    kind: "canonical-statement-array-with-source-trivia-v1",
+    statementCount: 1,
+    statementArraySha256: "b09e294b22f11ab9ae43880315e26114e891eddf010799075404fe2ec3437f64",
+    reconstructedSourceSha256: "51db487183ebc43107509f7233dd3e8abee6ea55dd1ab3d94475c6aeaae71cb9",
+  }),
+  "20261007165732": Object.freeze({
+    version: "20261007165732",
+    name: "retire_legacy_content_image_catalog",
+    kind: "canonical-statement-array-with-source-trivia-crlf-v1",
+    statementCount: 7,
+    sourceLineEndings: "crlf",
+    statementArraySha256: "1720d24ead16e525c462c581aa47d74ff2177574298635c183d7d3e1a358a713",
+    reconstructedSourceSha256: "03e250b86d61fb3ca246cfd9e9a25671bb3c663e5c03e421c52c7867b1b3ffd3",
+  }),
+  "20261007193823": Object.freeze({
+    version: "20261007193823",
+    name: "media_delete_usage_confirmation",
+    kind: "canonical-statement-array-with-source-trivia-crlf-v1",
+    statementCount: 28,
+    sourceLineEndings: "crlf",
+    statementArraySha256: "e7ac34389882ac9de3f08c3be8d6e5d8df73f651424639e6a9738b293371c02b",
+    reconstructedSourceSha256: "c9cd7893ce4bb9773632f32f067e767c37a445eeee7eddfd7b7b4e89b5e63330",
+  }),
+  "20261008084745": Object.freeze({
+    version: "20261008084745",
+    name: "media_delete_lease_resolution",
+    kind: "canonical-statement-array-with-source-trivia-crlf-v1",
+    statementCount: 6,
+    sourceLineEndings: "crlf",
+    statementArraySha256: "8ceeab8119744789ad352f4f2fdcc8d5f97a46f98dc7eb8629c42fb8b2bf9598",
+    reconstructedSourceSha256: "8292ffe3ac5b46aa3a73ba83afa04bf38b29ce1d5575094e53aa042b71216fa3",
+  }),
+  "20261010005444": Object.freeze({
+    version: "20261010005444",
+    name: "media_relocation_lease_journal",
+    kind: "canonical-statement-array-with-source-trivia-v1",
+    statementCount: 6,
+    statementArraySha256: "97ee31ad015bfa1087835ab0cf1144c9211c54408d6e1b8c60f1008e73ca2e01",
+    reconstructedSourceSha256: "ef0bfdaabffc7989ce8efac643aaa78a802ef4fc08667f2b16eacbfdcb628e76",
+  }),
 });
 
 /** @typedef {{version:string,name:string,sql:string,sha256?:string}} MigrationSource */
@@ -195,11 +238,15 @@ export function classifyCanonicalRegistryRepresentation(row, migration) {
     || row.statements.some(statement => typeof statement !== "string")) return null;
   const statementArraySha256 = digest(JSON.stringify(row.statements));
   if (statementArraySha256 !== representation.statementArraySha256) return null;
-  const reconstructedSql = reconstructCanonicalStatementReceipt(row.statements, migration.sql);
+  // Only the hash-frozen CRLF receipts below use the corresponding source
+  // representation. Never normalize arbitrary recorded SQL or relax its hash.
+  const receiptSource = representation.sourceLineEndings === "crlf"
+    ? migration.sql.replaceAll("\n", "\r\n") : migration.sql;
+  const reconstructedSql = reconstructCanonicalStatementReceipt(row.statements, receiptSource);
   if (reconstructedSql === null) return null;
-  if (digest(reconstructedSql) !== representation.reconstructedSourceSha256
+  if (digest(reconstructedSql.replace(/\r\n/gu, "\n")) !== representation.reconstructedSourceSha256
     || digest(migration.sql) !== representation.reconstructedSourceSha256
-    || reconstructedSql !== migration.sql) return null;
+    || reconstructedSql !== receiptSource) return null;
   return {
     revision: "canonical-current",
     sourceSha256: representation.reconstructedSourceSha256,

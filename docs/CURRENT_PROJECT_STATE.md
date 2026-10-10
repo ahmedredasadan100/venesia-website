@@ -105,27 +105,44 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The authorized cutover readback on 2026-09-13 established the historical 103-migration corpus snapshot used by the structural Git guard. A read-only Production reconciliation on 2026-09-24 refreshed the volatile registry and catalog metrics below through migration 110; all 110 receipts have exact recognized source provenance. The `Repository migration files` row intentionally remains the immutable 103-file snapshot count, not the current corpus size.
+The authorized cutover readback on 2026-09-13 established the historical 103-migration corpus snapshot used by the structural Git guard. A read-only Production reconciliation on 2026-10-10 refreshed the volatile registry and catalog metrics below through migration 121. All 121 receipts have exact recognized source provenance, including the five bounded CLI representations described below. The `Repository migration files` row intentionally remains the immutable 103-file snapshot count, not the current corpus size.
 
 The Shared Corrections & Adoption continuation on baseline `d60938a6781db3630a64c1cf1798f7ef269c38b4` added `20260912224809_shared_composition_menu_atomic_completion.sql` as migration 103. After isolated proof and separate owner authorization, the exact approved SQL was applied once on 2026-09-13 at 01:33:23 UTC, with its canonical registry record in the same transaction. It extends the existing Composition/Menu RPC owners for atomic template saves and Page/Menu batch deletion, preserving their signatures, ACL and Audit policy. Independent readback matched both expected function hashes and permissions; PostgREST exposes the unchanged signatures. PR #155 then standard-merged feature `a451527489ce7b5e7545e737a056c6ed6cdc6467` as `672cf81dff4e39c300adb68e5f41750ef980e9c1`, followed by automatic Production deployment. No CMS write test or historical migration replay was performed. Isolated behavioral evidence remains scoped as documented in `reports/SHARED_CORRECTIONS_PROOF.md`; A04 is deferred and `globalClosed=false`.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
 | Repository migration files                        |                                               103 |
-| Production registry versions                      |                                               110 |
+| Production registry versions                      |                                               121 |
 | Migration 101 rollout state                       |                 Applied / exact registry provenance |
 | Migration 103 rollout state                       |                 Applied once before PR #155 merge |
-| Current Production live state                     |                    Verified on 2026-09-24 |
-| Registry SQL provenance                           | Exact recognized source provenance for all 110 recorded versions |
-| Public tables                                     |                                                63 |
-| Public tables with RLS enabled                    |                                                63 |
-| Public catalog objects with repository provenance |                                               336 |
+| Current Production live state                     |                    Verified on 2026-10-10 |
+| Registry SQL provenance                           | Exact recognized source provenance for all 121 recorded versions |
+| Public tables                                     |                                                64 |
+| Public tables with RLS enabled                    |                                                64 |
+| Public catalog objects with repository provenance |                                               378 |
 | Invalid, unready, or non-live indexes             |                                                 0 |
 | Unvalidated public constraints                    |                                                 0 |
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                28 |
+| Registry reconciliation audit records             |                                                33 |
+
+### Historical registry representation closure (2026-10-10)
+
+The last recorded registry mutation closure is Audit 4569 at 2026-10-06 18:37:00 UTC: 116 entries, one selected reconciliation, and 115 historical entries preserved. The four questioned migrations were added afterward (PRs #187, #193, #195 and #197). All three verification/reconciliation owner files are byte-identical between PR #186 merge `fd3f818f8cae89c8d9429acedf24ab2d9ad091ca` and the PR #205 baseline `e0c0669137acfd2178b184853a6b982c0fe2052a`. The prior 116-entry closure was valid for its corpus; it did not cover these later additions. This is a bounded representation-recognition gap, not a verifier regression or unapplied schema debt.
+
+| Version | Observed representation | Independent Production effect | Registry disposition |
+|---|---|---|---|
+| 20261006200447 | One LF CLI statement without its source terminator | cms-images ceiling = 52,428,800 bytes | CORRECT AS-IS |
+| 20261007165732 | Seven CRLF CLI statements | 278 retired filesystem assets, zero active/remaining usage, validated retirement constraint and retirement Audit | CORRECT AS-IS |
+| 20261007193823 | 28 CRLF CLI statements | Confirmation/deleted-at columns, seven exact function bodies after line-ending projection, view and revival trigger | CORRECT AS-IS |
+| 20261008084745 | Six CRLF CLI statements | Both lease function bodies and service-only ACL match their canonical source | CORRECT AS-IS |
+
+The existing `migration-provenance.mjs` owner recognizes only the frozen version/name/count/ordered raw statement-array hash and reconstructed canonical source hash. Three explicit receipts reconstruct against the CRLF projection of canonical Git source; arbitrary recorded SQL is never normalized or accepted by semantics. Negative tests retain rejection of altered bytes, ordering, segmentation, line endings, name, version and executable source. The same bounded recognition covers `20261010005444`; its functions and ACL remain correct without replay or rewrite.
+
+This closure performs **zero Production mutations**: no repair command, registry write, SQL replay, DDL/DML, permission change or business-data change. Supabase CLI `migration list` confirms all 121 timestamps match; the current live verifier proves receipt provenance and the migration-owned security catalog separately. The ignored local `supabase/migrations` CLI mirror was refreshed from tracked `sql/migrations` (10 missing files plus four stale copies), preserving the old copies as evidence. This mirror is not a persistent local database's applied history; no local database was running or modified. Canonical local files match Git, and native disposable migration application remains covered by the existing CI owner.
+
+The old 103-file structural snapshot remains immutable. Audit count 33 records earlier registry operations; no new database audit event is invented for this read-only closure. The Git review and external read-only evidence are its receipt. Production schema, RLS, functions, triggers, indexes and raw registry bytes are compared before/after release.
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
