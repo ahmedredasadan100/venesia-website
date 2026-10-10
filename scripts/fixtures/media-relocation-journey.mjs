@@ -43,13 +43,13 @@ export async function verifyMediaRelocations({page,origin,api,assets,heroId=9000
     ];
     for(const item of cases){
       await page.goto(origin+item.path);
-      const tab=page.locator('[data-admin-tab-id="'+item.tab+'"]');if(await tab.count())await tab.click();
+      const tab=page.locator('[data-admin-tab-id="'+item.tab+'"]');await page.waitForLoadState('networkidle');await expect(tab).toBeVisible();await tab.click();await expect(tab).toHaveAttribute('aria-selected','true');
       const field=page.locator('[name="'+item.field+'"]');assert.ok((await field.inputValue()).includes(asset.publicUrl));
       const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===item.path);
       await page.locator('form').filter({has:field}).locator('button[type="submit"]').click();
       assert.ok((await response).ok());
       await page.waitForLoadState('networkidle');await page.goto(origin+item.path);
-      if(await tab.count())await tab.click();
+      await page.waitForLoadState('networkidle');await expect(tab).toBeVisible();await tab.click();await expect(tab).toHaveAttribute('aria-selected','true');
       assert.ok((await field.inputValue()).includes(asset.publicUrl));
       const images=page.locator('img').filter({visible:true});
       await expect.poll(async()=>images.evaluateAll((rows,url)=>rows.some(img=>(img.src.includes(encodeURIComponent(url))||img.src.includes(url))&&img.complete&&img.naturalWidth>0),asset.publicUrl)).toBe(true);
