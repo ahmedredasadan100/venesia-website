@@ -6,6 +6,13 @@
   "classifications": ["adopted", "neutral", "explicit_exception"],
   "providerRegistry": [
     {
+      "domainKey": "pages",
+      "table": "pages",
+      "mediaFields": [
+        "og_image"
+      ]
+    },
+    {
       "domainKey": "topics",
       "table": "topics",
       "mediaFields": [
@@ -29,7 +36,8 @@
         "hero_image",
         "small_box_image",
         "overview_main_image",
-        "og_image"
+        "og_image",
+        "brochure_url"
       ]
     },
     {
@@ -45,7 +53,10 @@
     {
       "domainKey": "project_videos",
       "table": "project_videos",
-      "mediaFields": ["poster_image"]
+      "mediaFields": [
+        "poster_image",
+        "video_url"
+      ]
     },
     {
       "domainKey": "project_tracking_update_media",
@@ -109,6 +120,58 @@
     }
   ],
   "owners": [
+    {
+      "id": "page-managed-image-writes",
+      "classification": "adopted",
+      "tables": [
+        "pages"
+      ],
+      "mediaFields": [
+        "pages.og_image"
+      ],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/pages/page-seo-actions.ts",
+        "src/app/admin/pages-blocks/pages/page-actions/page-duplicate.ts"
+      ],
+      "rationale": "Page managed image persistence adopts the existing Media lease and entity synchronization, without changing editorial SEO semantics."
+    },
+    {
+      "id": "page-media-neutral-writes",
+      "classification": "neutral",
+      "tables": [
+        "pages"
+      ],
+      "mediaFields": [],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": false,
+      "structuredWarning": false,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/pages/page-actions/create-page.ts",
+        "src/app/admin/pages-blocks/pages/page-actions/page-status.ts"
+      ],
+      "rationale": "Creation starts without a media value; publication changes status and revision only, preserving the existing media identity."
+    },
+    {
+      "id": "page-media-removal",
+      "classification": "explicit_exception",
+      "tables": [
+        "pages"
+      ],
+      "mediaFields": [
+        "pages.og_image"
+      ],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "requiresExplicitEmptyCleanup": true,
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/pages/page-actions/page-delete.ts"
+      ],
+      "rationale": "The Page domain deletion is removal-only, followed by explicit-empty entity synchronization and a visible post-commit warning on uncertainty."
+    },
     {
       "id": "topic-domain-writes",
       "classification": "adopted",
@@ -176,7 +239,9 @@
         "project_media.image",
         "project_floor_plans.architectural_image",
         "project_floor_plans.furnishing_image",
-        "project_videos.poster_image"
+        "project_videos.poster_image",
+        "projects.brochure_url",
+        "project_videos.video_url"
       ],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,

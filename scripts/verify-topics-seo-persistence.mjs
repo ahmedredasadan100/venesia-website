@@ -190,6 +190,8 @@ function rebindHarness(options = {}) {
     "../content/content-types": actual("src/lib/admin/content/content-types.ts"),
     "../../content/public-content-path": { resolvePublicContentPath: () => "/topics/fixture" },
     "./identity": { getCanonicalMediaIdentityKey: () => "fixture", parseLegacyPublicMediaAsset: () => null },
+    "../projects/project-media-reference-rebind": { persistProjectMediaReferenceRebind: async () => { throw new Error("Project RPC not configured in this fixture"); } },
+    "../../page-blocks/admin-queries": { getPageModuleAssignmentsForAdmin: async () => ({ seoContent: {} }) },
     "../seo/entity-seo-persistence": seo,
   });
   const provider = registry.getMediaReferenceProvider("topics");
@@ -328,7 +330,7 @@ try {
       return true;
     });
   });
-  await check("Media payload rebind does not recompute unrelated SEO or add source reads", async () => {
+  await check("Media payload rebind preserves SEO and compares the current row revision", async () => {
     const row = fixture();
     row.media_payload = { image: "/images/topics/original.jpg" };
     const h = rebindHarness({ row });
@@ -336,7 +338,7 @@ try {
     analyses = 0;
     await h.rebind("/images/topics/original.jpg", "/images/topics/rebound.jpg", "media_payload");
     assert.equal(analyses, 0);
-    assert.equal(h.state.reads[0], "id, media_payload");
+    assert.equal(h.state.reads[0], "id, media_payload, updated_at, slug, content_type");
     assert.deepEqual(persisted(h.state.row), original);
     assert.deepEqual(Object.keys(h.state.writes[0]).sort(), ["media_payload", "updated_at"]);
   });

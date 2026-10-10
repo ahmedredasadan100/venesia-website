@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { revalidatePublicPagesWithBlockAssignments } from "../../../../../lib/page-blocks/admin-revalidate";
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
@@ -33,6 +34,8 @@ export async function deletePages(ids: number[]): Promise<PageDeleteResult> {
       : { ok: false, code: "page_not_found", message: "الصفحة غير موجودة." };
   }
   const deletedIds = deletedPages.map((page) => page.id);
+  const mediaSync = await synchronizeMediaReferenceWriteScopesAfterDomainMutation([], null, deletedIds.map(id => ({ domainKey: "pages", entityIdentity: id })));
+  const mediaWarning = mediaSync.status === "saved_with_media_sync_warning";
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
     deletedPages.forEach((page) => revalidateDeletedPublicPath(page.path));
     revalidatePath("/admin/pages-blocks/pages", "layout");
@@ -41,8 +44,8 @@ export async function deletePages(ids: number[]): Promise<PageDeleteResult> {
   if (!cacheRevalidation.ok) console.error("Pages deleted; cache revalidation failed", cacheRevalidation.error);
   const blockedSuffix = blockedIds.length ? ` لم يُحذف ${blockedIds.length} صفحة محمية.` : "";
   return { ok: true, deletedIds, blockedIds, blockedCount: blockedIds.length,
-    feedbackStatus: blockedIds.length || !cacheRevalidation.ok ? "warning" : "success",
-    message: `تم حذف ${deletedIds.length} صفحة بنجاح.${blockedSuffix}${cacheRevalidation.ok ? "" : " تعذر تحديث الكاش بعد إعادة المحاولة؛ قد تتأخر القراءة العامة."}` };
+    feedbackStatus: blockedIds.length || mediaWarning || !cacheRevalidation.ok ? "warning" : "success",
+    message: `تم حذف ${deletedIds.length} صفحة بنجاح.${blockedSuffix}${mediaWarning ? " تعذر تأكيد تنظيف مراجع الصور؛ يلزم فحص المكتبة." : ""}${cacheRevalidation.ok ? "" : " تعذر تحديث الكاش بعد إعادة المحاولة؛ قد تتأخر القراءة العامة."}` };
 }
 
 export async function deletePage(pageId: number) { return deletePages([pageId]); }

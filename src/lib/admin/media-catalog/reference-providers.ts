@@ -1,6 +1,8 @@
 import "server-only";
 
 import { isDeepStrictEqual } from "node:util";
+import { persistProjectMediaReferenceRebind } from "../projects/project-media-reference-rebind";
+import { getPageModuleAssignmentsForAdmin } from "../../page-blocks/admin-queries";
 
 import type { Database, Json, TablesUpdate } from "../../database.types";
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
@@ -13,6 +15,10 @@ import {
   deriveEntitySeoScore,
   PERSISTED_ENTITY_SEO_FIELDS,
   TOPIC_SEO_SOURCE_COLUMNS,
+  PROJECT_SEO_SOURCE_COLUMNS,
+  PAGE_SEO_SOURCE_COLUMNS,
+  toProjectSeoScoreInput,
+  toPageSeoScoreInput,
   toTopicSeoScoreInput,
 } from "../seo/entity-seo-persistence";
 
@@ -73,10 +79,11 @@ type ProviderConfig = {
   stateFields?: readonly string[];
   supportsRebind?: boolean;
   revisionField?: "updated_at";
+  persistRebind?: typeof persistProjectMediaReferenceRebind;
   derivedWrite?: {
     sourceColumns: readonly string[];
     fields: readonly string[];
-    derive: (row: ProviderRow) => Record<string, Json | undefined>;
+    derive: (row: ProviderRow) => Record<string, Json | undefined> | Promise<Record<string, Json | undefined>>;
   };
   adoptsCanonicalLegacyPublic?: boolean;
   editHref: (row: ProviderRow) => string | null;
@@ -382,6 +389,8 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
       const readColumns = [...new Set([
         idField,
         reference.fieldKey,
+        config.revisionField,
+        ...(config.extraFields ?? []),
         ...(derivedWrite
           ? [...derivedWrite.sourceColumns, ...derivedWrite.fields, config.revisionField]
           : []),
@@ -408,7 +417,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
       }
       const update: TablesUpdate<MediaReferenceProviderTable> = {};
       Object.assign(update, { [reference.fieldKey]: nextValue });
-      const derivedFields = derivedWrite?.derive({
+      const derivedFields = await derivedWrite?.derive({
         ...currentRow,
         [reference.fieldKey]: nextValue,
       });
@@ -416,7 +425,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
       const expectedRevision = config.revisionField
         ? currentRow[config.revisionField]
         : undefined;
-      if (derivedWrite && (!config.revisionField ||
+      if (config.revisionField && (
         (expectedRevision !== null && typeof expectedRevision !== "string"))) {
         throw new MediaReferenceProviderRebindError(
           `media_reference_rebind_revision_invalid:${config.domainKey}`,
@@ -448,35 +457,39 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
         }
         comparisonValue = currentValue;
       }
-      let updateQuery = supabase
-        .from(config.table)
-        .update(update)
-        .eq(idField, reference.entityIdentity)
-        .eq(reference.fieldKey, comparisonValue);
-      if (derivedWrite && config.revisionField) {
-        const revisionColumn: string = config.revisionField;
-        updateQuery = typeof expectedRevision === "string"
-          ? updateQuery.eq(revisionColumn, expectedRevision)
-          : updateQuery.is(revisionColumn, null);
-        // The provenance hash covers every SEO input, including another field
-        // changed within the same millisecond as this snapshot revision.
-        for (const field of derivedWrite.fields) {
-          const previousValue = currentRow[field];
-          if (previousValue !== null && typeof previousValue !== "string" &&
-            typeof previousValue !== "number") {
-            throw new MediaReferenceProviderRebindError(
-              `media_reference_rebind_revision_invalid:${config.domainKey}`,
-              false,
-            );
+      const { data: updatedRow, error: updateError } = config.persistRebind
+        ? await config.persistRebind({ table: config.table, entityIdentity: reference.entityIdentity,
+          fieldKey: reference.fieldKey, currentRow, nextValue, derivedFields })
+        : await (async () => {
+          let updateQuery = supabase
+            .from(config.table)
+            .update(update)
+            .eq(idField, reference.entityIdentity)
+            .eq(reference.fieldKey, comparisonValue);
+          if (config.revisionField) {
+            const revisionColumn: string = config.revisionField;
+            updateQuery = typeof expectedRevision === "string"
+              ? updateQuery.eq(revisionColumn, expectedRevision)
+              : updateQuery.is(revisionColumn, null);
+            // The provenance hash covers every SEO input, including another field
+            // changed within the same millisecond as this snapshot revision.
+            for (const field of derivedWrite?.fields ?? []) {
+              const previousValue = currentRow[field];
+              if (previousValue !== null && typeof previousValue !== "string" &&
+                typeof previousValue !== "number") {
+                throw new MediaReferenceProviderRebindError(
+                  `media_reference_rebind_revision_invalid:${config.domainKey}`,
+                  false,
+                );
+              }
+              updateQuery = previousValue === null
+                ? updateQuery.is(field, null)
+                : updateQuery.eq(field, previousValue);
+            }
           }
-          updateQuery = previousValue === null
-            ? updateQuery.is(field, null)
-            : updateQuery.eq(field, previousValue);
-        }
-      }
-      const { data: updatedRow, error: updateError } = await updateQuery
-        .select(idField)
-        .maybeSingle();
+          return await updateQuery.select(idField).maybeSingle();
+
+        })();
       if (!updateError && updatedRow) return;
 
       const { data: observedRow, error: verificationError } = await supabase
@@ -511,6 +524,26 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
 }
 
 const PROVIDER_CONFIGS = [
+  {
+    domainKey: "pages",
+    table: "pages",
+    entityType: "page",
+    labelField: "title",
+    fields: ["og_image"],
+    revisionField: "updated_at",
+    derivedWrite: {
+      sourceColumns: PAGE_SEO_SOURCE_COLUMNS, fields: PERSISTED_ENTITY_SEO_FIELDS,
+      derive: async (row) => {
+        const composition = await getPageModuleAssignmentsForAdmin(Number(row.id));
+        return deriveEntitySeoScore(toPageSeoScoreInput({ ...row, semanticContent: composition.seoContent }), row);
+      },
+    },
+    stateFields: ["status"],
+    extraFields: ["path"],
+    editHref: (row) => "/admin/pages-blocks/pages/" + row.id + "?tab=seo",
+    publicHref: (row) => valueText(row.path) || null,
+  },
+
   {
     domainKey: "topics",
     table: "topics",
@@ -549,10 +582,15 @@ const PROVIDER_CONFIGS = [
     table: "projects",
     entityType: "project",
     labelField: "arabic_name",
-    fields: ["image", "hero_image", "small_box_image", "overview_main_image", "og_image"],
+    fields: ["image", "hero_image", "small_box_image", "overview_main_image", "og_image", "brochure_url"],
+    revisionField: "updated_at",
+    derivedWrite: {
+      sourceColumns: PROJECT_SEO_SOURCE_COLUMNS, fields: PERSISTED_ENTITY_SEO_FIELDS,
+      derive: (row) => deriveEntitySeoScore(toProjectSeoScoreInput(row), row),
+    },
     adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.id}`,
-    supportsRebind: false,
+    persistRebind: persistProjectMediaReferenceRebind,
   },
   {
     domainKey: "project_media",
@@ -562,7 +600,8 @@ const PROVIDER_CONFIGS = [
     extraFields: ["project_id"],
     adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.project_id}`,
-    supportsRebind: false,
+    persistRebind: persistProjectMediaReferenceRebind,
+    revisionField: "updated_at",
   },
   {
     domainKey: "project_floor_plans",
@@ -572,17 +611,19 @@ const PROVIDER_CONFIGS = [
     extraFields: ["project_id"],
     adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.project_id}`,
-    supportsRebind: false,
+    persistRebind: persistProjectMediaReferenceRebind,
+    revisionField: "updated_at",
   },
   {
     domainKey: "project_videos",
     table: "project_videos",
     entityType: "project_video",
-    fields: ["poster_image"],
+    fields: ["poster_image", "video_url"],
     extraFields: ["project_id"],
     adoptsCanonicalLegacyPublic: true,
     editHref: (row) => `/admin/projects/${row.project_id}`,
-    supportsRebind: false,
+    persistRebind: persistProjectMediaReferenceRebind,
+    revisionField: "updated_at",
   },
   {
     domainKey: "project_tracking_update_media",
@@ -592,7 +633,7 @@ const PROVIDER_CONFIGS = [
     fields: ["public_url", "poster_url"],
     extraFields: ["update_id", "media_kind"],
     editHref: (row) => `/admin/projects/construction-updates?update=${row.update_id}`,
-    supportsRebind: false,
+    revisionField: "updated_at",
   },
   {
     domainKey: "hero_templates",
@@ -710,7 +751,7 @@ const PROVIDER_CONFIGS = [
 ] satisfies ProviderConfig[];
 
 export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
-export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v6-managed-content-images";
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v7-complete-managed-rebind";
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;

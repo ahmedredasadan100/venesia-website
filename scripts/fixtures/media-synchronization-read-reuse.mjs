@@ -48,6 +48,8 @@ function harness(sourceRoot, options = {}) {
     "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
     "../content/content-types": { isContentType: () => true },
     "../../content/public-content-path": { resolvePublicContentPath: () => "/fixture" },
+    "../projects/project-media-reference-rebind": { persistProjectMediaReferenceRebind: async () => { throw new Error("Project RPC not configured in this fixture"); } },
+    "../../page-blocks/admin-queries": { getPageModuleAssignmentsForAdmin: async () => ({ seoContent: {} }) },
     "../seo/entity-seo-persistence": { TOPIC_SEO_SOURCE_COLUMNS: [], PERSISTED_ENTITY_SEO_FIELDS: [] },
     "./reference-providers": {
       MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "fixture",

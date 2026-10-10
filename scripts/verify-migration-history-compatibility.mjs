@@ -282,6 +282,8 @@ function verifyCanonicalRegistryRepresentations() {
       "8ceeab8119744789ad352f4f2fdcc8d5f97a46f98dc7eb8629c42fb8b2bf9598", "8292ffe3ac5b46aa3a73ba83afa04bf38b29ce1d5575094e53aa042b71216fa3", "crlf"],
     ["20261010005444", "media_relocation_lease_journal", 6, "canonical-statement-array-with-source-trivia-v1",
       "97ee31ad015bfa1087835ab0cf1144c9211c54408d6e1b8c60f1008e73ca2e01", "ef0bfdaabffc7989ce8efac643aaa78a802ef4fc08667f2b16eacbfdcb628e76"],
+    ["20261010052006", "project_managed_media_reference_rebind", 9, "canonical-statement-array-with-source-trivia-v1",
+      "c1bf19623818c0745ede649c61948a062188cb5685138172ebc591e117839215", "eafe3928dadbc1dad9f62abbe076035eeeeffa85a51d85032ed7b2b649ccb749"],
   ];
   const reports = [];
   for (const [version, name, statementCount, kind, statementArraySha256, sourceSha256, sourceLineEndings] of expected) {
