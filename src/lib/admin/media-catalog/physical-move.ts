@@ -16,6 +16,7 @@ import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
   listMediaCatalogSnapshot,
   getCatalogAssetByIdentity,
+  getCatalogAssetById,
   getMediaCatalogRuntimeState,
   listCatalogReferences,
   markCatalogAssetState,
@@ -32,6 +33,7 @@ import {
   type DiscoveredMediaReference,
 } from "./reference-providers";
 import { rebindAllSupportedMediaReferences } from "./synchronization";
+import type { Json } from "../../database.types";
 import type { MediaCatalogAsset } from "./types";
 import {
   acquireMediaReferenceWriteLease,
@@ -503,6 +505,11 @@ export function validateMediaRelocationTarget(asset: MediaCatalogAsset, input: {
   return { targetFilename, targetObjectKey };
 }
 
+function readRelocationIdentity(value: Json | undefined) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.provider !== "supabase" || typeof value.bucket !== "string" || typeof value.objectKey !== "string" || typeof value.publicUrl !== "string" || typeof value.folderPath !== "string" || !value.bucket || !value.objectKey || !value.publicUrl || value.folderPath !== getFolderPathFromObjectKey(value.objectKey)) throw new Error("media_relocation_recovery_identity_unproven");
+  return { provider: "supabase" as const, bucket: value.bucket, objectKey: value.objectKey, publicUrl: value.publicUrl, folderPath: value.folderPath };
+}
+
 /** Recovery compensates a proven staged copy while the existing unresolved lease
  * fences all affected assets. Expired live workers are never reclaimed here. */
 export async function repairFailedMediaRelocation(leaseToken: string) {
@@ -510,9 +517,17 @@ export async function repairFailedMediaRelocation(leaseToken: string) {
   const rows = await db.from("media_reference_write_leases").select("id,status,resolved_at,failure_metadata,updated_at,failure_code").eq("lease_token", leaseToken).order("id");
   if (rows.error || !rows.data?.length || rows.data.some(row => row.status !== "failed" || row.resolved_at)) throw new Error("media_relocation_recovery_not_ready");
   const first = rows.data[0];
-  const plan = first.failure_metadata as unknown as { operation?: string; copyConfirmed?: boolean; previousAsset?: MediaCatalogAsset; nextIdentity?: MediaCatalogAsset; referenceKeys?: string[][] };
-  if (plan.operation !== "physical_move" || !plan.previousAsset || !plan.nextIdentity || !plan.referenceKeys || first.failure_code === "media_relocation_repair_running") throw new Error("media_relocation_recovery_plan_unproven");
-  const previous = plan.previousAsset, next = plan.nextIdentity;
+  const plan = first.failure_metadata;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan) || plan.operation !== "physical_move" || first.failure_code === "media_relocation_repair_running") throw new Error("media_relocation_recovery_plan_unproven");
+  const prior = plan.previousAsset;
+  if (!prior || typeof prior !== "object" || Array.isArray(prior) || typeof prior.id !== "string") throw new Error("media_relocation_recovery_plan_unproven");
+  const previousIdentity = readRelocationIdentity(prior), next = readRelocationIdentity(plan.nextIdentity);
+  const referenceKeys = plan.referenceKeys;
+  if (!Array.isArray(referenceKeys) || referenceKeys.some(key => !Array.isArray(key) || key.length !== 3 || key.some(value => typeof value !== "string"))) throw new Error("media_relocation_recovery_plan_unproven");
+  const current = await getCatalogAssetById(prior.id);
+  if (!current || current.provider !== "supabase" || current.status !== "active" || previousIdentity.bucket !== next.bucket) throw new Error("media_relocation_recovery_identity_unproven");
+  const previous: MediaCatalogAsset = { ...current, ...previousIdentity, reconciliationState: "synced", missingObject: false };
+  if (buildMovedPublicUrl(previous, next.objectKey) !== next.publicUrl) throw new Error("media_relocation_recovery_identity_unproven");
   const claim = await db.rpc("transition_media_relocation_repair", { p_lease_token: leaseToken, p_action: "claim", p_expected_updated_at: first.updated_at });
   if (claim.error || Number(claim.data) !== rows.data.length) throw new Error("media_relocation_recovery_conflict");
   try {
@@ -527,7 +542,7 @@ export async function repairFailedMediaRelocation(leaseToken: string) {
       // Retirement finished; keep the final identity and let full reconciliation prove it.
       await markCatalogAssetState(previous.id, { reconciliationState: "synced" });
     } else if (state === "previous" || (state === "both" && plan.copyConfirmed)) {
-      const allowed = new Set(plan.referenceKeys.map(key => key.join("\u0000")));
+      const allowed = new Set(referenceKeys.map(key => Array.isArray(key) ? key.join("\u0000") : ""));
       if (nextRefs.some(ref => !allowed.has([ref.domainKey, ref.entityIdentity, ref.fieldKey].join("\u0000")))) throw new Error("media_relocation_recovery_foreign_reference");
       for (const ref of nextRefs) {
         const provider = getMediaReferenceProvider(ref.domainKey);
