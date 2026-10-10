@@ -88,6 +88,14 @@ const CANONICAL_REGISTRY_REPRESENTATIONS = Object.freeze({
     statementArraySha256: "97ee31ad015bfa1087835ab0cf1144c9211c54408d6e1b8c60f1008e73ca2e01",
     reconstructedSourceSha256: "ef0bfdaabffc7989ce8efac643aaa78a802ef4fc08667f2b16eacbfdcb628e76",
   }),
+  "20261010052006": Object.freeze({
+    version: "20261010052006",
+    name: "project_managed_media_reference_rebind",
+    kind: "canonical-statement-array-with-source-trivia-v1",
+    statementCount: 9,
+    statementArraySha256: "c1bf19623818c0745ede649c61948a062188cb5685138172ebc591e117839215",
+    reconstructedSourceSha256: "eafe3928dadbc1dad9f62abbe076035eeeeffa85a51d85032ed7b2b649ccb749",
+  }),
 });
 
 /** @typedef {{version:string,name:string,sql:string,sha256?:string}} MigrationSource */

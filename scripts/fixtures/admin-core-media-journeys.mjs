@@ -502,7 +502,7 @@ export async function runCoreMediaJourneys(ctx) {
     await moveForm.getByLabel("مجلد الوجهة", { exact: true }).fill("images/" + plan.namespace + "/moved");
     await moveForm.getByLabel("اسم الملف الفعلي الجديد", { exact: true }).fill(plan.namespace + "-renamed.png");
     await moveForm.getByRole("button", { name: "مراجعة العملية", exact: true }).click();
-    dialog = page.getByRole("dialog", { name: "تنفيذ تغيير فعلي لمسار التخزين؟", exact: true });
+    dialog = page.getByRole("dialog", { name: "مراجعة النقل وإعادة التسمية", exact: true });
     await api("PATCH", () => dialog.locator("[data-admin-confirm-submit]").click(), { operation: "move_asset" }); await expect(dialog).toHaveCount(0);
     const moved = await snapshot("prerequisite-moved"); await selectAsset(moved.assets.find(row => row.id === primaryId));
     const replacement = await upload([{ name: plan.namespace + "-replacement.png", mimeType: "image/png", buffer: png }], true);
@@ -707,12 +707,12 @@ export async function runCoreMediaJourneys(ctx) {
         const filename = plan.namespace + "-renamed.png";
         await form.getByLabel("مجلد الوجهة", { exact: true }).fill(targetFolder); await form.getByLabel("اسم الملف الفعلي الجديد", { exact: true }).fill(filename);
         await form.getByRole("button", { name: "مراجعة العملية", exact: true }).click();
-        let dialog = page.getByRole("dialog", { name: "تنفيذ تغيير فعلي لمسار التخزين؟", exact: true });
+        let dialog = page.getByRole("dialog", { name: "مراجعة النقل وإعادة التسمية", exact: true });
         await dialog.locator("[data-admin-confirm-cancel]").click(); await expect(form.getByLabel("مجلد الوجهة", { exact: true })).toHaveValue(targetFolder);
         await expect(form.getByLabel("اسم الملف الفعلي الجديد", { exact: true })).toHaveValue(filename);
         assertCoreMediaUnchanged(before, await snapshot("move-cancel-" + index), true);
         await form.getByRole("button", { name: "مراجعة العملية", exact: true }).click();
-        dialog = page.getByRole("dialog", { name: "تنفيذ تغيير فعلي لمسار التخزين؟", exact: true });
+        dialog = page.getByRole("dialog", { name: "مراجعة النقل وإعادة التسمية", exact: true });
         await api("PATCH", () => dialog.locator("[data-admin-confirm-submit]").click(), { operation: "move_asset" }); await expect(dialog).toHaveCount(0);
         const after = await snapshot("move-after-" + index);
         const changed = assertCoreMediaAsset(after, currentId, { object_key: targetFolder + "/" + filename, status: "active" });

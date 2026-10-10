@@ -61,6 +61,8 @@ const identityModule = loadTypeScriptModule("src/lib/admin/media-catalog/identit
 
 const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
+  "../projects/project-media-reference-rebind": { persistProjectMediaReferenceRebind: async () => { throw new Error("Project RPC not configured in this fixture"); } },
+  "../../page-blocks/admin-queries": { getPageModuleAssignmentsForAdmin: async () => ({ seoContent: {} }) },
   "../seo/entity-seo-persistence": seoPersistenceModule,
   "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": {
@@ -183,6 +185,8 @@ const usageSupabase = {
 };
 const usageProviderModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
+  "../projects/project-media-reference-rebind": { persistProjectMediaReferenceRebind: async () => { throw new Error("Project RPC not configured in this fixture"); } },
+  "../../page-blocks/admin-queries": { getPageModuleAssignmentsForAdmin: async () => ({ seoContent: {} }) },
   "../seo/entity-seo-persistence": seoPersistenceModule,
   "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
@@ -922,10 +926,7 @@ check("rebind proves live registry parity, retains the old asset and compensates
 const projectEntryCoordination = source("src/lib/admin/projects/project-entry-media-coordination.ts");
 const projectEntrySave = source("src/app/admin/projects/project-actions/save-entry.ts");
 check("projects synchronize parent and child media domains", ["project_media", "project_floor_plans", "project_videos"].every((domain) => projectEntryCoordination.includes(`"${domain}"`)) && projectEntrySave.includes("coordinateProjectEntrySave") && projectEntryCoordination.includes("synchronizeMediaReferenceWriteScopesAfterDomainMutation"));
-check("Project aggregate providers retain their specialized no-rebind mutation boundary", ["projects", "project_media", "project_floor_plans", "project_videos"].every((domain) => {
-  const provider = providerModule.MEDIA_REFERENCE_PROVIDER_REGISTRY.find((item) => item.domainKey === domain);
-  return provider && provider.supportsRebind === false;
-}));
+check("Every registered managed reference owner supports safe rebind", providerModule.MEDIA_REFERENCE_PROVIDER_REGISTRY.every(provider => provider.supportsRebind === true));
 check("Project reference discovery includes canonical legacy identities without widening other domains", (source("src/lib/admin/media-catalog/reference-providers.ts").match(/adoptsCanonicalLegacyPublic: true/g) ?? []).length === 4);
 
 const route = source("src/app/api/admin/media-library/route.ts");

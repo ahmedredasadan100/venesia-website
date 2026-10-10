@@ -18,7 +18,8 @@ import {
   registerCatalogUpload,
   updateCatalogAssetMetadata,
 } from "../../../../lib/admin/media-catalog/catalog";
-import { getMediaReferenceProvider } from "../../../../lib/admin/media-catalog/reference-providers";
+import { getCanonicalMediaIdentityKey } from "../../../../lib/admin/media-catalog/identity";
+import { getMediaReferenceProvider, scanAllMediaReferenceProviders } from "../../../../lib/admin/media-catalog/reference-providers";
 import { reconcileMediaCatalog, refreshMediaCatalogAfterMutation } from "../../../../lib/admin/media-catalog/reconciliation";
 import { moveCatalogMediaAsset, validateMediaRelocationTarget } from "../../../../lib/admin/media-catalog/physical-move";
 import { safelyDeleteMediaAsset, previewMediaDeletion, prepareMediaDeleteBatch, runBoundedMediaDeletes, refreshMediaDeleteCatalog } from "../../../../lib/admin/media-catalog/safe-delete";
@@ -448,6 +449,8 @@ export async function PATCH(request: Request) {
     if (body.operation === "preview_move") {
       const ids = Array.isArray(body.assetIds) ? [...new Set(body.assetIds)] : [];
       if (!ids.length || ids.length > 100 || ids.some(id => typeof id !== "string") || (ids.length > 1 && body.targetFilename !== undefined)) return mediaJson({ error: "حدد صورًا للنقل؛ إعادة التسمية متاحة لصورة واحدة فقط." }, { status: 400 });
+      const live = await scanAllMediaReferenceProviders();
+      if (live.uncertainties.length) return mediaJson({ error: "تعذر تأكيد جميع الاستخدامات الحالية. أعد الفحص قبل المتابعة." }, { status: 409 });
       const previews = [];
       for (const id of ids) {
         const asset = await getCatalogAssetById(String(id));
@@ -455,6 +458,15 @@ export async function PATCH(request: Request) {
         try {
           const target = validateMediaRelocationTarget(asset, { targetFolder: String(body.targetFolder ?? ""), targetFilename: typeof body.targetFilename === "string" ? body.targetFilename : undefined });
           const references = await listCatalogReferences(asset.id);
+          const liveReferences = live.references.filter(ref => getCanonicalMediaIdentityKey(ref.identity) === getCanonicalMediaIdentityKey(asset));
+          const keys = (rows: { domainKey: string; entityIdentity: string; fieldKey: string }[]) =>
+            new Set(rows.map(ref => JSON.stringify([ref.domainKey, ref.entityIdentity, ref.fieldKey])));
+          const storedKeys = keys(references), liveKeys = keys(liveReferences);
+          if (storedKeys.size !== liveKeys.size || [...liveKeys].some(key => !storedKeys.has(key))) {
+            previews.push({ id, asset, targetObjectKey: target.targetObjectKey, references,
+              error: "تغيرت الاستخدامات منذ آخر مزامنة. حدّث مكتبة الوسائط ثم أعد المراجعة." });
+            continue;
+          }
           const unsupported = references.some(ref => !getMediaReferenceProvider(ref.domainKey)?.supportsRebind);
           previews.push({ id, asset, targetObjectKey: target.targetObjectKey, references, error: unsupported ? "UNSUPPORTED_REFERENCE_OWNER" : null });
         } catch (error) { previews.push({ id, asset, error: safeError(error, "تعذر فحص النقل.").message }); }

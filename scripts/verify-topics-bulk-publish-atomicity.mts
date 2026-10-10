@@ -898,6 +898,8 @@ const referenceProvidersRuntime =
   loadTypeScriptModule<ReferenceProvidersRuntime>(REFERENCE_PROVIDERS_PATH, {
     "server-only": {},
     "node:util": nativeRequire("node:util"),
+    "../projects/project-media-reference-rebind": { persistProjectMediaReferenceRebind: async () => { throw new Error("Project RPC not configured in this fixture"); } },
+    "../../page-blocks/admin-queries": { getPageModuleAssignmentsForAdmin: async () => ({ seoContent: {} }) },
     "../seo/entity-seo-persistence": {
       TOPIC_SEO_SOURCE_COLUMNS: ["content_type", "image"],
       PERSISTED_ENTITY_SEO_FIELDS: Object.keys(reboundSeo),

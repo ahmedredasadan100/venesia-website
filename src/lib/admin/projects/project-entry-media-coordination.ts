@@ -102,7 +102,7 @@ function buildIntendedChildren(
       domainKey: "project_videos" as const,
       clientKey: video.client_key,
       leaseEntityIdentity: `project-video:${operationIdentity}:${video.client_key}`,
-      row: { poster_image: video.poster_image },
+      row: { poster_image: video.poster_image, video_url: video.video_url },
     })),
   ];
 }
@@ -196,6 +196,7 @@ export async function coordinateProjectEntrySave(input: {
       small_box_image: input.payload.project.small_box_image,
       overview_main_image: input.payload.project.overview_main_image,
       og_image: input.payload.project.og_image,
+      brochure_url: input.payload.project.brochure_url,
     }),
     ...intendedChildren.map((child) =>
       buildMediaReferenceWriteScope(

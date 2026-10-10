@@ -719,10 +719,14 @@ export default function MediaLibraryCore({
 
   const selectionMode = mode !== "manage";
   const canMutate = data?.catalogState === "available";
+  const relocationRenames = confirmation?.kind === "move" && confirmation.assets.length === 1 &&
+    Boolean(confirmation.targetFilename && confirmation.targetFilename !== confirmation.assets[0].objectKey.split("/").at(-1));
+  const relocationMoves = confirmation?.kind === "move" && confirmation.assets.some(asset => asset.folderPath !== confirmation.targetFolder);
+  const relocationLabel = relocationRenames ? (relocationMoves ? "تأكيد النقل وإعادة التسمية" : "تأكيد إعادة التسمية") : "تأكيد النقل";
   const confirmDescription = confirmation?.kind === "replace"
     ? `سيتم تحديث مواضع الاستخدام المدعومة من «${confirmation.previous.displayName}» إلى «${confirmation.next.displayName}». سيبقى الملف القديم محفوظًا.`
     : confirmation?.kind === "move"
-      ? `تم تحديد ${confirmation.assets.length} صور؛ ${confirmation.previews.filter(item => (item.references?.length ?? 0) > 0).length} مستخدمة، وسيتم تحديث ${confirmation.previews.reduce((sum, item) => sum + (item.references?.length ?? 0), 0)} مراجع. راجع المسارات والاستخدامات لكل صورة.`
+      ? `تم تحديد ${confirmation.assets.length} صور؛ ${confirmation.previews.filter(item => (item.references?.length ?? 0) > 0).length} مستخدمة، وسيتم تحديث ${confirmation.previews.reduce((sum, item) => sum + (item.references?.length ?? 0), 0)} مراجع تلقائيًا عند المتابعة. الوجهة: ${confirmation.targetFolder}. راجع المسارات والاستخدامات لكل صورة.`
       : confirmation?.kind === "delete" && confirmation.phase === "checking" ? "جارٍ فحص الاستخدامات الحالية…"
       : "راجع الملفات ومواضع استخدامها. الحذف نهائي، ولن يفك مراجع المحتوى أو يغيرها تلقائيًا.";
 
@@ -1022,9 +1026,9 @@ export default function MediaLibraryCore({
 
       <AdminConfirmDialog
         open={confirmation !== null}
-        title={confirmation?.kind === "replace" ? "استبدال كل المراجع المدعومة؟" : confirmation?.kind === "move" ? "تنفيذ تغيير فعلي لمسار التخزين؟" : "حذف الأصول المحددة؟"}
+        title={confirmation?.kind === "replace" ? "استبدال كل المراجع المدعومة؟" : confirmation?.kind === "move" ? "مراجعة النقل وإعادة التسمية" : "حذف الأصول المحددة؟"}
         description={confirmDescription}
-        confirmLabel={confirmation?.kind === "replace" ? "تأكيد الاستبدال" : confirmation?.kind === "move" ? "تأكيد النقل / التسمية" : confirmation?.kind === "delete" && confirmation.phase === "failed" ? "إعادة الفحص" : confirmation?.kind === "delete" && confirmation.checks.some(check => check.state === "in_use") ? "حذف رغم الاستخدام" : "تأكيد الحذف"}
+        confirmLabel={confirmation?.kind === "replace" ? "تأكيد الاستبدال" : confirmation?.kind === "move" ? relocationLabel : confirmation?.kind === "delete" && confirmation.phase === "failed" ? "إعادة الفحص" : confirmation?.kind === "delete" && confirmation.checks.some(check => check.state === "in_use") ? "حذف رغم الاستخدام" : "تأكيد الحذف"}
         pending={busy === "delete-preview" || busy === "delete" || busy === "replace" || busy === "move"}
         confirmDisabled={confirmation?.kind === "move" ? confirmation.previews.every(item => Boolean(item.error)) || Boolean(busy) : confirmation?.kind === "delete" && (confirmation.phase === "checking" || (confirmation.phase === "ready" && confirmation.assets.length > 0 && !confirmation.checks.some(check => check.state === "safe_to_delete" || check.state === "in_use")))}
         returnFocusRef={
@@ -1038,7 +1042,7 @@ export default function MediaLibraryCore({
         onCancel={() => setConfirmation(null)}
         onConfirm={executeConfirmation}
       >
-        {confirmation?.kind === "move" ? <div className="max-h-[40vh] overflow-y-auto space-y-3" data-media-relocation-preview="">{confirmation.previews.map(item => <div key={item.id} className="rounded-lg border border-white/10 p-3"><p>{item.asset?.displayName ?? item.id}</p><p dir="ltr" className="break-all">{item.asset?.objectKey} → {item.targetObjectKey}</p><p>{item.references?.length ?? 0} مواضع استخدام — تُحدث تلقائيًا.</p>{item.error ? <p className="text-red-200">{item.error}</p> : null}<ul>{item.references?.map(ref => <li key={ref.id}>{ref.entityLabel ?? ref.entityIdentity} — {ref.domainKey} / {ref.fieldKey}</li>)}</ul></div>)}</div> : null}
+        {confirmation?.kind === "move" ? <div className="max-h-[40vh] overflow-y-auto space-y-3" data-media-relocation-preview="">{confirmation.previews.map(item => <div key={item.id} className="rounded-lg border border-white/10 p-3"><p>{item.asset?.displayName ?? item.id}</p><p dir="ltr" className="break-all">{item.asset?.objectKey} → {item.targetObjectKey}</p><p>{item.references?.length ?? 0} مواضع استخدام — تُحدث تلقائيًا.</p>{item.error ? <p className="text-red-200">{item.error}</p> : null}<ul>{item.references?.map(ref => <li key={ref.id}>{ref.editHref ? <Link href={ref.editHref} target="_blank" className="underline">{ref.entityLabel ?? ref.entityIdentity}</Link> : ref.entityLabel ?? ref.entityIdentity} — {ref.domainKey} / {ref.fieldKey}</li>)}</ul></div>)}</div> : null}
         {confirmation?.kind === "delete" ? <div className="max-h-[40vh] space-y-3 overflow-y-auto" aria-live="polite" data-media-delete-preview="">
           {confirmation.phase === "checking" ? <p role="status">جارٍ فحص الاستخدامات…</p> : null}
           {confirmation.error ? <p role="alert" className="text-sm text-red-200">{confirmation.error}</p> : null}

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { coordinateMediaReferenceEntityMutation } from "../../../../lib/admin/media-catalog/domain-write-coordination";
 import { redirect } from "next/navigation";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
@@ -34,7 +35,7 @@ function appendSeoQuery(redirectTo: string, key: "seo_notice" | "seo_error", val
 }
 
 export async function savePageSeoAction(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
 
   const pageId = Number(readString(formData, "page_id"));
   const redirectTo = readString(formData, "redirect_to") || `/admin/pages-blocks/pages/${pageId}?tab=seo`;
@@ -70,17 +71,25 @@ export async function savePageSeoAction(formData: FormData) {
     semanticContent: composition.seoContent,
   }), pageSource);
 
-  const { error } = await getSupabaseAdmin()
-    .from("pages")
-    .update({
-      ...persistence,
-      ...score,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", pageId);
-
-  if (error) {
-    redirect(appendSeoQuery(redirectTo, "seo_error", error.message));
+  let mediaWarning: string | null = null;
+  try {
+    const coordinated = await coordinateMediaReferenceEntityMutation({
+      domainKey: "pages", leaseEntityIdentity: String(pageId), intendedRow: persistence,
+      actorId: actor.id, requestIdentity: "page-media-save:" + pageId,
+      mutate: async () => {
+        const { error } = await getSupabaseAdmin().from("pages").update({
+          ...persistence, ...score, updated_at: new Date().toISOString(),
+        }).eq("id", pageId);
+        if (error) throw new Error(error.message);
+        return pageId;
+      },
+      resolveEntityIdentity: String,
+    });
+    if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
+      mediaWarning = coordinated.mediaSynchronization.failureReason ?? "تم الحفظ لكن تعذر تأكيد مزامنة مرجع الصورة.";
+    }
+  } catch (error) {
+    redirect(appendSeoQuery(redirectTo, "seo_error", error instanceof Error ? error.message : "تعذر حفظ مرجع الصورة بأمان."));
   }
 
   const { data: page, error: pageReadError } = await getSupabaseAdmin()
@@ -115,5 +124,6 @@ export async function savePageSeoAction(formData: FormData) {
     metadata: { scope: "page_seo", score: score.seo_score, scoreVersion: score.seo_score_version },
   });
 
+  if (mediaWarning) redirect(appendSeoQuery(redirectTo, "seo_error", mediaWarning));
   redirect(appendSeoQuery(redirectTo, "seo_notice", "saved"));
 }

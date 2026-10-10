@@ -257,8 +257,16 @@ async function mediaUploadLimitProof(argv: string[]) {
       const bucket = (await handle.query("select file_size_limit from storage.buckets where id='cms-images'")).rows[0];
       assert.equal(Number(bucket.file_size_limit), 50 * 1024 * 1024);
       await handle.preparePublicVerification();
-      await handle.prepareAdminInteractions({ study: "media-upload-limit" });
+      const relocationFixtures = await handle.prepareAdminInteractions();
+      writeFileSync(resolve(output, "run/admin-adoption-fixtures.json"), JSON.stringify(relocationFixtures));
+      const sharedImage = String((await handle.query("select image from public.projects where id=$1", [(relocationFixtures.project as { id: number }).id])).rows[0].image);
+      await handle.query("update public.topics set status='unpublished' where id=$1", [(relocationFixtures.topic as { id: number }).id]);
+      await handle.query("insert into public.hero_templates(id,name,slug,variant,status,source_type,config) values (900002,'QA Multi-owner','qa-multi-owner','home-cinematic','unpublished','manual',$1::jsonb)", [JSON.stringify({title:"QA Multi-owner",images:[sharedImage],mobileImages:[]})]);
+      handle.record("media-relocation-fixtures-ready", { project: true, topic: true, hero: true });
+      const migrationReceipt = await handle.query("select version,name,statements from supabase_migrations.schema_migrations where version='20261010052006'");
+      writeFileSync(resolve(output, "rebind-migration-receipt.json"), JSON.stringify(migrationReceipt.rows));
       await handle.query(readFileSync(resolve(root, "scripts/fixtures/media-relocation-journal.sql"), "utf8"));
+      handle.record("media-relocation-native-pass", { projectCas: true, projectCompensation: true, grantsUnchanged: true });
       writeFileSync(resolve(output, "relocation-journal-proof.json"), JSON.stringify({ status: "pass", directWritesDenied: true, serviceRpcAllowed: true, anonymousRpcDenied: true, receiptMonotonic: true, duplicateRepairClaimRejected: true, rolledBack: true }));
       await handle.query(`insert into public.hero_templates (id,name,slug,variant,status,source_type,config) values
         (900001,'QA Slider upload','qa-slider-upload','home-cinematic','unpublished','manual','{"title":"QA Slider upload","images":[],"mobileImages":[]}'::jsonb)`);
@@ -296,7 +304,7 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(relocationAssets.length,2);
       assert.ok(relocationAssets.every(row=>row.status==='active' && row.storage_exists && String(row.object_key).startsWith('images/home/relocate-bulk/')));
       const relocationAudit=(await handle.query("select metadata from public.admin_audit_logs where metadata->>'operation' in ('move','rename','move+rename') and metadata->>'result'='success'")).rows;
-      assert.equal(relocationAudit.length,7);
+      assert.equal(relocationAudit.length,10);
       const oldReferences=(await handle.query("select count(*)::int as count from public.media_reference_write_leases where resolved_at is null and status in ('failed','expired')")).rows[0];
       assert.equal(oldReferences.count,0);
       writeFileSync(resolve(output,"media-relocation-database-proof.json"),JSON.stringify({status:'pass',assets:relocationAssets,audit:relocationAudit,unresolved:oldReferences.count},null,2));
