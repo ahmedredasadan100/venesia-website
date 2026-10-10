@@ -23,11 +23,11 @@ function assertCurrentApplicabilityAccounting(receipt){
   assert.equal(row.declaration,owners[0].applicability[row.axis]?.state,'Exact current canonical applicability decision');
  }
  const retained=retainedTrackingMediaCases();assert.deepEqual(declaredPending.map(row=>row.key).sort(),retained.map(row=>row.key).sort());
- assert.equal(receipt.coverageAccounting.historicalRequiredCases,rows.length);
+ assert.equal(receipt.coverageAccounting.historicalRequiredCases+receipt.coverageAccounting.postHistoricalAdditionCases.length,rows.length);
  assert.equal(receipt.coverageAccounting.currentApplicableCases,rows.length-declaredPending.length);
  assert.equal(receipt.coverageAccounting.retainedNotApplicableCases,declaredPending.length);
  assert.ok(rows.every(row=>row.status==='open'&&row.evidence===null));
- return{historicalRequiredCases:rows.length,currentApplicableCases:rows.length-declaredPending.length,retainedNotApplicableCases:declaredPending.length};
+ return{historicalRequiredCases:receipt.coverageAccounting.historicalRequiredCases,postHistoricalAdditionCases:receipt.coverageAccounting.postHistoricalAdditionCases,currentApplicableCases:rows.length-declaredPending.length,retainedNotApplicableCases:declaredPending.length};
 }
 const currentAccounting=assertCurrentApplicabilityAccounting(inventory);
 check('canonical-inventory-retains-exact-historical-identities-with-current-applicability',()=>assertCurrentApplicabilityAccounting(inventory));
