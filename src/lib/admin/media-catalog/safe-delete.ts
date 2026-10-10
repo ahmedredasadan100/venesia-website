@@ -23,7 +23,7 @@ import {
 } from "./delete-reservation";
 import { runMediaDeleteSaga } from "./delete-saga";
 import { buildMediaCatalogReadiness } from "./readiness";
-import { reconcileMediaCatalog } from "./reconciliation";
+import { reconcileMediaCatalog, refreshMediaCatalogAfterMutation } from "./reconciliation";
 import { getCanonicalMediaIdentityKey } from "./identity";
 import {
   MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
@@ -364,24 +364,7 @@ export async function safelyDeleteMediaAsset(
   }
 }
 
-export async function refreshMediaDeleteCatalog(actorId?: number | null) {
-    const catalogWarnings: string[] = [];
-    try {
-      const [catalog, inventory, runtimeState] = await Promise.all([
-        listMediaCatalogSnapshot(), listPublicMediaInventory(), getMediaCatalogRuntimeState(),
-      ]);
-      const readiness = buildMediaCatalogReadiness(catalog, inventory, runtimeState,
-        resolveMediaStorageRuntimeContext(), MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION);
-      if (!readiness.runtimeDatasetMatches) {
-        const reconciliation = await reconcileMediaCatalog({ actorId: actorId });
-        if (!reconciliation.complete) catalogWarnings.push(...reconciliation.uncertainties);
-      }
-    } catch (error) {
-      catalogWarnings.push(error instanceof Error ? error.message : "media_delete_catalog_refresh_failed");
-    }
-
-  return catalogWarnings;
-}
+export const refreshMediaDeleteCatalog = refreshMediaCatalogAfterMutation;
 
 export async function prepareMediaDeleteBatch(values: string[]) {
   const snapshot = await readDeleteContext();

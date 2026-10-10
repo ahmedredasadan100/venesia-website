@@ -183,7 +183,16 @@ function discoverRowUsage(config: ProviderConfig, row: ProviderRow, requestedPub
 }
 
 export function replaceMediaValue(value: Json, previousValue: string, nextValue: string): Json {
-  if (typeof value === "string") return value.split(previousValue).join(nextValue);
+  if (typeof value === "string") {
+    // Match complete managed candidates, never prefixes of unrelated filenames.
+    if (value.trim() === previousValue) return value.replace(previousValue, nextValue);
+    return value.replace(/https?:\/\/[^\s"'<>\\]+|(?<![A-Za-z0-9:/])\/(?:images|files)\/[^\s"'<>\\]+/gi, (token) => {
+      const candidate = token.replace(/[),.;]+$/, "");
+      return mediaPublicValuesMatch(candidate, previousValue)
+        ? nextValue + token.slice(candidate.length)
+        : token;
+    });
+  }
   if (Array.isArray(value)) return value.map((item) => replaceMediaValue(item, previousValue, nextValue));
   if (value && typeof value === "object") {
     return Object.fromEntries(

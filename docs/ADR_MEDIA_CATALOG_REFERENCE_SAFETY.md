@@ -100,3 +100,48 @@ The UI removes successful rows immediately and retains failed selections with th
 reasons; a truncated stream is a visible failure, never a success. Retry previews only
 the failed/unknown targets. The same owner handles folder assets before atomic empty
 folder retirement. No consumer bypasses the readiness or usage-confirmation gates.
+
+## Managed image relocation
+
+`physical-move.ts` is the existing owner for single Move, Rename and combined
+Move + Rename. The management consumer previews existing compatible Catalog
+folders, final paths and reference locations. Bulk Move calls this same owner
+sequentially, records independent results and retains failed selection for retry.
+There is no bulk rename, folder rename, MIME relaxation or consumer-specific path.
+
+The owner validates the exact filename/extension and destination, scans all
+registered providers, proves Catalog/live reference parity, and acquires existing
+write leases. It journals intent in the existing recovery ledger, copies without
+upsert, changes the Catalog location while retaining the asset UUID, and updates
+supported references with their existing compare-and-set providers. Both Storage
+locations remain available until reference verification and cache invalidation
+finish. Only then is the old object retired and the identity finalized. The API
+records the existing Audit entry and refreshes Catalog readiness when required.
+
+Supported reference writes remain defined by `supportsRebind` in the canonical
+provider registry: Topics/categories, Hero and Page Block templates, menus and
+site settings. Project aggregate providers remain read-only; an asset referenced
+by any unsupported provider fails with `UNSUPPORTED_REFERENCE_OWNER` before
+Storage mutation. No similar URL prefixes are replaced.
+
+On a compensated failure, the original location remains valid. Partial or
+unproven outcomes retain an unresolved lease and fail closed. Media Recovery
+repairs a failed relocation only from its persisted plan: a proven staged copy
+can be rolled back, or a completed retirement can retain its final identity.
+Full reconciliation and the existing lease resolver then prove closure. An
+ambiguous copy response does not authorize deleting a possibly foreign object;
+Storage ownership must be established operationally. Expiry alone never proves
+that a worker stopped. Reconciliation refuses unresolved relocation staging so
+it cannot register a temporary copy as a second logical asset.
+
+Verification owners: `verify-media-library-system.mjs` includes the executable
+relocation owner fixture; the isolated upload/picker journey includes
+`media-relocation-journey.mjs` for unused/referenced move, rename, combined move,
+partial bulk failure and failed-only retry, negative destinations/names, and
+Hero save/reload. Production runs the same browser journey with unpublished QA
+consumers and confirms Storage/Catalog/references/Audit before official cleanup.
+
+The relocation journal migration extends the existing lease RPC boundary. Direct
+service-role table updates remain denied; the journal is immutable apart from its
+copy receipt. Recovery claims lock the complete token group and reject concurrent
+claims. The isolated SQL fixture proves those permissions and transitions.

@@ -9,6 +9,7 @@ import {
   createCatalogFolder,
   retireEmptyCatalogFolder,
   getCatalogAssetById,
+  listCatalogReferences,
   getCatalogAssetByIdentity,
   getMediaCatalogRuntimeState,
   listMediaCatalogSnapshot,
@@ -17,8 +18,9 @@ import {
   registerCatalogUpload,
   updateCatalogAssetMetadata,
 } from "../../../../lib/admin/media-catalog/catalog";
-import { reconcileMediaCatalog } from "../../../../lib/admin/media-catalog/reconciliation";
-import { moveCatalogMediaAsset } from "../../../../lib/admin/media-catalog/physical-move";
+import { getMediaReferenceProvider } from "../../../../lib/admin/media-catalog/reference-providers";
+import { reconcileMediaCatalog, refreshMediaCatalogAfterMutation } from "../../../../lib/admin/media-catalog/reconciliation";
+import { moveCatalogMediaAsset, validateMediaRelocationTarget } from "../../../../lib/admin/media-catalog/physical-move";
 import { safelyDeleteMediaAsset, previewMediaDeletion, prepareMediaDeleteBatch, runBoundedMediaDeletes, refreshMediaDeleteCatalog } from "../../../../lib/admin/media-catalog/safe-delete";
 import { rebindAllSupportedMediaReferences } from "../../../../lib/admin/media-catalog/synchronization";
 import type { MediaSmartView } from "../../../../lib/admin/media-catalog/types";
@@ -253,7 +255,7 @@ export async function POST(request: Request) {
     const actor = await requireAdminSession();
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const body = (await request.json()) as { operation?: unknown; assets?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown;
+      const body = (await request.json()) as { operation?: unknown; assetIds?: unknown; assets?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown;
         file?: { name?: unknown; type?: unknown; size?: unknown }; kind?: unknown; receipt?: unknown };
       if (body.operation === "delete_folder") {
         if (typeof body.folder !== "string") return mediaJson({ error: "حدد مجلدًا صالحًا." }, { status: 400 });
@@ -443,14 +445,34 @@ export async function PATCH(request: Request) {
       return mediaJson({ replaced: true, ...result });
     }
 
+    if (body.operation === "preview_move") {
+      const ids = Array.isArray(body.assetIds) ? [...new Set(body.assetIds)] : [];
+      if (!ids.length || ids.length > 100 || ids.some(id => typeof id !== "string") || (ids.length > 1 && body.targetFilename !== undefined)) return mediaJson({ error: "حدد صورًا للنقل؛ إعادة التسمية متاحة لصورة واحدة فقط." }, { status: 400 });
+      const previews = [];
+      for (const id of ids) {
+        const asset = await getCatalogAssetById(String(id));
+        if (!asset) { previews.push({ id, error: "الأصل غير موجود." }); continue; }
+        try {
+          const target = validateMediaRelocationTarget(asset, { targetFolder: String(body.targetFolder ?? ""), targetFilename: typeof body.targetFilename === "string" ? body.targetFilename : undefined });
+          const references = await listCatalogReferences(asset.id);
+          const unsupported = references.some(ref => !getMediaReferenceProvider(ref.domainKey)?.supportsRebind);
+          previews.push({ id, asset, targetObjectKey: target.targetObjectKey, references, error: unsupported ? "UNSUPPORTED_REFERENCE_OWNER" : null });
+        } catch (error) { previews.push({ id, asset, error: safeError(error, "تعذر فحص النقل.").message }); }
+      }
+      return mediaJson({ previews });
+    }
+
     if (body.operation === "move_asset") {
       const assetId = typeof body.assetId === "string" ? body.assetId : "";
-      const targetFolder = typeof body.targetFolder === "string" ? normalizeMediaFolder(body.targetFolder) : "";
+      const targetFolder = typeof body.targetFolder === "string" ? body.targetFolder : "";
       const targetFilename = typeof body.targetFilename === "string" ? body.targetFilename : undefined;
       const asset = await getCatalogAssetById(assetId);
       if (!asset || !targetFolder) return mediaJson({ error: "الأصل ومسار الوجهة مطلوبان." }, { status: 400 });
-      const result = await moveCatalogMediaAsset(asset, { targetFolder, targetFilename }, actor.id);
-      const operation = targetFolder === asset.folderPath ? "rename_physical_object" : "move_physical_object";
+      const result = await moveCatalogMediaAsset(asset, { targetFolder, targetFilename }, actor.id).catch(async error => {
+        await recordCmsAdminAudit({ action: buildCmsAuditAction("media_asset", "update"), entityType: "media_asset", entityLabel: asset.displayName, metadata: { operation: "relocation", assetId, previousObjectKey: asset.objectKey, targetFolder, targetFilename, result: "failed", reason: error instanceof Error ? error.message : "unknown" } }, actor);
+        throw error;
+      });
+      const operation = result.operation;
       await recordCmsAdminAudit(
         {
           action: buildCmsAuditAction("media_asset", "update"),
@@ -461,11 +483,14 @@ export async function PATCH(request: Request) {
             assetId,
             previousObjectKey: asset.objectKey,
             nextObjectKey: result.asset.objectKey,
+            referenceCountUpdated: result.rebind.appliedCount,
+            result: "success",
           },
         },
         actor,
       );
-      return mediaJson({ moved: true, operation, ...result });
+      const catalogWarnings = await refreshMediaCatalogAfterMutation(actor.id);
+      return mediaJson({ moved: true, ...result, catalogWarnings });
     }
 
     return mediaJson({ error: "عملية التعديل غير مدعومة." }, { status: 400 });

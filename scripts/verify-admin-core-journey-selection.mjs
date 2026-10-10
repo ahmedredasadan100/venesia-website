@@ -28,6 +28,12 @@ const loops=tree.statements.filter(node=>ts.isForOfStatement(node)&&["inventory"
 const preflight=spawnSync(process.execPath,["--experimental-strip-types","scripts/verify-admin-row-actions-capability.mts","--consumer-capability-audit","--all","--phase","applicability","--json"],{cwd:root,encoding:"utf8",timeout:120000,maxBuffer:4000000,windowsHide:true});assert.equal(preflight.status,0);const canonical=JSON.parse(preflight.stdout.split(/\r?\n/u).find(line=>line.startsWith('{"phase":')));
 const retainedCaseFunctions=tree.statements.filter(node=>ts.isFunctionDeclaration(node)&&['retainedTrackingMediaCases','assertHistoricalCoreCaseIdentity'].includes(node.name?.text));assert.equal(retainedCaseFunctions.length,2);
 const requiredCases=new Function("assert","forms","collections","canonical","createHash",retainedCaseFunctions.map(node=>node.getText(tree)).join("\n")+"\n"+inventory.getText(tree)+";const requiredCases=[];"+loops.map(node=>node.getText(tree)).join("\n")+";requiredCases.push(...retainedTrackingMediaCases());assertHistoricalCoreCaseIdentity(requiredCases);return requiredCases;")(assert,forms,collections,canonical,createHash);
+const assertCurrentLedger=new Function("assert","createHash",retainedCaseFunctions.map(node=>node.getText(tree)).join("\n")+";return assertHistoricalCoreCaseIdentity;")(assert,createHash);
+assert.equal(assertCurrentLedger(requiredCases).historicalRequiredCases,959);
+assert.deepEqual(assertCurrentLedger(requiredCases).postHistoricalAdditionCases,["form:activity-sitemap-media-commands:capability:listbox"]);
+assert.throws(()=>assertCurrentLedger(requiredCases.filter(row=>row.key!=="form:activity-sitemap-media-commands:capability:listbox")));
+assert.throws(()=>assertCurrentLedger([...requiredCases,requiredCases.find(row=>row.key==="form:activity-sitemap-media-commands:capability:listbox")]));
+assert.throws(()=>assertCurrentLedger(requiredCases.slice(1)));
 const fixtures={category:{id:1,name:"QA"},project:{id:2,editorPath:"/admin/projects/2",locationIds:[3,4,5,6]},commercialProject:{id:7,editorPath:"/admin/projects/7"}};
 const all=buildCoreDomainFormPlan({manifest,requiredCases,fixtures,locationConfig}),selection="text-topic-forms",plan=selectCoreDomainFormPlan(all,selection),recipes=coreSelectedTopicRecipes(selection,manifest),ids=recipes.map(coreTopicJourneyId),checks=[];
 const test=async(name,run)=>{await run();checks.push(name);};

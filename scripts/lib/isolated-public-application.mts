@@ -272,6 +272,7 @@ export async function runApplicationHandoff(
         "20261007165732_retire_legacy_content_image_catalog.sql",
         "20261007193823_media_delete_usage_confirmation.sql",
         "20261008084745_media_delete_lease_resolution.sql",
+        "20261010005444_media_relocation_lease_journal.sql",
       ],
       "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, terminal integration conflict, configurable image ceiling, legacy content image retirement, and guarded media deletion extensions may follow the SEO security declaration.",
     );

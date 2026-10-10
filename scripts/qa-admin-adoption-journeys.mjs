@@ -119,13 +119,18 @@ function retainedTrackingMediaCases() {
  return [...tracking,...readonly,...confirmation,...readonlyConfirmation,...updateListbox];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
- assert.equal(cases.length,959,"The bounded closure ledger must retain every historical case.");
+ const additionKey="form:activity-sitemap-media-commands:capability:listbox";
+ const additions=cases.filter(row=>row.key===additionKey);
+ assert.equal(additions.length,1,"Managed relocation must retain its newly applicable Listbox case.");
+ assert.equal(additions[0].declaration,"adopted");
+ const historical=cases.filter(row=>row.key!==additionKey);
+ assert.equal(historical.length,959,"The bounded closure ledger must retain every historical case.");
  assert.equal(new Set(cases.map(row=>row.key)).size,cases.length,"Duplicate historical case identity.");
- assert.equal(createHash("sha256").update(JSON.stringify(cases.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
+ assert.equal(createHash("sha256").update(JSON.stringify(historical.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
  const retained=retainedTrackingMediaCases();
  assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the exact reviewed Tracking Media, Tracking Updates Listbox, readonly Feedback, readonly Confirmation and Media summary Confirmation corrections may be retained as not applicable.");
  for(const row of retained){const actual=cases.find(cell=>cell.key===row.key);for(const[key,value]of Object.entries(row))assert.equal(actual[key],value);}
- return {historicalRequiredCases:cases.length,currentApplicableCases:cases.filter(row=>row.declaration!=="not_applicable").length,retainedNotApplicableCases:retained.length,historicalIdentitySha256:"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",dispositions:retained,automaticCoverage:[],globalClosed:false};
+ return {historicalRequiredCases:historical.length,postHistoricalAdditionCases:additions.map(row=>row.key),currentApplicableCases:cases.filter(row=>row.declaration!=="not_applicable").length,retainedNotApplicableCases:retained.length,historicalIdentitySha256:"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",dispositions:retained,automaticCoverage:[],globalClosed:false};
 }
 function receipt() {
   const evidenceIdCounts = new Map();

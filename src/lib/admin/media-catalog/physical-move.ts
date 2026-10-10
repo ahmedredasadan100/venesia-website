@@ -3,14 +3,20 @@ import "server-only";
 import path from "path";
 
 import {
-  moveManagedStorageAsset,
+  copyManagedStorageAsset,
+  createSupabaseCmsMediaStorageAdapter,
   verifyManagedStorageAssetExists,
 } from "../../storage/upload-cms-asset";
+import { expirePublicCacheTags, PUBLIC_CACHE_TAG_GROUPS } from "../../cache/revalidate-public-cache-tags";
+import { isCmsUploadFolderCompatible } from "../media-intelligence/cms-upload-policy";
+import { normalizeMediaFolder } from "../media-library-paths";
+import { MediaStorageError } from "../media-storage-adapter";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
-  ensureCatalogFolderHierarchy,
+  listMediaCatalogSnapshot,
   getCatalogAssetByIdentity,
+  getCatalogAssetById,
   getMediaCatalogRuntimeState,
   listCatalogReferences,
   markCatalogAssetState,
@@ -27,6 +33,7 @@ import {
   type DiscoveredMediaReference,
 } from "./reference-providers";
 import { rebindAllSupportedMediaReferences } from "./synchronization";
+import type { Json } from "../../database.types";
 import type { MediaCatalogAsset } from "./types";
 import {
   acquireMediaReferenceWriteLease,
@@ -101,8 +108,8 @@ function identityMatches(
 function physicalMoveFailureMetadata(input: {
   previous: MediaCatalogAsset;
   next: Pick<MediaCatalogAsset, "provider" | "bucket" | "objectKey" | "publicUrl">;
-  storageState: "previous" | "next" | "unknown";
-  catalogState: "previous" | "next" | "unknown";
+  storageState: "previous" | "next" | "both" | "unknown";
+  catalogState: "previous" | "next" | "both" | "unknown";
 }) {
   return {
     operation: "physical_move",
@@ -163,6 +170,7 @@ async function proveStorageMoveState(previousPublicUrl: string, nextPublicUrl: s
     verifyManagedStorageAssetExists(nextPublicUrl),
   ]);
   if (!previous.managed || !next.managed) return "unknown" as const;
+  if (previous.exists && next.exists) return "both" as const;
   if (previous.exists && !next.exists) return "previous" as const;
   if (!previous.exists && next.exists) return "next" as const;
   return "unknown" as const;
@@ -273,19 +281,17 @@ export async function moveCatalogMediaAsset(
   ) {
     throw new Error("media_physical_move_catalog_uncertain");
   }
-  const targetFilename = (input.targetFilename?.trim() || path.posix.basename(asset.objectKey))
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  if (!targetFilename || path.posix.extname(targetFilename).toLowerCase() !== asset.extension.toLowerCase()) {
-    throw new Error("media_physical_move_extension_mismatch");
+  const { targetFilename, targetObjectKey } = validateMediaRelocationTarget(asset, input);
+  const catalog = await listMediaCatalogSnapshot();
+  if (!catalog.folders.some(folder => folder.path === input.targetFolder)) {
+    throw new MediaStorageError("media_move_folder_missing", "اختر مجلد صور موجودًا من المكتبة.", 400);
   }
-  const targetObjectKey = normalizeManagedObjectKey(`${input.targetFolder}/${targetFilename}`);
   const collision = await getCatalogAssetByIdentity({
     provider: "supabase",
     bucket: asset.bucket,
     objectKey: targetObjectKey,
   });
-  if (collision && collision.id !== asset.id) throw new Error("media_physical_move_collision");
+  if (collision && collision.id !== asset.id) throw new MediaStorageError("media_physical_move_collision", "يوجد أصل مسجل بنفس اسم ومسار الوجهة.", 409);
 
   const references = await listCatalogReferences(asset.id);
   const live = await scanAllMediaReferenceProviders();
@@ -303,7 +309,7 @@ export async function moveCatalogMediaAsset(
     throw new Error("media_physical_move_reference_drift");
   }
   const unsupported = references.filter((reference) => !getMediaReferenceProvider(reference.domainKey)?.supportsRebind);
-  if (unsupported.length) throw new Error("media_physical_move_unsupported_references");
+  if (unsupported.length) throw new MediaStorageError("UNSUPPORTED_REFERENCE_OWNER", "لا يملك أحد مواضع الاستخدام تحديثًا آمنًا للمراجع؛ لم يتم النقل.", 409);
 
   const targetFolder = getFolderPathFromObjectKey(targetObjectKey);
   const expectedNext = {
@@ -314,29 +320,35 @@ export async function moveCatalogMediaAsset(
     folderPath: targetFolder,
   };
   const coordination = buildPhysicalMoveCoordination(asset, references, live.references);
-  await ensureCatalogFolderHierarchy(targetFolder, actorId);
+
   const moveLease = await acquireMediaReferenceWriteLease({
     scopes: coordination.scopes,
     actorId,
     requestIdentity: `media-physical-move:${asset.id}`,
+    ttlSeconds: 600,
   });
   if (!moveLease) throw new Error("media_physical_move_write_lease_missing");
 
-  let storageState: "previous" | "next" | "unknown" = "previous";
+  let storageState: "previous" | "next" | "both" | "unknown" = "previous";
   let catalogState: "previous" | "next" | "unknown" = "previous";
   let moveLeaseSettled = false;
   let retainMovedIdentity = false;
   let moved = expectedNext;
+  const plan = { copyConfirmed: false, operation: "physical_move", previousAsset: asset, nextIdentity: expectedNext, referenceKeys: references.map(ref => [ref.domainKey, ref.entityIdentity, ref.fieldKey]) };
   try {
+    // Persist intent BEFORE touching Storage, using the existing recovery ledger.
+    const journal = await getSupabaseAdmin().rpc("record_media_relocation_journal", { p_lease_token: moveLease.token, p_plan: plan });
+    if (journal.error || Number(journal.data) !== moveLease.assetCount) throw new Error("media_physical_move_intent_unproven");
     try {
-      const storageMove = await moveManagedStorageAsset(asset.publicUrl, targetObjectKey);
+      const storageMove = await copyManagedStorageAsset(asset.publicUrl, targetObjectKey);
       moved = { ...storageMove, folderPath: targetFolder };
-      storageState = "next";
+      storageState = "both";
+      plan.copyConfirmed = true;
+      const copiedJournal = await getSupabaseAdmin().rpc("record_media_relocation_journal", { p_lease_token: moveLease.token, p_plan: plan });
+      if (copiedJournal.error || Number(copiedJournal.data) !== moveLease.assetCount) throw new Error("media_physical_move_copy_receipt_unproven");
     } catch (storageError) {
       storageState = await proveStorageMoveState(asset.publicUrl, expectedNext.publicUrl).catch(() => "unknown" as const);
-      if (storageState === "next") {
-        moved = expectedNext;
-      } else if (storageState === "unknown") {
+      if (storageState === "both" || storageState === "unknown") {
         retainMovedIdentity = true;
         throw new Error(`media_physical_move_storage_state_unproven:${storageError instanceof Error ? storageError.message : "unknown"}`);
       } else {
@@ -380,6 +392,15 @@ export async function moveCatalogMediaAsset(
     }
 
     retainMovedIdentity = true;
+    // Both locations remain readable until every owned reference and cache is current.
+    const proof = await scanAllMediaReferenceProviders();
+    if (proof.uncertainties.length || proof.references.some(ref => getCanonicalMediaIdentityKey(ref.identity) === identityKey)) {
+      throw new Error("media_physical_move_old_references_remain");
+    }
+    await expirePublicCacheTags(Object.values(PUBLIC_CACHE_TAG_GROUPS).flat());
+    await createSupabaseCmsMediaStorageAdapter().deleteAsset(asset.publicUrl);
+    storageState = await proveStorageMoveState(asset.publicUrl, moved.publicUrl);
+    if (storageState !== "next") throw new Error("media_physical_move_retirement_unproven");
     const catalogFinalized = await finalizeCatalogIdentity({
       assetId: asset.id,
       next: moved,
@@ -391,6 +412,7 @@ export async function moveCatalogMediaAsset(
 
     return {
       asset: { ...nextAsset, reconciliationState: "synced" as const },
+      operation: targetFolder === asset.folderPath ? "rename" : targetFilename === path.posix.basename(asset.objectKey) ? "move" : "move+rename",
       rebind,
       previousObjectRetired: true,
     };
@@ -406,12 +428,12 @@ export async function moveCatalogMediaAsset(
           failureCode: "media_physical_move_recovery_required",
           reasons: [failureReason],
           domainWriteCommitted: true,
-          metadata: physicalMoveFailureMetadata({
+          metadata: { ...plan, ...physicalMoveFailureMetadata({
             previous: asset,
             next: moved,
             storageState,
             catalogState,
-          }),
+          }) },
         }).catch((leaseError) => {
           recoveryFailures.push(`media_physical_move_lease_failure_record_failed:${leaseError instanceof Error ? leaseError.message : "unknown"}`);
         });
@@ -427,9 +449,9 @@ export async function moveCatalogMediaAsset(
     }
 
     const rollbackFailures: string[] = [];
-    if (storageState === "next") {
+    if (storageState === "both") {
       try {
-        await moveManagedStorageAsset(moved.publicUrl, asset.objectKey);
+        await createSupabaseCmsMediaStorageAdapter().deleteAsset(moved.publicUrl);
         storageState = "previous";
       } catch {
         storageState = await proveStorageMoveState(asset.publicUrl, moved.publicUrl).catch(() => "unknown" as const);
@@ -453,12 +475,12 @@ export async function moveCatalogMediaAsset(
       failureCode: "media_physical_move_failed",
       reasons: [failureReason, ...rollbackFailures],
       domainWriteCommitted: rollbackFailures.length > 0,
-      metadata: physicalMoveFailureMetadata({
+      metadata: { ...plan, ...physicalMoveFailureMetadata({
         previous: asset,
         next: moved,
         storageState,
         catalogState,
-      }),
+      }) },
     }).catch((leaseError) => {
       rollbackFailures.push(`media_physical_move_lease_failure_record_failed:${leaseError instanceof Error ? leaseError.message : "unknown"}`);
     });
@@ -467,6 +489,80 @@ export async function moveCatalogMediaAsset(
       await markCatalogAssetState(asset.id, { reconciliationState: "uncertain" }).catch(() => undefined);
       throw new Error(`media_physical_move_compensation_failed:${rollbackFailures.join(",")}`);
     }
+    throw error;
+  }
+}
+
+export function validateMediaRelocationTarget(asset: MediaCatalogAsset, input: { targetFolder: string; targetFilename?: string }) {
+  if (asset.kind !== "image") throw new MediaStorageError("media_move_image_required", "النقل وإعادة التسمية متاحان للصور فقط.", 400);
+  const folder = normalizeMediaFolder(input.targetFolder);
+  if (folder !== input.targetFolder || !isCmsUploadFolderCompatible(folder, "image")) throw new MediaStorageError("media_move_incompatible_folder", "مجلد الوجهة غير متوافق مع الصور.", 400);
+  const targetFilename = input.targetFilename === undefined ? path.posix.basename(asset.objectKey) : input.targetFilename;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,179}$/.test(targetFilename) || targetFilename.includes("..")) throw new MediaStorageError("media_move_invalid_filename", "اسم الملف غير صالح؛ استخدم حروفًا وأرقامًا وشرطة مع الامتداد الحالي.", 400);
+  if (path.posix.extname(targetFilename).toLowerCase() !== asset.extension.toLowerCase()) throw new MediaStorageError("media_move_extension_mismatch", "لا يمكن تغيير امتداد الصورة.", 400);
+  const targetObjectKey = normalizeManagedObjectKey(folder + "/" + targetFilename);
+  if (targetObjectKey === asset.objectKey) throw new MediaStorageError("media_move_same_path", "المسار الجديد مطابق للحالي.", 400);
+  return { targetFilename, targetObjectKey };
+}
+
+function readRelocationIdentity(value: Json | undefined) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.provider !== "supabase" || typeof value.bucket !== "string" || typeof value.objectKey !== "string" || typeof value.publicUrl !== "string" || typeof value.folderPath !== "string" || !value.bucket || !value.objectKey || !value.publicUrl || value.folderPath !== getFolderPathFromObjectKey(value.objectKey)) throw new Error("media_relocation_recovery_identity_unproven");
+  return { provider: "supabase" as const, bucket: value.bucket, objectKey: value.objectKey, publicUrl: value.publicUrl, folderPath: value.folderPath };
+}
+
+/** Recovery compensates a proven staged copy while the existing unresolved lease
+ * fences all affected assets. Expired live workers are never reclaimed here. */
+export async function repairFailedMediaRelocation(leaseToken: string) {
+  const db = getSupabaseAdmin();
+  const rows = await db.from("media_reference_write_leases").select("id,status,resolved_at,failure_metadata,updated_at,failure_code").eq("lease_token", leaseToken).order("id");
+  if (rows.error || !rows.data?.length || rows.data.some(row => row.status !== "failed" || row.resolved_at)) throw new Error("media_relocation_recovery_not_ready");
+  const first = rows.data[0];
+  const plan = first.failure_metadata;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan) || plan.operation !== "physical_move" || first.failure_code === "media_relocation_repair_running") throw new Error("media_relocation_recovery_plan_unproven");
+  const prior = plan.previousAsset;
+  if (!prior || typeof prior !== "object" || Array.isArray(prior) || typeof prior.id !== "string") throw new Error("media_relocation_recovery_plan_unproven");
+  const previousIdentity = readRelocationIdentity(prior), next = readRelocationIdentity(plan.nextIdentity);
+  const referenceKeys = plan.referenceKeys;
+  if (!Array.isArray(referenceKeys) || referenceKeys.some(key => !Array.isArray(key) || key.length !== 3 || key.some(value => typeof value !== "string"))) throw new Error("media_relocation_recovery_plan_unproven");
+  const current = await getCatalogAssetById(prior.id);
+  if (!current || current.provider !== "supabase" || current.status !== "active" || previousIdentity.bucket !== next.bucket) throw new Error("media_relocation_recovery_identity_unproven");
+  const previous: MediaCatalogAsset = { ...current, ...previousIdentity, reconciliationState: "synced", missingObject: false };
+  if (buildMovedPublicUrl(previous, next.objectKey) !== next.publicUrl) throw new Error("media_relocation_recovery_identity_unproven");
+  const claim = await db.rpc("transition_media_relocation_repair", { p_lease_token: leaseToken, p_action: "claim", p_expected_updated_at: first.updated_at });
+  if (claim.error || Number(claim.data) !== rows.data.length) throw new Error("media_relocation_recovery_conflict");
+  try {
+    const state = await proveStorageMoveState(previous.publicUrl, next.publicUrl);
+    const observed = await readCatalogIdentity(previous.id);
+    const scan = await scanAllMediaReferenceProviders();
+    if (scan.uncertainties.length) throw new Error("media_relocation_recovery_reference_uncertain");
+    const oldKey = getCanonicalMediaIdentityKey(previous), nextKey = getCanonicalMediaIdentityKey(next);
+    const oldRefs = scan.references.filter(ref => getCanonicalMediaIdentityKey(ref.identity) === oldKey);
+    const nextRefs = scan.references.filter(ref => getCanonicalMediaIdentityKey(ref.identity) === nextKey);
+    if (plan.copyConfirmed && state === "next" && identityMatches(observed, next) && !oldRefs.length) {
+      // Retirement finished; keep the final identity and let full reconciliation prove it.
+      await markCatalogAssetState(previous.id, { reconciliationState: "synced" });
+    } else if (state === "previous" || (state === "both" && plan.copyConfirmed)) {
+      const allowed = new Set(referenceKeys.map(key => Array.isArray(key) ? key.join("\u0000") : ""));
+      if (nextRefs.some(ref => !allowed.has([ref.domainKey, ref.entityIdentity, ref.fieldKey].join("\u0000")))) throw new Error("media_relocation_recovery_foreign_reference");
+      for (const ref of nextRefs) {
+        const provider = getMediaReferenceProvider(ref.domainKey);
+        if (!provider?.supportsRebind) throw new Error("UNSUPPORTED_REFERENCE_OWNER");
+        await provider.rebind(ref, previous.publicUrl);
+      }
+      if (identityMatches(observed, next)) {
+        if (!await rollbackCatalogIdentity({ previous, next, leaseToken })) throw new Error("media_relocation_recovery_catalog_unproven");
+      } else if (!identityMatches(observed, previous)) throw new Error("media_relocation_recovery_identity_unproven");
+      const verified = await scanAllMediaReferenceProviders();
+      if (verified.uncertainties.length || verified.references.some(ref => getCanonicalMediaIdentityKey(ref.identity) === nextKey)) throw new Error("media_relocation_recovery_rebind_unproven");
+      await expirePublicCacheTags(Object.values(PUBLIC_CACHE_TAG_GROUPS).flat());
+      if (state === "both") await createSupabaseCmsMediaStorageAdapter().deleteAsset(next.publicUrl);
+      if (await proveStorageMoveState(previous.publicUrl, next.publicUrl) !== "previous") throw new Error("media_relocation_recovery_storage_unproven");
+    } else throw new Error("media_relocation_recovery_storage_ownership_unproven");
+    const completed = await db.rpc("transition_media_relocation_repair", { p_lease_token: leaseToken, p_action: "complete", p_expected_updated_at: first.updated_at });
+    if (completed.error || Number(completed.data) !== rows.data.length) throw new Error("media_relocation_recovery_receipt_failed");
+    return { repaired: true, reconciliationRequired: true };
+  } catch (error) {
+    await db.rpc("transition_media_relocation_repair", { p_lease_token: leaseToken, p_action: "fail", p_expected_updated_at: first.updated_at });
     throw error;
   }
 }
