@@ -1538,3 +1538,27 @@ export function asBreadcrumbConfig(raw: unknown): BreadcrumbBlockConfig {
     manualItems,
   };
 }
+/** Maps only the image-source fields declared by the Page Block config owner.
+ * Text, alt labels, links, presentation, IDs and persisted data are unchanged.
+ */
+export function mapPageBlockImageSources<T extends object>(
+  config: T,
+  mapSource: (source: string) => string,
+): T {
+  const result = { ...config } as Record<string, unknown>;
+  for (const key of ["image", "backgroundImage"]) {
+    if (typeof result[key] === "string") result[key] = mapSource(result[key]);
+  }
+  if (result.images && typeof result.images === "object" && !Array.isArray(result.images)) {
+    const images: Record<string, unknown> = { ...result.images };
+    for (const key of ["main", "secondary", "accent"]) {
+      if (typeof images[key] === "string") images[key] = mapSource(images[key]);
+    }
+    result.images = images;
+  }
+  if (Array.isArray(result.items)) {
+    result.items = result.items.map(item => item && typeof item === "object" && typeof item.image === "string"
+      ? { ...item, image: mapSource(item.image) } : item);
+  }
+  return result as T;
+}

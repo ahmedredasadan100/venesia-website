@@ -1,4 +1,5 @@
 import "server-only";
+import { readDeletedManagedValues } from "../admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "../cache/public-cache-generation";
 
@@ -105,6 +106,33 @@ async function loadLocationRows(
   return locations;
 }
 
+async function projectDeletedMedia(projects: PublicProject[]): Promise<PublicProject[]> {
+  const values = projects.flatMap(project => [
+    project.brochureUrl, project.cardImage.src, project.heroImage.src, project.heroBoxImage.src,
+    project.overview.mainImage?.src,
+    ...[...project.overview.images, ...project.delivery.images, ...project.gallery.images].map(image => image.src),
+    ...project.plans.flatMap(plan => [plan.architecturalImage?.src, plan.furnishingImage?.src]),
+    ...[...project.overview.videos, ...project.gallery.videos].flatMap(video => [video.url, video.poster?.src]),
+  ]);
+  const deleted = new Set(await readDeletedManagedValues(values));
+  if (!deleted.size) return projects;
+  const image = <T extends { src: string }>(value: T): T => deleted.has(value.src) ? { ...value, src: "" } : value;
+  const videos = (values: PublicProject["gallery"]["videos"]) => values.filter(video => !deleted.has(video.url))
+    .map(video => ({ ...video, poster: video.poster && !deleted.has(video.poster.src) ? video.poster : null }));
+  return projects.map(project => ({
+    ...project,
+    brochureUrl: project.brochureUrl && deleted.has(project.brochureUrl) ? null : project.brochureUrl,
+    cardImage: image(project.cardImage), heroImage: image(project.heroImage), heroBoxImage: image(project.heroBoxImage),
+    overview: { ...project.overview, mainImage: project.overview.mainImage ? image(project.overview.mainImage) : null,
+      images: project.overview.images.filter(item => !deleted.has(item.src)), videos: videos(project.overview.videos) },
+    delivery: { ...project.delivery, images: project.delivery.images.filter(item => !deleted.has(item.src)) },
+    gallery: { ...project.gallery, images: project.gallery.images.filter(item => !deleted.has(item.src)), videos: videos(project.gallery.videos) },
+    plans: project.plans.map(plan => ({ ...plan,
+      architecturalImage: plan.architecturalImage ? image(plan.architecturalImage) : null,
+      furnishingImage: plan.furnishingImage ? image(plan.furnishingImage) : null })),
+  }));
+}
+
 async function queryPublicProjects() {
   const projects: PublicProjectRootRow[] = [];
   let afterId: number | undefined;
@@ -129,7 +157,7 @@ async function queryPublicProjects() {
   });
   const locations = await loadLocationRows(projects);
   try {
-    return mapProjectRowsToPublicProjects(projects, locations);
+    return projectDeletedMedia(mapProjectRowsToPublicProjects(projects, locations));
   } catch (error) {
     logError("Public projects mapping failed", error);
     throw new PublicProjectReadError("mapping_failed", "تعذر تجهيز بيانات المشاريع للعرض.");
@@ -266,10 +294,10 @@ async function queryProjectBySlug(
 
   return {
     status: "ok",
-    project: mapLoadedProjectAggregate(
+    project: (await projectDeletedMedia([mapLoadedProjectAggregate(
       rootResult.data,
       { identity: slug, source },
-    ),
+    )]))[0],
   };
 }
 
@@ -311,10 +339,10 @@ export const loadProjectForAdminPreviewResult = cache(
     return {
       status: "ok",
       publicationStatus,
-      project: mapLoadedProjectAggregate(
+      project: (await projectDeletedMedia([mapLoadedProjectAggregate(
         project,
         { identity: String(id), source: "admin-preview" },
-      ),
+      )]))[0],
     };
   },
 );

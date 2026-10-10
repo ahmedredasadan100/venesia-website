@@ -652,7 +652,7 @@ export default function MediaLibraryCore({
         } else {
           setConfirmation(null);
           if (activeConfirmation.folder) openFolder(activeConfirmation.folder.split("/").slice(0, -1).join("/"));
-          announce(catalogWarnings.length ? "warning" : "success", "تم الحذف", `تم حذف ${deleted} ملف${activeConfirmation.folder ? " والمجلد" : ""}. لم تتغير مراجع المحتوى؛ يمكنك ربط صور بديلة يدويًا.${catalogWarnings.length ? " تعذر تحديث جاهزية المكتبة: " + catalogWarnings.join("، ") : ""}`);
+          announce(catalogWarnings.length ? "warning" : "success", "تم الحذف", `تم حذف ${deleted} ملف${activeConfirmation.folder ? " والمجلد" : ""}. تبقى بيانات الصفوف والمراجع السابقة محفوظة كأصول محذوفة، ويمكن حفظ التعديلات واختيار بدائل.${catalogWarnings.length ? " تعذر تحديث جاهزية المكتبة: " + catalogWarnings.join("، ") : ""}`);
         }
       } finally { setBusy(null); }
       return;
@@ -729,7 +729,7 @@ export default function MediaLibraryCore({
     : confirmation?.kind === "move"
       ? `تم تحديد ${confirmation.assets.length} صور؛ ${confirmation.previews.filter(item => (item.references?.length ?? 0) > 0).length} مستخدمة، وسيتم تحديث ${confirmation.previews.reduce((sum, item) => sum + (item.references?.length ?? 0), 0)} مراجع تلقائيًا عند المتابعة. الوجهة: ${confirmation.targetFolder}. راجع المسارات والاستخدامات لكل صورة.`
       : confirmation?.kind === "delete" && confirmation.phase === "checking" ? "جارٍ فحص الاستخدامات الحالية…"
-      : "راجع الملفات ومواضع استخدامها. الحذف نهائي، ولن يفك مراجع المحتوى أو يغيرها تلقائيًا.";
+      : "راجع الملفات ومواضع استخدامها. الحذف نهائي؛ تُحفظ بيانات الصفوف ومراجعها كأصول محذوفة لا تظهر للزوار ولا تمنع حفظ التعديلات.";
 
   return (
     <div

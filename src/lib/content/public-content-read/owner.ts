@@ -1,4 +1,5 @@
 import "server-only";
+import { readDeletedManagedValues } from "../../admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "../../cache/public-cache-generation";
 
@@ -681,6 +682,8 @@ async function queryPublicContentFeedSeries(
     }
     bySlug.set(row.series_slug, mapCollectionRow(row.representative as PublicContentRow));
   }
+  const deletedImages = new Set(await readDeletedManagedValues([...bySlug.values()].map(item => item.image)));
+  for (const [slug, item] of bySlug) if (deletedImages.has(item.image)) bySlug.set(slug, { ...item, image: "" });
   return data.map((row) => ({
       id: row.id,
       name: row.name,
@@ -878,14 +881,21 @@ function collectionCacheKey(input: PublicContentCollectionInput) {
   return JSON.stringify(normalized);
 }
 
+async function projectDeletedCollectionMedia(result: PublicContentCollectionResult) {
+  const rows = result.featured ? [...result.items, result.featured] : result.items;
+  const deleted = new Set(await readDeletedManagedValues(rows.map(row => row.image)));
+  const project = (row: PublicContentSummary) => deleted.has(row.image) ? { ...row, image: "" } : row;
+  return { ...result, items: result.items.map(project), featured: result.featured ? project(result.featured) : null };
+}
+
 export async function loadPublicContentCollection(
   input: PublicContentCollectionInput,
 ): Promise<PublicContentCollectionResult> {
   const normalized = normalizePublicContentCollectionInput(input);
-  if (normalized.search) return queryPublicContentCollection(normalized);
+  if (normalized.search) return queryPublicContentCollection(normalized).then(projectDeletedCollectionMedia);
 
   return cachePublicRead(
-    () => queryPublicContentCollection(normalized),
+    () => queryPublicContentCollection(normalized).then(projectDeletedCollectionMedia),
     ["public-content-collection", collectionCacheKey(normalized)],
     { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
   )();
@@ -977,7 +987,15 @@ async function queryPublicContentDetail(contentType: ContentType, slug: string) 
       details: { contentType, slug },
     });
   }
-  return data ? mapDetailRow(data) : null;
+  if (!data) return null;
+  const detail = mapDetailRow(data);
+  const deleted = new Set(await readDeletedManagedValues([
+    detail.image, detail.videoUrl, ...detail.galleryImages.map(image => image.url),
+  ]));
+  return { ...detail, image: deleted.has(detail.image) ? "" : detail.image,
+    videoUrl: deleted.has(detail.videoUrl ?? "") ? "" : detail.videoUrl,
+    galleryImages: detail.galleryImages.filter(image => !deleted.has(image.url)) };
+
 }
 
 export const loadPublicContentDetail = cache(async function loadPublicContentDetail(

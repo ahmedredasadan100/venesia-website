@@ -137,7 +137,7 @@ export function verifyProjectMappingAndGrouping() {
     for (let index = 0; index < n; index += 1) assert.equal(result[index].location.subArea?.id, String(index + 10));
     work.push({ n, locationIdReads });
   }
-  assert.match(read("src/lib/projects/load-published-projects.ts"), /return mapProjectRowsToPublicProjects\(projects, locations\)/u);
+  assert.match(read("src/lib/projects/load-published-projects.ts"), /return projectDeletedMedia\(mapProjectRowsToPublicProjects\(projects, locations\)\)/u);
   return { renderedGroups: groups, work };
 }
 

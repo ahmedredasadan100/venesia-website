@@ -262,6 +262,7 @@ async function mediaUploadLimitProof(argv: string[]) {
       const sharedImage = String((await handle.query("select image from public.projects where id=$1", [(relocationFixtures.project as { id: number }).id])).rows[0].image);
       await handle.query("update public.topics set status='unpublished' where id=$1", [(relocationFixtures.topic as { id: number }).id]);
       await handle.query("insert into public.hero_templates(id,name,slug,variant,status,source_type,config) values (900002,'QA Multi-owner','qa-multi-owner','home-cinematic','unpublished','manual',$1::jsonb)", [JSON.stringify({title:"QA Multi-owner",images:[sharedImage],mobileImages:[]})]);
+      await handle.query("insert into public.project_media(project_id,client_key,section,image,alt_text,sort_order) values ($1,gen_random_uuid(),'gallery',$2,'QA retained row metadata',900)", [(relocationFixtures.project as {id:number}).id,sharedImage]);
       handle.record("media-relocation-fixtures-ready", { project: true, topic: true, hero: true });
       const migrationReceipt = await handle.query("select version,name,statements from supabase_migrations.schema_migrations where version='20261010052006'");
       writeFileSync(resolve(output, "rebind-migration-receipt.json"), JSON.stringify(migrationReceipt.rows));
@@ -270,6 +271,7 @@ async function mediaUploadLimitProof(argv: string[]) {
       writeFileSync(resolve(output, "relocation-journal-proof.json"), JSON.stringify({ status: "pass", directWritesDenied: true, serviceRpcAllowed: true, anonymousRpcDenied: true, receiptMonotonic: true, duplicateRepairClaimRejected: true, rolledBack: true }));
       await handle.query(`insert into public.hero_templates (id,name,slug,variant,status,source_type,config) values
         (900001,'QA Slider upload','qa-slider-upload','home-cinematic','unpublished','manual','{"title":"QA Slider upload","images":[],"mobileImages":[]}'::jsonb)`);
+      await handle.query("insert into public.hero_templates(id,name,slug,variant,status,source_type,config) values (900003,'QA Independent Hero','qa-independent-hero','home-cinematic','unpublished','manual','{\"title\":\"QA Independent Hero\",\"images\":[],\"mobileImages\":[]}'::jsonb)");
       try {
         await handle.runPublicVerification({ selection: "media-upload-limit", additionalSourceFiles: files });
       } catch (error) {
@@ -277,15 +279,25 @@ async function mediaUploadLimitProof(argv: string[]) {
         writeFileSync(resolve(output, "relocation-failure-diagnostics.json"), JSON.stringify(diagnostics.rows, null, 2));
         throw error;
       }
+      const deletedProof = (await handle.query("select a.id,a.status,a.object_key,exists(select 1 from storage.objects o where o.bucket_id=a.bucket and o.name=a.object_key) as storage_exists,(select count(*)::int from public.media_references r where r.asset_id=a.id) as references from public.media_assets a where a.original_filename like 'qa-delete-responsive-%'")).rows;
+      assert.equal(deletedProof.length,12);
+      assert.ok(deletedProof.every(row=>row.status==='deleted'&&!row.storage_exists));
+      const deleteAudit = (await handle.query("select count(*)::int as count from public.admin_audit_logs where action='media_asset.delete' and entity_type='media_asset'")).rows[0];
+      assert.equal(deleteAudit.count,13);
+      const retainedChild=(await handle.query("select image,alt_text from public.project_media where project_id=$1 and alt_text='QA retained row metadata'",[(relocationFixtures.project as {id:number}).id])).rows;
+      assert.equal(retainedChild.length,1);assert.ok(String(retainedChild[0].image).length>0);
+      const retainedHero=(await handle.query("select config from public.hero_templates where id=900003")).rows[0];
+      assert.equal((retainedHero.config as {images:string[]}).images.length,3);
+      writeFileSync(resolve(output,"media-delete-database-proof.json"),JSON.stringify({status:'pass',deletedProof,deleteAudit,retainedHero},null,2));
       const settings = (await handle.query("select value from public.site_settings where key='media.settings'")).rows[0];
       assert.equal((settings.value as { maxImageBytes: number }).maxImageBytes, 7 * 1024 * 1024);
       const assets = (await handle.query("select object_key,byte_size,uploaded_by from public.media_assets where original_filename like 'configured-limit-%' and provider='supabase'")).rows;
       assert.equal(assets.length, 2);
       assert.ok(assets.every(row => Number(row.byte_size) > 5 * 1024 * 1024 && Number(row.byte_size) < 7 * 1024 * 1024 && Number(row.uploaded_by) > 0));
       const objects = (await handle.query("select name from storage.objects where bucket_id='cms-images'")).rows;
-      assert.equal(objects.length, 7, "One bootstrap image, two size fixtures and four scope images; rejected changed-policy object must be removed.");
+      assert.equal(objects.length, 6, "The shared bootstrap asset and all delete QA assets were removed; size and picker regression fixtures remain.");
       const audit = (await handle.query("select action,entity_label from public.admin_audit_logs where entity_type='media_asset' and action='media_asset.create'")).rows;
-      assert.equal(audit.length, 7);
+      assert.equal(audit.length, 19); // Seven existing upload fixtures plus twelve delete/responsive fixtures.
       const slider = (await handle.query("select config from public.hero_templates where id=900001")).rows[0];
       const sliderImages = (slider.config as { images: string[] }).images;
       assert.equal(sliderImages.length, 3);

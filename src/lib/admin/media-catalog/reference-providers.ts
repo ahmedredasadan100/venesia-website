@@ -60,6 +60,7 @@ export type MediaReferenceProvider = {
   readonly idField: string;
   readonly fields: readonly string[];
   readonly supportsRebind: boolean;
+  readonly publicCacheTags: readonly string[];
   scanAll(): Promise<DiscoveredMediaReference[]>;
   scanEntity(entityIdentity: string): Promise<DiscoveredMediaReference[]>;
   scanEntities?(entityIdentities: readonly string[]): Promise<Map<string, DiscoveredMediaReference[]>>;
@@ -68,6 +69,7 @@ export type MediaReferenceProvider = {
 };
 
 type ProviderConfig = {
+  publicCacheTags: readonly string[];
   domainKey: string;
   table: MediaReferenceProviderTable;
   entityType: string;
@@ -328,6 +330,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
     idField,
     fields: config.fields,
     supportsRebind: config.supportsRebind ?? true,
+    publicCacheTags: config.publicCacheTags,
     async scanAll() {
       const rows = await fetchRows();
       return rows.flatMap((row) => discoverRowReferences(config, row));
@@ -526,6 +529,7 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
 const PROVIDER_CONFIGS = [
   {
     domainKey: "pages",
+    publicCacheTags: ["page-seo","page-composition"],
     table: "pages",
     entityType: "page",
     labelField: "title",
@@ -546,6 +550,7 @@ const PROVIDER_CONFIGS = [
 
   {
     domainKey: "topics",
+    publicCacheTags: ["public-content"],
     table: "topics",
     entityType: "topic",
     labelField: "title",
@@ -570,6 +575,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "topic_categories",
+    publicCacheTags: ["public-content"],
     table: "topic_categories",
     entityType: "topic_category",
     labelField: "name",
@@ -579,6 +585,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "projects",
+    publicCacheTags: ["projects","project"],
     table: "projects",
     entityType: "project",
     labelField: "arabic_name",
@@ -594,6 +601,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "project_media",
+    publicCacheTags: ["projects","project"],
     table: "project_media",
     entityType: "project_media",
     fields: ["image"],
@@ -605,6 +613,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "project_floor_plans",
+    publicCacheTags: ["projects","project"],
     table: "project_floor_plans",
     entityType: "project_floor_plan",
     fields: ["architectural_image", "furnishing_image"],
@@ -616,6 +625,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "project_videos",
+    publicCacheTags: ["projects","project"],
     table: "project_videos",
     entityType: "project_video",
     fields: ["poster_image", "video_url"],
@@ -627,6 +637,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "project_tracking_update_media",
+    publicCacheTags: ["project-tracking","projects"],
     table: "project_tracking_update_media",
     entityType: "project_tracking_update_media",
     labelField: "title",
@@ -637,6 +648,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "hero_templates",
+    publicCacheTags: ["hero","page-composition"],
     table: "hero_templates",
     entityType: "hero_template",
     labelField: "name",
@@ -646,6 +658,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "content_block_templates",
+    publicCacheTags: ["page-blocks","page-composition"],
     table: "content_block_templates",
     entityType: "content_block_template",
     labelField: "name",
@@ -656,6 +669,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "cta_block_templates",
+    publicCacheTags: ["page-blocks","page-composition"],
     table: "cta_block_templates",
     entityType: "cta_block_template",
     labelField: "name",
@@ -666,6 +680,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "cards_block_templates",
+    publicCacheTags: ["page-blocks","page-composition"],
     table: "cards_block_templates",
     entityType: "cards_block_template",
     labelField: "name",
@@ -676,6 +691,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "breadcrumb_block_templates",
+    publicCacheTags: ["page-blocks","page-composition"],
     table: "breadcrumb_block_templates",
     entityType: "breadcrumb_block_template",
     labelField: "name",
@@ -686,6 +702,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "feed_module_templates",
+    publicCacheTags: ["feed-modules","page-composition"],
     table: "feed_module_templates",
     entityType: "feed_module_template",
     labelField: "name",
@@ -696,6 +713,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "featured_module_templates",
+    publicCacheTags: ["featured-modules","page-composition"],
     table: "featured_module_templates",
     entityType: "featured_module_template",
     labelField: "name",
@@ -706,6 +724,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "media_sidebar_module_templates",
+    publicCacheTags: ["media-sidebar","page-composition"],
     table: "media_sidebar_module_templates",
     entityType: "media_sidebar_module_template",
     labelField: "name",
@@ -716,6 +735,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "media_hub_module_templates",
+    publicCacheTags: ["media-center","page-composition"],
     table: "media_hub_module_templates",
     entityType: "media_hub_module_template",
     labelField: "name",
@@ -726,6 +746,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "menu_items",
+    publicCacheTags: ["navigation","menus"],
     table: "menu_items",
     entityType: "menu_item",
     labelField: "label",
@@ -735,6 +756,7 @@ const PROVIDER_CONFIGS = [
   },
   {
     domainKey: "site_settings",
+    publicCacheTags: ["site-settings","footer"],
     table: "site_settings",
     entityType: "site_setting",
     idField: "key",

@@ -1,4 +1,5 @@
 "use client";
+import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
 
 import { useState } from "react";
 
@@ -37,6 +38,7 @@ export default function AdminMediaFileField({
   return (
     <div className="space-y-3">
       <input type="hidden" name={name} value={value} />
+        <AdminDeletedMediaNotice values={[value]} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-xs font-semibold text-white/55">{label}</span>

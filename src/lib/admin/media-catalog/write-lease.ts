@@ -1,10 +1,14 @@
 import "server-only";
 
+import { readDeletedManagedValues } from "./deleted-reference-state";
+import { getCanonicalMediaIdentityKey } from "./identity";
+
 import type { Json } from "../../database.types";
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
+  getMediaReferenceProvider,
   extractMediaCandidateValues,
   MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
 } from "./reference-providers";
@@ -14,6 +18,8 @@ export type MediaReferenceWriteScope = {
   entityType: string;
   entityIdentity: string;
   values: readonly unknown[];
+  /** Persisted identity proven by the aggregate owner for an existing child. */
+  retainedEntityIdentity?: string;
 };
 
 export type MediaReferenceWriteTarget = {
@@ -109,7 +115,33 @@ export async function acquireMediaReferenceWriteLease(input: {
   requestIdentity: string;
   ttlSeconds?: number;
 }): Promise<MediaReferenceWriteLease | null> {
-  const targets = collectManagedMediaWriteTargets(input.scopes);
+  const collected = collectManagedMediaWriteTargets(input.scopes);
+  const deletedValues = await readDeletedManagedValues(input.scopes.map(scope => scope.values), true);
+  const deletedKeys = new Set(deletedValues.map(value => {
+    const identity = parseManagedStorageAsset(value)!;
+    return getCanonicalMediaIdentityKey({ provider: "supabase", bucket: identity.bucket, objectKey: identity.objectPath });
+  }));
+  const retainedByEntity = new Map<string, Set<string>>();
+  const targets: MediaReferenceWriteTarget[] = [];
+  for (const target of collected) {
+    const identityKey = getCanonicalMediaIdentityKey(target);
+    if (!deletedKeys.has(identityKey)) { targets.push(target); continue; }
+    const entityKey = [target.domainKey, target.entityType, target.entityIdentity].join("\u0000");
+    let retained = retainedByEntity.get(entityKey);
+    if (!retained) {
+      const provider = getMediaReferenceProvider(target.domainKey);
+      if (!provider || provider.entityType !== target.entityType) {
+        throw new MediaReferenceWriteLeaseError("invalid_media_write_lease_scope");
+      }
+      const scope = input.scopes.find(scope => scope.domainKey === target.domainKey &&
+        scope.entityType === target.entityType && scope.entityIdentity === target.entityIdentity);
+      retained = new Set((await provider.scanEntity(scope?.retainedEntityIdentity ?? target.entityIdentity))
+        .map(reference => getCanonicalMediaIdentityKey(reference.identity)));
+      retainedByEntity.set(entityKey, retained);
+    }
+    // Existing tombstone references are retained metadata, never new attachments.
+    if (!retained.has(identityKey)) targets.push(target);
+  }
   if (!targets.length) return null;
   const context = resolveMediaStorageRuntimeContext();
   if (!context.identity) {
