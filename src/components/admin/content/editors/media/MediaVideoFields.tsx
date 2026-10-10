@@ -1,3 +1,4 @@
+import { mediaContentSlot } from "../../../../../lib/media-center/detail-page-config";
 import AdminMediaImageField from "../../../media/AdminMediaImageField";
 import {
   AdminFormError,
@@ -67,11 +68,11 @@ export default function MediaVideoFields({
 
       <div id="video_thumbnail" className="scroll-mt-24">
         <AdminMediaImageField
-          name="video_thumbnail"
+        mediaSlot={mediaContentSlot("videoPoster")}
+name="video_thumbnail"
           label="صورة مصغّرة (اختياري)"
           defaultValue={defaultThumbnail ?? ""}
           browseFolder="images/topics"
-          dimensionHint="content"
           helperText="إن تُركت فارغة تُستخدم الصورة الرئيسية للغلاف."
           focusTargetId="video_thumbnail_control"
           ariaInvalid={hasError("video_thumbnail")}

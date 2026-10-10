@@ -1,4 +1,5 @@
 "use client";
+import { projectMediaSlot } from "../../../../lib/projects/project-hero-adapter";
 
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
 
@@ -507,11 +508,15 @@ export function ProjectFloorPlansEditor({ initialPlans }: { initialPlans: Projec
 
                 <section className="grid gap-4 sm:grid-cols-2">
                   <div className={`${itemSurfaceClass} p-3`}>
-                    <AdminMediaImageField name="floor_plan_architectural_image" label="المخطط المعماري" defaultValue={plan.architectural_image} browseFolder="images/projects/plans" appearance="dark" onValueChange={(value) => updatePlan(plan.client_key, { architectural_image: value })} />
+                    <AdminMediaImageField
+        mediaSlot={projectMediaSlot("plan-or-poster")}
+name="floor_plan_architectural_image" label="المخطط المعماري" defaultValue={plan.architectural_image} browseFolder="images/projects/plans" appearance="dark" onValueChange={(value) => updatePlan(plan.client_key, { architectural_image: value })} />
                     <label className={`${labelClass} mt-3`}>النص البديل<input id={index === 0 ? "floor_plan_architectural_image_alt" : undefined} name="floor_plan_architectural_image_alt" value={plan.architectural_image_alt} onChange={(event) => updatePlan(plan.client_key, { architectural_image_alt: event.target.value })} className={`${fieldClass} mt-1`} aria-invalid={planFieldError("floor_plan_architectural_image_alt") || undefined} aria-describedby={planFieldError("floor_plan_architectural_image_alt") ? "floor_plan_architectural_image_alt-error" : undefined} /></label>
                   </div>
                   <div className={`${itemSurfaceClass} p-3`}>
-                    <AdminMediaImageField name="floor_plan_furnishing_image" label="مخطط الفرش" defaultValue={plan.furnishing_image} browseFolder="images/projects/plans" appearance="dark" onValueChange={(value) => updatePlan(plan.client_key, { furnishing_image: value })} />
+                    <AdminMediaImageField
+        mediaSlot={projectMediaSlot("plan-or-poster")}
+name="floor_plan_furnishing_image" label="مخطط الفرش" defaultValue={plan.furnishing_image} browseFolder="images/projects/plans" appearance="dark" onValueChange={(value) => updatePlan(plan.client_key, { furnishing_image: value })} />
                     <label className={`${labelClass} mt-3`}>النص البديل<input id={index === 0 ? "floor_plan_furnishing_image_alt" : undefined} name="floor_plan_furnishing_image_alt" value={plan.furnishing_image_alt} onChange={(event) => updatePlan(plan.client_key, { furnishing_image_alt: event.target.value })} className={`${fieldClass} mt-1`} aria-invalid={planFieldError("floor_plan_furnishing_image_alt") || undefined} aria-describedby={planFieldError("floor_plan_furnishing_image_alt") ? "floor_plan_furnishing_image_alt-error" : undefined} /></label>
                   </div>
                 </section>

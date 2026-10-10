@@ -1,4 +1,5 @@
 "use client";
+import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
   ModuleEditorField,
@@ -82,12 +83,12 @@ export default function AboutIntroSingleImageModuleEditor({
 
       <ModuleEditorSection>
         <AdminMediaImageField
-          name="image_main"
+                  mediaSlot={contentModuleMediaSlot("about-intro-single-image")}
+name="image_main"
           label="الصورة"
           defaultValue={mainSrc}
           altName="image_main_alt"
           defaultAlt={mainAlt}
-          dimensionHint="content"
           browseFolder="images/about"
         />
         <div className="space-y-2">

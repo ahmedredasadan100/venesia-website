@@ -1,4 +1,6 @@
 "use client";
+import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
+import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
 import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
@@ -6,19 +8,13 @@ import { useId, useRef, useState } from "react";
 
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 
-export type ImageDimensionHint = "hero" | "hero-mobile" | "content";
 
-const DIMENSION_HINTS: Record<ImageDimensionHint, string> = {
-  hero: "المقاس المستهدف بعد إعادة التحجيم: 1920 × 1080 px (16:9)",
-  "hero-mobile": "المقاس المستهدف بعد إعادة التحجيم: 1080 × 1920 px (9:16)",
-  content: "الأبعاد الموصى بها: 1600 × 900 px (16:9)",
-};
 
 type AdminMediaImageFieldProps = {
   name: string;
   label: string;
   defaultValue?: string;
-  dimensionHint?: ImageDimensionHint;
+  mediaSlot?: MediaSlotContract;
   helperText?: string;
   browseFolder?: string;
   variant?: "default" | "compact";
@@ -42,7 +38,7 @@ export default function AdminMediaImageField({
   name,
   label,
   defaultValue = "",
-  dimensionHint,
+  mediaSlot,
   helperText,
   browseFolder = "images",
   variant = "default",
@@ -114,7 +110,8 @@ export default function AdminMediaImageField({
         aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
       >
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
-        <AdminDeletedMediaNotice values={[value]} />
+        <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
+        <AdminMediaSlotGuidance slot={mediaSlot} />
 
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
           {value ? (
@@ -204,15 +201,13 @@ export default function AdminMediaImageField({
       aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
     >
       <input ref={valueInputRef} type="hidden" name={name} value={value} />
-        <AdminDeletedMediaNotice values={[value]} />
+        <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
 
       {showLabel ? (
         <span className={`block text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
       ) : null}
 
-      {dimensionHint ? (
-        <p className={`text-xs leading-6 ${light ? "text-[#9a6815]" : "text-[#D8B87A]/65"}`}>{DIMENSION_HINTS[dimensionHint]}</p>
-      ) : null}
+      <AdminMediaSlotGuidance slot={mediaSlot} />
       {helperText ? <p className={`text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{helperText}</p> : null}
 
       {value ? (

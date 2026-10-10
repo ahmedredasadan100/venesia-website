@@ -1031,3 +1031,20 @@ export async function retireEmptyCatalogFolder(folder: string) {
   if (error) throw new Error(error.message);
   return data;
 }
+
+/** Read persisted original-file metadata; never infer it from a rendition or slot. */
+export async function readCatalogOriginalDimensions(values: readonly string[]) {
+  const identities = [...new Set(values)].flatMap(value => {
+    const identity = parseManagedStorageAsset(value);
+    return identity?.kind === "image" ? [{ value, ...identity }] : [];
+  });
+  if (!identities.length) return [];
+  const { data, error } = await getSupabaseAdmin().from("media_assets")
+    .select("bucket,object_key,width,height").eq("provider", "supabase")
+    .in("object_key", identities.map(item => item.objectPath));
+  if (error) throw new Error("media_original_dimensions_unavailable");
+  return identities.map(item => {
+    const row = data?.find(row => row.bucket === item.bucket && row.object_key === item.objectPath);
+    return { value: item.value, width: row?.width ?? null, height: row?.height ?? null };
+  });
+}

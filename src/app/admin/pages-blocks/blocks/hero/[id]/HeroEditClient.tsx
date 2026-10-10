@@ -1,4 +1,5 @@
 "use client";
+import { resolveHeroMediaSlot } from "../../../../../../lib/hero/hero-content-controls";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AdminFormRuntime from "../../../../../../components/admin/ui/AdminFormRuntime";
@@ -271,7 +272,7 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
       });
     };
 
-    commitMetrics(image.naturalWidth, image.naturalHeight);
+    commitMetrics(0, 0); // Rendition naturalWidth is never original metadata.
     if (!sourcePath) return;
 
     const sourceProbe = frameDocument.createElement("img");
@@ -448,7 +449,7 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
                 Original: {metrics.sourceWidth} × {metrics.sourceHeight} px
               </p>
               <p dir="ltr">
-                Safe Visible Source Area:{" "}
+                Visible Source Area (current viewport):{" "}
                 {roundedPixels(metrics.visibleSourceWidth)} ×{" "}
                 {roundedPixels(metrics.visibleSourceHeight)} px
               </p>
@@ -469,7 +470,7 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
             </div>
           ) : (
             <p className="text-xs leading-6 text-white/42">
-              لا توجد صورة معروضة داخل مساحة الهيرو الحالية.
+              أبعاد المصدر الأصلي غير متاحة بعد؛ قياس الحاوية أعلاه مستقل عنها.
             </p>
           )}
           <p className="truncate font-mono text-[10px] text-white/30" dir="ltr">
@@ -514,6 +515,7 @@ export default function HeroEditClient({
     "secondaryCtaLink",
     "secondaryCtaHref",
   );
+  const [guidanceVariant, setGuidanceVariant] = useState(hero.variant);
   const controls = resolveHeroContentControlsForVariant(config, hero.variant);
   const imageComposition = resolveHeroImageCompositionPreset(
     config.imageComposition ??
@@ -542,6 +544,7 @@ export default function HeroEditClient({
           name="variant"
           label="نمط العرض"
           defaultValue={hero.variant}
+          onChange={setGuidanceVariant}
           options={variantOptions}
         />
       </ModuleEditorIdentitySection>
@@ -815,9 +818,9 @@ export default function HeroEditClient({
                       ) : (
                         <AdminImagePathListField
                           name="images"
+                          mediaSlot={resolveHeroMediaSlot(guidanceVariant, "desktop")}
                           label="صور سطح المكتب"
                           defaultValue={imagesText}
-                          dimensionHint="hero"
                           density="compact"
                           helperText="قائمة مستقلة لسطح المكتب. اختر أو ارفع الصور ورتّب الشرائح؛ لن تُضاف إليها صور الهاتف."
                         />
@@ -829,9 +832,9 @@ export default function HeroEditClient({
                       <ModuleEditorSection>
                         <AdminImagePathListField
                           name="mobile_images"
+                          mediaSlot={resolveHeroMediaSlot(guidanceVariant, "mobile")}
                           label="صور الهاتف المحمول"
                           defaultValue={mobileImagesText}
-                          dimensionHint="hero-mobile"
                           density="compact"
                           helperText="قائمة مستقلة للهاتف، بترتيب وعدد مستقلين. إذا كانت فارغة تمامًا تُستخدم قائمة سطح المكتب كاملة؛ وإذا أضفت صورًا تُعرض هذه القائمة وحدها."
                         />

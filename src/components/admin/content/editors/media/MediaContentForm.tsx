@@ -1,4 +1,5 @@
 "use client";
+import { mediaContentSlot } from "../../../../../lib/media-center/detail-page-config";
 
 import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
 
@@ -195,13 +196,13 @@ export default function MediaContentForm({
       ) : adapter.body === "gallery" ? (
         <div className="space-y-5">
           <AdminMediaGalleryField
-            valueMode="items"
+        mediaSlot={mediaContentSlot("galleryImage")}
+valueMode="items"
             name="gallery_image_url"
             altName="gallery_image_alt"
             captionName="gallery_image_caption"
             label="صور المعرض"
             helperText="اختر الصور من مكتبة الميديا المشتركة، ثم اضبط النص البديل والتعليق وترتيب العرض."
-            dimensionHint="content"
             defaultItems={galleryDefaults}
             focusTargetId="gallery_image_url"
             altFocusTargetId="gallery_image_alt"

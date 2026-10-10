@@ -1,4 +1,5 @@
 "use client";
+import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
   ModuleEditorField,
@@ -200,13 +201,13 @@ export default function AboutPrinciplesModuleEditor({
               </label>
               {isHomeTrust ? (
                   <AdminMediaImageField
-                    name={`principle_${index}_image`}
+                  mediaSlot={contentModuleMediaSlot("home-trust")}
+name={`principle_${index}_image`}
                     label="صورة الكارت — اختياري"
                     defaultValue={item.image ?? ""}
                     altName={`principle_${index}_image_alt`}
                     defaultAlt={item.imageAlt ?? ""}
                     altLabel="النص البديل للصورة — اختياري"
-                    dimensionHint="content"
                     browseFolder="images/home"
                     onValueChange={(value) => updateItem(index, { image: value || undefined })}
                   />

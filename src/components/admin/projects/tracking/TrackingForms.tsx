@@ -1,4 +1,5 @@
 "use client";
+import { TRACKING_MEDIA_SLOT } from "../../../../lib/projects/tracking/contract";
 
 import { useRef } from "react";
 import AdminDatePicker from "../../ui/AdminDatePicker";
@@ -432,14 +433,14 @@ export function TrackingUpdateFormModal({
               <AdminFormError name="body" />
             </AdminFormField>
             <AdminMediaGalleryField
-              name="image_urls"
+              mediaSlot={TRACKING_MEDIA_SLOT}
+name="image_urls"
               label="صور التحديث"
               defaultPaths={
                 update?.media
                   .filter((item) => item.media_kind === "image")
                   .map((item) => item.public_url) ?? []
               }
-              dimensionHint="content"
               browseFolder="images/projects"
               density="compact"
               helperText="يمكن إعادة استخدام الأصل نفسه في أكثر من تحديث؛ الحذف من التحديث يزيل المرجع فقط."

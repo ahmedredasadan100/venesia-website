@@ -1,4 +1,5 @@
 "use client";
+import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
   ModuleEditorField,
@@ -76,11 +77,11 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
 
         <ModuleEditorField nature="media">
         <AdminMediaImageField
-          name="map_image"
+                  mediaSlot={contentModuleMediaSlot("projects-hub-map")}
+name="map_image"
           label="صورة الخريطة"
           defaultValue={config.mapImage || PROJECTS_HUB_DEFAULT_MAP_IMAGE}
           browseFolder="images/projects"
-          dimensionHint="content"
           helperText={`الافتراضي: ${PROJECTS_HUB_DEFAULT_MAP_IMAGE}`}
           allowRemove={false}
         />

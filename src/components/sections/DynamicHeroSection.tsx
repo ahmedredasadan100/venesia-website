@@ -1,4 +1,5 @@
 "use client";
+import { HERO_MEDIA_GEOMETRY } from "../../lib/hero/hero-content-controls";
 
 import Link from "next/link";
 import { resolveHeroResponsiveMedia } from "../../lib/hero/responsive-media";
@@ -385,7 +386,7 @@ function HomeDynamicHero({
   return (
     <section
       ref={containerRef}
-      className="relative isolate min-h-screen touch-pan-y overflow-hidden bg-[#05070B]"
+      className={`relative isolate ${HERO_MEDIA_GEOMETRY.cinematic.containerClass} touch-pan-y overflow-hidden bg-[#05070B]`}
       dir="rtl"
       data-hero-variant={hero.variant}
       data-hero-family={resolveHeroFamily(hero.variant)}
@@ -687,7 +688,7 @@ function InternalDynamicHero({
 
   return (
     <section
-      className="relative isolate z-0 h-[min(62vh,580px)] min-h-[440px] overflow-hidden bg-[#05070B]"
+      className={`relative isolate z-0 ${HERO_MEDIA_GEOMETRY.internal.containerClass} overflow-hidden bg-[#05070B]`}
       dir="rtl"
       data-hero-variant={hero?.variant ?? "internal-page"}
       data-hero-family="standard-internal"

@@ -138,3 +138,12 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
 } as const satisfies Record<string, MediaDetailPageConfig>;
 
 export type MediaDetailPageKey = keyof typeof MEDIA_DETAIL_PAGE_CONFIG;
+
+/** The entity image is reused by multiple selected public presentations. */
+export function mediaContentSlot(slot: "image" | "galleryImage" | "videoPoster"): import("../media/media-slot-contract").MediaSlotContract {
+  return { owner: "media-center/detail-and-listing", slot, device: "all",
+    evidence: ["src/components/media-center/MediaDetailArticle.tsx", "src/components/media-center/MediaCenterCollectionItems.tsx"],
+    display: slot === "galleryImage" ? { kind: "ratio", ratio: [4, 3] } : { kind: "responsive", description: "تُستخدم الصورة في مواضع عرض متعددة حسب القالب والبطاقة؛ لا توجد أبعاد بكسل أو نسبة واحدة مطلوبة للملف." },
+    fit: slot === "galleryImage" ? "cover" : undefined,
+  };
+}

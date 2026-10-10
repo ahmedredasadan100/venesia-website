@@ -1,4 +1,5 @@
 "use client";
+import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
   ModuleEditorField,
@@ -282,7 +283,8 @@ export default function AboutIntroModuleEditor({
                   </button>
                 </div>
                 <AdminMediaImageField
-                  name="image_main"
+                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+name="image_main"
                   label={fieldLabels.imageMain}
                   showLabel={false}
                   defaultValue={homeStoryImages.main}
@@ -291,7 +293,6 @@ export default function AboutIntroModuleEditor({
                   altLabel={fieldLabels.imageAlt}
                   onValueChange={(value) => setHomeStoryImages((current) => ({ ...current, main: value }))}
                   onAltValueChange={(value) => setHomeStoryImages((current) => ({ ...current, mainAlt: value }))}
-                  dimensionHint="content"
                   browseFolder="images/home"
                 />
               </div>
@@ -309,7 +310,8 @@ export default function AboutIntroModuleEditor({
                   </button>
                 </div>
                 <AdminMediaImageField
-                  name="image_secondary"
+                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+name="image_secondary"
                   label={fieldLabels.imageSecondary}
                   showLabel={false}
                   defaultValue={homeStoryImages.secondary}
@@ -322,7 +324,6 @@ export default function AboutIntroModuleEditor({
                   onAltValueChange={(value) =>
                     setHomeStoryImages((current) => ({ ...current, secondaryAlt: value }))
                   }
-                  dimensionHint="content"
                   browseFolder="images/home"
                 />
               </div>
@@ -331,33 +332,33 @@ export default function AboutIntroModuleEditor({
             <>
               <div className="grid gap-5 lg:grid-cols-3">
                 <AdminMediaImageField
-                  name="image_main"
+                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+name="image_main"
                   label={fieldLabels.imageMain}
                   defaultValue={images.main ?? ""}
                   altName="image_main_alt"
                   defaultAlt={images.mainAlt ?? ""}
                   altLabel="النص البديل للصورة 1"
-                  dimensionHint="content"
                   browseFolder="images/about"
                 />
                 <AdminMediaImageField
-                  name="image_secondary"
+                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+name="image_secondary"
                   label={fieldLabels.imageSecondary}
                   defaultValue={images.secondary ?? ""}
                   altName="image_secondary_alt"
                   defaultAlt={images.secondaryAlt ?? ""}
                   altLabel="النص البديل للصورة 2"
-                  dimensionHint="content"
                   browseFolder="images/about"
                 />
                 <AdminMediaImageField
-                  name="image_accent"
+                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+name="image_accent"
                   label="الصورة 3 — اللمسة"
                   defaultValue={images.accent ?? ""}
                   altName="image_accent_alt"
                   defaultAlt={images.accentAlt ?? ""}
                   altLabel="النص البديل للصورة 3"
-                  dimensionHint="content"
                   browseFolder="images/about"
                 />
               </div>
