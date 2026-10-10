@@ -1,4 +1,5 @@
 import "server-only";
+import { expirePublicCacheTags, runBoundedPublicCacheRevalidation } from "../../cache/revalidate-public-cache-tags";
 
 import { recordCmsAdminAudit } from "../audit-log";
 import { failMediaReferenceWriteLease, resolveMediaReferenceWriteLease } from "./write-lease";
@@ -26,6 +27,7 @@ import { buildMediaCatalogReadiness } from "./readiness";
 import { reconcileMediaCatalog, refreshMediaCatalogAfterMutation } from "./reconciliation";
 import { getCanonicalMediaIdentityKey } from "./identity";
 import {
+  getMediaReferenceProvider,
   MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION,
   scanAllMediaReferenceProviders,
 } from "./reference-providers";
@@ -341,6 +343,14 @@ export async function safelyDeleteMediaAsset(
     }
 
     const catalogWarnings = options.deferCatalogRefresh ? [] : await refreshMediaDeleteCatalog(options.actorId);
+    const affectedTags = [...new Set(eligibility.references.flatMap(reference =>
+      getMediaReferenceProvider(reference.domainKey)?.publicCacheTags ?? []))];
+    if (affectedTags.length) {
+      // Use the existing immediate-generation fence only for affected owners.
+      // A post-commit cache failure cannot turn successful deletion into retry.
+      const invalidation = await runBoundedPublicCacheRevalidation(() => expirePublicCacheTags(affectedTags));
+      if (!invalidation.ok) catalogWarnings.push("media_delete_public_cache_invalidation_failed");
+    }
     return {
       deleted: true as const,
       catalogWarnings,

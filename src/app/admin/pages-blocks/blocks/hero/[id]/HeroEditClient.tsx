@@ -819,7 +819,7 @@ export default function HeroEditClient({
                           defaultValue={imagesText}
                           dimensionHint="hero"
                           density="compact"
-                          helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
+                          helperText="قائمة مستقلة لسطح المكتب. اختر أو ارفع الصور ورتّب الشرائح؛ لن تُضاف إليها صور الهاتف."
                         />
                       )}
                     </ModuleEditorSection>
@@ -833,7 +833,7 @@ export default function HeroEditClient({
                           defaultValue={mobileImagesText}
                           dimensionHint="hero-mobile"
                           density="compact"
-                          helperText="اختياري. لو تُركت فارغة تُستخدم صور سطح المكتب تلقائيًا على الهاتف المحمول. رتّب صور الهاتف بنفس ترتيب صور سطح المكتب."
+                          helperText="قائمة مستقلة للهاتف، بترتيب وعدد مستقلين. إذا كانت فارغة تمامًا تُستخدم قائمة سطح المكتب كاملة؛ وإذا أضفت صورًا تُعرض هذه القائمة وحدها."
                         />
                       </ModuleEditorSection>
                     </div>

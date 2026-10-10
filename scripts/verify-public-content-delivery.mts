@@ -246,6 +246,7 @@ class SupabaseQueryMock implements PromiseLike<QueryResult> {
 const cacheEntries = new Map<string, unknown>();
 let cacheHits = 0;
 let cacheWrites = 0;
+let deletedMediaValues = new Set<string>();
 
 function unstableCacheMock<Args extends unknown[], Result>(
   callback: (...args: Args) => Promise<Result> | Result,
@@ -267,6 +268,7 @@ function unstableCacheMock<Args extends unknown[], Result>(
 }
 
 function resetScenario() {
+  deletedMediaValues = new Set();
   replaceQueryPlan([]);
   queryLog.length = 0;
   cacheEntries.clear();
@@ -427,6 +429,7 @@ const owner = loadTranspiledModule(
   {
     "server-only": {},
     "../../cache/public-cache-generation": { cachePublicRead: unstableCacheMock },
+    "../../admin/media-catalog/deleted-reference-state": { readDeletedManagedValues: async () => [...deletedMediaValues] },
     react: {
       // React cache is render-pass/request memoization. Identity here models a
       // fresh request for the required transient-failure recovery proof.
@@ -1857,6 +1860,18 @@ check(
   adaptedGallery?.content === MARKDOWN_FIXTURE,
 );
 assertPlanConsumed("Gallery Rich Media");
+
+resetScenario();
+deletedMediaValues.add(GALLERY_IMAGES[0].url);
+const retainedGallerySource = topicRow({ id: 203, slug: "deleted-gallery-asset", content_type: "gallery", image: GALLERY_IMAGES[0].url,
+  media_payload: { kind: "gallery", images: GALLERY_IMAGES } });
+const retainedSourceBefore = JSON.stringify(retainedGallerySource);
+replaceQueryPlan([{ label: "retained deleted gallery source", table: "topics", result: success(retainedGallerySource) }]);
+const deletedGallery = await loadPublicContentDetail("gallery", "deleted-gallery-asset");
+check("Public Gallery hides deleted cover and media while preserving stored row/body/metadata", deletedGallery?.image === "" &&
+  JSON.stringify(findGalleryImages(deletedGallery)) === JSON.stringify(GALLERY_IMAGES.slice(1)) &&
+  deletedGallery?.content === MARKDOWN_FIXTURE && JSON.stringify(retainedGallerySource) === retainedSourceBefore);
+assertPlanConsumed("Retained deleted Gallery");
 
 const VIDEO_THUMBNAIL = "https://cdn.example.test/video/thumbnail.jpg";
 resetScenario();

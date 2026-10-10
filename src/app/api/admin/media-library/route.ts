@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readDeletedManagedValues } from "../../../../lib/admin/media-catalog/deleted-reference-state";
 
 import { requireAdminApi } from "../../../../lib/admin/auth/require-admin-api";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
@@ -263,6 +264,13 @@ export async function POST(request: Request) {
         const retired = await retireEmptyCatalogFolder(body.folder);
         await recordCmsAdminAudit({ action: buildCmsAuditAction("media_asset", "delete"), entityType: "media_folder", entityLabel: body.folder, metadata: { retiredFolderCount: retired } }, actor);
         return mediaJson({ deleted: true, folder: body.folder });
+      }
+      if (body.operation === "reference_state") {
+        if (!Array.isArray(body.assets) || body.assets.length > 100 ||
+          !body.assets.every(value => typeof value === "string" && value.length <= 4096)) {
+          return mediaJson({ error: "حدد مراجع وسائط صالحة." }, { status: 400 });
+        }
+        return mediaJson({ deleted: await readDeletedManagedValues(body.assets) });
       }
       if (body.operation === "preview_delete") return mediaJson(await previewMediaDeletion(body));
       if (body.operation === "prepare_upload") {

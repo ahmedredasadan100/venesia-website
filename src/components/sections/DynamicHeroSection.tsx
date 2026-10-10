@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { resolveHeroResponsiveMedia } from "../../lib/hero/responsive-media";
+import { useHeroMediaViewport } from "../../lib/hero/use-hero-media-viewport";
 import {
   useCallback,
   useEffect,
@@ -184,17 +186,16 @@ function HeroArtDirectedImage({
   );
 }
 
-function buildHomeHeroSlides(desktopImages: string[], mobileImages: string[]): HeroDomainSlide[] {
-  const hasMobileSet = mobileImages.length > 0;
-  const count = hasMobileSet
-    ? Math.max(desktopImages.length, mobileImages.length)
-    : desktopImages.length;
-
-  return Array.from({ length: count }, (_, index) => {
-    const desktop = desktopImages[index] ?? mobileImages[index] ?? "";
-    const mobile = mobileImages[index] ?? desktop;
-    return { id: `manual-${index}`, desktopImage: desktop, mobileImage: mobile !== desktop ? mobile : undefined };
-  }).filter((slide) => Boolean(slide.desktopImage));
+function buildHomeHeroSlides(desktopImages: string[], mobileImages: string[], viewport: "desktop" | "mobile" | null): HeroDomainSlide[] {
+  const sources = resolveHeroResponsiveMedia(desktopImages, mobileImages);
+  // The browser selects the first source before hydration; counts and autoplay
+  // then use only the complete selected list, never index-paired lists.
+  if (viewport === null) {
+    return sources.desktop.length || sources.mobile.length
+      ? [{ id: "manual-0", desktopImage: sources.desktop[0] ?? "", mobileImage: sources.mobile[0] }]
+      : [];
+  }
+  return sources[viewport].map((source, index) => ({ id: `manual-${index}`, desktopImage: source }));
 }
 
 function HomeDynamicHero({
@@ -212,7 +213,8 @@ function HomeDynamicHero({
   const images = config.images ?? [];
   const mobileImages = config.mobileImages ?? [];
   const isDomainBacked = domainSlides !== undefined;
-  const slides = domainSlides ? [...domainSlides] : buildHomeHeroSlides(images, mobileImages);
+  const viewport = useHeroMediaViewport();
+  const slides = domainSlides ? [...domainSlides] : buildHomeHeroSlides(images, mobileImages, viewport);
   const [activeIndex, setActiveIndex] = useState(0);
   const [preparedSlideIndexes, setPreparedSlideIndexes] = useState<ReadonlySet<number>>(
     () => new Set([0]),
@@ -545,9 +547,9 @@ function InternalDynamicHero({
     : fallbackImage && showFallbackImage
       ? [fallbackImage]
       : [];
-  const image = images[0];
-  // Mobile image support is a shared variant contract, not a route exception.
-  const mobileImage = config.mobileImages?.[0];
+  const sources = resolveHeroResponsiveMedia(images, config.mobileImages);
+  const image = sources.desktop[0];
+  const mobileImage = sources.mobile[0];
   const title = config.title || fallbackTitle || hero?.page?.title || "";
   const eyebrow = config.eyebrow || fallbackEyebrow || "Internal Page";
   const highlight = (config.highlight || "").trim();
@@ -693,10 +695,10 @@ function InternalDynamicHero({
       data-hero-composition-baseline={STANDARD_INTERNAL_HERO_COMPOSITION_BASELINE}
       data-hero-reduced-motion={reducedMotion ? "true" : undefined}
     >
-      {image ? (
+      {image || mobileImage ? (
         <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
           <HeroArtDirectedImage
-            desktopSrc={image}
+            desktopSrc={image ?? ""}
             mobileSrc={mobileImage}
             priority
             imageComposition={config.imageComposition}

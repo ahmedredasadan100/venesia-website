@@ -1,4 +1,5 @@
 import "server-only";
+import { readDeletedManagedValues } from "../media-catalog/deleted-reference-state";
 
 import {
   coordinateMediaReferenceDomainMutation,
@@ -183,9 +184,10 @@ export async function coordinateProjectEntrySave(input: {
   const hasMediaDeletions = input.payload.deleted.floor_plan_ids.length > 0
     || input.payload.deleted.media_ids.length > 0
     || input.payload.deleted.video_ids.length > 0;
-  // Previous identities serve only explicit deletion cleanup. Persisted identities
-  // are still read after every successful mutation before reference synchronization.
-  const existingChildren = hasMediaDeletions
+  // A retained tombstone is allowed only on a child belonging to this aggregate.
+  const hasRetainedDeletedMedia = input.projectId !== null &&
+    (await readDeletedManagedValues(input.payload, true)).length > 0;
+  const existingChildren = hasMediaDeletions || hasRetainedDeletedMedia
     ? await loadExistingMediaChildren(input.projectId)
     : [];
   const intendedChildren = buildIntendedChildren(input.payload, operationIdentity);
@@ -198,13 +200,13 @@ export async function coordinateProjectEntrySave(input: {
       og_image: input.payload.project.og_image,
       brochure_url: input.payload.project.brochure_url,
     }),
-    ...intendedChildren.map((child) =>
-      buildMediaReferenceWriteScope(
-        child.domainKey,
-        child.leaseEntityIdentity,
-        child.row,
-      ),
-    ),
+    ...intendedChildren.map((child) => {
+      const existing = existingChildren.find(row => row.domainKey === child.domainKey && row.clientKey === child.clientKey);
+      return {
+        ...buildMediaReferenceWriteScope(child.domainKey, child.leaseEntityIdentity, child.row),
+        ...(existing ? { retainedEntityIdentity: String(existing.id) } : {}),
+      };
+    }),
   ];
 
   let reconciliationMediaSeed: ProjectEntryMediaReadSeed | null = null;

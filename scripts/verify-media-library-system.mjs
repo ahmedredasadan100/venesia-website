@@ -1375,6 +1375,8 @@ check(
   let present = true, active = true, lease = false, uncertain = false, used = true;
   let storageDeletes = 0, reservations = 0, reconciliations = 0, leaseResolutions = 0, staleLease = false;
   const audit = [];
+  const invalidatedTags = [];
+  let cacheFails = false;
   let runtime = { ...completeRuntimeState };
   const reference = { identity: target, domainKey: "topics", entityType: "topic", entityIdentity: "owned",
     entityLabel: "Owned fixture", fieldKey: "image", editHref: "/admin/content/topics/owned", referenceState: "active", restorable: false };
@@ -1383,6 +1385,7 @@ check(
   const inventory = () => ({ ...managedInventory, items: present ? [{ ...managedInventory.items[0], storagePath: target.objectKey }] : [] });
   const safeOwner = loadTypeScriptModule("src/lib/admin/media-catalog/safe-delete.ts", {
     "server-only": {}, "node:crypto": { randomUUID: () => "owned-request" },
+    "../../cache/revalidate-public-cache-tags": { expirePublicCacheTags: async tags => { invalidatedTags.push(tags); if (cacheFails) throw new Error("cache-offline"); }, runBoundedPublicCacheRevalidation: async fn => { try { await fn(); return { ok: true }; } catch { return { ok: false }; } } },
     "../audit-log": { recordCmsAdminAudit: async () => {} },
     "./write-lease": { resolveMediaReferenceWriteLease: async () => { leaseResolutions++; staleLease = false; },
       failMediaReferenceWriteLease: async () => {} },
@@ -1401,7 +1404,7 @@ check(
       finalizeCatalogAssetDeletion: async () => { active = false; }, cancelCatalogAssetDeletion: async () => {}, markCatalogAssetDeleteRecovery: async () => {} },
     "./delete-saga": loadTypeScriptModule("src/lib/admin/media-catalog/delete-saga.ts", {}),
     "./readiness": readinessModule, "./identity": identityModule,
-    "./reference-providers": { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry", scanAllMediaReferenceProviders: async () => ({ references: used ? [reference] : [], uncertainties: uncertain ? ["scan_failed"] : [] }) },
+    "./reference-providers": { getMediaReferenceProvider: () => ({ publicCacheTags: ["public-content"] }), MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry", scanAllMediaReferenceProviders: async () => ({ references: used ? [reference] : [], uncertainties: uncertain ? ["scan_failed"] : [] }) },
     "../media-library-paths": { normalizeMediaFolder: value => value }, "../media-storage-adapter": { MediaStorageError: TestMediaStorageError },
     "./reconciliation": { reconcileMediaCatalog: async () => { reconciliations++; runtime = { ...runtime, storageAssetCount: 0, catalogAssetCount: 0 }; return { complete: true, uncertainties: [] }; }, refreshMediaCatalogAfterMutation: async () => { reconciliations++; runtime = { ...runtime, storageAssetCount: 0, catalogAssetCount: 0 }; return []; } },
   });
@@ -1427,11 +1430,17 @@ check(
   assert.equal(deleted.deleted, true); assert.deepEqual(deleted.catalogWarnings, []);
   assert.equal(storageDeletes, 1); assert.equal(reconciliations, 1);
   assert.deepEqual(audit, ["reserve", "finalize"]);
+  assert.deepEqual(invalidatedTags, [["public-content"]]);
   assert.equal(reference.identity.publicUrl, target.publicUrl);
   present = active = true; used = false; runtime = { ...completeRuntimeState };
   assert.equal((await safeOwner.previewMediaDeletion({ assets: [target.publicUrl] })).checks[0].state, "safe_to_delete");
   assert.equal((await safeOwner.safelyDeleteMediaAsset(target.publicUrl)).deleted, true);
   assert.equal(storageDeletes, 2);
+  present = active = used = cacheFails = true; runtime = { ...completeRuntimeState };
+  const cacheWarning = await safeOwner.safelyDeleteMediaAsset(target.publicUrl, { confirmReferenced: true });
+  assert.equal(cacheWarning.deleted, true); assert.equal(storageDeletes, 3);
+  assert.deepEqual(cacheWarning.catalogWarnings, ["media_delete_public_cache_invalidation_failed"]);
+  check("Post-commit cache failure remains a warning and never changes successful deletion into failed-only retry", true);
   check("single/folder preview and real delete owner require explicit usage consent, retain leases/uncertainty guards, audit and refresh the baseline", true);
 }
 
@@ -1457,6 +1466,93 @@ check('direct folder browse keeps only current-level assets and retains the comp
   assert.equal(result.html, '<img src="' + next + '"><a href="' + old + '-other">x</a>');
   check("relocation replaces exact reference tokens without altering similar URLs", true);
 }
+
+// Confirmed deletion is a retained-reference state, never attachment permission.
+{
+  const base = "https://test.supabase.co/storage/v1/object/public/cms-images/";
+  const retired = base + "images/retired.jpg", active = base + "images/active.jpg";
+  const parse = value => typeof value === "string" && value.startsWith(base)
+    ? { bucket: "cms-images", objectPath: value.slice(base.length) } : null;
+  let unavailable = false, confirmed = true, retained = true, rpcCalls = [];
+  const deletedOwner = loadTypeScriptModule("src/lib/admin/media-catalog/deleted-reference-state.ts", {
+    "server-only": {}, "./reference-providers": providerModule,
+    "../../storage/upload-cms-asset": { parseManagedStorageAsset: parse },
+    "../../supabase-admin": { getSupabaseAdmin: () => ({ from: () => ({
+      onlyConfirmed: false, keys: [], select() { return this; }, eq() { return this; },
+      contains() { this.onlyConfirmed = true; return this; }, in(_column, keys) { this.keys = keys; return this; },
+      then(resolve) { return Promise.resolve({ error: unavailable ? { code: "offline" } : null,
+        data: this.keys.includes("images/retired.jpg") && (!this.onlyConfirmed || confirmed)
+          ? [{ bucket: "cms-images", object_key: "images/retired.jpg", status: "deleted" }] : [] }).then(resolve); },
+    }) }) },
+  });
+  const stored = { images: [retired, active, retired + "-backup"], alt: "Building", nested: { title: "Keep", url: retired } };
+  const projection = await deletedOwner.omitDeletedManagedMedia(stored);
+  assert.deepEqual(projection, { ...stored, images: ["", active, retired + "-backup"], nested: { title: "Keep", url: "" } });
+  assert.equal(stored.images[0], retired);
+  const leaseOwner = loadTypeScriptModule("src/lib/admin/media-catalog/write-lease.ts", {
+    "server-only": {}, "./deleted-reference-state": deletedOwner, "./identity": identityModule,
+    "../../storage/upload-cms-asset": { parseManagedStorageAsset: parse },
+    "../media-storage-adapter": { resolveMediaStorageRuntimeContext: () => ({ identity: "test", provider: "supabase", environment: "local" }) },
+    "./reference-providers": { ...providerModule, getMediaReferenceProvider: () => ({ entityType: "hero_template",
+      scanEntity: async id => retained && id === "existing" ? [{ identity: { provider: "supabase", bucket: "cms-images", objectKey: "images/retired.jpg" } }] : [] }) },
+    "../../supabase-admin": { getSupabaseAdmin: () => ({ rpc: async (_name, args) => {
+      rpcCalls.push(args.p_targets);
+      if (args.p_targets.some(target => target.objectKey === "images/retired.jpg")) return { error: { message: "media_write_lease_asset_not_active" } };
+      return { data: [{ lease_token: "token", leased_asset_count: args.p_targets.length, lease_started_at: "now", lease_expires_at: "later" }] };
+    } }) },
+  });
+  const acquire = (id, values) => leaseOwner.acquireMediaReferenceWriteLease({ scopes: [{ domainKey: "hero_templates", entityType: "hero_template", entityIdentity: id, values }], requestIdentity: "test" });
+  assert.equal(await acquire("existing", [retired]), null);
+  assert.equal(rpcCalls.length, 0);
+  assert.equal((await acquire("existing", [retired, active])).assetCount, 1);
+  assert.equal(rpcCalls.at(-1)[0].objectKey, "images/active.jpg");
+  await assert.rejects(acquire("new", [retired]), /asset_not_active/);
+  retained = false; await assert.rejects(acquire("existing", [retired]), /asset_not_active/);
+  retained = true; confirmed = false; await assert.rejects(acquire("existing", [retired]), /asset_not_active/);
+  confirmed = true;
+  const childAcquire = retainedEntityIdentity => leaseOwner.acquireMediaReferenceWriteLease({
+    scopes: [{ domainKey: "hero_templates", entityType: "hero_template", entityIdentity: "temporary-child",
+      retainedEntityIdentity, values: [retired, active] }], requestIdentity: "child-test" });
+  assert.equal((await childAcquire("existing")).assetCount, 1);
+  await assert.rejects(childAcquire("another-parent-child"), /asset_not_active/);
+  await assert.rejects(childAcquire(undefined), /asset_not_active/);
+  unavailable = true; await assert.rejects(acquire("existing", [retired]), /state_unavailable/);
+  check("deleted reference: existing owner save allowed; new/unconfirmed/stale/unknown references remain rejected; projection preserves stored metadata", true);
+}
+{
+  const { resolveHeroResponsiveMedia } = loadTypeScriptModule("src/lib/hero/responsive-media.ts", {});
+  for (const [desktopCount, mobileCount] of [[2,10],[5,0],[1,1],[0,10]]) {
+    const desktop = Array.from({length:desktopCount}, (_, index) => 'desktop-' + index);
+    const mobile = Array.from({length:mobileCount}, (_, index) => 'mobile-' + index);
+    const result = resolveHeroResponsiveMedia(desktop, mobile);
+    assert.equal(result.desktop, desktop);
+    assert.equal(result.mobile, mobileCount ? mobile : desktop);
+    assert.equal(result.desktop.length, desktopCount);
+    assert.equal(result.mobile.length, mobileCount || desktopCount);
+  }
+  check("Hero independent source lists: 2/10, 5/0, 1/1, 0/10; no reverse or per-index fallback", true);
+}
+
+{
+  const { mapPageBlockImageSources } = loadTypeScriptModule("src/lib/page-blocks/configs.ts", {
+    "../admin/links/serialize": { deserializeAdminLink: value => value },
+    "../collection-modules/collection-view": { COLLECTION_LISTING_ITEMS_PER_ROW: [1,2,3,4], COLLECTION_LISTING_LAYOUTS: ["grid","list"] },
+    "../collection-modules/item-limit": { COLLECTION_LISTING_ITEM_LIMITS: [3,6,9] },
+    "./search-platform-config": { asSearchPlatformConfig: value => value, isSearchPlatformTemplate: () => false },
+  });
+  const old = "https://media.example/deleted.jpg";
+  const original = { image: old, backgroundImage: old, title: old, href: old,
+    images: { main: old, secondary: "active", alt: old },
+    items: [{ id: 4, image: old, title: old, href: old }] };
+  const projected = mapPageBlockImageSources(original, value => value === old ? "" : value);
+  assert.equal(projected.image, ""); assert.equal(projected.images.main, "");
+  assert.equal(projected.images.secondary, "active"); assert.equal(projected.images.alt, old);
+  assert.equal(projected.title, old); assert.equal(projected.href, old);
+  assert.deepEqual(projected.items[0], { id: 4, image: "", title: old, href: old });
+  assert.equal(original.items[0].image, old);
+  check("Page Block projection changes only declared image sources and preserves row metadata and links", true);
+}
+
 await verifyMediaRelocationContract();
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nMedia Library system: ${passed}/${checks.length} checks passed.`);

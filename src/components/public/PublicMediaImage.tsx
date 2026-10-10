@@ -141,7 +141,7 @@ export function PublicArtDirectedMediaImage({
   };
   const {
     props: { srcSet: desktopSrcSet },
-  } = getImageProps({ ...common, src: desktopSrc });
+  } = getImageProps({ ...common, src: desktopSrc || TRANSPARENT_IMAGE_FALLBACK });
   const {
     props: { srcSet: mobileSrcSet, ...mobileRest },
   } = getImageProps({ ...common, src: mobileSrc });
@@ -149,7 +149,7 @@ export function PublicArtDirectedMediaImage({
   return (
     <picture>
       <source media="(max-width: 767px)" srcSet={mobileSrcSet} sizes={sizes} />
-      <source media="(min-width: 768px)" srcSet={desktopSrcSet} sizes={sizes} />
+      <source media="(min-width: 768px)" srcSet={desktopSrcSet || TRANSPARENT_IMAGE_FALLBACK} sizes={sizes} />
       <img
         {...mobileRest}
         src={TRANSPARENT_IMAGE_FALLBACK}

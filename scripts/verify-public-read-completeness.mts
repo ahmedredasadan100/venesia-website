@@ -22,7 +22,7 @@ modules._load = (request, parent, main) => {
   if (request === "server-only") return {};
   if (request === "next/cache") return { unstable_cache: (callback: unknown) => callback };
   if (request.endsWith("/cache/public-cache-generation")) return { cachePublicRead: (callback: unknown) => callback };
-  if (request.endsWith("/supabase-admin")) return { getSupabaseAdmin: () => currentClient };
+  if (request.endsWith("/supabase-admin")) return { getSupabaseAdmin: () => currentClient, getSupabaseStorageAdmin: () => currentClient };
   if (request.endsWith("/load-global-seo-settings")) return { loadGlobalSeoSettings: async () => ({ canonicalBaseUrl: "https://verification.invalid", defaultRobotsIndex: true, defaultRobotsFollow: true }) };
   if (request.endsWith("/PublicMediaImage")) return { __esModule: true, default: () => null };
   if (request === "next/link") return { __esModule: true, default: "a" };
@@ -137,7 +137,7 @@ export function verifyProjectMappingAndGrouping() {
     for (let index = 0; index < n; index += 1) assert.equal(result[index].location.subArea?.id, String(index + 10));
     work.push({ n, locationIdReads });
   }
-  assert.match(read("src/lib/projects/load-published-projects.ts"), /return mapProjectRowsToPublicProjects\(projects, locations\)/u);
+  assert.match(read("src/lib/projects/load-published-projects.ts"), /return projectDeletedMedia\(mapProjectRowsToPublicProjects\(projects, locations\)\)/u);
   return { renderedGroups: groups, work };
 }
 

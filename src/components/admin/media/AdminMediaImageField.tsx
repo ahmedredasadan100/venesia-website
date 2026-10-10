@@ -1,4 +1,5 @@
 "use client";
+import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useId, useRef, useState } from "react";
@@ -113,6 +114,7 @@ export default function AdminMediaImageField({
         aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
       >
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
+        <AdminDeletedMediaNotice values={[value]} />
 
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
           {value ? (
@@ -202,6 +204,7 @@ export default function AdminMediaImageField({
       aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
     >
       <input ref={valueInputRef} type="hidden" name={name} value={value} />
+        <AdminDeletedMediaNotice values={[value]} />
 
       {showLabel ? (
         <span className={`block text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>

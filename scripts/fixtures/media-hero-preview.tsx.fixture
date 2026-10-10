@@ -1,0 +1,18 @@
+import { cachePublicRead } from "../../lib/cache/public-cache-generation";
+import DynamicHeroSection from "../../components/sections/DynamicHeroSection";
+import { getSupabaseAdmin } from "../../lib/supabase-admin";
+import { omitDeletedManagedMedia } from "../../lib/admin/media-catalog/deleted-reference-state";
+import type { HeroSectionData } from "../../lib/page-sections";
+export const dynamic = "force-dynamic";
+const readHero = cachePublicRead(async () => {
+  const { data, error } = await getSupabaseAdmin().from("hero_templates").select("id,variant,config,status").eq("id",900003).single();
+  if (error || !data || data.status !== "unpublished") throw new Error("isolated_hero_fixture_missing");
+  const config = data.config as Record<string, unknown>;
+  const media = await omitDeletedManagedMedia({images:config.images,mobileImages:config.mobileImages});
+  const hero: HeroSectionData = {id:900003,page_id:0,section_key:"qa",section_type:"hero",slot:"hero",variant:data.variant,
+    style_preset:"default",source_type:"manual",source_id:null,source_slug:null,limit_count:0,is_visible:true,sort_order:0,config:{...config,...media}};
+  return hero;
+}, ["qa-unpublished-hero"], { revalidate: 300, tags: ["hero"] });
+export default async function IsolatedHeroPreview() {
+  return <DynamicHeroSection hero={await readHero()} autoplayMs={600000} />;
+}

@@ -97,7 +97,9 @@ export async function verifyOwnedPublicReadCompleteness(handle: OwnedLocalHandle
     try { await pendingControlRenewal; } finally { pendingControlRenewal = undefined; }
   };
   const requests: Record<string, number> = {};
-  const client = createClient<Database>("http://127.0.0.1:1", "owned-test-placeholder", {
+  const storageOrigin = new URL(String(templateRows.projects.image)).origin;
+  assert.equal(new URL(storageOrigin).hostname, "127.0.0.1");
+  const client = createClient<Database>(storageOrigin, "owned-test-placeholder", {
     auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
       await maintainControl();
       const url = new URL(String(input));
@@ -135,7 +137,8 @@ export async function verifyOwnedPublicReadCompleteness(handle: OwnedLocalHandle
   report.projectCollection = await verifyPublicProjectCollectionCompleteness(client, completeProjects.map(row => ({
     id: Number(row.id), locationIds: [row.governorate_id, row.city_id, row.main_area_id, row.sub_area_id].map(value => value == null ? null : Number(value)),
   })));
-  for (const count of Object.values(requests)) assert.ok(count > 3);
+  for (const table of ["topics", "projects", "pages", "project_locations"]) assert.ok(requests[table] > 3);
+  assert.equal(requests.media_assets, 2, "Catalog tombstone lookup is bounded once per complete collection read, not paginated enumeration");
   report.singleResponseControls = controls;
   report.transportRequests = requests;
   report.mapping = verifyProjectMappingAndGrouping();

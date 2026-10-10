@@ -1,4 +1,5 @@
 import "server-only";
+import { omitDeletedManagedMedia } from "./admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "./cache/public-cache-generation";
 
@@ -156,7 +157,7 @@ async function queryDomainBackedHeroTemplateState(
   }
 
   const hero = templateToDomainBackedHeroSection(template);
-  hero.config = await resolveHeroConfigLinks(template.config);
+  hero.config = await resolvePublicHeroConfig(template.config);
   return { hero, visibility: "visible" };
 }
 
@@ -213,9 +214,17 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
   };
 }
 
+async function resolvePublicHeroConfig(config: JsonObject | null) {
+  return {
+    ...(await resolveHeroConfigLinks(config)),
+    ...(await omitDeletedManagedMedia({ images: config?.images,
+      mobileImages: config?.mobileImages, mobile_images: config?.mobile_images })),
+  };
+}
+
 async function templateToHeroSectionResolved(template: HeroTemplateRecord, page: PageRecord): Promise<HeroSectionData> {
   const hero = templateToHeroSection(template, page);
-  hero.config = await resolveHeroConfigLinks(template.config);
+  hero.config = await resolvePublicHeroConfig(template.config);
   return hero;
 }
 

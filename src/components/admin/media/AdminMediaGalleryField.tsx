@@ -1,4 +1,5 @@
 "use client";
+import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -269,7 +270,8 @@ export default function AdminMediaGalleryField(
       <p className="text-xs leading-6 text-[#D8B87A]/65">
         {DIMENSION_HINTS[dimensionHint]}
       </p>
-      {helperText ? (
+      <AdminDeletedMediaNotice values={items.map(item => item.url)} />
+        {helperText ? (
         <p className="text-xs leading-6 text-white/42">{helperText}</p>
       ) : null}
 

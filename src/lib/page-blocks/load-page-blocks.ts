@@ -1,4 +1,6 @@
 import "server-only";
+import { readDeletedManagedValues } from "../admin/media-catalog/deleted-reference-state";
+import { mapPageBlockImageSources } from "./configs";
 
 import { cachePublicRead } from "../cache/public-cache-generation";
 
@@ -315,6 +317,15 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   }
 
   const blocks = await Promise.all(blockPromises);
+  const imageSources: string[] = [];
+  for (const block of blocks) mapPageBlockImageSources(block.template.config, source => {
+    imageSources.push(source); return source;
+  });
+  const deletedSources = new Set(await readDeletedManagedValues(imageSources));
+  if (deletedSources.size) for (const block of blocks) {
+    block.template.config = mapPageBlockImageSources(block.template.config,
+      source => deletedSources.has(source) ? "" : source);
+  }
 
   const hasRenderableModules = blocks.length > 0;
   const hasAnyAssignmentRows = assignmentRowCount > 0;

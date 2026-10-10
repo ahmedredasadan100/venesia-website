@@ -69,7 +69,12 @@ revives the existing folder identity, including after concurrent retirement.
 
 Confirmed deleted assets remain tombstones for retained reference discovery and
 reconciliation, never selectable active assets. Newly acquired write leases still
-reject deleted assets. If a successful deletion contracts the reconciled dataset,
+reject deleted assets. The application write owner excludes a confirmed tombstone
+from new attachment targets only after the canonical provider proves that the same
+persisted entity already contains that identity. Project child identities must first
+be resolved within their own parent aggregate. New, unconfirmed, or unproven deleted
+references still reach the unchanged rejecting RPC. Retained URLs and row metadata
+remain authored data and do not require manual cleanup before future saves. If a successful deletion contracts the reconciled dataset,
 the existing full reconciliation owner refreshes the baseline automatically; no
 count-only exception or manual user step establishes readiness. A refresh failure
 is surfaced separately from a proven Storage/Catalog deletion.
@@ -180,3 +185,54 @@ The relocation journal migration extends the existing lease RPC boundary. Direct
 service-role table updates remain denied; the journal is immutable apart from its
 copy receipt. Recovery claims lock the complete token group and reject concurrent
 claims. The isolated SQL fixture proves those permissions and transitions.
+
+## Retained deleted references and Public projection (2026-10-10)
+
+Owner-approved meaning: keep row metadata, expose a manageable deleted-asset notice,
+and allow subsequent edits of proven existing references. No row is removed or
+rewritten by deletion. The shared image/gallery/file fields obtain read-only Catalog
+state through the authenticated media API. Replacement still uses the managed picker.
+
+Catalog tombstones, rather than URL HTTP cache responses, determine Public image
+availability. Existing Public read owners project only their declared media fields:
+Hero image lists; Project card/hero/overview/gallery/plan/video sources; content
+collection/detail/series images and media; Page Block image sources; Tracking media.
+Text, links, authored rows and SEO remain unchanged. The reference-provider inventory
+still contains nineteen providers; a link or SEO reference is not an image-render
+consumer. No parallel reference registry or migration is introduced.
+
+Successful single/bulk/folder asset deletion expires the existing public cache tags
+of the affected reference providers through the canonical generation owner. A cache
+failure is a post-commit warning, not an asset-delete failure eligible for retry.
+Direct Storage/CDN responses and cached browser images are separate evidence; the
+application must stop emitting the deleted image regardless of CDN retention.
+
+Verification extends the existing Media Library system and isolated Supabase media
+journey. The isolated build alone contains a fixture route rendering the real Hero
+component from an unpublished QA template. This route is generated under the owned
+build directory, never added to the deployed app. Completion requires native
+Storage/Catalog/audit/reference proof plus actual Admin Save/Reload and viewport
+proof; unit/source checks alone are not Production closure.
+
+## Hero responsive source contract (2026-10-10)
+
+The existing manual Hero save action already persists desktop and mobile arrays
+separately. Runtime index pairing previously expanded the slider to the longer
+array and supplied missing desktop entries from the mobile array. This was the
+source of desktop slide leakage; it was not a persistence defect.
+
+`resolveHeroResponsiveMedia` now owns whole-list selection. Desktop uses its own
+array, including an empty array. Mobile uses its entire array when nonempty, and
+falls back to the entire desktop array only when empty. No reverse fallback exists.
+The cinematic and projects-hub manual sliders derive count and navigation from the
+selected list. Standard/internal Heroes remain static first-image presentations,
+using the same list contract. Domain-backed Project slides retain their domain
+identity and existing art direction. No sizing, layout, animation or Ken Burns
+contract changes are included.
+
+An art-directed first image preserves the server-rendered initial source; the
+existing runtime then selects the complete viewport list at the 767/768 breakpoint.
+An empty desktop source uses the existing transparent image fallback so a mobile
+image is never borrowed for desktop. Admin helper text explains independent arrays.
+The isolated media journey saves and reloads 2/10, 5/0, 1/1 and 0/10 configurations
+and measures the actual Hero component at desktop and mobile widths.

@@ -1,4 +1,5 @@
 import "server-only";
+import { readDeletedManagedValues } from "../../admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "../../cache/public-cache-generation";
 
@@ -439,11 +440,15 @@ async function queryProjectTrackingDetail(
     historyResult.data ?? [],
   );
 
-  const media = mediaRows.map((row) => ({
+  const deletedMedia = new Set(await readDeletedManagedValues([
+    core.project.heroImage, core.latestVisual,
+    ...mediaRows.flatMap(row => [row.public_url, row.poster_url]),
+  ]));
+  const media = mediaRows.filter(row => !deletedMedia.has(row.public_url)).map((row) => ({
     id: row.id,
     kind: row.media_kind,
     url: row.public_url,
-    posterUrl: row.poster_url,
+    posterUrl: row.poster_url && deletedMedia.has(row.poster_url) ? null : row.poster_url,
     title: row.title,
     sortOrder: row.sort_order,
   }));
@@ -516,7 +521,7 @@ async function queryProjectTrackingDetail(
       }
     : null;
   const detail = projectTrackingPublicDetailSchema.parse({
-    project: core.project,
+    project: { ...core.project, heroImage: core.project.heroImage && deletedMedia.has(core.project.heroImage) ? null : core.project.heroImage },
     profile: core.profile,
     stages,
     history: historyRows.map((row) =>
@@ -528,7 +533,7 @@ async function queryProjectTrackingDetail(
     selectedStageId: selectedStageRow?.id ?? null,
     selectedItemId: selectedItemRow?.id ?? null,
     selectedUpdateId: selectedUpdateRow?.id ?? null,
-    latestVisual: core.latestVisual,
+    latestVisual: core.latestVisual && deletedMedia.has(core.latestVisual) ? null : core.latestVisual,
     pagination: {
       stages: stagesPage,
       items: itemsPage,

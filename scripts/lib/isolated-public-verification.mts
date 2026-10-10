@@ -1916,6 +1916,15 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       writeFileSync(target, downloadFixture, { flag: "wx" });
       receipt(context, "owned-download-fixture.json", { path: CORE_DOWNLOAD_MEDIA_KEY, sha256: digest(downloadFixture), deployedContentDependency: false });
     }
+    if (mediaUpload) {
+      // Only the owned, loopback-only build receives this fixture. No app route is deployed.
+      const fixtureRoute = join(sourceDirectory, "src/app/qa-isolated-hero/page.tsx");
+      mkdirSync(dirname(fixtureRoute), { recursive: true });
+      const fixtureSource = readFileSync(sourcePath("scripts/fixtures/media-hero-preview.tsx.fixture"), "utf8");
+      writeFileSync(fixtureRoute, fixtureSource, { flag: "wx" });
+      receipt(context, "media-hero-preview-fixture.json", { path: "src/app/qa-isolated-hero/page.tsx",
+        sha256: digest(fixtureSource), isolatedOnly: true, deployed: false, templateId: 900003 });
+    }
     writeFileSync(join(sourceDirectory, imageConfig.file), imageConfigSource, { flag: "wx", mode: 0o600 });
     symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
     const headSha = await gitHead(context);

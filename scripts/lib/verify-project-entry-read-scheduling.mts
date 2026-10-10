@@ -105,7 +105,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
     floor_plan_ids: number[]; media_ids: number[]; video_ids: number[];
     feature_ids: number[]; floor_plan_detail_ids: number[];
   };
-  type Scope = { domainKey: string; entityIdentity: string; values: unknown[] };
+  type Scope = { domainKey: string; entityIdentity: string; values: unknown[]; retainedEntityIdentity?: string };
   type Target = { domainKey: string; entityIdentity: string; leaseEntityIdentity: string };
   type Cleanup = { domainKey: string; entityIdentity: string };
   type Saved = { id: number; slug: string; updatedAt: string };
@@ -120,6 +120,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
     noLease?: boolean;
     syncWarning?: boolean;
     emptyChildren?: boolean;
+    retainedAsset?: boolean;
   };
   const domains: Domain[] = ["project_floor_plans", "project_media", "project_videos"];
   const savedRows: Record<Domain, Array<{ id: number; client_key: string }>> = {
@@ -176,7 +177,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
             const error = options.errorStage === stage && (options.errorTables ?? domains).includes(table)
               ? { message: `${stage}:${table}` } : null;
             const data = stage === "before"
-              ? [{ id: 60, client_key: `removed:${table}` }, { id: 61, client_key: `retained:${table}` }]
+              ? [{ id: 60, client_key: `removed:${table}` }, { id: 61, client_key: `retained:${table}` }, ...(options.retainedAsset ? savedRows[table] : [])]
               : options.missingIdentity === table || options.emptyChildren ? [] : savedRows[table];
             const result = Promise.resolve({ data, error });
             const query = {
@@ -187,6 +188,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
           } };
         } };
       } }) },
+      "../media-catalog/deleted-reference-state": { readDeletedManagedValues: async () => options.retainedAsset ? ["/gallery.jpg"] : [] },
       "../media-catalog/reference-providers": referencePort,
       "./reference-providers": referencePort,
       "../media-catalog/synchronization": syncPort,
@@ -243,6 +245,17 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
     assert.deepEqual(h.state.failed, []); assert.deepEqual(h.state.uncertain, []);
   }
   ok("Project Save without media-child tombstones skips only three preflight reads and preserves actor, lease, mutation, persisted IDs and return values");
+
+  {
+    const h = fixture({ retainedAsset: true }); await h.run();
+    assert.deepEqual(h.state.reads, ["before", "after"].flatMap(stage => domains.map(table => ({ table, stage, projectId: 40 }))));
+    assert.deepEqual(h.state.acquired[0].scopes.map(scope => scope.retainedEntityIdentity), [undefined, "501", "701", "901"]);
+    assert.deepEqual(h.state.sync[0].cleanup, []);
+    const created = fixture({ retainedAsset: true, projectId: null }); await created.run();
+    assert.ok(created.state.reads.every(row => row.stage === "after"));
+    assert.ok(created.state.acquired[0].scopes.every(scope => scope.retainedEntityIdentity === undefined));
+    ok("Confirmed deleted child references resolve only from the same persisted Project; creation never gains retained-reference permission");
+  }
 
   for (const [index, key] of ["floor_plan_ids", "media_ids", "video_ids"].entries()) {
     const h = fixture({ deleted: { [key]: [60, 999] } }); const result = await h.run();
