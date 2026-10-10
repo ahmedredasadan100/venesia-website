@@ -21,12 +21,14 @@ const ACTION_LABELS: Record<MediaRecoveryAction, string> = {
   confirm_missing: "تأكيد فقد الملف",
   preview_scoped_reconciliation: "فحص ارتباطات هذا الملف",
   resolve_write_lease: "حل عملية الحفظ",
+  repair_relocation: "إصلاح عملية النقل",
 };
 const CONFIRM_ACTIONS = new Set<MediaRecoveryAction>([
   "retry_finalization",
   "cancel_reservation",
   "confirm_missing",
   "resolve_write_lease",
+  "repair_relocation",
 ]);
 
 const STATE_LABELS: Record<string, string> = {

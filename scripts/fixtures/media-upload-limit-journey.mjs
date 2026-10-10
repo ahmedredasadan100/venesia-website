@@ -1,3 +1,5 @@
+import {verifyMediaRelocations} from "./media-relocation-journey.mjs";
+import {readFileSync} from "node:fs";
 import {verifyPickerUploads} from './media-picker-upload-journey.mjs';
 // Reusable Browser journey owned by qa-isolated-supabase --media-upload-limit-proof.
 import assert from 'node:assert/strict';
@@ -94,6 +96,8 @@ try {
   const illegal = await page.request.post(storageOrigin + '/storage/v1/object/cms-images/images/unauthorized.png', { data: image, headers: { 'Content-Type': 'image/png' } });
   assert.ok([400, 401, 403].includes(illegal.status()));
   await verifyPickerUploads({page,origin,api,transfers});
+  const pickerProof = JSON.parse(readFileSync(path.join(process.env.QA_ADMIN_OUTPUT, "slider-upload-browser-proof.json"), "utf8"));
+  await verifyMediaRelocations({page,origin,api,assets:pickerProof.assets,injectFailure:true});
   assert.deepEqual(errors, []);
   const proof = { status: 'pass', sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256, imageBytes: image.length,
     adminSaveReload: [10, 2, 7], realSignedStorageUploads: completions, directBrowserTransfers: transfers,

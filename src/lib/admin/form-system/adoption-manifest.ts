@@ -11,6 +11,7 @@ import {
   ADMIN_MODAL_CONSUMER_CAPABILITIES,
   ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_MEDIA_CONSUMER_CAPABILITIES,
+  ADMIN_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
   ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
@@ -853,7 +854,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "activity-sitemap-media-commands",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MEDIA_CONSUMER_CAPABILITIES,
+      ADMIN_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "activity-sitemap-media-commands:query-command-utilities",
@@ -861,6 +862,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
             "src/app/admin/activity-log/ActivityLogClient.tsx",
             "src/app/admin/seo/sitemap/SitemapMonitorClient.tsx",
             "src/components/admin/media/MediaLibraryCore.tsx",
+            "src/app/admin/settings/media/MediaRecoveryCenter.tsx",
           ],
           rationale:
             "Activity queries, sitemap checks, and Media commands are bounded command utilities without a generic entity edit lifecycle.",

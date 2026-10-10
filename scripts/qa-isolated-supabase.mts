@@ -258,9 +258,17 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(Number(bucket.file_size_limit), 50 * 1024 * 1024);
       await handle.preparePublicVerification();
       await handle.prepareAdminInteractions({ study: "media-upload-limit" });
+      await handle.query(readFileSync(resolve(root, "scripts/fixtures/media-relocation-journal.sql"), "utf8"));
+      writeFileSync(resolve(output, "relocation-journal-proof.json"), JSON.stringify({ status: "pass", directWritesDenied: true, serviceRpcAllowed: true, anonymousRpcDenied: true, receiptMonotonic: true, duplicateRepairClaimRejected: true, rolledBack: true }));
       await handle.query(`insert into public.hero_templates (id,name,slug,variant,status,source_type,config) values
         (900001,'QA Slider upload','qa-slider-upload','home-cinematic','unpublished','manual','{"title":"QA Slider upload","images":[],"mobileImages":[]}'::jsonb)`);
-      await handle.runPublicVerification({ selection: "media-upload-limit", additionalSourceFiles: files });
+      try {
+        await handle.runPublicVerification({ selection: "media-upload-limit", additionalSourceFiles: files });
+      } catch (error) {
+        const diagnostics = await handle.query("select metadata from public.admin_audit_logs where entity_type = 'media_asset' and metadata->>'result' = 'failed'");
+        writeFileSync(resolve(output, "relocation-failure-diagnostics.json"), JSON.stringify(diagnostics.rows, null, 2));
+        throw error;
+      }
       const settings = (await handle.query("select value from public.site_settings where key='media.settings'")).rows[0];
       assert.equal((settings.value as { maxImageBytes: number }).maxImageBytes, 7 * 1024 * 1024);
       const assets = (await handle.query("select object_key,byte_size,uploaded_by from public.media_assets where original_filename like 'configured-limit-%' and provider='supabase'")).rows;
@@ -284,6 +292,14 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(Number(refs.count), 3); // Repeated use inside the same config field is one canonical reference.
       const scopeObjects = (await handle.query("select bucket_id,name from storage.objects where name like '%scope-%'")).rows;
       assert.equal(scopeObjects.length, 5);
+      const relocationAssets = (await handle.query("select a.id,a.object_key,a.public_url,a.status,exists(select 1 from storage.objects o where o.bucket_id=a.bucket and o.name=a.object_key) as storage_exists,(select count(*) from public.media_references r where r.asset_id=a.id) as reference_count from public.media_assets a where a.original_filename in ('scope-slide-jpg.jpg','scope-library.jpg')")).rows;
+      assert.equal(relocationAssets.length,2);
+      assert.ok(relocationAssets.every(row=>row.status==='active' && row.storage_exists && String(row.object_key).startsWith('images/home/relocate-bulk/')));
+      const relocationAudit=(await handle.query("select metadata from public.admin_audit_logs where metadata->>'operation' in ('move','rename','move+rename') and metadata->>'result'='success'")).rows;
+      assert.equal(relocationAudit.length,7);
+      const oldReferences=(await handle.query("select count(*)::int as count from public.media_reference_write_leases where resolved_at is null and status in ('failed','expired')")).rows[0];
+      assert.equal(oldReferences.count,0);
+      writeFileSync(resolve(output,"media-relocation-database-proof.json"),JSON.stringify({status:'pass',assets:relocationAssets,audit:relocationAudit,unresolved:oldReferences.count},null,2));
       writeFileSync(resolve(output, "slider-upload-database-proof.json"), JSON.stringify({status:"pass",sliderImages,sliderAssets,references:refs.count,scopeObjects},null,2));
       writeFileSync(resolve(output, "media-upload-database-proof.json"), JSON.stringify({ status: "pass", assets, audit, bucketLimit: Number(bucket.file_size_limit), savedImageLimit: 7 * 1024 * 1024 }, null, 2));
     },

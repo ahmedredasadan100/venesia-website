@@ -18,6 +18,7 @@ import type {
   MediaCatalogPage,
   MediaDeleteEligibility,
   MediaSmartView,
+  MediaReferenceRecord,
 } from "../../../lib/admin/media-catalog/types";
 import {
   applyAdminEntityUrlPatch,
@@ -39,6 +40,7 @@ import {
   useAdminFeedback,
 } from "../AdminFeedbackProvider";
 import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
+import AdminListboxSelect from "../ui/AdminListboxSelect";
 import AdminConfirmDialog from "../ui/AdminConfirmDialog";
 import AdminTablePagination from "../ui/AdminTablePagination";
 import MediaUsagePanel from "../media-intelligence/MediaUsagePanel";
@@ -52,8 +54,11 @@ type PageSize = 10 | 20 | 30 | 50 | 100;
 type PendingConfirmation =
   | { kind: "delete"; assets: MediaCatalogAsset[]; folder?: string | null; phase: "checking" | "ready" | "failed"; checks: MediaDeleteEligibility[]; results: { name: string; deleted: boolean; error?: string }[]; total?: number; error?: string }
   | { kind: "replace"; previous: MediaCatalogAsset; next: MediaCatalogAsset }
-  | { kind: "move"; asset: MediaCatalogAsset; targetFolder: string; targetFilename: string }
+  | { kind: "move"; assets: MediaCatalogAsset[]; targetFolder: string; targetFilename?: string; previews: MovePreview[] }
   | null;
+type MovePreview = { id: string; asset?: MediaCatalogAsset; targetObjectKey?: string; references?: MediaReferenceRecord[]; error?: string | null };
+type MoveResult = { id: string; name: string; success: boolean; error?: string };
+
 type UploadRow = { name: string; state: "pending" | "uploading" | "complete" | "error"; error?: string };
 
 export type MediaLibraryCoreProps = {
@@ -201,6 +206,8 @@ export default function MediaLibraryCore({
   const [folderDraft, setFolderDraft] = useState("");
   const [showFolderForm, setShowFolderForm] = useState(false);
   const [showPhysicalForm, setShowPhysicalForm] = useState(false);
+  const [moveFolder, setMoveFolder] = useState("images");
+  const [moveResults, setMoveResults] = useState<MoveResult[]>([]);
   const [confirmation, setConfirmation] = useState<PendingConfirmation>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const replacementInputRef = useRef<HTMLInputElement>(null);
@@ -652,30 +659,27 @@ export default function MediaLibraryCore({
 
     if (activeConfirmation.kind === "move") {
       setBusy("move");
+      const results: MoveResult[] = [];
+      const catalogWarnings: string[] = [];
       try {
-        const response = await fetch("/api/admin/media-library", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            operation: "move_asset",
-            assetId: activeConfirmation.asset.id,
-            targetFolder: activeConfirmation.targetFolder,
-            targetFilename: activeConfirmation.targetFilename,
-          }),
-        });
-        const payload = (await response.json()) as { error?: string };
-        if (!response.ok) throw new Error(payload.error || "تعذر نقل الأصل أو إعادة تسميته.");
+        // One independent request at a time: no shared rollback or bulk timeout.
+        for (const asset of activeConfirmation.assets) {
+          try {
+            const response = await fetch("/api/admin/media-library", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "move_asset", assetId: asset.id, targetFolder: activeConfirmation.targetFolder, ...(activeConfirmation.targetFilename === undefined ? {} : { targetFilename: activeConfirmation.targetFilename }) }) });
+            const payload = await response.json() as { error?: string; code?: string; catalogWarnings?: string[] };
+            if (!response.ok) throw new Error(payload.code === "UNSUPPORTED_REFERENCE_OWNER" ? payload.code : payload.error || "تعذر النقل.");
+            catalogWarnings.push(...(payload.catalogWarnings ?? []));
+            results.push({ id: asset.id, name: asset.displayName, success: true });
+          } catch (error) { results.push({ id: asset.id, name: asset.displayName, success: false, error: error instanceof Error ? error.message : "تعذر إثبات نتيجة النقل؛ أعد تحميل المكتبة قبل المحاولة." }); }
+          setMoveResults([...results]);
+        }
+        const failed = results.filter(result => !result.success);
+        setSelectedIds(failed.map(result => result.id));
         setConfirmation(null);
-        setShowPhysicalForm(false);
-        setSelectedIds([]);
+        setShowPhysicalForm(failed.length > 0);
         await loadPage();
-        announce("success", "اكتملت عملية التخزين", "تغير المسار الفعلي وأعيد ربط المراجع المدعومة.");
-      } catch (moveError) {
-        announce("danger", "لم تكتمل عملية التخزين", `${moveError instanceof Error ? moveError.message : "خطأ غير معروف."} لم يُعلن نجاح جزئي.`);
-        throw moveError;
-      } finally {
-        setBusy(null);
-      }
+        announce(failed.length || catalogWarnings.length ? "warning" : "success", "نتيجة نقل الصور", "نجح " + (results.length - failed.length) + " وفشل " + failed.length + (failed.length ? ". بقيت الصور الفاشلة محددة لإعادة المحاولة فقط." : ".") + (catalogWarnings.length ? " يلزم تحديث جاهزية المكتبة: " + catalogWarnings.join("، ") : ""));
+      } finally { setBusy(null); }
       return;
     }
 
@@ -718,7 +722,7 @@ export default function MediaLibraryCore({
   const confirmDescription = confirmation?.kind === "replace"
     ? `سيتم تحديث مواضع الاستخدام المدعومة من «${confirmation.previous.displayName}» إلى «${confirmation.next.displayName}». سيبقى الملف القديم محفوظًا.`
     : confirmation?.kind === "move"
-      ? `سينتقل الملف إلى ${confirmation.targetFolder}/${confirmation.targetFilename} مع تحديث مواضع الاستخدام المدعومة. لن يعتمد التغيير إذا لم يكتمل كله.`
+      ? `تم تحديد ${confirmation.assets.length} صور؛ ${confirmation.previews.filter(item => (item.references?.length ?? 0) > 0).length} مستخدمة، وسيتم تحديث ${confirmation.previews.reduce((sum, item) => sum + (item.references?.length ?? 0), 0)} مراجع. راجع المسارات والاستخدامات لكل صورة.`
       : confirmation?.kind === "delete" && confirmation.phase === "checking" ? "جارٍ فحص الاستخدامات الحالية…"
       : "راجع الملفات ومواضع استخدامها. الحذف نهائي، ولن يفك مراجع المحتوى أو يغيرها تلقائيًا.";
 
@@ -805,7 +809,7 @@ export default function MediaLibraryCore({
                 {mode === "manage" && selectedAssets.length ? (
                   <button ref={deleteConfirmationTriggerRef} type="button" aria-describedby={!canSafelyDeleteSelectedAssets ? safeDeleteStatusId : undefined} title={!canSafelyDeleteSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canSafelyDeleteSelectedAssets || Boolean(busy)} onClick={() => void previewDelete(selectedAssets)} className="rounded-xl border border-red-300/25 px-3 py-2 text-sm text-red-200 disabled:opacity-40">{canSafelyDeleteSelectedAssets ? `حذف آمن (${selectedAssets.length})` : "الحذف الآمن غير جاهز"}</button>
                 ) : null}
-                {mode === "manage" && selectedAssets.length === 1 ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => setShowPhysicalForm(true)} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">نقل / إعادة تسمية</button> : null}
+                {mode === "manage" && selectedAssets.length > 0 && selectedAssets.every(asset => asset.kind === "image") ? <button type="button" title={!canRebindSelectedAssets ? safeDeleteUnavailableReason : undefined} disabled={!canRebindSelectedAssets || Boolean(busy)} onClick={() => { setMoveFolder(selectedAssets[0].folderPath); setMoveResults([]); setShowPhysicalForm(true); }} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">{selectedAssets.length === 1 ? "نقل / إعادة تسمية" : "نقل إلى…"}</button> : null}
                 <button type="button" onClick={() => setSelectedIds([])} className="ms-auto rounded-xl border border-white/10 px-3 py-2 text-sm text-white/55">مسح التحديد</button>
               </div>
             }
@@ -986,13 +990,7 @@ export default function MediaLibraryCore({
                     <button type="submit" disabled={!isManaged(focusedAsset) || busy === "metadata"} className="w-full rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-3 py-2 text-sm font-semibold text-[#D8B87A] disabled:opacity-40">حفظ البيانات</button>
                   </form>
                   <div className="mt-4 border-t border-white/8 pt-4"><button ref={replacementConfirmationTriggerRef} type="button" disabled={!canMutate || !data?.readiness.usageResultsAuthoritative || !isManaged(focusedAsset) || Boolean(busy)} onClick={() => replacementInputRef.current?.click()} className="w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">{busy === "replace-upload" ? "جارٍ رفع بديل جديد…" : "رفع بديل ثم استبدال كل المراجع"}</button><input ref={replacementInputRef} type="file" accept={focusedAsset.kind === "image" ? CMS_IMAGE_ACCEPT : CMS_PDF_ACCEPT} className="hidden" onChange={(event) => { void stageReplacement(event.currentTarget.files?.[0] ?? null); event.currentTarget.value = ""; }} /><p className="mt-2 text-[10px] leading-5 text-white/35">يتطلب الاستبدال فحص ارتباطات مكتملًا، ويبقى الأصل القديم محفوظًا.</p></div>
-                  {showPhysicalForm ? <form key={`move-${focusedAsset.id}`} onSubmit={(event) => {
-                    event.preventDefault();
-                    const formData = new FormData(event.currentTarget);
-                    const targetFolder = String(formData.get("targetFolder") || "").trim();
-                    const targetFilename = String(formData.get("targetFilename") || "").trim();
-                    if (targetFolder && targetFilename) setConfirmation({ kind: "move", asset: focusedAsset, targetFolder, targetFilename });
-                  }} className="mt-4 space-y-2 border-t border-white/8 pt-4"><p className="text-xs font-semibold text-white/60">تغيير المجلد أو اسم الملف</p><input name="targetFolder" defaultValue={focusedAsset.folderPath} aria-label="مجلد الوجهة" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><input name="targetFilename" defaultValue={focusedAsset.objectKey.split("/").at(-1)} aria-label="اسم الملف الفعلي الجديد" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 font-mono text-xs text-white outline-none" dir="ltr" /><div className="flex gap-2"><button type="button" onClick={() => setShowPhysicalForm(false)} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/55">إلغاء</button><button ref={moveConfirmationTriggerRef} type="submit" className="flex-1 rounded-xl border border-[#D8B87A]/30 px-3 py-2 text-xs font-semibold text-[#D8B87A]">مراجعة العملية</button></div></form> : null}
+
                 </section>
               ) : null}
               <MediaUsagePanel assetPath={focusedAsset.publicUrl} refreshToken={dataRevision} />
@@ -1001,13 +999,34 @@ export default function MediaLibraryCore({
         </aside>
       </div>
 
+
+      {showPhysicalForm && mode === "manage" && selectedAssets.length > 0 ? <form data-media-relocation-form="" key={selectedAssets.map(asset => asset.id).join(",")} onSubmit={async event => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        const targetFilename = selectedAssets.length === 1 ? String(formData.get("targetFilename") ?? "") : undefined;
+        setBusy("move-preview");
+        try {
+          const response = await fetch("/api/admin/media-library", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operation: "preview_move", assetIds: selectedAssets.map(asset => asset.id), targetFolder: moveFolder, ...(targetFilename === undefined ? {} : { targetFilename }) }) });
+          const payload = await response.json() as { error?: string; previews: MovePreview[] };
+          if (!response.ok) throw new Error(payload.error || "تعذر فحص النقل.");
+          setConfirmation({ kind: "move", assets: [...selectedAssets], targetFolder: moveFolder, targetFilename, previews: payload.previews });
+        } catch (error) { announce("danger", "تعذر فحص النقل", error instanceof Error ? error.message : "أعد المحاولة."); }
+        finally { setBusy(null); }
+      }} className="space-y-3 rounded-2xl border border-white/10 p-4">
+        <p className="font-semibold">{selectedAssets.length === 1 ? "نقل / إعادة تسمية الصورة" : "نقل الصور المحددة"}</p>
+        <AdminListboxSelect value={moveFolder} onChange={setMoveFolder} ariaLabel="مجلد الوجهة" disabled={Boolean(busy)} searchable sizing="full" options={(data?.folders ?? []).filter(item => isCmsUploadFolderCompatible(item.path, "image")).map(item => ({ value: item.path, label: item.path }))} />
+        {selectedAssets.length === 1 ? <input name="targetFilename" defaultValue={selectedAssets[0].objectKey.split("/").at(-1)} aria-label="اسم الملف الفعلي الجديد" disabled={Boolean(busy)} className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-white" dir="ltr" /> : null}
+        <div className="flex gap-2"><button type="button" disabled={Boolean(busy)} onClick={() => setShowPhysicalForm(false)}>إلغاء</button><button ref={moveConfirmationTriggerRef} type="submit" disabled={Boolean(busy)} className="rounded-xl border border-[#D8B87A]/30 px-4 py-2 text-[#D8B87A]">{busy === "move-preview" ? "جارٍ فحص الاستخدام…" : moveResults.some(result => !result.success) ? "مراجعة الفاشل فقط وإعادة المحاولة" : "مراجعة العملية"}</button></div>
+      </form> : null}
+      {moveResults.length > 0 ? <ul data-media-relocation-results="" aria-live="polite" className="space-y-2">{moveResults.map(result => <li key={result.id} className={result.success ? "text-emerald-200" : "text-red-200"}>{result.name}: {result.success ? "نجح النقل" : result.error}</li>)}</ul> : null}
+
       <AdminConfirmDialog
         open={confirmation !== null}
         title={confirmation?.kind === "replace" ? "استبدال كل المراجع المدعومة؟" : confirmation?.kind === "move" ? "تنفيذ تغيير فعلي لمسار التخزين؟" : "حذف الأصول المحددة؟"}
         description={confirmDescription}
         confirmLabel={confirmation?.kind === "replace" ? "تأكيد الاستبدال" : confirmation?.kind === "move" ? "تأكيد النقل / التسمية" : confirmation?.kind === "delete" && confirmation.phase === "failed" ? "إعادة الفحص" : confirmation?.kind === "delete" && confirmation.checks.some(check => check.state === "in_use") ? "حذف رغم الاستخدام" : "تأكيد الحذف"}
         pending={busy === "delete-preview" || busy === "delete" || busy === "replace" || busy === "move"}
-        confirmDisabled={confirmation?.kind === "delete" && (confirmation.phase === "checking" || (confirmation.phase === "ready" && confirmation.assets.length > 0 && !confirmation.checks.some(check => check.state === "safe_to_delete" || check.state === "in_use")))}
+        confirmDisabled={confirmation?.kind === "move" ? confirmation.previews.every(item => Boolean(item.error)) || Boolean(busy) : confirmation?.kind === "delete" && (confirmation.phase === "checking" || (confirmation.phase === "ready" && confirmation.assets.length > 0 && !confirmation.checks.some(check => check.state === "safe_to_delete" || check.state === "in_use")))}
         returnFocusRef={
           confirmation?.kind === "delete"
             ? deleteConfirmationTriggerRef
@@ -1019,6 +1038,7 @@ export default function MediaLibraryCore({
         onCancel={() => setConfirmation(null)}
         onConfirm={executeConfirmation}
       >
+        {confirmation?.kind === "move" ? <div className="max-h-[40vh] overflow-y-auto space-y-3" data-media-relocation-preview="">{confirmation.previews.map(item => <div key={item.id} className="rounded-lg border border-white/10 p-3"><p>{item.asset?.displayName ?? item.id}</p><p dir="ltr" className="break-all">{item.asset?.objectKey} → {item.targetObjectKey}</p><p>{item.references?.length ?? 0} مواضع استخدام — تُحدث تلقائيًا.</p>{item.error ? <p className="text-red-200">{item.error}</p> : null}<ul>{item.references?.map(ref => <li key={ref.id}>{ref.entityLabel ?? ref.entityIdentity} — {ref.domainKey} / {ref.fieldKey}</li>)}</ul></div>)}</div> : null}
         {confirmation?.kind === "delete" ? <div className="max-h-[40vh] space-y-3 overflow-y-auto" aria-live="polite" data-media-delete-preview="">
           {confirmation.phase === "checking" ? <p role="status">جارٍ فحص الاستخدامات…</p> : null}
           {confirmation.error ? <p role="alert" className="text-sm text-red-200">{confirmation.error}</p> : null}

@@ -1,3 +1,4 @@
+import { verifyMediaRelocationContract } from "./fixtures/media-relocation-contract.mjs";
 import { verifyMediaUploadLimitContract } from './fixtures/media-upload-limit-contract.mjs';
 import { strict as assert } from "node:assert";
 import { existsSync, readFileSync } from "node:fs";
@@ -943,8 +944,8 @@ check("unknown Media API views, kinds, page sizes and query keys are rejected", 
 check("catalog registration records checksum and supported image dimensions", source("src/lib/admin/media-catalog/catalog.ts").includes("readUploadBinaryMetadata") && source("src/lib/admin/media-catalog/binary-metadata.ts").includes('createHash("sha256")'));
 check("replace-all uses the reference synchronization owner", route.includes("rebindAllSupportedMediaReferences") && route.includes('operation === "replace_all"'));
 const physicalMove = source("src/lib/admin/media-catalog/physical-move.ts");
-check("Manage physical move uses live reference proof, Storage move, rebind and compensation", route.includes('operation === "move_asset"') && physicalMove.includes("scanAllMediaReferenceProviders") && physicalMove.includes("moveManagedStorageAsset") && physicalMove.includes("rollbackFailures"));
-check("physical move acquires coordination before Storage mutation", physicalMove.indexOf("const moveLease = await acquireMediaReferenceWriteLease") < physicalMove.indexOf("await moveManagedStorageAsset(asset.publicUrl") && physicalMove.includes("PHYSICAL_MOVE_COORDINATION_DOMAIN"));
+check("Manage physical move uses live reference proof, Storage move, rebind and compensation", route.includes('operation === "move_asset"') && physicalMove.includes("scanAllMediaReferenceProviders") && physicalMove.includes("copyManagedStorageAsset") && physicalMove.includes("rollbackFailures"));
+check("physical move acquires coordination before Storage mutation", physicalMove.indexOf("const moveLease = await acquireMediaReferenceWriteLease") < physicalMove.indexOf("await copyManagedStorageAsset(asset.publicUrl") && physicalMove.includes("PHYSICAL_MOVE_COORDINATION_DOMAIN"));
 check("physical move retains the new identity when Domain compensation is incomplete", physicalMove.includes("rebind.nextAssetRequired") && physicalMove.includes("retainMovedIdentity") && synchronization.includes("nextAssetRequired: domainCompensationFailures.length > 0"));
 
 const core = source("src/components/admin/media/MediaLibraryCore.tsx");
@@ -1001,7 +1002,7 @@ check("picker selection changes a field only after explicit confirmation", picke
 check("media previews use optimized next/image with responsive sizes", core.includes('from "next/image"') && core.includes("sizes={") && !core.includes("unoptimized"));
 check("picker delegates focus trapping, Escape, and focus return to VenesiaModal", picker.includes("<VenesiaModal") && picker.includes("closeOnEscape") && !picker.includes("createPortal") && !picker.includes("document.addEventListener") && sharedModal.includes('event.key === "Escape" && closeOnEscape') && sharedModal.includes("focusReturnSnapshotRef"));
 check("multi-upload, folders, smart views, metadata and safe replacement are present", ["uploadFiles", "createFolder", "SMART_VIEWS", "updateMetadata", "stageReplacement"].every((token) => core.includes(token)));
-check("physical rename and move controls stay out of Select Mode", core.includes('mode === "manage" && selectedAssets.length === 1') && !picker.includes("move_asset"));
+check("physical rename and move controls stay out of Select Mode", core.includes('mode === "manage" && selectedAssets.length > 0 && selectedAssets.every(asset => asset.kind === "image")') && !picker.includes("move_asset"));
 check("summary and folder counters consume the merged read model", core.includes("data.summary.totalBytes") && core.includes("item.totalAssetCount") && core.includes("item.totalBytes"));
 check("dashboard separates management, usage, missing, managed and read-only storage metrics", ["unreconciledAssetCount", "usageUnknownCount", "missingObjectCount", "managedStorageAssetCount", "readOnlyAssetCount", "largestAsset"].every((token) => core.includes(token)));
 check(
@@ -1400,7 +1401,7 @@ check(
     "./readiness": readinessModule, "./identity": identityModule,
     "./reference-providers": { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry", scanAllMediaReferenceProviders: async () => ({ references: used ? [reference] : [], uncertainties: uncertain ? ["scan_failed"] : [] }) },
     "../media-library-paths": { normalizeMediaFolder: value => value }, "../media-storage-adapter": { MediaStorageError: TestMediaStorageError },
-    "./reconciliation": { reconcileMediaCatalog: async () => { reconciliations++; runtime = { ...runtime, storageAssetCount: 0, catalogAssetCount: 0 }; return { complete: true, uncertainties: [] }; } },
+    "./reconciliation": { reconcileMediaCatalog: async () => { reconciliations++; runtime = { ...runtime, storageAssetCount: 0, catalogAssetCount: 0 }; return { complete: true, uncertainties: [] }; }, refreshMediaCatalogAfterMutation: async () => { reconciliations++; runtime = { ...runtime, storageAssetCount: 0, catalogAssetCount: 0 }; return []; } },
   });
   const preview = await safeOwner.previewMediaDeletion({ folder: "images/contract" });
   assert.equal(preview.checks[0].state, "in_use");
@@ -1444,6 +1445,17 @@ for (const folder of ['images','images/about']) {
 }
 check('direct folder browse keeps only current-level assets and retains the complete dynamic folder tree',true);
 
+// Exact owned URLs may be embedded in HTML/JSON; similar filenames stay untouched.
+{
+  const old = "https://test.supabase.co/storage/v1/object/public/cms-images/images/a.jpg";
+  const next = "https://test.supabase.co/storage/v1/object/public/cms-images/images/b.jpg";
+  const value = { images: [old, old + "-backup"], html: '<img src="' + old + '"><a href="' + old + '-other">x</a>' };
+  const result = providerModule.replaceMediaValue(value, old, next);
+  assert.deepEqual(result.images, [next, old + "-backup"]);
+  assert.equal(result.html, '<img src="' + next + '"><a href="' + old + '-other">x</a>');
+  check("relocation replaces exact reference tokens without altering similar URLs", true);
+}
+await verifyMediaRelocationContract();
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nMedia Library system: ${passed}/${checks.length} checks passed.`);
 if (passed !== checks.length) process.exitCode = 1;

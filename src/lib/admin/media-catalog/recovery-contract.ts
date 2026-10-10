@@ -5,6 +5,7 @@ export const MEDIA_RECOVERY_ACTIONS = [
   "confirm_missing",
   "preview_scoped_reconciliation",
   "resolve_write_lease",
+  "repair_relocation",
 ] as const;
 
 export type MediaRecoveryAction = (typeof MEDIA_RECOVERY_ACTIONS)[number];

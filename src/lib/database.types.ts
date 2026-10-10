@@ -3615,6 +3615,8 @@ export type Database = {
       }
     }
     Functions: {
+      record_media_relocation_journal: { Args: { p_lease_token: string; p_plan: Json }; Returns: number }
+      transition_media_relocation_repair: { Args: { p_lease_token: string; p_action: string; p_expected_updated_at: string }; Returns: number }
       read_public_cache_generation: { Args: Record<PropertyKey, never>; Returns: string }
       advance_public_cache_generation: { Args: Record<PropertyKey, never>; Returns: string }
       entity_seo_score_source: {

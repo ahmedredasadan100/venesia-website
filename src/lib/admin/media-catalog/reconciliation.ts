@@ -1,16 +1,19 @@
 import "server-only";
 
 import path from "path";
+import { buildMediaCatalogReadiness } from "./readiness";
 
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   listManagedMediaInventory,
+  listPublicMediaInventory,
   resolveMediaStorageRuntimeContext,
 } from "../media-library";
 import { MediaStorageError } from "../media-storage-adapter";
 import type { MediaAssetItem } from "../media-library-paths";
 import {
   ensureCatalogFolderHierarchy,
+  listMediaCatalogSnapshot,
   getAllCatalogAssetIdentityMap,
   getMediaCatalogRuntimeState,
   setMediaCatalogRuntimeState,
@@ -103,6 +106,16 @@ export async function reconcileMediaCatalog(options: {
     );
   }
 
+  // Never register a staged relocation copy as a second logical asset.
+  const relocations = await getSupabaseAdmin().from("media_reference_write_leases")
+    .select("failure_metadata,write_targets").is("resolved_at", null).in("status", ["active", "failed", "expired"]);
+  if (relocations.error) throw new Error("media_relocation_state_unproven");
+  if (relocations.data.some(row => {
+    const metadata = row.failure_metadata;
+    const repaired = metadata && typeof metadata === "object" && !Array.isArray(metadata) && metadata.relocationRepaired === true;
+    const targets = Array.isArray(row.write_targets) ? row.write_targets : [];
+    return !repaired && targets.some(target => target && typeof target === "object" && !Array.isArray(target) && target.domainKey === "media_catalog_physical_move");
+  })) throw new MediaStorageError("media_relocation_repair_required", "أكمل عملية النقل أو إصلاحها من مركز التعافي قبل المزامنة.", 409);
   const storage = await listManagedMediaInventory();
   const storageAssets = storage.items.filter(
     (item) => item.managed && item.provider === context.provider && Boolean(item.storagePath),
@@ -319,4 +332,23 @@ export async function reconcileMediaCatalog(options: {
     }).catch(() => undefined);
     throw error;
   }
+}
+
+export async function refreshMediaCatalogAfterMutation(actorId?: number | null) {
+    const catalogWarnings: string[] = [];
+    try {
+      const [catalog, inventory, runtimeState] = await Promise.all([
+        listMediaCatalogSnapshot(), listPublicMediaInventory(), getMediaCatalogRuntimeState(),
+      ]);
+      const readiness = buildMediaCatalogReadiness(catalog, inventory, runtimeState,
+        resolveMediaStorageRuntimeContext(), MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION);
+      if (!readiness.runtimeDatasetMatches) {
+        const reconciliation = await reconcileMediaCatalog({ actorId: actorId });
+        if (!reconciliation.complete) catalogWarnings.push(...reconciliation.uncertainties);
+      }
+    } catch (error) {
+      catalogWarnings.push(error instanceof Error ? error.message : "media_catalog_refresh_failed");
+    }
+
+  return catalogWarnings;
 }

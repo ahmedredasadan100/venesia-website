@@ -20,6 +20,7 @@ import {
   type MediaRecoveryQueue,
   type MediaRecoveryTargetKind,
 } from "./recovery-contract";
+import { repairFailedMediaRelocation } from "./physical-move";
 import { resolveMediaReferenceWriteLease } from "./write-lease";
 
 const RECOVERY_LIMIT = 100;
@@ -295,6 +296,7 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
   }
   for (const [token, group] of leaseGroups) {
     const first = group[0];
+    const relocation = group.some(row => safeFailureMetadata(row.failure_metadata).operation === "physical_move" && safeFailureMetadata(row.failure_metadata).relocationRepaired !== true);
     const effectiveExpired = group.some(
       (row) => text(row.status) === "active" && Date.parse(text(row.expires_at)) <= now,
     );
@@ -336,7 +338,8 @@ export async function listMediaRecoveryQueue(): Promise<MediaRecoveryQueue> {
           ? "يمكن حل عملية الحفظ بعد إثبات المزامنة المكتملة."
           : "نفّذ فحصًا ومزامنة مكتملين قبل حل عملية الحفظ.",
       allowedActions: [
-        ...(reconciliationNewEnough ? (["resolve_write_lease"] as const) : []),
+        ...(relocation && group.every(row => row.status === "failed") ? (["repair_relocation"] as const) : []),
+        ...(!relocation && reconciliationNewEnough ? (["resolve_write_lease"] as const) : []),
       ],
       blockedReasons: effectiveExpired
         ? ["انتهاء المهلة لا يثبت توقف عملية الحفظ؛ يلزم إثبات تشغيلي قبل تغيير حالتها."]
@@ -442,19 +445,25 @@ export async function executeMediaRecoveryAction(input: {
   action: MediaRecoveryAction;
   target: { kind: MediaRecoveryTargetKind; id: string; expectedUpdatedAt?: string };
 }) {
+  if (input.action === "repair_relocation") {
+    if (input.target.kind !== "write_lease") throw new MediaRecoveryError("invalid_media_recovery_target", "هدف التعافي غير صالح.", 400);
+    const verification = await repairFailedMediaRelocation(input.target.id);
+    return { mutated: true, state: verification.repaired ? "relocation_repaired_reconcile_required" : "uncertain", verification: null };
+  }
   if (input.action === "resolve_write_lease") {
     if (input.target.kind !== "write_lease") {
       throw new MediaRecoveryError("invalid_media_recovery_target", "هدف عملية الحل غير صالح.", 400);
     }
     const { data, error } = await getSupabaseAdmin()
       .from("media_reference_write_leases")
-      .select("lease_token,status,expires_at,completed_at,resolved_at")
+      .select("lease_token,status,expires_at,completed_at,resolved_at,failure_metadata")
       .eq("lease_token", input.target.id)
       .in("status", ["failed", "expired"])
       .is("resolved_at", null);
     if (error || !(data ?? []).length) {
       throw new MediaRecoveryError("media_write_lease_not_resolvable", "عملية الحفظ لم تعد قابلة للحل.", 409);
     }
+    if (data.some(row => safeFailureMetadata(row.failure_metadata).operation === "physical_move" && safeFailureMetadata(row.failure_metadata).relocationRepaired !== true)) throw new MediaRecoveryError("media_relocation_repair_required", "أكمل إصلاح النقل قبل حل الحجز.", 409);
     const runtime = await getMediaCatalogRuntimeState();
     const context = resolveMediaStorageRuntimeContext();
     const failureAt = (data ?? [])

@@ -513,9 +513,10 @@ export async function listAllSupabaseManagedStorageAssets(
   };
 }
 
-export async function moveManagedStorageAsset(
+async function relocateStorageObject(
   publicValue: string,
   targetObjectKey: string,
+  mode: "move" | "copy",
   supabase: SupabaseAdminClient = getSupabaseStorageAdmin(),
 ) {
   const managed = parseManagedStorageAsset(publicValue, supabase);
@@ -546,7 +547,8 @@ export async function moveManagedStorageAsset(
   if ((targetEntries ?? []).some((entry) => entry.name === targetFilename)) {
     throw new MediaStorageError("media_move_collision", "يوجد أصل فعلي في مسار الوجهة.", 409);
   }
-  const { error } = await supabase.storage.from(managed.bucket).move(managed.objectPath, normalizedTarget);
+  const storage = supabase.storage.from(managed.bucket);
+  const { error } = await (mode === "copy" ? storage.copy(managed.objectPath, normalizedTarget) : storage.move(managed.objectPath, normalizedTarget));
   if (error) {
     throw new MediaStorageError("media_move_failed", "تعذر نقل الأصل داخل التخزين؛ لم يتم إعلان نجاح.", 503);
   }
@@ -556,6 +558,14 @@ export async function moveManagedStorageAsset(
     objectKey: normalizedTarget,
     publicUrl: publicUrlForObject(supabase, managed.bucket, normalizedTarget),
   };
+}
+
+export function moveManagedStorageAsset(publicValue: string, targetObjectKey: string, supabase: SupabaseAdminClient = getSupabaseStorageAdmin()) {
+  return relocateStorageObject(publicValue, targetObjectKey, "move", supabase);
+}
+
+export function copyManagedStorageAsset(publicValue: string, targetObjectKey: string, supabase: SupabaseAdminClient = getSupabaseStorageAdmin()) {
+  return relocateStorageObject(publicValue, targetObjectKey, "copy", supabase);
 }
 
 // Transport receipts bind a signed Storage destination to an already-authenticated
