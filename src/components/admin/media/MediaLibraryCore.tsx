@@ -45,6 +45,7 @@ import AdminConfirmDialog from "../ui/AdminConfirmDialog";
 import AdminTablePagination from "../ui/AdminTablePagination";
 import MediaUsagePanel from "../media-intelligence/MediaUsagePanel";
 import MediaNoImage from "./MediaNoImage";
+import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
 
 type LibraryMode = "manage" | "select-one" | "select-many";
 type KindFilter = "all" | "image" | "document";
@@ -1043,7 +1044,7 @@ export default function MediaLibraryCore({
         onConfirm={executeConfirmation}
       >
         {confirmation?.kind === "move" ? <div className="max-h-[40vh] overflow-y-auto space-y-3" data-media-relocation-preview="">{confirmation.previews.map(item => <div key={item.id} className="rounded-lg border border-white/10 p-3"><p>{item.asset?.displayName ?? item.id}</p><p dir="ltr" className="break-all">{item.asset?.objectKey} → {item.targetObjectKey}</p><p>{item.references?.length ?? 0} مواضع استخدام — تُحدث تلقائيًا.</p>{item.error ? <p className="text-red-200">{item.error}</p> : null}<ul>{item.references?.map(ref => <li key={ref.id}>{ref.editHref ? <Link href={ref.editHref} target="_blank" className="underline">{ref.entityLabel ?? ref.entityIdentity}</Link> : ref.entityLabel ?? ref.entityIdentity} — {ref.domainKey} / {ref.fieldKey}</li>)}</ul></div>)}</div> : null}
-        {confirmation?.kind === "delete" ? <div className="max-h-[40vh] space-y-3 overflow-y-auto" aria-live="polite" data-media-delete-preview="">
+        {confirmation?.kind === "delete" ? <div className={`max-h-[40vh] space-y-3 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`} aria-live="polite" data-media-delete-preview="">
           {confirmation.phase === "checking" ? <p role="status">جارٍ فحص الاستخدامات…</p> : null}
           {confirmation.error ? <p role="alert" className="text-sm text-red-200">{confirmation.error}</p> : null}
           {confirmation.checks.map((check, index) => <div key={check.asset?.id ?? index} className="rounded-lg border border-white/10 p-3 text-sm">
