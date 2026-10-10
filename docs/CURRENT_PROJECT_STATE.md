@@ -105,18 +105,18 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The authorized cutover readback on 2026-09-13 established the historical 103-migration corpus snapshot used by the structural Git guard. A read-only Production reconciliation on 2026-10-10 refreshed the volatile registry and catalog metrics below through migration 121. All 121 receipts have exact recognized source provenance, including the five bounded CLI representations described below. The `Repository migration files` row intentionally remains the immutable 103-file snapshot count, not the current corpus size.
+The authorized cutover readback on 2026-09-13 established the historical 103-migration corpus snapshot used by the structural Git guard. A read-only Production reconciliation on 2026-10-10 refreshed the volatile registry and catalog metrics below through migration 122. All 122 receipts have exact recognized source provenance, including the historical bounded CLI representations described below and the new managed-reference rebind receipt. The `Repository migration files` row intentionally remains the immutable 103-file snapshot count, not the current corpus size.
 
 The Shared Corrections & Adoption continuation on baseline `d60938a6781db3630a64c1cf1798f7ef269c38b4` added `20260912224809_shared_composition_menu_atomic_completion.sql` as migration 103. After isolated proof and separate owner authorization, the exact approved SQL was applied once on 2026-09-13 at 01:33:23 UTC, with its canonical registry record in the same transaction. It extends the existing Composition/Menu RPC owners for atomic template saves and Page/Menu batch deletion, preserving their signatures, ACL and Audit policy. Independent readback matched both expected function hashes and permissions; PostgREST exposes the unchanged signatures. PR #155 then standard-merged feature `a451527489ce7b5e7545e737a056c6ed6cdc6467` as `672cf81dff4e39c300adb68e5f41750ef980e9c1`, followed by automatic Production deployment. No CMS write test or historical migration replay was performed. Isolated behavioral evidence remains scoped as documented in `reports/SHARED_CORRECTIONS_PROOF.md`; A04 is deferred and `globalClosed=false`.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
 | Repository migration files                        |                                               103 |
-| Production registry versions                      |                                               121 |
+| Production registry versions                      |                                               122 |
 | Migration 101 rollout state                       |                 Applied / exact registry provenance |
 | Migration 103 rollout state                       |                 Applied once before PR #155 merge |
 | Current Production live state                     |                    Verified on 2026-10-10 |
-| Registry SQL provenance                           | Exact recognized source provenance for all 121 recorded versions |
+| Registry SQL provenance                           | Exact recognized source provenance for all 122 recorded versions |
 | Public tables                                     |                                                64 |
 | Public tables with RLS enabled                    |                                                64 |
 | Public catalog objects with repository provenance |                                               378 |
@@ -126,6 +126,8 @@ The Shared Corrections & Adoption continuation on baseline `d60938a6781db3630a64
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
 | Registry reconciliation audit records             |                                                33 |
+
+Migration `20261010052006_project_managed_media_reference_rebind.sql` was applied once through Supabase CLI 2.116.0 at 2026-10-10 06:28 UTC after isolated browser/RPC proof and PR #207 CI success. Its nine-statement receipt is recognized by the existing provenance owner. It adds the narrow Project reference CAS operation and optional Page clone snapshot check to existing RPCs; independent before/after readback preserved all 121 earlier registry records, business-row hashes, existing function ACL, and relocation-journal functions. The immutable historical closure below remains scoped to its original 121-entry corpus.
 
 ### Historical registry representation closure (2026-10-10)
 
