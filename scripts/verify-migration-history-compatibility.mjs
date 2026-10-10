@@ -272,12 +272,22 @@ function verifyCanonicalRegistryRepresentations() {
       "b3482df9a29f3be2a30ca8897745dbde58d74df68399cc45c7fd2753f6062d73", "c0c73d1fd71300df3d0cf4807488ee3c285df49e4a1f47a2effb937e4f1b8627"],
     ["20260920011000", "page_composition_layout_regions", 36, "canonical-statement-array-with-source-trivia-v1",
       "c6b4d4b817a75dfe0f53ea55efabe4e824dd0885506f0e0a6d13a00ebda21645", "f024e3fda109b47c2251fc5ef6d4da49f2b4142fa697a5c50629d7241ec1c67c"],
+    ["20261006200447", "cms_image_upload_configurable_ceiling", 1, "canonical-statement-array-with-source-trivia-v1",
+      "b09e294b22f11ab9ae43880315e26114e891eddf010799075404fe2ec3437f64", "51db487183ebc43107509f7233dd3e8abee6ea55dd1ab3d94475c6aeaae71cb9"],
+    ["20261007165732", "retire_legacy_content_image_catalog", 7, "canonical-statement-array-with-source-trivia-crlf-v1",
+      "1720d24ead16e525c462c581aa47d74ff2177574298635c183d7d3e1a358a713", "03e250b86d61fb3ca246cfd9e9a25671bb3c663e5c03e421c52c7867b1b3ffd3", "crlf"],
+    ["20261007193823", "media_delete_usage_confirmation", 28, "canonical-statement-array-with-source-trivia-crlf-v1",
+      "e7ac34389882ac9de3f08c3be8d6e5d8df73f651424639e6a9738b293371c02b", "c9cd7893ce4bb9773632f32f067e767c37a445eeee7eddfd7b7b4e89b5e63330", "crlf"],
+    ["20261008084745", "media_delete_lease_resolution", 6, "canonical-statement-array-with-source-trivia-crlf-v1",
+      "8ceeab8119744789ad352f4f2fdcc8d5f97a46f98dc7eb8629c42fb8b2bf9598", "8292ffe3ac5b46aa3a73ba83afa04bf38b29ce1d5575094e53aa042b71216fa3", "crlf"],
+    ["20261010005444", "media_relocation_lease_journal", 6, "canonical-statement-array-with-source-trivia-v1",
+      "97ee31ad015bfa1087835ab0cf1144c9211c54408d6e1b8c60f1008e73ca2e01", "ef0bfdaabffc7989ce8efac643aaa78a802ef4fc08667f2b16eacbfdcb628e76"],
   ];
   const reports = [];
-  for (const [version, name, statementCount, kind, statementArraySha256, sourceSha256] of expected) {
+  for (const [version, name, statementCount, kind, statementArraySha256, sourceSha256, sourceLineEndings] of expected) {
     const sql = normalize(readFileSync(join(ROOT, "sql/migrations", `${version}_${name}.sql`), "utf8"));
     const migration = { version, name, sql, sha256: digest(sql) };
-    const statements = splitCanonicalStatements(sql);
+    const statements = splitCanonicalStatements(sourceLineEndings === "crlf" ? sql.replaceAll("\n", "\r\n") : sql);
     const row = { version, name, statements };
     const before = JSON.stringify([migration, row]);
     check(statements.length === statementCount && digest(JSON.stringify(statements)) === statementArraySha256,
@@ -291,12 +301,18 @@ function verifyCanonicalRegistryRepresentations() {
     check(classifyWholeFileMigrationProvenance({ ...row, statements: statements.slice(0, -1) }, migration) === null,
       `Wrong statement count fails closed for ${version}.`);
     check(classifyWholeFileMigrationProvenance({ ...row,
-      statements: statements.map((statement, index) => index === 1 ? `${statement} ` : statement) }, migration) === null,
+      statements: statements.map((statement, index) => index === 0 ? `${statement} ` : statement) }, migration) === null,
     `An altered statement fails closed for ${version}.`);
-    const reordered = [...statements];
-    [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
-    check(classifyWholeFileMigrationProvenance({ ...row, statements: reordered }, migration) === null,
-      `Reordered statements fail closed for ${version}.`);
+    if (statements.length > 1) {
+      const reordered = [...statements];
+      [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
+      check(classifyWholeFileMigrationProvenance({ ...row, statements: reordered }, migration) === null,
+        `Reordered statements fail closed for ${version}.`);
+    }
+    const alteredLineEndings = statements.map(statement => sourceLineEndings === "crlf"
+      ? statement.replaceAll("\r\n", "\n") : statement.replaceAll("\n", "\r\n"));
+    check(classifyWholeFileMigrationProvenance({ ...row, statements: alteredLineEndings }, migration) === null,
+      `Unreviewed line-ending changes fail closed for ${version}.`);
     const differentlySegmented = [...statements];
     differentlySegmented[0] = `${differentlySegmented[0]};`;
     check(digest(JSON.stringify(differentlySegmented)) !== statementArraySha256
