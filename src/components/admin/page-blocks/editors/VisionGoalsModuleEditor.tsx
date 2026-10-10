@@ -1,4 +1,5 @@
 "use client";
+import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
   ModuleEditorField,
@@ -68,12 +69,12 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
 
       <ModuleEditorSection>
         <AdminMediaImageField
-          name="image"
+                  mediaSlot={contentModuleMediaSlot("vision-goals")}
+name="image"
           label="صورة القسم"
           defaultValue={config.image ?? ""}
           altName="image_alt"
           defaultAlt={config.imageAlt ?? ""}
-          dimensionHint="content"
           browseFolder="images/about"
         />
       </ModuleEditorSection>

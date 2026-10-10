@@ -1,4 +1,5 @@
 "use client";
+import { projectMediaSlot } from "../../../lib/projects/project-hero-adapter";
 
 import type { GlobalSeoSettings } from "../../../lib/seo/global-seo-types";
 
@@ -164,7 +165,6 @@ function ImageWithAlt({
   label,
   value,
   alt,
-  dimensionHint = "content",
   previewLoading,
 }: {
   imageName: string;
@@ -172,7 +172,6 @@ function ImageWithAlt({
   label: string;
   value: string;
   alt: string;
-  dimensionHint?: "hero" | "content";
   previewLoading?: "lazy" | "eager";
 }) {
   return (
@@ -181,11 +180,11 @@ function ImageWithAlt({
       className="min-w-0 scroll-mt-28 rounded-2xl border border-white/10 bg-black/20 p-4"
     >
       <AdminMediaImageField
-        name={imageName}
+        mediaSlot={projectMediaSlot(imageName)}
+name={imageName}
         label={label}
         defaultValue={value}
         browseFolder="images/projects"
-        dimensionHint={dimensionHint}
         previewLoading={previewLoading}
       />
       <AdminFormField label="النص البديل للصورة" required className="mt-4">
@@ -350,7 +349,6 @@ function BasicTab({
             label="صورة الهيرو الرئيسية"
             value={project.hero_image}
             alt={project.hero_image_alt}
-            dimensionHint="hero"
             previewLoading="eager"
           />
           <ImageWithAlt
@@ -455,7 +453,6 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
             label="الصورة الرئيسية للنظرة العامة"
             value={project.overview_main_image}
             alt={project.overview_main_image_alt}
-            dimensionHint="hero"
           />
         </div>
         <div

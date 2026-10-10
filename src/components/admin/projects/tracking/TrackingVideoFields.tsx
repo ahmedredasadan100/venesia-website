@@ -1,4 +1,5 @@
 "use client";
+import { TRACKING_MEDIA_SLOT } from "../../../../lib/projects/tracking/contract";
 
 import { useState } from "react";
 
@@ -31,7 +32,9 @@ export default function TrackingVideoFields({ media }: { media: TrackingMediaAdm
             <label className="space-y-2"><span className="text-xs text-white/55">رابط الفيديو</span><input dir="ltr" type="url" required value={video.url} onChange={(event) => update(video.client_key, { url: event.target.value })} className={adminFormFieldClassName("font-mono text-xs")} placeholder="https://..." /></label>
             <label className="space-y-2"><span className="text-xs text-white/55">عنوان اختياري</span><input value={video.title} onChange={(event) => update(video.client_key, { title: event.target.value })} className={adminFormFieldClassName()} /></label>
           </div>
-          <div className="mt-4 max-w-xs"><AdminMediaImageField name={`poster_${video.client_key}`} label="غلاف الفيديو" defaultValue={video.poster_url} dimensionHint="content" variant="compact" onValueChange={(value) => update(video.client_key, { poster_url: value })} /></div>
+          <div className="mt-4 max-w-xs"><AdminMediaImageField
+        mediaSlot={TRACKING_MEDIA_SLOT}
+name={`poster_${video.client_key}`} label="غلاف الفيديو" defaultValue={video.poster_url} variant="compact" onValueChange={(value) => update(video.client_key, { poster_url: value })} /></div>
         </div>
       ))}
       {!videos.length ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-xs text-white/40">لا توجد فيديوهات في هذا التحديث.</p> : null}

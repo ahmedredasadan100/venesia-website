@@ -470,6 +470,8 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
     media: {
       owner: "Existing Admin Media owner",
       sourceFiles: [
+        "src/components/admin/media/AdminMediaSlotGuidance.tsx",
+        "src/lib/media/media-slot-contract.ts",
         "src/components/admin/media/AdminMediaImageField.tsx",
         "src/components/admin/media/AdminMediaGalleryField.tsx",
         "src/components/admin/media/AdminMediaPickerModal.tsx",

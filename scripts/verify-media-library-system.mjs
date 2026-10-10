@@ -1,3 +1,4 @@
+import { verifyMediaDimensionsContract } from "./fixtures/media-dimensions-contract.mjs";
 import { verifyMediaRelocationContract } from "./fixtures/media-relocation-contract.mjs";
 import { verifyMediaUploadLimitContract } from './fixtures/media-upload-limit-contract.mjs';
 import { strict as assert } from "node:assert";
@@ -1554,6 +1555,7 @@ check('direct folder browse keeps only current-level assets and retains the comp
 }
 
 await verifyMediaRelocationContract();
+await verifyMediaDimensionsContract();
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nMedia Library system: ${passed}/${checks.length} checks passed.`);
 if (passed !== checks.length) process.exitCode = 1;

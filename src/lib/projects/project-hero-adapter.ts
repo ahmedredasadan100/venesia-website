@@ -80,3 +80,12 @@ export function adaptProjectsHubHeroModule(
     emptyState: config.emptyState,
   };
 }
+
+/** Project images have multiple domain-owned projections, not one design size. */
+export function projectMediaSlot(slot: string): import("../media/media-slot-contract").MediaSlotContract {
+  return { owner: "projects/public-presentation", slot, device: "all",
+    evidence: ["src/components/projects/details/ProjectDetailsHero.tsx", "src/components/projects/details/ProjectImageGalleries.tsx", "src/components/projects/details/ProjectPlansAndAreasSection.tsx"],
+    display: { kind: "responsive", description: "تتغير مساحة الصورة حسب قالب المشروع وموضعها: Hero أو بطاقة أو معرض أو مخطط. لا توجد أبعاد ملف أو نسبة موحدة مطلوبة؛ راجع معاينة المشروع." },
+    note: "المخططات قد تُقص في البطاقة وتظهر كاملة في العرض المكبّر. احتفظ بالتفاصيل المهمة بعيدًا عن الأطراف.",
+  };
+}

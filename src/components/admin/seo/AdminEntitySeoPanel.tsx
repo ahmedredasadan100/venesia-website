@@ -730,7 +730,6 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           name={fieldNames.ogImage}
           label="صورة المشاركة"
           defaultValue={initial.ogImage}
-          dimensionHint="content"
           browseFolder={social.mediaBrowseFolder}
           appearance="dark"
           onValueChange={(ogImage) =>

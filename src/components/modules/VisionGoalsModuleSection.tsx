@@ -1,3 +1,4 @@
+import { EDITORIAL_IMAGE_GEOMETRY } from "../../lib/page-blocks/configs";
 import Image from "next/image";
 import type { VisionGoalsContent, VisionGoalsItem } from "./vision-goals-mappers";
 import { pageBlockTextAlignClass, pageBlockTextPlacementClass } from "../../lib/page-blocks/configs";
@@ -91,7 +92,7 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
               className={`${showCopy ? "slot-editorial-media " : ""}group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10`}
               data-editorial-media-side={showCopy ? "end" : undefined}
             >
-              <div className="relative aspect-[16/12] overflow-hidden">
+              <div className={`relative ${EDITORIAL_IMAGE_GEOMETRY.frameClass} overflow-hidden`}>
                 <Image
                   src={imageSrc}
                   alt={imageAlt}

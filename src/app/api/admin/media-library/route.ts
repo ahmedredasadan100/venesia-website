@@ -1,3 +1,4 @@
+import { readCatalogOriginalDimensions } from "../../../../lib/admin/media-catalog/catalog";
 import { NextResponse } from "next/server";
 import { readDeletedManagedValues } from "../../../../lib/admin/media-catalog/deleted-reference-state";
 
@@ -270,7 +271,7 @@ export async function POST(request: Request) {
           !body.assets.every(value => typeof value === "string" && value.length <= 4096)) {
           return mediaJson({ error: "حدد مراجع وسائط صالحة." }, { status: 400 });
         }
-        return mediaJson({ deleted: await readDeletedManagedValues(body.assets) });
+        return mediaJson({ deleted: await readDeletedManagedValues(body.assets), originals: await readCatalogOriginalDimensions(body.assets) });
       }
       if (body.operation === "preview_delete") return mediaJson(await previewMediaDeletion(body));
       if (body.operation === "prepare_upload") {

@@ -1,4 +1,6 @@
 "use client";
+import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
+import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
 import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
@@ -9,19 +11,8 @@ import {
   useOptionalAdminFormRuntime,
 } from "../ui/AdminFormRuntime";
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
-import type { ImageDimensionHint } from "./AdminMediaImageField";
 
-const DIMENSION_HINTS: Record<ImageDimensionHint, string> = {
-  hero: "المقاس المستهدف بعد إعادة التحجيم: 1920 × 1080 px (16:9)",
-  "hero-mobile": "المقاس المستهدف بعد إعادة التحجيم: 1080 × 1920 px (9:16)",
-  content: "الأبعاد الموصى بها للصور المميزة/المحتوى: 1600 × 900 px (16:9)",
-};
 
-const DIMENSION_CARD_LABELS: Record<ImageDimensionHint, string> = {
-  hero: "1920 × 1080 • 16:9",
-  "hero-mobile": "1080 × 1920 • 9:16",
-  content: "1600 × 900 • 16:9",
-};
 
 export type AdminMediaGalleryItem = {
   url: string;
@@ -39,7 +30,7 @@ type NormalizedGalleryItem = {
 type AdminMediaGalleryFieldBaseProps = {
   label: string;
   helperText?: string;
-  dimensionHint?: ImageDimensionHint;
+  mediaSlot?: MediaSlotContract;
   browseFolder?: string;
   density?: "default" | "compact";
 };
@@ -118,7 +109,7 @@ export default function AdminMediaGalleryField(
   const {
     label,
     helperText,
-    dimensionHint = "hero",
+    mediaSlot,
     browseFolder = "images",
     density = "default",
   } = props;
@@ -267,10 +258,8 @@ export default function AdminMediaGalleryField(
       )}
 
       <span className="block text-xs font-semibold text-white/55">{label}</span>
-      <p className="text-xs leading-6 text-[#D8B87A]/65">
-        {DIMENSION_HINTS[dimensionHint]}
-      </p>
-      <AdminDeletedMediaNotice values={items.map(item => item.url)} />
+      <AdminMediaSlotGuidance slot={mediaSlot} />
+      <AdminDeletedMediaNotice showOriginalDimensions values={items.map(item => item.url)} />
         {helperText ? (
         <p className="text-xs leading-6 text-white/42">{helperText}</p>
       ) : null}
@@ -393,12 +382,7 @@ export default function AdminMediaGalleryField(
                   استبدال
                 </button>
               </div>
-              <p
-                className="text-[10px] font-medium tracking-wide text-[#D8B87A]/65"
-                dir="ltr"
-              >
-                {DIMENSION_CARD_LABELS[dimensionHint]}
-              </p>
+
 
               {itemsMode ? (
                 <div className="space-y-3 pt-1">

@@ -152,3 +152,10 @@ export function projectTrackingStatusLabel(status: ProjectTrackingStatus) {
   if (status === "in_progress") return "جاري التنفيذ";
   return "لم يبدأ";
 }
+
+export const TRACKING_MEDIA_SLOT: import("../../media/media-slot-contract").MediaSlotContract = {
+  owner: "project-tracking/viewer", slot: "imageOrPoster", device: "all",
+  evidence: ["src/components/track/ProjectTrackingExperience.tsx"],
+  display: { kind: "ratio", ratio: [16, 9] }, fit: "cover",
+  note: "هذه نسبة عارض الوسائط الرئيسي؛ الصور المصغرة تُعرض بنسبة 4:3، وقد تُستخدم الصورة أيضًا في غلاف المتابعة. ليست أبعاد ملف إلزامية.",
+};

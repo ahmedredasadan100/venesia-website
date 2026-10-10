@@ -605,7 +605,9 @@ check(
   "Hero image metrics eagerly read the canonical public DOM without duplicating rendering geometry",
   heroEditor.includes('querySelector<HTMLElement>("[data-hero-family]")') &&
     heroEditor.includes("Rendered Hero Area:") &&
-    heroEditor.includes("Safe Visible Source Area:") &&
+    heroEditor.includes("Visible Source Area (current viewport):") &&
+    !heroEditor.includes("commitMetrics(image.naturalWidth, image.naturalHeight)") &&
+    heroEditor.includes("commitMetrics(sourceProbe.naturalWidth, sourceProbe.naturalHeight)") &&
     heroEditor.includes("frameWindow.getComputedStyle(image)") &&
     heroEditor.includes("hero.getBoundingClientRect()") &&
     heroEditor.includes("data-hero-rendered-area-state={state.status}") &&

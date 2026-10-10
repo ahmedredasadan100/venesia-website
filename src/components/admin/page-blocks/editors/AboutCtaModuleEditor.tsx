@@ -1,4 +1,5 @@
 "use client";
+import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
   ModuleEditorField,
@@ -170,13 +171,13 @@ export default function AboutCtaModuleEditor({
   const imageFields = showImage ? (
       <ModuleEditorSection>
       <AdminMediaImageField
-        name="image"
+                  mediaSlot={contentModuleMediaSlot("about-cta")}
+name="image"
         label="صورة القسم"
         defaultValue={config.image ?? ""}
         altName="image_alt"
         defaultAlt={config.imageAlt ?? ""}
         altLabel={fieldLabels.imageAlt}
-        dimensionHint="content"
         browseFolder={isHomeContact ? "images/home" : "images/about"}
       />
       </ModuleEditorSection>

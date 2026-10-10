@@ -568,3 +568,19 @@ export const HERO_ELEMENT_LABELS_AR: Record<string, string> = {
   description: "الوصف",
   cta: "زر الإجراء",
 };
+
+/** Same presentation geometry consumed by Public and Admin guidance. */
+export const HERO_MEDIA_GEOMETRY = {
+  cinematic: { containerClass: "min-h-screen", description: "عرض متجاوب بارتفاع أدنى 100vh، وقد يزيد مع المحتوى. لا توجد نسبة ثابتة أو أبعاد بكسل مطلوبة للصورة." },
+  internal: { containerClass: "h-[min(62vh,580px)] min-h-[440px]", description: "عرض متجاوب؛ ارتفاع الحاوية min(62vh, 580px) بحد أدنى 440px. لا توجد نسبة ثابتة أو أبعاد بكسل مطلوبة للصورة." },
+} as const;
+
+export function resolveHeroMediaSlot(variant: string, device: "desktop" | "mobile"): import("../media/media-slot-contract").MediaSlotContract {
+  const geometry = variant === "home-cinematic" || variant === "projects-hub" ? HERO_MEDIA_GEOMETRY.cinematic : variant === "internal-page" ? HERO_MEDIA_GEOMETRY.internal : { description: variant === "project-detail" ? "صورة يملكها المشروع؛ حاوية متجاوبة بارتفاع أدنى 620px، وليست أبعاد ملف إلزامية." : "لم يُعرّف هذا النمط عقد أبعاد موثوقًا بعد." };
+  return {
+    owner: "hero/" + variant, slot: device === "mobile" ? "mobileHero" : "desktopHero", device,
+    evidence: ["src/components/sections/DynamicHeroSection.tsx", "src/lib/hero/hero-content-controls.ts"],
+    display: { kind: "responsive", description: geometry.description }, fit: "cover",
+    note: (device === "mobile" ? "تُستخدم قائمة الهاتف حتى عرض 767px؛ وعند فراغها تُستخدم قائمة سطح المكتب." : "تُستخدم قائمة سطح المكتب من عرض 768px.") + " موضع القص يتبع إعداد تكوين الصورة؛ تتأثر المساحة المرئية بالحركة والنصوص والطبقات فوق الصورة.",
+  };
+}

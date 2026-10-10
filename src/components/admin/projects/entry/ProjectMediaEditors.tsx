@@ -1,4 +1,5 @@
 "use client";
+import { projectMediaSlot } from "../../../../lib/projects/project-hero-adapter";
 
 import { useRef, useState } from "react";
 
@@ -122,7 +123,8 @@ export function ProjectImageCollectionEditor({
               <span className="cursor-grab text-lg tracking-[-3px] text-white/35" aria-hidden>⠿</span>
             </div>
             <AdminMediaImageField
-              name="media_image"
+        mediaSlot={projectMediaSlot("project-media")}
+name="media_image"
               label={`صورة ${index + 1}`}
               defaultValue={item.image}
               browseFolder="images/projects"
@@ -244,7 +246,9 @@ export function ProjectVideoCollectionEditor({
               </label>
             </div>
             <div>
-              <AdminMediaImageField name="video_poster_image" label="صورة الغلاف" defaultValue={item.poster_image} browseFolder="images/projects/videos" appearance="dark" variant="compact" compactAspectClassName="aspect-video" onValueChange={(poster_image) => update(item.client_key, { poster_image })} />
+              <AdminMediaImageField
+        mediaSlot={projectMediaSlot("project-media")}
+name="video_poster_image" label="صورة الغلاف" defaultValue={item.poster_image} browseFolder="images/projects/videos" appearance="dark" variant="compact" compactAspectClassName="aspect-video" onValueChange={(poster_image) => update(item.client_key, { poster_image })} />
             </div>
           </div>
         </article>

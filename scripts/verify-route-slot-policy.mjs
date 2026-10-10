@@ -1,3 +1,4 @@
+import { createJiti } from "jiti";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -340,6 +341,19 @@ assert.throws(
   "missing reverse-state restoration must fail closed",
 );
 
+const { EDITORIAL_IMAGE_GEOMETRY, contentModuleMediaSlot } = await createJiti(import.meta.url, { fsCache: false, moduleCache: false }).import("../src/lib/page-blocks/configs.ts");
+assert.equal(EDITORIAL_IMAGE_GEOMETRY.frameClass, `aspect-[${EDITORIAL_IMAGE_GEOMETRY.ratio.join("/")}]`);
+for (const moduleKey of ["vision-goals", "about-intro-single-image"]) {
+  assert.deepEqual(contentModuleMediaSlot(moduleKey).display, { kind: "ratio", ratio: EDITORIAL_IMAGE_GEOMETRY.ratio });
+}
+function adoptsEditorialMediaGeometry(input) {
+  const source = withoutComments(input);
+  return source.includes('import { EDITORIAL_IMAGE_GEOMETRY } from "../../lib/page-blocks/configs"') && source.includes('${EDITORIAL_IMAGE_GEOMETRY.frameClass}');
+}
+const adoptedSource = read("src/components/modules/AboutIntroSingleImageModuleSection.tsx");
+assert.ok(adoptsEditorialMediaGeometry(adoptedSource));
+assert.equal(adoptsEditorialMediaGeometry(adoptedSource.replace('import { EDITORIAL_IMAGE_GEOMETRY }', 'import { UNRELATED }')), false);
+assert.equal(adoptsEditorialMediaGeometry(adoptedSource.replace('EDITORIAL_IMAGE_GEOMETRY.frameClass', 'UNRELATED.frameClass')), false);
 const editorialModuleSources = [
   "src/components/modules/WhoWeAreModuleSection.tsx",
   "src/components/modules/AboutIntroSingleImageModuleSection.tsx",
@@ -352,7 +366,7 @@ for (const path of editorialModuleSources) {
   assert.ok(source.includes("slot-editorial-copy"), `${path} must preserve copy flow through the shared editorial contract`);
   assert.ok(source.includes("slot-editorial-clear"), `${path} must return structured content to the full line width`);
   assert.ok(
-    source.includes("aspect-") || source.includes("slot-editorial-flow--media-compact"),
+    source.includes("aspect-") || source.includes("slot-editorial-flow--media-compact") || adoptsEditorialMediaGeometry(source),
     `${path} must keep an explicit media aspect owner`,
   );
 }

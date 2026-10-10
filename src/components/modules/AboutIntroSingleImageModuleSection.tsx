@@ -1,4 +1,6 @@
 "use client";
+import { EDITORIAL_IMAGE_GEOMETRY } from "../../lib/page-blocks/configs";
+
 
 import Image from "next/image";
 
@@ -88,7 +90,7 @@ export default function AboutIntroSingleImageModuleSection({
               className="slot-editorial-media group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10"
               data-editorial-media-side={imageOnRight ? "start" : "end"}
             >
-              <div className="relative aspect-[16/12] overflow-hidden">
+              <div className={`relative ${EDITORIAL_IMAGE_GEOMETRY.frameClass} overflow-hidden`}>
                 <Image
                   src={imageSrc}
                   alt={content.imageAlt || content.title || ""}

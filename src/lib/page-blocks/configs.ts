@@ -1562,3 +1562,21 @@ export function mapPageBlockImageSources<T extends object>(
   }
   return result as T;
 }
+
+/** Media requirements belong to the public module presentation, not the picker. */
+export const EDITORIAL_IMAGE_GEOMETRY = { frameClass: "aspect-[16/12]", ratio: [16, 12] } as const;
+export function contentModuleMediaSlot(module: string, slot = "image"): import("../media/media-slot-contract").MediaSlotContract {
+  const ratioBased = module === "vision-goals" || module === "about-intro-single-image";
+  const descriptions: Record<string, string> = {
+    "about-cta": "صورة متجاوبة في عمود العرض؛ ارتفاع أدنى 250px ويتغير إلى 220px مع التخطيط الواسع. هذه أبعاد الحاوية وليست أبعاد الملف.",
+    "projects-hub-map": "خريطة بعرض متجاوب وارتفاع حاوية أدنى 500px؛ لا توجد نسبة ثابتة أو أبعاد ملف مطلوبة.",
+    "home-story": "صورتان متداخلتان بعرض وارتفاع يتغيران مع حاوية العرض؛ لا توجد نسبة موحدة أو أبعاد ملف مطلوبة.",
+    "about-intro": "صور متداخلة بأحجام نسبية مختلفة داخل حاوية متجاوبة؛ لا توجد نسبة موحدة أو أبعاد ملف مطلوبة.",
+    "home-trust": "صورة خلفية بطاقة متجاوبة؛ لا توجد أبعاد ملف مطلوبة. راجع المعاينة مع النص والتأثير الحركي.",
+  };
+  return { owner: "content-module/" + module, slot, device: "all",
+    evidence: ["src/lib/page-blocks/configs.ts"],
+    display: ratioBased ? { kind: "ratio", ratio: EDITORIAL_IMAGE_GEOMETRY.ratio } : { kind: "responsive", description: descriptions[module] ?? "لم يُعرّف هذا القالب إرشاد أبعاد موثوقًا لهذا الموضع." },
+    fit: "cover", note: ratioBased ? "موضع الصورة عند المركز أفقيًا و36% رأسيًا، مع تكبير طفيف عند المرور." : undefined,
+  };
+}

@@ -1,4 +1,5 @@
 "use client";
+import { mediaContentSlot } from "../../../../../lib/media-center/detail-page-config";
 
 import { useState } from "react";
 import AdminMediaImageField from "../../../media/AdminMediaImageField";
@@ -19,11 +20,11 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
   return (
     <div className="space-y-3">
       <AdminMediaImageField
-        name="image"
+        mediaSlot={mediaContentSlot("image")}
+name="image"
         label="الصورة الرئيسية"
         defaultValue={defaultImage ?? ""}
         browseFolder="images/topics"
-        dimensionHint="content"
         variant="compact"
         showLabel={false}
         compactAspectClassName="aspect-video"
@@ -32,7 +33,7 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] leading-5 text-white/42">
         <span>JPG، PNG، WEBP، GIF، AVIF</span>
-        <span>1600 × 900 · حجم الرفع حسب إعدادات مكتبة الوسائط</span>
+        <span>حجم الرفع حسب إعدادات مكتبة الوسائط</span>
       </div>
 
       <label className="block">
