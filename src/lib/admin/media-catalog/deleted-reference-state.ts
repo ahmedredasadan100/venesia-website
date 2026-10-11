@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolveLocalPublicImage } from "../../media/resolve-local-public-image";
 import type { Json } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import { parseManagedStorageAsset } from "../../storage/upload-cms-asset";
@@ -45,6 +46,7 @@ async function readUnavailableCatalogValues(value: unknown, includeDeleted: bool
     return identity ? [{ publicValue, ...identity }] : [];
   });
   const missing = new Set<string>();
+  const known = new Set<string>();
   const keys = [...new Set(managed.map(item => item.objectPath))];
   for (let offset = 0; offset < keys.length; offset += 100) {
     const { data, error } = await getSupabaseAdmin().from("media_assets")
@@ -52,10 +54,20 @@ async function readUnavailableCatalogValues(value: unknown, includeDeleted: bool
       .eq("provider", "supabase").in("object_key", keys.slice(offset, offset + 100));
     if (error) throw new Error("media_missing_reference_state_unavailable");
     for (const row of data ?? []) {
+      known.add(`${row.bucket}\u0000${row.object_key}`);
       if (row.status === "missing" || row.status === "deleting" || row.missing_object || (includeDeleted && row.status === "deleted")) missing.add(`${row.bucket}\u0000${row.object_key}`);
     }
   }
-  return managed.filter(item => missing.has(`${item.bucket}\u0000${item.objectPath}`)).map(item => item.publicValue);
+  // A managed URL without a Catalog row is a missing reference, never proof of an active asset.
+  // This projection does not grant the confirmed-deletion save exemption.
+  const unavailable = managed.filter(item => {
+    const key = `${item.bucket}\u0000${item.objectPath}`;
+    return !known.has(key) || missing.has(key);
+  }).map(item => item.publicValue);
+  // Local public files use the existing filesystem availability owner.
+  const missingLocal = extractMediaCandidateValues(value).filter(source =>
+    source.startsWith("/") && !resolveLocalPublicImage(source, ""));
+  return [...new Set([...unavailable, ...missingLocal])];
 }
 
 export async function readMissingManagedValues(value: unknown): Promise<string[]> {

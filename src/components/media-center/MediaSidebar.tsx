@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAutoCarousel } from "../../hooks/use-auto-carousel";
@@ -42,7 +42,7 @@ function SidebarMediaItemImage({
 
   return (
     <div className={containerClassName}>
-      <Image
+      <PublicMediaImage
         src={item.image}
         alt={item.imageAlt || item.title}
         fill

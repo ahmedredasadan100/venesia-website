@@ -1,4 +1,5 @@
 import React from 'react';
+import AdminFormSwitch from '../../src/components/admin/ui/AdminFormSwitch';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import Latest from '../../src/components/sidebar-feeds/SidebarLatestArticlesWidget';
@@ -23,6 +24,7 @@ import {resolveMediaSidebarItems} from '../../src/lib/media-sidebar-modules/reso
 const root=createRoot(document.getElementById('root'));
 const list={showDots:true,itemsPerGroup:3,intervalSeconds:8};
 window.renderImageCases=(image,allowed=true)=>{
+  window.fixtureImage=image;
   const display=resolveCollectionModuleDisplayFormatting({image:allowed});
   const item={id:1,slug:'fixture-article',href:'/topics/fixture-article',title:'مقال بلا صورة يدعم النص',excerpt:'النص الأصلي يظل ظاهرًا',image,imageAlt:'صورة اختبار',contentType:'news',category:'قسم',categorySlug:'category',series:'سلسلة',seriesSlug:'series',date:'11 أكتوبر',publishedAt:'2026-10-11',viewsCount:2,display:{title:true,image:allowed,excerpt:true,date:true,category:true,series:true},mediaKind:null,mediaProject:'',mediaDuration:'',isFeatured:false,isPopular:false};
   const media=adaptPublicContentToMediaItem(item);
@@ -51,6 +53,6 @@ window.renderImageCases=(image,allowed=true)=>{
   add('related-media',<Related items={[media]} getHref={i=>'/news/'+i.slug}/>);
   for(const layout of ['full-list','full-grid'])add('search-'+layout,<SearchResultCard item={item} presentation={layout}/>,'always');
   window.imageCasePolicies=cases.map(({name,policy})=>({name,policy}));
-  flushSync(()=>root.render(<main dir="rtl" className="space-y-6 bg-slate-950 p-5 text-white">{cases.map(c=><section key={c.name+'-'+String(image)+'-'+allowed} data-image-case={c.name} className="mx-auto w-full max-w-3xl">{c.node}</section>)}</main>));
+  flushSync(()=>root.render(<main dir="rtl" className="space-y-6 bg-slate-950 p-5 text-white"><AdminFormSwitch label="Show image" checked={allowed} onChange={e=>window.renderImageCases(window.fixtureImage,e.currentTarget.checked)}/>{cases.map(c=><section key={c.name+'-'+String(image)+'-'+allowed} data-image-case={c.name} className="@container/slot-module mx-auto w-full max-w-3xl">{c.node}</section>)}</main>));
 };
 window.imageFixtureReady=true;

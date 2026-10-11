@@ -1,3 +1,4 @@
+import { MEDIA_HUB_EMPTY_BEHAVIOR } from "../../lib/media-hub-modules/presentation-contract";
 import type { ReactNode } from "react";
 import type { ListingRenderContext } from "../../lib/page-blocks/page-composition-types";
 import MediaCenterCollectionItems from "./MediaCenterCollectionItems";
@@ -27,16 +28,14 @@ export function isMediaHubModuleRenderable(
   module: MediaHubModuleState,
   context: MediaHubRenderContext = {},
 ) {
+  if (!module.isVisible) return false;
   if (module.config.placement === "listing") {
     return Boolean(context.listingContext && resolveMediaListingConfig(module));
   }
 
   const data = module.sectionData;
   if (!data) return false;
-  const layout = module.config.presentation.collectionView.layout;
-  return layout === "featured" || layout === "editorial" || layout === "mosaic"
-    ? data.items.length > 0
-    : true;
+  return MEDIA_HUB_EMPTY_BEHAVIOR === "SHELL_RESERVED" || data.items.length > 0;
 }
 
 function getMediaHubSectionHref(module: MediaHubModuleState) {
@@ -73,6 +72,18 @@ export function renderMediaHubSection(
 
   const data = module.sectionData;
   if (!data) return null;
+  // Keep the module-owned static shell for every collection layout. Child
+  // item presenters may be empty without making the assignment disappear.
+  if (!data.items.length) {
+    return (
+      <section data-module-empty-behavior={MEDIA_HUB_EMPTY_BEHAVIOR}>
+        <MediaCenterHubSectionHeader
+          presentation={module.config.presentation}
+          href={getMediaHubSectionHref(module)}
+        />
+      </section>
+    );
+  }
   const layout = module.config.presentation.collectionView.layout;
   const display = module.config.display
     ?? resolveCollectionModuleDisplayFormatting({});

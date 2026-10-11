@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -115,7 +115,7 @@ export default function MediaCenterHubFeaturedCollection({
             >
               {itemDisplay.image ? (
                 <div className="relative mb-4 aspect-[16/10] overflow-hidden rounded-[1rem]">
-                  <Image
+                  <PublicMediaImage
                     src={item.image}
                     alt={item.imageAlt || item.title}
                     fill

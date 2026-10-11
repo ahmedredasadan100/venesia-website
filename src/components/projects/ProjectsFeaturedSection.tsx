@@ -116,7 +116,8 @@ export default function ProjectsFeaturedSection({
     onSwipeRight: goToPrev,
   });
 
-  if (projects.length === 0) return null;
+  // This module owns an independent title/subtitle shell.
+  if (projects.length === 0 && !showTitle && !showSubtitle) return null;
 
   const mainProject = projects[activeIndex];
 
@@ -140,7 +141,7 @@ export default function ProjectsFeaturedSection({
         ) : null}
 
         <div className="grid gap-5 lg:grid-cols-[1.75fr_0.62fr_0.62fr] lg:gap-4">
-          <MainFeaturedCard project={mainProject} display={cardDisplay} />
+          {mainProject ? <MainFeaturedCard project={mainProject} display={cardDisplay} /> : null}
 
           {visibleSideProjects.map((project) => (
             <SideFeaturedCard key={project.id} project={project} display={cardDisplay} />

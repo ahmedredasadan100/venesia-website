@@ -931,7 +931,7 @@ assert.deepEqual(
 const latestWidgetContract = loadTranspiledModule(
   "src/components/sidebar-feeds/SidebarLatestArticlesWidget.tsx",
   {
-    "next/image": { default: () => null },
+    "../public/PublicMediaImage": loadTranspiledModule("src/components/public/PublicMediaImage.tsx"),
     "next/link": { default: () => null },
     "../../hooks/use-auto-carousel": { useAutoCarousel: () => ({}) },
     "../../lib/feed-modules/types": feedTypes,
@@ -965,7 +965,7 @@ assert.deepEqual(
 const mediaSidebarContract = loadTranspiledModule(
   "src/components/media-center/MediaSidebar.tsx",
   {
-    "next/image": { default: () => null },
+    "../public/PublicMediaImage": loadTranspiledModule("src/components/public/PublicMediaImage.tsx"),
     "next/link": { default: () => null },
     "next/navigation": { usePathname: () => "/media-center/news" },
     "../../hooks/use-auto-carousel": { useAutoCarousel: () => ({}) },

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
@@ -84,7 +84,7 @@ export default function MediaCenterHubTimeline({
                   ? "relative min-h-[92px] overflow-hidden rounded-[0.8rem]"
                   : "relative min-h-[105px] overflow-hidden rounded-[1rem]"}
               >
-                <Image
+                <PublicMediaImage
                   src={item.image}
                   alt={item.imageAlt || item.title}
                   fill

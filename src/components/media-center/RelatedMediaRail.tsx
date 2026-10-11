@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import { resolveContentImageVisibility } from "../../lib/page-blocks/configs";
 import Link from "next/link";
 import type { MediaContentItem } from "../../lib/media-center/types";
@@ -32,7 +32,7 @@ export default function RelatedMediaRail({
 
       <div className="flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @3xl/slot-module:grid @3xl/slot-module:grid-cols-3 @3xl/slot-module:overflow-visible @3xl/slot-module:pb-0">
         {items.slice(0, 3).map((item) => {
-          const showImage = resolveContentImageVisibility(item.showImageOnPage !== false, item.image);
+          const showImage = resolveContentImageVisibility(item.showImageOnPage !== false, item.image, "RESERVED");
           const hasTaxonomy = (item.showCategoryOnPage && item.category) || (item.showSeriesOnPage && item.series);
           return (
             <Link
@@ -44,7 +44,7 @@ export default function RelatedMediaRail({
                 <div className={showImage ? "relative h-36 overflow-hidden" : "flex flex-wrap gap-2 px-4 pt-4"}>
                   {showImage ? (
                     <>
-                      <Image
+                      <PublicMediaImage
                         src={item.image}
                         alt={item.title}
                         fill

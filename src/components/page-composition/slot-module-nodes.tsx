@@ -247,12 +247,11 @@ export function buildSlotModuleNodes(
     }
 
     if (isHomeProjectsContentBlock(block)) {
-      if (!context.homepageProjects?.length) continue;
       push(
         block,
         `home-projects-${block.assignmentId}`,
         <HomeProjectsSection
-          projects={context.homepageProjects}
+          projects={context.homepageProjects ?? []}
           content={mapHomeProjectsBlock(block)}
         />,
       );

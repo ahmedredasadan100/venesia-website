@@ -4,7 +4,13 @@ import FeaturedCarousel from "./FeaturedCarousel";
 import FeaturedContentCard from "./FeaturedContentCard";
 
 export function isFeaturedModuleRenderable(module: ResolvedFeaturedModule) {
-  return module.items.length > 0;
+  // Featured owns its heading shell. Per-item CTA links require an item.
+  const { presentation } = module;
+  const hasStaticCopy =
+    (presentation.showTitle !== false && Boolean(presentation.title?.trim())) ||
+    (presentation.showEyebrow !== false && Boolean(presentation.eyebrow?.trim())) ||
+    (presentation.showDescription !== false && Boolean(presentation.description?.trim()));
+  return module.items.length > 0 || hasStaticCopy;
 }
 
 export default function FeaturedModuleSection({

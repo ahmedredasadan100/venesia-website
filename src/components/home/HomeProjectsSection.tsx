@@ -385,7 +385,8 @@ export default function HomeProjectsSection({
     onSwipeRight: goToPrevPage,
   });
 
-  if (limitedProjects.length === 0) return null;
+  // The authored heading and CTA survive an empty project collection.
+  if (limitedProjects.length === 0 && !showHeader && !showFooterCta) return null;
 
   return (
     <section className="relative overflow-x-hidden bg-[#05070B] px-4 pb-12 pt-8 text-white @xl/slot-module:px-6 @xl/slot-module:pb-16 @xl/slot-module:pt-12 @3xl/slot-module:pb-20 @3xl/slot-module:pt-14">

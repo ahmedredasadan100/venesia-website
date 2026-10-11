@@ -511,13 +511,6 @@ export async function loadPublicContentCollection(input) {
 
 const emptyModuleSource = "export default {};";
 
-const imageMockSource = String.raw`
-import * as React from "react";
-export default function Image({ fill, priority, loader, unoptimized, ...props }) {
-  return React.createElement("img", props);
-}
-`;
-
 const linkMockSource = String.raw`
 import * as React from "react";
 export default function Link({ href, children, ...props }) {
@@ -538,14 +531,12 @@ async function compileHarness(rootDir: string, tempDir: string) {
   );
   const publicOwnerMockPath = path.join(tempDir, "public-content-owner.mock.js");
   const emptyModulePath = path.join(tempDir, "empty-module.mock.js");
-  const imageMockPath = path.join(tempDir, "next-image.mock.js");
   const linkMockPath = path.join(tempDir, "next-link.mock.js");
   await Promise.all([
     writeFile(uiMockPath, uiMockSource, "utf8"),
     writeFile(presentationMockPath, presentationMockSource, "utf8"),
     writeFile(publicOwnerMockPath, publicOwnerMockSource, "utf8"),
     writeFile(emptyModulePath, emptyModuleSource, "utf8"),
-    writeFile(imageMockPath, imageMockSource, "utf8"),
     writeFile(linkMockPath, linkMockSource, "utf8"),
   ]);
 
@@ -601,7 +592,6 @@ async function compileHarness(rootDir: string, tempDir: string) {
         "./ModuleEditorPresentation$": presentationMockPath,
         "../content/public-content-read/owner$": publicOwnerMockPath,
         "server-only$": emptyModulePath,
-        "next/image$": imageMockPath,
         "next/link$": linkMockPath,
       },
     },
@@ -867,15 +857,17 @@ try {
       ),
   );
   check(
-    "the actual public Featured presenter renders only real resolved rows and safely suppresses an empty result",
+    "the actual public Featured presenter renders resolved rows and reserves its authored shell without phantom items",
     JSON.stringify(publicEvidence.renderedIds) === JSON.stringify([701, 503]) &&
       publicEvidence.renderedText.indexOf("Available item 701") <
       publicEvidence.renderedText.indexOf("Available item 503") &&
       !publicEvidence.renderedText.includes("999001") &&
       !publicEvidence.renderedText.includes("999002") &&
-      publicEvidence.emptyMarkup === "",
+      publicEvidence.emptyMarkup.includes("data-featured-resolved-items=\"0\"") &&
+      !publicEvidence.emptyMarkup.includes("<article"),
   );
 
+  if (browserIssues.length || webpackWarnings.length) console.error(JSON.stringify({ browserIssues, webpackWarnings }, null, 2));
   check(
     "the isolated Featured browser run has no console, page, request, or webpack errors",
     browserIssues.length === 0 && webpackWarnings.length === 0,

@@ -46,5 +46,47 @@ export function verifyHomeDeletedMediaRendering(){
  assert.equal(isPageModulePubliclyVisible(false,'published'),false);assert.equal(isPageModulePubliclyVisible(true,'draft'),false);
  const visibleEntries=entries.filter(e=>isPageModulePubliclyVisible(e.block.isVisible,e.block.template.status));
  assert.equal(buildSlotRenderPlan(visibleEntries,{homepageProjects:projects},VENISIA_THEME_MODULE_PRESENTATION).length,4);
+
+ // A zero-result collection does not own the independently authored shell.
+ const zeroProjectPlan=buildSlotRenderPlan(entries,{homepageProjects:[]},VENISIA_THEME_MODULE_PRESENTATION);
+ assert.deepEqual(zeroProjectPlan.map(p=>p.assignmentId),[25,28,26,27]);
+ const zeroProjectHtml=renderToStaticMarkup(zeroProjectPlan.find(p=>p.assignmentId===28).node);
+ assert(zeroProjectHtml.includes('Projects title'));assert(!zeroProjectHtml.includes('<img'));assert(!zeroProjectHtml.includes('home-project-card group'));
+ const {parseMediaHubModuleConfig}=load('src/lib/media-hub-modules/parse-config.ts');
+ const {MEDIA_HUB_COLLECTION_CAPABILITIES}=load('src/lib/media-hub-modules/presentation-contract.ts');
+ const {isMediaHubModuleRenderable,renderMediaHubSection}=load('src/components/media-center/renderMediaHubSections.tsx');
+ let emptyLayouts=0;
+ for(const [sectionKey,capability] of Object.entries(MEDIA_HUB_COLLECTION_CAPABILITIES)){
+  for(const layout of capability.view.layouts){
+   const config=parseMediaHubModuleConfig({source:'topics',placement:'hub',contentHierarchy:{mode:capability.view.variants[layout].contentHierarchyMode},presentation:{title:'Retained title',description:'Retained description',ctaText:'Retained CTA',collectionView:{layout}}},sectionKey);
+   assert.equal(config.presentation.collectionView.layout,layout);
+   const hubModule={assignmentId:101,sortOrder:10,slot:'main',isVisible:true,sectionKey,config,sectionData:{kind:sectionKey,items:[]}};
+   assert(isMediaHubModuleRenderable(hubModule),sectionKey+'/'+layout);
+   assert.equal(buildSlotRenderPlan([{kind:'media-hub',assignmentId:101,sortOrder:10,module:hubModule}],{},VENISIA_THEME_MODULE_PRESENTATION).length,1);
+   const html=renderToStaticMarkup(renderMediaHubSection(hubModule));
+   assert(html.includes('Retained title')&&html.includes('Retained description')&&html.includes('Retained CTA'),sectionKey+'/'+layout);
+   assert(!html.includes('<img')&&!html.includes('<article'),'No phantom items');
+   const hidden={...hubModule,isVisible:false};assert.equal(isMediaHubModuleRenderable(hidden),false);assert.equal(renderMediaHubSection(hidden),null);
+   assert.equal(buildSlotRenderPlan([{kind:'media-hub',assignmentId:101,sortOrder:10,module:hidden}],{},VENISIA_THEME_MODULE_PRESENTATION).length,0);
+   emptyLayouts++;
+  }
+ }
+ const Feed=load('src/components/feed-modules/FeedModuleSection.tsx');
+ const feed={presentation:{emptyBehavior:'hide',title:'Feed title'},payload:{kind:'articles',items:[]}};
+ assert.equal(Feed.isFeedModuleRenderable(feed),false);assert.equal(renderToStaticMarkup(React.createElement(Feed.default,{module:feed})),'');
+ assert.equal(buildSlotRenderPlan([{kind:'feed',assignmentId:102,sortOrder:20,module:feed}],{},VENISIA_THEME_MODULE_PRESENTATION).length,0);
+ const Featured=load('src/components/featured/FeaturedModuleSection.tsx');
+ const featured={items:[],source:{kind:'topics'},presentation:{variant:'list',title:'Featured title',description:'Featured copy',eyebrow:'Featured eyebrow'}};
+ assert(Featured.isFeaturedModuleRenderable(featured));
+ const featuredHtml=renderToStaticMarkup(React.createElement(Featured.default,{module:featured}));
+ assert(featuredHtml.includes('Featured title')&&featuredHtml.includes('Featured copy'));assert(!featuredHtml.includes('<img')&&!featuredHtml.includes('<article'));
+ const hiddenFeatured={...featured,presentation:{...featured.presentation,showTitle:false,showDescription:false,showEyebrow:false}};
+ assert.equal(Featured.isFeaturedModuleRenderable(hiddenFeatured),false);
+ assert.equal(renderToStaticMarkup(React.createElement(Featured.default,{module:hiddenFeatured})),'');
+ const ProjectFeatured=load('src/components/projects/ProjectsFeaturedSection.tsx').default;
+ const featuredProjectsHtml=renderToStaticMarkup(React.createElement(ProjectFeatured,{projects:[],title:'Project shell',subtitle:'Project copy'}));
+ assert(featuredProjectsHtml.includes('Project shell')&&featuredProjectsHtml.includes('Project copy'));assert(!featuredProjectsHtml.includes('<img')&&!featuredProjectsHtml.includes('<article'));
+ assert.equal(renderToStaticMarkup(React.createElement(ProjectFeatured,{projects:[],showTitle:false,showSubtitle:false})), '');
+ console.log('PASS Empty module ownership: '+emptyLayouts+' Media Hub layouts retain title/copy/CTA in the actual render plan; Home/Featured/Projects retain static shells; Feed explicit hide remains collapsible.');
  console.log('PASS Home deleted-media rendering: '+cases.length+' real React/Next Image cases; published copy/CTA survives missing images; deleted image stays absent');return { cases, geometryCases, html: renderToStaticMarkup(React.createElement("main", {dir:"rtl",className:"bg-[#05070B] text-white"}, plan.map(item=>React.createElement("div", {key:item.key,"data-fixture-assignment":item.assignmentId,className:"@container/slot-module"},item.node)))) };
 }

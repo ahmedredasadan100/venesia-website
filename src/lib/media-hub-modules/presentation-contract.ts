@@ -1,3 +1,7 @@
+/** Hub sections own authored headings, descriptions and navigation independently
+ * of their collection. No content query may collapse this shell. */
+export const MEDIA_HUB_EMPTY_BEHAVIOR = "SHELL_RESERVED" as const;
+
 import {
   buildCollectionContentHierarchy,
   parseCollectionContentHierarchy,

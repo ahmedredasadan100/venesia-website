@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import type { SidebarArticleItem } from "../../lib/content-feeds/types";
@@ -48,7 +48,7 @@ function LatestArticleCard({ item, layout, showImage: imageAllowed, formatting }
   showImage: boolean;
   formatting: FeedArticleCardPresentation;
 }) {
-  const showImage = resolveContentImageVisibility(imageAllowed, item.image);
+  const showImage = resolveContentImageVisibility(imageAllowed, item.image, "RESERVED");
   const hasDate = formatting.showDate && Boolean(item.date?.trim());
   const hasExcerpt = formatting.showExcerpt && Boolean(item.excerpt?.trim());
   const hasText = formatting.showTitle || hasDate || hasExcerpt;
@@ -72,7 +72,7 @@ function LatestArticleCard({ item, layout, showImage: imageAllowed, formatting }
     >
       {showImage ? (
         <div className={`relative w-full overflow-hidden rounded-xl ${isList ? "aspect-square" : "aspect-[4/3]"}`}>
-          <Image
+          <PublicMediaImage
             src={item.image}
             alt={item.imageAlt}
             fill
@@ -131,7 +131,7 @@ export default function SidebarLatestArticlesWidget({
     showExcerpt,
   };
   const hasRenderableItems =
-    items.some((item) => resolveContentImageVisibility(showImage, item.image)) ||
+    items.some((item) => resolveContentImageVisibility(showImage, item.image, "RESERVED")) ||
     resolvedCardFormatting.showTitle ||
     (resolvedCardFormatting.showDate && items.some((item) => Boolean(item.date?.trim()))) ||
     (resolvedCardFormatting.showExcerpt && items.some((item) => Boolean(item.excerpt?.trim())));
