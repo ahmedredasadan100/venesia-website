@@ -60,13 +60,13 @@ export function verifyHomeDeletedMediaRendering(){
   for(const layout of capability.view.layouts){
    const config=parseMediaHubModuleConfig({source:'topics',placement:'hub',contentHierarchy:{mode:capability.view.variants[layout].contentHierarchyMode},presentation:{title:'Retained title',description:'Retained description',ctaText:'Retained CTA',collectionView:{layout}}},sectionKey);
    assert.equal(config.presentation.collectionView.layout,layout);
-   const module={assignmentId:101,sortOrder:10,slot:'main',isVisible:true,sectionKey,config,sectionData:{kind:sectionKey,items:[]}};
-   assert(isMediaHubModuleRenderable(module),sectionKey+'/'+layout);
-   assert.equal(buildSlotRenderPlan([{kind:'media-hub',assignmentId:101,sortOrder:10,module}],{},VENISIA_THEME_MODULE_PRESENTATION).length,1);
-   const html=renderToStaticMarkup(renderMediaHubSection(module));
+   const hubModule={assignmentId:101,sortOrder:10,slot:'main',isVisible:true,sectionKey,config,sectionData:{kind:sectionKey,items:[]}};
+   assert(isMediaHubModuleRenderable(hubModule),sectionKey+'/'+layout);
+   assert.equal(buildSlotRenderPlan([{kind:'media-hub',assignmentId:101,sortOrder:10,module:hubModule}],{},VENISIA_THEME_MODULE_PRESENTATION).length,1);
+   const html=renderToStaticMarkup(renderMediaHubSection(hubModule));
    assert(html.includes('Retained title')&&html.includes('Retained description')&&html.includes('Retained CTA'),sectionKey+'/'+layout);
    assert(!html.includes('<img')&&!html.includes('<article'),'No phantom items');
-   const hidden={...module,isVisible:false};assert.equal(isMediaHubModuleRenderable(hidden),false);assert.equal(renderMediaHubSection(hidden),null);
+   const hidden={...hubModule,isVisible:false};assert.equal(isMediaHubModuleRenderable(hidden),false);assert.equal(renderMediaHubSection(hidden),null);
    assert.equal(buildSlotRenderPlan([{kind:'media-hub',assignmentId:101,sortOrder:10,module:hidden}],{},VENISIA_THEME_MODULE_PRESENTATION).length,0);
    emptyLayouts++;
   }
