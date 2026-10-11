@@ -56,18 +56,24 @@ export async function verifyMediaGuidanceBrowser(){
  const projectFrames=[];await page.goto('http://127.0.0.1:48198/project-cards');await page.locator('[data-case="district"] img').waitFor();
  for(const width of [320,375,390,430,639,640,767,768,1023,1024,1280,1440,1920]){
   await page.setViewportSize({width,height:1000});
-  const cases=await page.locator('[data-case]').evaluateAll(es=>es.map(e=>({name:e.dataset.case,frames:[...e.querySelectorAll('img')].map(i=>{const r=i.parentElement.getBoundingClientRect(),s=getComputedStyle(i);return {width:r.width,height:r.height,ratio:r.width/r.height,fit:s.objectFit,position:s.objectPosition};})})));
+  const cases=await page.locator('[data-case]').evaluateAll(es=>es.map(e=>({name:e.dataset.case,frames:[...e.querySelectorAll('img')].map(i=>{const r=i.parentElement.getBoundingClientRect(),s=getComputedStyle(i);return {width:r.width,height:r.height,cssHeight:getComputedStyle(i.parentElement).height,ratio:r.width/r.height,fit:s.objectFit,position:s.objectPosition};})})));
   assert.equal(cases.length,5);assert(cases.every(c=>c.frames.length>0));
   assert(cases.flatMap(c=>c.frames).every(f=>f.fit==='cover'&&f.position==='50% 50%'));
-  const home=cases.find(c=>c.name==='home').frames;assert.equal(home.length,3);assert(home.every(f=>f.height===360));
+  const home=cases.find(c=>c.name==='home').frames;assert.equal(home.length,3);// Hover translation can round DOMRect by ~0.00003px; CSS height stays exact.
+  assert(home.every(f=>f.cssHeight==='360px'&&Math.abs(f.height-360)<0.001),JSON.stringify({viewport:width,home}));
   const expectedWidth=width<768?width-(width<576?34:50):(Math.min(width-48,1280)-40)/3-2;
   assert(home.every(f=>Math.abs(f.width-expectedWidth)<0.05));
   if(width===1023)assert(cases.find(c=>c.name==='featured').frames.slice(1).every(f=>f.width===973&&f.height===175));
   projectFrames.push({viewport:width,cases});
   if([390,1440].includes(width))await page.screenshot({path:path.join(out,'project-cards-'+width+'.png'),fullPage:true});
  }
+ await page.setViewportSize({width:390,height:1000});await page.locator('.home-project-card').nth(1).hover();
+ const hoverFrames=await page.locator('.home-project-card').nth(1).evaluate(async e=>{const frame=[...e.children].find(x=>x.classList.contains('h-[360px]')),samples=[];for(let i=0;i<12;i++){samples.push({height:frame.getBoundingClientRect().height,cssHeight:getComputedStyle(frame).height});await new Promise(requestAnimationFrame);}return samples;});
+ assert(hoverFrames.every(f=>f.cssHeight==='360px'&&Math.abs(f.height-360)<0.001));
+ await writeFile(path.join(out,'project-card-hover.json'),JSON.stringify(hoverFrames,null,2));
  await writeFile(path.join(out,'project-card-frames.json'),JSON.stringify(projectFrames,null,2));
  assert.deepEqual(errors,[]);
+ await page.mouse.move(0,0);
  const geometryProof=[];await page.goto('http://127.0.0.1:48198/geometry');
  for(const width of [375,390,430,1440]){await page.setViewportSize({width,height:932});
  const result=await page.evaluate(()=>{const measure=(name,selector)=>{const root=document.querySelector(`[data-geometry="${name}"]`),base=root.getBoundingClientRect();return [...root.querySelectorAll(selector)].map(e=>{const r=e.getBoundingClientRect();return {x:r.x-base.x,y:r.y-base.y,width:r.width,height:r.height}})};return {storyValid:measure('story-valid','.home-story-frame'),storyDeleted:measure('story-deleted-all','.home-story-frame'),contactValid:measure('contact-valid','section'),contactDeleted:measure('contact-deleted','section')};});
