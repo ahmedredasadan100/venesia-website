@@ -4,7 +4,7 @@ import { mediaContentSlot } from "../../../../../lib/media-center/detail-page-co
 import { useState } from "react";
 import AdminMediaImageField from "../../../media/AdminMediaImageField";
 import AdminMediaAltWarning from "../../../media-intelligence/AdminMediaAltWarning";
-import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
+import { adminFormTextareaClassName } from "../../../../../lib/admin/admin-ui-styles";
 import TopicFieldCounter from "./TopicFieldCounter";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
@@ -49,7 +49,7 @@ name="image"
             defaultValue={defaultAlt ?? ""}
             placeholder="اكتب نصًا يصف الصورة للمستخدمين ومحركات البحث"
             onInput={(event) => setAltLength(event.currentTarget.value.length)}
-            className={adminFormFieldClassName("h-auto min-h-16 scroll-mt-24 resize-y rounded-xl px-3 py-2.5 leading-6")}
+            className={adminFormTextareaClassName("h-auto min-h-16 scroll-mt-24 resize-y rounded-xl px-3 py-2.5 leading-6")}
           />
         </div>
       </label>

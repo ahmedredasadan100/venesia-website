@@ -180,3 +180,35 @@ The existing verify:media-library-system owner now executes a second 2:3 templat
 - Full local ci:check stopped at an unchanged CRLF-sensitive fixture assertion in verify-admin-core-query-fixture-contract.mjs:105. Normalized fixture bytes equal Git; the LF replacement needle misses the Windows working copy and matches normalized content. No unrelated fixture or governance repair was made.
 - Older non-CI Hero/About verifiers also contain pre-existing presentation expectations; they were inspected but left unchanged. Current route-slot, Page Block presentation and Media owners carry this phase's verification.
 - The owner explicitly authorized release in chat on 2026-10-11: affected verification, PR, CI, standard merge, automatic Production deployment, read-only proof and cleanup. No manual deployment, database mutation, uploaded file mutation or content save is part of the release. Production proof remains a closure gate.
+## 2026-10-11 continuation: design guidance and per-image metadata
+
+Resumed preserved work on `3523f83bc20ab3ce1b626d0d371f1b32fe46b498` after Home incident closure. Eleven saved files were byte-identical across the disjoint fast-forward. No Home, Feed, deletion, MIME, SEO, database, or image-source changes are part of this continuation.
+
+### Recommended design guidance (not validation)
+
+`MediaSlotContract.design` is optional and owned by the presentation: either `recommended` with width/height and rationale/composition, or `no-single-size` with explanatory guidance. Generic fields only render it. Existing templates without a defensible master continue to show their current responsive/ratio guidance and original metadata; no universal default is introduced. New templates supply their own contract without a generic field switch. Numeric recommendation text is direction-isolated for Arabic W × H display.
+
+| Slot / owner | Actual presentations | Design outcome | Derivation / limits |
+|---|---|---|---|
+| Topic/article main image; media-center/detail-page-config | Internal detail Hero: full width, min(62vh,580px), min-height440px; article cover340px high; cards4:3 /16:10; Sidebar square/4:3; Featured flexible cover | Recommended3840 ×2560 (3:2) | Practical photographic compromise, not a common container ratio.3840 is an explicit2× design target for the measured1920px desktop width, not a runtime maximum or requirement.3:2 allows landscape/detail and narrower cards to crop around one central subject. |
+| Media gallery image; same owner | MediaDetailArticle gallery4:3 cover, responsive one/two columns; InternalPageLayout max-w-7xl (1280px) | Recommended2560 ×1920 (4:3) | 2× the conservative full1280px body-width bound. Actual padded/column width is smaller. Does not assume the two-column breakpoint always activates. |
+| Media video poster; same owner | Player and independently configured cards/featured frames | No single safe master | Horizontal central composition; preview each selected presentation. |
+| Hero desktop/mobile | Existing template owner: home/project100vh; internal min(62vh,580px), minimum440px; separate device lists | Existing responsive guidance retained | No new required/recommended pixels invented for variable viewport/text/Ken Burns composition. |
+| Project image/collections; project-hero-adapter | Domain Hero/cards, flexible galleries, plan cover/contain | Existing owner guidance retained | Multiple uses do not provide one universal safe master. Original dimensions now accompany each gallery card. |
+| Tracking image/poster |16:9 viewer,4:3 thumbnail and possible cover reuse | Existing16:9 and reuse caveat retained | No new pixel requirement. |
+| Page Blocks | Vision/about single16:12; CTA/map/intro/trust variable frames | Existing selected-module ratio/responsive guidance retained | Template owner remains authoritative. Generic field does not infer a size from its preview. |
+| Identity / OG / raw Catalog | Brand/external/unspecified presentations | Original metadata only where no owner guidance exists | No invented design numbers; SEO values untouched. |
+
+The previously captured measurements cover375×812,390×844,430×932,768×1024,1440×1000,1920×1080. Article cover spans near-square mobile to~2.524 desktop; the internal Hero is a separate full-width crop. For the375–1920px width range and440–580px Hero-height bounds, center-cover cropping of a3:2 master can preserve as little as~43% of source width or~34% of source height before motion/overlay. The guidance therefore suggests a central40% ×30% starting composition, with explicit preview/motion/overlay caveats. It is not a guaranteed safe area for arbitrary viewports or future templates. Resolution/density and composition are editorial recommendations, not original-file measurements or upload validation.
+
+Evidence owners: `src/lib/hero/hero-content-controls.ts`, `src/components/InternalPageLayout.tsx`, `src/components/media-center/MediaDetailArticle.tsx`, `src/components/media-center/MediaCenterCollectionItems.tsx`, `src/app/(site)/topics/[slug]/page.tsx`, `src/components/collection-modules/CollectionListingPresenter.tsx`, `src/components/sidebar-feeds/SidebarLatestArticlesWidget.tsx`, `src/components/featured/FeaturedContentCard.tsx`.
+
+### Metadata and scrollbar adoption
+
+The existing reference-state read is shared once per Image/Gallery field. Gallery cards consume the same batched Catalog result and display their own original width/height immediately below their preview; no aggregate dimensions list remains above the gallery. Unknown dimensions explicitly remain unavailable. Delete notice semantics and the existing reference-state endpoint are unchanged.
+
+Gallery adoption: Hero desktop/mobile through AdminImagePathListField (a direct re-export), MediaContentForm gallery, and TrackingForms. ProjectMediaEditors/ProjectRepeaters and Page Block editors use repeated AdminMediaImageField instances, so each inherits the single-image placement. Generic single Image fields show original dimensions below the preview. Topic Alt Text uses the shared Admin textarea adapter, which adopts `VENESIA_SCROLLBAR_VISUAL_CLASSES`; Media Library caption textarea adopts the same token. Other shared media Alt/caption controls are single-line inputs and do not need a vertical textarea scrollbar. No scrollbar CSS or visual owner is added.
+
+The existing `verify:media-library-system` owner runs the real-component browser fixture: recommendation vs original dimensions, dynamic owner change, three-card placement/unknown metadata, batched read, reorder preservation, keyboard scrolling/focus, shared computed scrollbar styles and375/390/430 responsive widths. Its browser transport is isolated; it cannot upload or mutate Production. Existing binary metadata/rendition-separation and new-template contract checks remain active.
+
+The seven Project cover404 paths are OWNER-DELETED / OWNER-TO-REPLACE per the owner. They are intentional, outside this work, and not a bug/debt or closure blocker. No restoration or reference edit is authorized here.

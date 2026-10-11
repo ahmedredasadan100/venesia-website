@@ -142,7 +142,20 @@ export type MediaDetailPageKey = keyof typeof MEDIA_DETAIL_PAGE_CONFIG;
 /** The entity image is reused by multiple selected public presentations. */
 export function mediaContentSlot(slot: "image" | "galleryImage" | "videoPoster"): import("../media/media-slot-contract").MediaSlotContract {
   return { owner: "media-center/detail-and-listing", slot, device: "all",
-    evidence: ["src/components/media-center/MediaDetailArticle.tsx", "src/components/media-center/MediaCenterCollectionItems.tsx"],
+    evidence: ["src/components/media-center/MediaDetailArticle.tsx", "src/components/media-center/MediaCenterCollectionItems.tsx", "src/app/(site)/topics/[slug]/page.tsx", "src/components/InternalPageLayout.tsx", "src/lib/hero/hero-content-controls.ts", "src/components/collection-modules/CollectionListingPresenter.tsx", "src/components/sidebar-feeds/SidebarLatestArticlesWidget.tsx", "src/components/featured/FeaturedContentCard.tsx"],
+    design: slot === "galleryImage" ? {
+      kind: "recommended", width: 2560, height: 1920,
+      rationale: "نسبة 4:3 تطابق إطار معرض التفاصيل. عرض تصميم 2560 يغطي حتى عمود كامل داخل جسم الصفحة ذي الحد الأقصى 1280 بكسل بكثافة 2×، سواء تفعّل تخطيط العمودين أو بقي عمود واحد.",
+      composition: "احتفظ بالتفاصيل المهمة داخل الإطار؛ هذه التوصية لمعرض التفاصيل ولا تضمن منع القص إذا استُخدم الأصل في موضع آخر.",
+    } : slot === "image" ? {
+      kind: "recommended", width: 3840, height: 2560,
+      rationale: "ماستر 3:2 كحل وسط بين Hero التفاصيل والبطاقات والعرض القريب من المربع على الهاتف؛ عرض 3840 يدعم شاشة حتى 1920 بكسل بكثافة 2×. ليست هذه نسبة جميع مواضع العرض ولا ضمانًا لعدم القص.",
+      composition: "ضع العنصر الأساسي قرب المركز، داخل 40% من العرض و30% من الارتفاع في المركز كنقطة بداية. اترك بقية الصورة خلفية قابلة للقص؛ لا تضع كتابة أساسية داخل الصورة. راجع Hero والبطاقات مع النصوص والحركة؛ المواضع المرنة قد تقص أكثر.",
+    } : {
+      kind: "no-single-size",
+      rationale: "غلاف الفيديو يتنقل بين إطار المشغل والبطاقات، ولا يحدد هذا الحقل قالبًا واحدًا أو مساحة نص ثابتة.",
+      composition: "ابدأ بتكوين أفقي يضع الموضوع في المركز، واترك حواف قابلة للقص؛ راجع المشغل والبطاقة قبل الاعتماد.",
+    },
     display: slot === "galleryImage" ? { kind: "ratio", ratio: [4, 3] } : { kind: "responsive", description: "تُستخدم الصورة في مواضع عرض متعددة حسب القالب والبطاقة؛ لا توجد أبعاد بكسل أو نسبة واحدة مطلوبة للملف." },
     fit: slot === "galleryImage" ? "cover" : undefined,
   };

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 /** Shared field feedback; deletion truth comes from Catalog, not image loading. */
-export default function AdminDeletedMediaNotice({ values, showOriginalDimensions = false }: { values: readonly string[]; showOriginalDimensions?: boolean }) {
+export function useAdminMediaReferenceState(values: readonly string[]) {
   const key = JSON.stringify([...new Set(values.filter(Boolean))]);
   const [result, setResult] = useState<{ key: string; count: number; originals: { value: string; width: number | null; height: number | null }[] } | null>(null);
   useEffect(() => {
@@ -36,17 +36,30 @@ export default function AdminDeletedMediaNotice({ values, showOriginalDimensions
     window.addEventListener("focus", refresh);
     return () => { controller.abort(); window.removeEventListener("focus", refresh); };
   }, [key]);
+  return result?.key === key ? result : null;
+}
+
+type ReferenceState = ReturnType<typeof useAdminMediaReferenceState>;
+
+export function AdminMediaOriginalDimensions({ value, state }: { value: string; state: ReferenceState }) {
+  if (!value) return null;
+  const original = state?.originals.find(item => item.value === value);
+  return <p data-media-original={value} className="text-xs leading-6 text-slate-500">
+    الأبعاد الأصلية: {original?.width && original.height ? <bdi>{original.width} × {original.height} px</bdi> : state ? "غير متاحة" : "جارٍ قراءة أبعاد الأصل…"}
+  </p>;
+}
+
+export function AdminDeletedMediaStatus({ state }: { state: ReferenceState }) {
+  return state?.count ? <p role="status" data-admin-deleted-media-count={state.count} className="text-xs leading-6 text-amber-500">
+    يوجد {state.count} أصل محذوف. بياناته محفوظة هنا، لكنه لا يظهر للزوار. المراجع المحفوظة مسبقًا لا تمنع حفظ التعديلات؛ يمكنك اختيار بديل دون إزالة بيانات الصف.
+  </p> : null;
+}
+
+export default function AdminDeletedMediaNotice({ values, showOriginalDimensions = false }: { values: readonly string[]; showOriginalDimensions?: boolean }) {
+  const state = useAdminMediaReferenceState(values);
   if (!values.some(Boolean)) return null;
-  const current = result?.key === key ? result : null;
   return <div>
-    {showOriginalDimensions ? [...new Set(values.filter(Boolean))].map((value, index) => {
-      const original = current?.originals.find(item => item.value === value);
-      return <p key={value} data-media-original={value} className="text-xs leading-6 text-slate-500">
-        {values.length > 1 ? `الصورة ${index + 1} — ` : ""}الأبعاد الأصلية: {original?.width && original.height ? <bdi>{original.width} × {original.height} px</bdi> : current ? "غير معروفة" : "جارٍ قراءة أبعاد الأصل…"}
-      </p>;
-    }) : null}
-    {current?.count ? <p role="status" data-admin-deleted-media-count={current.count} className="text-xs leading-6 text-amber-500">
-    يوجد {current.count} أصل محذوف. بياناته محفوظة هنا، لكنه لا يظهر للزوار. المراجع المحفوظة مسبقًا لا تمنع حفظ التعديلات؛ يمكنك اختيار بديل دون إزالة بيانات الصف.
-  </p> : null}
+    {showOriginalDimensions ? [...new Set(values.filter(Boolean))].map(value => <AdminMediaOriginalDimensions key={value} value={value} state={state} />) : null}
+    <AdminDeletedMediaStatus state={state} />
   </div>;
 }
