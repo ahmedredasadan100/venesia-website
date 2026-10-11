@@ -107,8 +107,9 @@ assert.ok(
   "ProjectsFeaturedSection must use the guarded side-project selector",
 );
 assert.ok(
-  featuredSectionSource.includes("if (projects.length === 0) return null;"),
-  "An empty featured list must render neither a main nor side projects",
+  featuredSectionSource.includes("if (projects.length === 0 && !showTitle && !showSubtitle) return null;") &&
+    featuredSectionSource.includes("mainProject ? <MainFeaturedCard"),
+  "An empty featured list retains its authored shell without fabricating a main project",
 );
 assert.ok(
   featuredSectionSource.includes("<SideFeaturedCard key={project.id}"),
