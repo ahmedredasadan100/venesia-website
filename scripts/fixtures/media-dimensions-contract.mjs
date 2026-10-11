@@ -21,6 +21,32 @@ function load(relative, ports = {}) {
 }
 export async function verifyMediaDimensionsContract() {
   await verifyMediaGuidanceBrowser();
+  const adminPresentation = load("src/components/admin/media/AdminDeletedMediaNotice.tsx");
+  const payloadOwner = load("src/lib/admin/media-topic-payload.ts");
+  for (const status of ["active", "deleted", "missing", "empty"]) {
+    const value = status === "empty" ? "" : "/preview-fixture.png";
+    const row = { id: 1, title: "Preview fixture", content_type: "gallery", status: "draft", image: value, content: "Body", media_payload: {kind:"gallery",images:[{url:value,alt:"Preserved alt",caption:"Preserved caption"}]} };
+    const original = JSON.stringify(row);
+    const prefix = "../../../../../../";
+    const query = {select(){return this},eq(){return this},is(){return this},async maybeSingle(){return {data:row,error:null}}};
+    const Preview = load("src/app/admin/content/topics/[id]/preview/page.tsx", {
+      [prefix+"components/admin/media/AdminDeletedMediaNotice"]: adminPresentation,
+      [prefix+"lib/admin/media-catalog/deleted-reference-state"]: {readDeletedManagedValues:async()=>status==="deleted"?[value]:[],readMissingManagedValues:async()=>status==="missing"?[value]:[]},
+      [prefix+"components/admin/content/AdminCategoryBadge"]:{default:()=>null},
+      [prefix+"components/admin/ui"]:{AdminPageHeader:()=>null,AdminStatusPill:()=>null},
+      [prefix+"components/content/RichTextContent"]:{default:()=>null},
+      [prefix+"lib/admin/media-topic-payload"]:payloadOwner,
+      [prefix+"lib/admin/auth/require-admin-session"]:{requireAdminSession:async()=>({})},
+      [prefix+"lib/admin/content/content-types"]:{getContentTypeLabel:x=>x,isContentType:()=>true},
+      [prefix+"lib/admin/content/content-status-metadata"]:{getContentStatusMetadata:()=>({tone:"neutral",label:"Draft"})},
+      [prefix+"lib/supabase-admin"]:{getSupabaseAdmin:()=>({from:()=>query})},
+    }).default;
+    const html=renderToStaticMarkup(await Preview({params:Promise.resolve({id:"1"})}));
+    assert.equal((html.match(/<img\b/g)||[]).length,status==="active"?2:0);
+    assert(html.includes("Preserved caption"));assert(!/src="\s*"/.test(html));assert.equal(JSON.stringify(row),original);
+    if(status==="deleted"||status==="missing")assert(html.includes(`data-admin-media-preview-state="${status}"`));
+  }
+  console.log("PASS Admin saved-content preview: active/deleted/missing/empty, no retained image, caption and row preserved");
   const contract = load("src/lib/media/media-slot-contract.ts");
   const Component = load("src/components/admin/media/AdminMediaSlotGuidance.tsx", { "../../../lib/media/media-slot-contract": contract }).default;
   const hero = load("src/lib/hero/hero-content-controls.ts");

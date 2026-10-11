@@ -52,3 +52,6 @@ Fixture browser: Story frame x/y/width/height and Contact section geometry equal
 Media owner: 107/107 checks; Feed/Card 8 cases x 29 variants; public read 199 assertions; Home 7 cases plus complete render plan. Final reruns and Admin Runtime/release still pending.
 
 Detailed inventory source review distinguishes Featured overlay geometry (RESERVED) from Featured carousel thumbnails (COLLAPSIBLE). Home Trust retains its 14.375rem card geometry while removing the optional flip-back image interaction. These existing designs are not modified.
+
+
+Final adoption review also found the internal Topics preview reading saved image/gallery URLs directly. It now supplies the same Catalog state to AdminMediaPreview without modifying the row, gallery cardinality or captions. Its registered product surface is admin-content-topic-preview (preview, runtime not_applicable), nested under the existing content editor; it is not a new Form/Collection. Project Admin preview already delegates to the now-filtered project read owner, and Hero measurement uses the public route. Four actual saved-preview render cases prove active/deleted/missing/empty behavior. Compact gallery status text was separately proven to fit at 375/390/430px; overlay padding is reserved only for the single-image field whose controls overlap the preview.
