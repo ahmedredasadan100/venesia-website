@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -6,7 +7,7 @@ import { adaptPagesReadModel } from "../src/lib/admin/pages/entity-list-read-mod
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) =>
-  readFileSync(resolve(root, path), "utf8").replace(/\r\n?/gu, "\n");
+  normalizeVerificationText(readFileSync(resolve(root, path), "utf8"), { loneCR: true });
 
 const migrationPath =
   "sql/migrations/20260810010000_page_delete_hero_assignment_integrity.sql";

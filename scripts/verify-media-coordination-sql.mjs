@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,7 +6,7 @@ import { verifyMediaSynchronizationReadReuse } from "./fixtures/media-synchroniz
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) =>
-  fs.readFileSync(path.join(root, relativePath), "utf8").replace(/\r\n/g, "\n");
+  normalizeVerificationText(fs.readFileSync(path.join(root, relativePath), "utf8"));
 
 const migration = read(
   "sql/migrations/20260725180000_media_delete_reservation_saga.sql",

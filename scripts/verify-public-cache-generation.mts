@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createRequire } from "node:module";
@@ -187,7 +188,7 @@ try {
   });
   await verifyInstalledReactRequestFence();
   await check("security revision changes only new metadata classification and provenance", () => {
-    const priorSql = readFileSync(resolve(ROOT, "sql/migrations/20260920011000_page_composition_layout_regions.sql"), "utf8").replace(/\r\n?/gu, "\n");
+    const priorSql = normalizeVerificationText(readFileSync(resolve(ROOT, "sql/migrations/20260920011000_page_composition_layout_regions.sql"), "utf8"), { loneCR: true });
     const nextSql = readFileSync(resolve(ROOT, "sql/migrations/20260926153347_public_cache_invalidation_generation.sql"), "utf8");
     const prior = JSON.parse(priorSql.split("$venisia_security_contract$")[1]);
     const next = JSON.parse(nextSql.split("$venisia_security_contract$")[1]);

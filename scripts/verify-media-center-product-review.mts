@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -37,7 +38,7 @@ const {
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function read(path: string) {
-  return readFileSync(resolve(ROOT, path), "utf8");
+  return normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"));
 }
 
 function paginationLabels(currentPage: number, totalPages: number) {

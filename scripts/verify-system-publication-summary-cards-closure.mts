@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,7 +8,7 @@ import { assertPublication69Source } from "./lib/publication-migration69-verific
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) =>
-  readFileSync(resolve(root, path), "utf8").replace(/\r\n?/g, "\n");
+  normalizeVerificationText(readFileSync(resolve(root, path), "utf8"), { loneCR: true });
 
 let passed = 0;
 function check(label: string, condition: unknown) {

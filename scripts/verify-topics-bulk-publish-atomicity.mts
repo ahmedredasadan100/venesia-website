@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -19,9 +20,8 @@ const MIGRATION_PATH =
   "sql/migrations/20260926013216_topics_command_completion.sql";
 
 function read(path: string) {
-  return readFileSync(join(ROOT, path), "utf8")
-    .replace(/^\uFEFF/u, "")
-    .replace(/\r\n?/gu, "\n");
+  return normalizeVerificationText(readFileSync(join(ROOT, path), "utf8")
+    .replace(/^\uFEFF/u, ""), { loneCR: true });
 }
 
 function sourceSection(

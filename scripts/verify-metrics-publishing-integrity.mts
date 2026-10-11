@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -13,7 +14,7 @@ import { verifyTopicViewIntegrity } from "./verify-topic-view-integrity.mts";
 createRequire(import.meta.url)("next/dist/server/node-environment-baseline");
 
 const root = path.resolve(import.meta.dirname, "..");
-const read = (file: string) => readFileSync(path.resolve(root, file), "utf8").replace(/\r\n/g, "\n");
+const read = (file: string) => normalizeVerificationText(readFileSync(path.resolve(root, file), "utf8"));
 type Database = {
   query<T = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<{ rows: T[] }>;
   exec(sql: string): Promise<unknown>;

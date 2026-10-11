@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -15,7 +16,7 @@ import { VENISIA_THEME_REGION_RENDER_ORDER } from "../src/components/page-compos
 
 const root = resolve(process.cwd());
 const read = (path: string) =>
-  readFileSync(resolve(root, path), "utf8").replace(/\r\n?/gu, "\n");
+  normalizeVerificationText(readFileSync(resolve(root, path), "utf8"), { loneCR: true });
 const withoutComments = (source: string) =>
   source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/^\s*\/\/.*$/gmu, "");
 const importSources = (source: string) =>

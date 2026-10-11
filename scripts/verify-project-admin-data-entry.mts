@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -16,7 +17,7 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) =>
-  readFileSync(join(ROOT, path), "utf8").replace(/\r\n/g, "\n");
+  normalizeVerificationText(readFileSync(join(ROOT, path), "utf8"));
 let passed = 0;
 
 function check(label: string, condition: unknown) {
@@ -291,9 +292,8 @@ function extractFunctionDefinition(sql: string, functionName: string) {
   assert.notEqual(start, -1, `${functionName} definition exists`);
   const bodyEnd = sql.indexOf("$function$;", start);
   assert.notEqual(bodyEnd, -1, `${functionName} definition is complete`);
-  return sql
-    .slice(start, bodyEnd + "$function$;".length)
-    .replace(/\r\n?/g, "\n");
+  return normalizeVerificationText(sql
+    .slice(start, bodyEnd + "$function$;".length), { loneCR: true });
 }
 
 function extractForwardFixColumnManifest(sql: string) {

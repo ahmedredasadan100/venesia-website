@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0;
 
 function read(path: string) {
-  return readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n?/gu, "\n");
+  return normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"), { loneCR: true });
 }
 
 function check(label: string, condition: unknown) {

@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 /**
  * Static and pure-behavior guardrails for the shared Admin Collection
@@ -14,7 +15,7 @@ let assertionCount = 0;
 
 function read(path) {
   // Source fixtures must be identical on Windows and CI before mutation proof.
-  return readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n?/gu, "\n");
+  return normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"), { loneCR: true });
 }
 
 function check(label, condition) {

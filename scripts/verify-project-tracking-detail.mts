@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,7 +8,7 @@ import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } from "../src/lib/admin/form-syste
 import { ADMIN_COLLECTION_SURFACE_ADOPTION, ADMIN_CURRENT_SHARED_CAPABILITY_SET } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
 const read = (path: string) =>
-  readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n?/g, "\n");
+  normalizeVerificationText(readFileSync(resolve(process.cwd(), path), "utf8"), { loneCR: true });
 const parseTsx = (path: string) =>
   ts.createSourceFile(
     path,
