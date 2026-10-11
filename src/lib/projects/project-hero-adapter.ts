@@ -83,6 +83,28 @@ export function adaptProjectsHubHeroModule(
 
 /** Project images have multiple domain-owned projections, not one design size. */
 export function projectMediaSlot(slot: string): import("../media/media-slot-contract").MediaSlotContract {
+  if (slot === "image") {
+    return {
+      owner: "projects/external-card", slot, device: "all", presence: "RESERVED",
+      evidence: [
+        "src/components/home/HomeProjectsSection.tsx",
+        "src/components/projects/ProjectsListSection.tsx",
+        "src/components/projects/ProjectsFeaturedSection.tsx",
+        "src/components/projects/details/ProjectDistrictSection.tsx",
+      ],
+      display: {
+        kind: "responsive",
+        description: "النسبة غير ثابتة. في الرئيسية: ارتفاع إطار الصورة 360px، وعرضه يتغير من عمود واحد إلى ثلاثة أعمدة حسب مساحة الموديل. تتغير النسبة أيضًا بين أنماط قائمة المشاريع والبطاقات المميزة.",
+      },
+      fit: "cover",
+      design: {
+        kind: "no-single-size",
+        rationale: "تُستخدم كغلاف للمشروع في بطاقات الرئيسية وقائمة المشاريع والمشاريع المميزة، وكذلك في قسم الموقع بتفاصيل المشروع السكني. الإطارات تتراوح بين ضيقة وطويلة وعريضة وقصيرة؛ لا يحافظ مقاس واحد على التكوين نفسه في جميعها.",
+        composition: "ضع العنصر الرئيسي قرب المركز واترك فراغًا واسعًا حوله. تجنّب النصوص والشعارات داخل الصورة؛ التوسيط يحمي نقطة التركيز لكنه لا يضمن ظهور المبنى كاملًا في كل بطاقة. راجع المعاينة عند تغيير نمط العرض.",
+      },
+      note: "القص متمركز: من الجانبين في الإطار الأضيق من نسبة الأصل، ومن أعلى وأسفل في الإطار الأعرض. التمرير فوق البطاقة يزيد التكبير قليلًا، وتغطي النصوص والتدرجات أجزاء من الصورة، خصوصًا أسفلها. هذا إرشاد تصميم فقط، وليس شرطًا للرفع أو أبعادًا أصلية.",
+    };
+  }
   return { owner: "projects/public-presentation", slot, device: "all",
     evidence: ["src/components/projects/details/ProjectDetailsHero.tsx", "src/components/projects/details/ProjectImageGalleries.tsx", "src/components/projects/details/ProjectPlansAndAreasSection.tsx"],
     display: { kind: "responsive", description: "تتغير مساحة الصورة حسب قالب المشروع وموضعها: Hero أو بطاقة أو معرض أو مخطط. لا توجد أبعاد ملف أو نسبة موحدة مطلوبة؛ راجع معاينة المشروع." },

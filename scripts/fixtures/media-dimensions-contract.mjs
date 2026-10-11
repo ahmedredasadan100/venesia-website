@@ -49,6 +49,20 @@ export async function verifyMediaDimensionsContract() {
   console.log("PASS Admin saved-content preview: active/deleted/missing/empty, no retained image, caption and row preserved");
   const contract = load("src/lib/media/media-slot-contract.ts");
   const Component = load("src/components/admin/media/AdminMediaSlotGuidance.tsx", { "../../../lib/media/media-slot-contract": contract }).default;
+  const projectOwner = load("src/lib/projects/project-hero-adapter.ts", {
+    "../page-composition/page-assignment-contract": {}, "./public-helpers": {},
+  });
+  const cardSlot = projectOwner.projectMediaSlot("image");
+  assert.equal(cardSlot.owner, "projects/external-card");
+  assert.equal(cardSlot.design.kind, "no-single-size");
+  assert.equal(cardSlot.display.kind, "responsive");
+  assert.equal(cardSlot.fit, "cover");
+  assert.equal(cardSlot.evidence.length, 4);
+  for (const other of ["hero_image", "small_box_image", "overview_main_image", "project-media", "plan-or-poster"]) {
+    const slot = projectOwner.projectMediaSlot(other);
+    assert.notEqual(slot.owner, cardSlot.owner);
+    assert.equal(slot.design, undefined, "Other project slots must not inherit card guidance");
+  }
   const hero = load("src/lib/hero/hero-content-controls.ts");
   const desktop = hero.resolveHeroMediaSlot("home-cinematic", "desktop");
   const mobile = hero.resolveHeroMediaSlot("home-cinematic", "mobile");

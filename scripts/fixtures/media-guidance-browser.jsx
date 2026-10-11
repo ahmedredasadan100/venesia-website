@@ -1,3 +1,5 @@
+import ProjectCardGuidanceFixture from './project-card-guidance-browser';
+import {projectMediaSlot} from '../../src/lib/projects/project-hero-adapter';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
@@ -14,7 +16,9 @@ function RetainedFixture(){
  <Gallery valueMode="items" label="Retained row" name="retained_url" altName="retained_alt" captionName="retained_caption" defaultItems={[saved]} />
  <button type="submit">Save fixture</button><button type="button" onClick={()=>{setSaved(JSON.parse(localStorage.getItem('retained-fixture')));setRevision(revision+1)}}>Reload fixture</button></form>;
 }
-function App(){const [variant,setVariant]=React.useState('image');return <main dir="rtl" className="mx-auto max-w-5xl space-y-8 bg-slate-950 p-5 text-white">
+function App(){const [variant,setVariant]=React.useState('image');const [projectVariant,setProjectVariant]=React.useState(false);return <main dir="rtl" className="mx-auto max-w-5xl space-y-8 bg-slate-950 p-5 text-white">
+<section data-qa="project-card"><ImageField name="external-card" label="صورة الكارت الخارجية" defaultValue="/original.png" mediaSlot={projectVariant ? {...projectMediaSlot("image"),owner:"fixture/project-card-future",display:{kind:"ratio",ratio:[4,3]},design:undefined} : projectMediaSlot("image")}/></section>
+<button onClick={()=>setProjectVariant(true)}>Change project presentation</button>
 <section data-qa="topic"><TopicImage defaultImage="/original.png" defaultAlt={'وصف طويل للصورة\n'.repeat(60)}/></section>
 <button onClick={()=>setVariant(variant==='image'?'galleryImage':'image')}>Change presentation</button>
 <section data-qa="variant"><ImageField name="fixture" label="Owner change" defaultValue="/original.png" mediaSlot={mediaContentSlot(variant)}/></section>
@@ -26,4 +30,4 @@ function App(){const [variant,setVariant]=React.useState('image');return <main d
 <RetainedFixture/>
 <section data-qa="compact-deleted"><Gallery label="Deleted compact gallery" name="compact_deleted" defaultPaths={["/deleted.png","/missing.png"]} density="compact" /></section>
 <div data-qa="scrollbar-owner" className={`h-20 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}><div className="h-96">Shared owner</div></div>
-</main>};flushSync(()=>root.render(<App/>));window.guidanceFixtureReady=true;
+</main>};flushSync(()=>root.render(location.pathname === "/project-cards" ? <ProjectCardGuidanceFixture/> : <App/>));window.guidanceFixtureReady=true;
