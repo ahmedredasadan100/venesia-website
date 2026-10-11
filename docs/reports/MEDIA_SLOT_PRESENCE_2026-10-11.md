@@ -18,9 +18,11 @@ Asset availability belongs to Catalog/public projection. Geometry belongs to the
 | Topics / Media Center | collection list/grid | thumbnail | Optional/display-controlled | Text-only layout | COLLAPSIBLE, preserve | CollectionListingPresenter + resolveContentItemDisplay |
 | Article/feed | card variants | thumbnail | Optional | Existing no-image layout | COLLAPSIBLE, preserve | Feed/Card owner from #212 |
 | Sidebar | latest/most-read/series | thumbnail | Optional | Removes thumbnail/column | COLLAPSIBLE, preserve | Sidebar widgets + resolveContentImageVisibility |
-| Featured | selected presentation | image | Display-controlled | Existing image gate | COLLAPSIBLE, preserve | FeaturedContentCard + item display resolver |
+| Featured | overlay card standard/large | background | Display-controlled | Card remains at 290px or 360/480px while only Image is gated | RESERVED, preserve | FeaturedContentCard + item display resolver |
+| Featured | carousel row | thumbnail | Optional | 112px column and minimum 98px frame disappear | COLLAPSIBLE, preserve | FeaturedCarousel |
 | Media gallery | detail | entry frame | Optional collection | Deleted entries filtered; surviving frames 4:3 | COLLAPSIBLE entry; RESERVED surviving frame | public-content-read + MediaDetailArticle |
-| Page Blocks | editorial/single-image | illustration | Template-dependent | Existing optional image gate | Preserve per-renderer gate/geometry | contentModuleMediaSlot + selected renderer |
+| Page Blocks | about-intro-single-image / vision-goals | editorial illustration | Optional | Media frame and editorial-flow layout disappear; copy remains | COLLAPSIBLE, preserve | AboutIntroSingleImageModuleSection / VisionGoalsModuleSection |
+| Page Blocks | about-cta (non-Home) | side image | Optional | Column remains at 250px/220px even without Image | RESERVED, preserve | AboutCtaModuleSection |
 | Hero | selected template/device | slide | Independent device selection | Existing variant-owned geometry | Preserve; no Hero runtime change | hero-content-controls / DynamicHeroSection |
 | Admin | single/gallery | preview | Empty or retained | Truthy retained URL still renders | RESERVED selected card; no deleted/missing preview | Shared Image/Gallery + useAdminMediaReferenceState |
 
@@ -48,3 +50,5 @@ Production before: Home 5/5 at 375/390/430/1440; Story has zero media frames. Ad
 Fixture browser: Story frame x/y/width/height and Contact section geometry equal between valid/deleted states at 375/390/430/1440; no image elements for deleted state. Admin default/compact/gallery deleted and missing references issue no image requests; references, alt and caption survive. Local fixture serialization/reload preserves row data; replacement selection and serialization/reload render the new valid image. This is a safe fixture persistence proof, not a Production save.
 
 Media owner: 107/107 checks; Feed/Card 8 cases x 29 variants; public read 199 assertions; Home 7 cases plus complete render plan. Final reruns and Admin Runtime/release still pending.
+
+Detailed inventory source review distinguishes Featured overlay geometry (RESERVED) from Featured carousel thumbnails (COLLAPSIBLE). Home Trust retains its 14.375rem card geometry while removing the optional flip-back image interaction. These existing designs are not modified.
