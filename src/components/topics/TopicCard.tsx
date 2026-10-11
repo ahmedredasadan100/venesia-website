@@ -1,6 +1,7 @@
 import {
   DEFAULT_COLLECTION_DETAILS_ACTION,
   resolveCollectionDisplayTextFormatting,
+  resolveContentImageVisibility,
   type TopicsListingDisplayOverrides,
 } from "../../lib/page-blocks/configs";
 import { resolvePublicContentPath } from "../../lib/content/public-content-path";
@@ -72,7 +73,7 @@ export default function TopicCard({
       }
       display={{
         title: displayOverrides?.title ?? true,
-        image: displayOverrides?.image ?? true,
+        image: resolveContentImageVisibility(displayOverrides?.image ?? true, image),
         excerpt: displayOverrides?.excerpt ?? true,
         date: displayOverrides?.date ?? showDateOnPage,
         category: displayOverrides?.category ?? showCategoryOnPage,

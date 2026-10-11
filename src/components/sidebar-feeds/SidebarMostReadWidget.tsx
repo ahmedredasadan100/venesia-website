@@ -7,7 +7,7 @@ import {
   type FeedArticleCardPresentation,
   type FeedPopularPresentationVariant,
 } from "../../lib/feed-modules/types";
-import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
+import { pageBlockTextAlignClass, resolveContentImageVisibility } from "../../lib/page-blocks/configs";
 import { SidebarFeedPanel } from "./SidebarFeedPanel";
 import FeedGroupedList from "../feed-modules/FeedGroupedList";
 import { feedGridColumnsClass } from "../feed-modules/feed-presentation-layout";
@@ -28,7 +28,7 @@ export default function SidebarMostReadWidget({
   items,
   eyebrow,
   title,
-  showImage = true,
+  showImage: imageAllowed = true,
   showDate = true,
   showExcerpt = false,
   cardFormatting,
@@ -43,6 +43,7 @@ export default function SidebarMostReadWidget({
     showExcerpt,
   };
   const cards = items.map((item, index) => {
+    const showImage = resolveContentImageVisibility(imageAllowed, item.image);
     const hasDate =
       resolvedCardFormatting.showDate && Boolean(item.date?.trim());
     const hasExcerpt =

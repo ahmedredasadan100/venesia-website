@@ -1,3 +1,4 @@
+import { verifyFeedCardEmptyMedia } from "./fixtures/feed-card-empty-media.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -1561,3 +1562,5 @@ assert.ok(legacyStack.includes("<FeedModuleSection"));
 console.log(
   "Feed Module contract integrity proof passed (schema, editor serialization, save/readback, failure paths, and public consumers).",
 );
+
+await verifyFeedCardEmptyMedia();

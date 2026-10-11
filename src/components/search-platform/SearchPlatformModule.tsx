@@ -25,6 +25,7 @@ import {
 } from "../../lib/page-blocks/search-platform-config";
 import {
   pageBlockTextAlignClass,
+  resolveContentImageVisibility,
   pageBlockTextPlacementClass,
 } from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
@@ -101,6 +102,7 @@ function SearchResultCard({
   presentation: "full-list" | "full-grid";
 }) {
   const isList = presentation === "full-list";
+  const showImage = resolveContentImageVisibility(true, item.image);
 
   return (
     <article
@@ -114,25 +116,27 @@ function SearchResultCard({
         href={item.href}
         className={[
           "h-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70",
-          isList ? "grid gap-0 md:grid-cols-[15rem_minmax(0,1fr)]" : "flex flex-col",
+          isList && showImage ? "grid gap-0 md:grid-cols-[15rem_minmax(0,1fr)]" : "flex flex-col",
         ].join(" ")}
         data-search-result-link=""
       >
-        <div
-          className={[
-            "relative block overflow-hidden bg-white/[0.03]",
-            isList ? "min-h-48 md:min-h-full" : "aspect-[16/10]",
-          ].join(" ")}
-        >
-          <Image
-            src={item.image}
-            alt={item.imageAlt || item.title}
-            fill
-            sizes={isList ? "(max-width: 768px) 100vw, 240px" : "(max-width: 768px) 100vw, 33vw"}
-            className="object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/55 via-transparent to-transparent" />
-        </div>
+        {showImage ? (
+          <div
+            className={[
+              "relative block overflow-hidden bg-white/[0.03]",
+              isList ? "min-h-48 md:min-h-full" : "aspect-[16/10]",
+            ].join(" ")}
+          >
+            <Image
+              src={item.image}
+              alt={item.imageAlt || item.title}
+              fill
+              sizes={isList ? "(max-width: 768px) 100vw, 240px" : "(max-width: 768px) 100vw, 33vw"}
+              className="object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/55 via-transparent to-transparent" />
+          </div>
+        ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col p-6 text-right">
           <div className="flex flex-wrap items-center gap-2 text-xs text-[#D8B87A]/75">

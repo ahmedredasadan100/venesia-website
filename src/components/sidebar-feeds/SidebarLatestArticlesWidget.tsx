@@ -10,7 +10,7 @@ import {
   type FeedLatestPresentationVariant,
   type FeedPresentationDensity,
 } from "../../lib/feed-modules/types";
-import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
+import { pageBlockTextAlignClass, resolveContentImageVisibility } from "../../lib/page-blocks/configs";
 import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
 import FeedCarouselNavigation from "../feed-modules/FeedCarouselNavigation";
@@ -42,12 +42,13 @@ function chunkItems(items: SidebarArticleItem[], density: FeedPresentationDensit
   return slides;
 }
 
-function LatestArticleCard({ item, layout, showImage, formatting }: {
+function LatestArticleCard({ item, layout, showImage: imageAllowed, formatting }: {
   item: SidebarArticleItem;
   layout: FeedLatestPresentationVariant["layout"];
   showImage: boolean;
   formatting: FeedArticleCardPresentation;
 }) {
+  const showImage = resolveContentImageVisibility(imageAllowed, item.image);
   const hasDate = formatting.showDate && Boolean(item.date?.trim());
   const hasExcerpt = formatting.showExcerpt && Boolean(item.excerpt?.trim());
   const hasText = formatting.showTitle || hasDate || hasExcerpt;
@@ -130,7 +131,7 @@ export default function SidebarLatestArticlesWidget({
     showExcerpt,
   };
   const hasRenderableItems =
-    showImage ||
+    items.some((item) => resolveContentImageVisibility(showImage, item.image)) ||
     resolvedCardFormatting.showTitle ||
     (resolvedCardFormatting.showDate && items.some((item) => Boolean(item.date?.trim()))) ||
     (resolvedCardFormatting.showExcerpt && items.some((item) => Boolean(item.excerpt?.trim())));
