@@ -35,6 +35,15 @@ export async function verifyMediaGuidanceBrowser(){
  await retained.locator('img').waitFor();await retained.getByRole('button',{name:'Save fixture',exact:true}).click();await retained.getByRole('button',{name:'Reload fixture',exact:true}).click();await retained.locator('img').waitFor();
  assert.equal(await retained.locator('[name="retained_url"]').inputValue(),'/original.png');assert.equal(await retained.locator('[name="retained_caption"]').inputValue(),'Retained caption');
  assert.equal(await page.locator('img[src=""]').count(),0);
+ const projectGuidance=page.locator('[data-qa="project-card"] [data-media-slot]');
+ assert.equal(await projectGuidance.getAttribute('data-media-slot-owner'),'projects/external-card');
+ assert.match(await projectGuidance.innerText(),/لا يوجد مقاس تصميم واحد/);
+ assert.doesNotMatch(await projectGuidance.innerText(),/Hero|معرض|مخطط/);
+ assert.match(await page.locator('[data-qa="project-card"] [data-media-original]').innerText(),/400 × 600/);
+ await page.getByRole('button',{name:'Change project presentation',exact:true}).click();
+ assert.equal(await projectGuidance.getAttribute('data-media-slot-owner'),'fixture/project-card-future');
+ assert.match(await projectGuidance.innerText(),/4:3/);
+ assert.match(await page.locator('[data-qa="project-card"] [data-media-original]').innerText(),/400 × 600/);
  const cards=page.locator('[data-qa="gallery"] [data-admin-media-gallery-card="image"]');assert.equal(await cards.count(),3);
  const expected=['400 × 600 px','900 × 300 px','غير متاحة'];for(let n=0;n<3;n++){assert((await cards.nth(n).locator('[data-media-original]').innerText()).includes(expected[n]));assert(await cards.nth(n).evaluate(el=>{const img=el.querySelector('img'),text=el.querySelector('[data-media-original]');return text.getBoundingClientRect().top>=img.getBoundingClientRect().bottom-1&&text.getBoundingClientRect().bottom<=el.getBoundingClientRect().bottom;}));}
  assert.equal(await page.locator('[data-qa="gallery"] [data-media-original]').count(),3);assert.equal(requests.filter(r=>r.assets.length===3).length,1,'Gallery batch, no per-card reads');
@@ -44,6 +53,21 @@ export async function verifyMediaGuidanceBrowser(){
  await page.screenshot({path:path.join(out,'desktop.png'),fullPage:true});
  for(const width of [375,390,430]){await page.setViewportSize({width,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await alt.focus();await alt.press('Control+End');assert(await alt.evaluate(e=>document.activeElement===e&&e.scrollTop>0));assert(await page.locator('[data-qa="compact-deleted"] [data-admin-media-preview-state]').evaluateAll(es=>es.every(e=>{const frame=e.getBoundingClientRect();return [...e.querySelectorAll('span')].every(s=>{const r=s.getBoundingClientRect();return r.top>=frame.top&&r.bottom<=frame.bottom})})), 'Compact deleted status must fit its frame');await page.screenshot({path:path.join(out,'mobile-'+width+'.png'),fullPage:true});}
  await cards.nth(0).getByRole('button',{name:'تحريك الصورة لأسفل',exact:true}).click();await cards.nth(1).getByText('400 × 600 px',{exact:true}).waitFor();assert.match(await cards.nth(1).locator('[data-media-original]').innerText(),/400 × 600/);assert.equal(await page.locator('[name="gallery_alt"]').inputValue(),'وصف الأصل');assert.equal(await page.locator('[name="gallery_caption"]').inputValue(),'تعليق محفوظ');assert.deepEqual(errors,[]);
+ const projectFrames=[];await page.goto('http://127.0.0.1:48198/project-cards');await page.locator('[data-case="district"] img').waitFor();
+ for(const width of [320,375,390,430,639,640,767,768,1023,1024,1280,1440,1920]){
+  await page.setViewportSize({width,height:1000});
+  const cases=await page.locator('[data-case]').evaluateAll(es=>es.map(e=>({name:e.dataset.case,frames:[...e.querySelectorAll('img')].map(i=>{const r=i.parentElement.getBoundingClientRect(),s=getComputedStyle(i);return {width:r.width,height:r.height,ratio:r.width/r.height,fit:s.objectFit,position:s.objectPosition};})})));
+  assert.equal(cases.length,5);assert(cases.every(c=>c.frames.length>0));
+  assert(cases.flatMap(c=>c.frames).every(f=>f.fit==='cover'&&f.position==='50% 50%'));
+  const home=cases.find(c=>c.name==='home').frames;assert.equal(home.length,3);assert(home.every(f=>f.height===360));
+  const expectedWidth=width<768?width-(width<576?34:50):(Math.min(width-48,1280)-40)/3-2;
+  assert(home.every(f=>Math.abs(f.width-expectedWidth)<0.05));
+  if(width===1023)assert(cases.find(c=>c.name==='featured').frames.slice(1).every(f=>f.width===973&&f.height===175));
+  projectFrames.push({viewport:width,cases});
+  if([390,1440].includes(width))await page.screenshot({path:path.join(out,'project-cards-'+width+'.png'),fullPage:true});
+ }
+ await writeFile(path.join(out,'project-card-frames.json'),JSON.stringify(projectFrames,null,2));
+ assert.deepEqual(errors,[]);
  const geometryProof=[];await page.goto('http://127.0.0.1:48198/geometry');
  for(const width of [375,390,430,1440]){await page.setViewportSize({width,height:932});
  const result=await page.evaluate(()=>{const measure=(name,selector)=>{const root=document.querySelector(`[data-geometry="${name}"]`),base=root.getBoundingClientRect();return [...root.querySelectorAll(selector)].map(e=>{const r=e.getBoundingClientRect();return {x:r.x-base.x,y:r.y-base.y,width:r.width,height:r.height}})};return {storyValid:measure('story-valid','.home-story-frame'),storyDeleted:measure('story-deleted-all','.home-story-frame'),contactValid:measure('contact-valid','section'),contactDeleted:measure('contact-deleted','section')};});
