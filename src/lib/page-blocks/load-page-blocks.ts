@@ -1,5 +1,5 @@
 import "server-only";
-import { readDeletedManagedValues } from "../admin/media-catalog/deleted-reference-state";
+import { readUnavailableManagedValues } from "../admin/media-catalog/deleted-reference-state";
 import { mapPageBlockImageSources } from "./configs";
 
 import { cachePublicRead } from "../cache/public-cache-generation";
@@ -321,7 +321,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   for (const block of blocks) mapPageBlockImageSources(block.template.config, source => {
     imageSources.push(source); return source;
   });
-  const deletedSources = new Set(await readDeletedManagedValues(imageSources));
+  const deletedSources = new Set(await readUnavailableManagedValues(imageSources));
   if (deletedSources.size) for (const block of blocks) {
     block.template.config = mapPageBlockImageSources(block.template.config,
       source => deletedSources.has(source) ? "" : source);

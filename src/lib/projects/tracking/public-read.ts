@@ -1,5 +1,5 @@
 import "server-only";
-import { readDeletedManagedValues } from "../../admin/media-catalog/deleted-reference-state";
+import { readUnavailableManagedValues } from "../../admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "../../cache/public-cache-generation";
 
@@ -440,7 +440,7 @@ async function queryProjectTrackingDetail(
     historyResult.data ?? [],
   );
 
-  const deletedMedia = new Set(await readDeletedManagedValues([
+  const deletedMedia = new Set(await readUnavailableManagedValues([
     core.project.heroImage, core.latestVisual,
     ...mediaRows.flatMap(row => [row.public_url, row.poster_url]),
   ]));

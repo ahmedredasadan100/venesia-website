@@ -1,6 +1,6 @@
 import { readCatalogOriginalDimensions } from "../../../../lib/admin/media-catalog/catalog";
 import { NextResponse } from "next/server";
-import { readDeletedManagedValues } from "../../../../lib/admin/media-catalog/deleted-reference-state";
+import { readDeletedManagedValues, readMissingManagedValues } from "../../../../lib/admin/media-catalog/deleted-reference-state";
 
 import { requireAdminApi } from "../../../../lib/admin/auth/require-admin-api";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
@@ -271,7 +271,8 @@ export async function POST(request: Request) {
           !body.assets.every(value => typeof value === "string" && value.length <= 4096)) {
           return mediaJson({ error: "حدد مراجع وسائط صالحة." }, { status: 400 });
         }
-        return mediaJson({ deleted: await readDeletedManagedValues(body.assets), originals: await readCatalogOriginalDimensions(body.assets) });
+        const [deleted, missing, originals] = await Promise.all([readDeletedManagedValues(body.assets), readMissingManagedValues(body.assets), readCatalogOriginalDimensions(body.assets)]);
+        return mediaJson({ deleted, missing, originals });
       }
       if (body.operation === "preview_delete") return mediaJson(await previewMediaDeletion(body));
       if (body.operation === "prepare_upload") {

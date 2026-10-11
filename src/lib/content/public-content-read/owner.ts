@@ -1,5 +1,5 @@
 import "server-only";
-import { readDeletedManagedValues } from "../../admin/media-catalog/deleted-reference-state";
+import { readUnavailableManagedValues } from "../../admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "../../cache/public-cache-generation";
 
@@ -682,7 +682,7 @@ async function queryPublicContentFeedSeries(
     }
     bySlug.set(row.series_slug, mapCollectionRow(row.representative as PublicContentRow));
   }
-  const deletedImages = new Set(await readDeletedManagedValues([...bySlug.values()].map(item => item.image)));
+  const deletedImages = new Set(await readUnavailableManagedValues([...bySlug.values()].map(item => item.image)));
   for (const [slug, item] of bySlug) if (deletedImages.has(item.image)) bySlug.set(slug, { ...item, image: "" });
   return data.map((row) => ({
       id: row.id,
@@ -883,7 +883,7 @@ function collectionCacheKey(input: PublicContentCollectionInput) {
 
 async function projectDeletedCollectionMedia(result: PublicContentCollectionResult) {
   const rows = result.featured ? [...result.items, result.featured] : result.items;
-  const deleted = new Set(await readDeletedManagedValues(rows.map(row => row.image)));
+  const deleted = new Set(await readUnavailableManagedValues(rows.map(row => row.image)));
   const project = (row: PublicContentSummary) => deleted.has(row.image) ? { ...row, image: "" } : row;
   return { ...result, items: result.items.map(project), featured: result.featured ? project(result.featured) : null };
 }
@@ -989,7 +989,7 @@ async function queryPublicContentDetail(contentType: ContentType, slug: string) 
   }
   if (!data) return null;
   const detail = mapDetailRow(data);
-  const deleted = new Set(await readDeletedManagedValues([
+  const deleted = new Set(await readUnavailableManagedValues([
     detail.image, detail.videoUrl, ...detail.galleryImages.map(image => image.url),
   ]));
   return { ...detail, image: deleted.has(detail.image) ? "" : detail.image,

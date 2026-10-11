@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "../public/PublicMediaImage";
 import Link from "next/link";
 import { useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";

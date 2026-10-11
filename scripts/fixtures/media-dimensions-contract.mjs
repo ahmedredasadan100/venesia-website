@@ -34,7 +34,7 @@ export async function verifyMediaDimensionsContract() {
   const Field = load("src/components/admin/media/AdminMediaImageField.tsx", {
     "next/image": { default: () => null },
     "./AdminMediaSlotGuidance": { default: Component },
-    "./AdminDeletedMediaNotice": { default: () => null },
+    "./AdminDeletedMediaNotice": load("src/components/admin/media/AdminDeletedMediaNotice.tsx"),
     "./AdminMediaPickerModal": { default: () => null },
   }).default;
   const markup = renderToStaticMarkup(React.createElement(Field, { name: "fixture", label: "fixture", mediaSlot: fixture }));

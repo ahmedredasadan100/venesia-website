@@ -429,7 +429,7 @@ const owner = loadTranspiledModule(
   {
     "server-only": {},
     "../../cache/public-cache-generation": { cachePublicRead: unstableCacheMock },
-    "../../admin/media-catalog/deleted-reference-state": { readDeletedManagedValues: async () => [...deletedMediaValues] },
+    "../../admin/media-catalog/deleted-reference-state": { readUnavailableManagedValues: async () => [...deletedMediaValues] },
     react: {
       // React cache is render-pass/request memoization. Identity here models a
       // fresh request for the required transient-failure recovery proof.
