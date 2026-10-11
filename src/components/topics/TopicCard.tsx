@@ -73,7 +73,7 @@ export default function TopicCard({
       }
       display={{
         title: displayOverrides?.title ?? true,
-        image: resolveContentImageVisibility(displayOverrides?.image ?? true, image),
+        image: resolveContentImageVisibility(displayOverrides?.image ?? true, image, "RESERVED"),
         excerpt: displayOverrides?.excerpt ?? true,
         date: displayOverrides?.date ?? showDateOnPage,
         category: displayOverrides?.category ?? showCategoryOnPage,

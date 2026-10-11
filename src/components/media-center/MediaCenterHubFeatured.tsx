@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import { useAutoCarousel } from "../../hooks/use-auto-carousel";
@@ -61,7 +61,7 @@ function FeaturedPrimaryCard({
         }`}
       >
         {display.image ? (
-          <Image
+          <PublicMediaImage
             src={item.image}
             alt={item.imageAlt || item.title}
             fill
@@ -191,7 +191,7 @@ export default function MediaCenterHubFeatured({
                   >
                     {itemDisplay.image ? (
                       <div className="relative min-h-[98px] overflow-hidden rounded-[1rem]">
-                        <Image
+                        <PublicMediaImage
                           src={item.image}
                           alt={item.imageAlt || item.title}
                           fill

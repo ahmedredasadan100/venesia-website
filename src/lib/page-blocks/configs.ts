@@ -1,3 +1,4 @@
+import { isMediaSlotPresent, type MediaSlotPresence } from "../media/media-slot-contract";
 import type { AdminLinkValue } from "../admin/links/types";
 import { deserializeAdminLink } from "../admin/links/serialize";
 import {
@@ -476,14 +477,17 @@ export function buildContentDisplayOptionsFromFormData(
   ) as ContentDisplayOptions;
 }
 
-/** Presentation permission alone never makes an absent public image renderable.
- * Deleted managed references are already projected to absence by the read owner.
+/** A presentation chooses slot presence independently of the projected source.
+ * COLLAPSIBLE preserves consumers without an image control. Controlled media
+ * uses RESERVED; PublicMediaImage separately decides whether to emit an image.
  */
 export function resolveContentImageVisibility(
   allowed: boolean,
   source: string | null | undefined,
+  presence: MediaSlotPresence = "COLLAPSIBLE",
 ): boolean {
-  return allowed && typeof source === "string" && source.trim().length > 0;
+  const renderable = typeof source === "string" && source.trim().length > 0;
+  return allowed && isMediaSlotPresent(presence, renderable);
 }
 
 export function resolveContentItemDisplay(
@@ -495,7 +499,7 @@ export function resolveContentItemDisplay(
     CONTENT_DISPLAY_FIELDS.map((field) => [
       field,
       field === "image"
-        ? resolveContentImageVisibility(display.image && itemDisplay.image, values.image)
+        ? resolveContentImageVisibility(display.image && itemDisplay.image, values.image, "RESERVED")
         : display[field] && itemDisplay[field] && Boolean(values[field]),
     ]),
   ) as ContentDisplayOptions;

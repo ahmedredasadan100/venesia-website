@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import type { CollectionContentHierarchy } from "../../lib/collection-modules/content-hierarchy";
@@ -47,7 +47,7 @@ function MosaicItem({
       }`}
     >
       {display.image ? (
-        <Image
+        <PublicMediaImage
           src={item.image}
           alt={item.imageAlt || item.title}
           fill

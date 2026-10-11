@@ -1478,15 +1478,22 @@ check('direct folder browse keeps only current-level assets and retains the comp
   let presentationStatus = "deleted", missingObject = false;
   const deletedOwner = loadTypeScriptModule("src/lib/admin/media-catalog/deleted-reference-state.ts", {
     "server-only": {}, "./reference-providers": providerModule,
+    "../../media/resolve-local-public-image": loadTypeScriptModule("src/lib/media/resolve-local-public-image.ts", {"server-only":{},"node:fs":{existsSync},"node:path":nodePath}),
     "../../storage/upload-cms-asset": { parseManagedStorageAsset: parse },
     "../../supabase-admin": { getSupabaseAdmin: () => ({ from: () => ({
       onlyConfirmed: false, statusFilter: null, keys: [], select() { return this; }, eq(key, value) { if (key === "status") this.statusFilter = value; return this; },
       contains() { this.onlyConfirmed = true; return this; }, in(_column, keys) { this.keys = keys; return this; },
       then(resolve) { return Promise.resolve({ error: unavailable ? { code: "offline" } : null,
         data: this.keys.includes("images/retired.jpg") && (!this.onlyConfirmed || confirmed) && (!this.statusFilter || this.statusFilter === presentationStatus)
-          ? [{ bucket: "cms-images", object_key: "images/retired.jpg", status: presentationStatus, missing_object: missingObject }] : [] }).then(resolve); },
+          ? [{ bucket: "cms-images", object_key: "images/retired.jpg", status: presentationStatus, missing_object: missingObject }, ...(!this.statusFilter ? this.keys.filter(key => key !== "images/retired.jpg" && key !== "images/unknown.jpg").map(key => ({bucket:"cms-images",object_key:key,status:"active",missing_object:false})) : [])] : (!this.statusFilter ? this.keys.filter(key => key !== "images/unknown.jpg").map(key => ({bucket:"cms-images",object_key:key,status:"active",missing_object:false})) : []) }).then(resolve); },
     }) }) },
   });
+  const unknown = base + "images/unknown.jpg";
+  assert.deepEqual(await deletedOwner.readUnavailableManagedValues([unknown]), [unknown]);
+  assert.deepEqual(await deletedOwner.readMissingManagedValues([unknown]), [unknown]);
+  assert.deepEqual(await deletedOwner.readDeletedManagedValues([unknown], true), [], "Unknown references are never confirmed-deletion save exemptions");
+  assert.deepEqual(await deletedOwner.readUnavailableManagedValues(["", null, undefined]), []);
+  assert.deepEqual(await deletedOwner.readUnavailableManagedValues(["/images/absence-fixture-does-not-exist.png"]), ["/images/absence-fixture-does-not-exist.png"]);
   const stored = { images: [retired, active, retired + "-backup"], alt: "Building", nested: { title: "Keep", url: retired } };
   const projection = await deletedOwner.omitDeletedManagedMedia(stored);
   assert.deepEqual(projection, { ...stored, images: ["", active, retired + "-backup"], nested: { title: "Keep", url: "" } });
@@ -1546,6 +1553,7 @@ check('direct folder browse keeps only current-level assets and retains the comp
 
 {
   const { mapPageBlockImageSources } = loadTypeScriptModule("src/lib/page-blocks/configs.ts", {
+    "../media/media-slot-contract": loadTypeScriptModule("src/lib/media/media-slot-contract.ts"),
     "../admin/links/serialize": { deserializeAdminLink: value => value },
     "../collection-modules/collection-view": { COLLECTION_LISTING_ITEMS_PER_ROW: [1,2,3,4], COLLECTION_LISTING_LAYOUTS: ["grid","list"] },
     "../collection-modules/item-limit": { COLLECTION_LISTING_ITEM_LIMITS: [3,6,9] },

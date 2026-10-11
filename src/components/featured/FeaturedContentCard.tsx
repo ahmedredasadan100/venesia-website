@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import type { PublicContentSummary } from "../../lib/content/public-content-read/contract";
@@ -46,7 +46,7 @@ export default function FeaturedContentCard({
       className={`group relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.035] ${cardMinHeightClass}`}
     >
       {resolvedDisplay.image ? (
-        <Image
+        <PublicMediaImage
           src={item.image}
           alt={item.imageAlt || item.title}
           fill

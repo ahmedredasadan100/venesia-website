@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import type { CollectionView } from "../../lib/collection-modules/collection-view";
@@ -121,7 +121,7 @@ function CollectionListItem({
     >
       {display.image ? (
         <div className="relative aspect-square overflow-hidden rounded-[0.9rem] bg-white/5">
-          <Image
+          <PublicMediaImage
             src={item.image}
             alt={item.imageAlt || item.title}
             fill
@@ -176,7 +176,7 @@ function CollectionGridItem({
     >
       {display.image ? (
         <div className={`relative overflow-hidden bg-white/5 ${compact ? "aspect-[4/3]" : "aspect-[16/10]"}`}>
-          <Image
+          <PublicMediaImage
             src={item.image}
             alt={item.imageAlt || item.title}
             fill

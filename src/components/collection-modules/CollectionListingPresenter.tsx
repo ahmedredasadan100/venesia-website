@@ -98,7 +98,8 @@ export function CollectionListingCard({
   display,
 }: CollectionListingCardProps) {
   const showTitle = display.title && Boolean(title);
-  const showImage = display.image && Boolean(image);
+  // Display intent owns the frame even when the guarded image renders nothing.
+  const showImage = display.image;
   const showExcerpt = display.excerpt && Boolean(excerpt);
   const showCategory = display.category && Boolean(category?.label);
   const showSeries = display.series && Boolean(series?.label);
@@ -214,6 +215,7 @@ export function CollectionListingCard({
           <Link
             href={href}
             aria-label={`فتح ${title}`}
+            data-collection-image-slot="reserved"
             className="relative mt-auto block h-[170px] overflow-hidden rounded-[1.5rem] @2xl/collection-listing-card:mt-0"
           >
             {image}

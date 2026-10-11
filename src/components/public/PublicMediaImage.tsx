@@ -46,7 +46,7 @@ export default function PublicMediaImage({
   const composition = compositionInput
     ? resolvePublicMediaComposition(compositionInput)
     : undefined;
-  const sourceKey = typeof src === "string" ? src : "default" in src ? src.default.src : src.src;
+  const sourceKey = src == null ? "" : typeof src === "string" ? src : "default" in src ? src.default.src : src.src;
   const [failedSourceKey, setFailedSourceKey] = useState<string | null>(null);
   const failed = failedSourceKey === sourceKey;
 

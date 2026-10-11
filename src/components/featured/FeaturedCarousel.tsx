@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -61,7 +61,7 @@ function FeaturedEditorialSecondaryCard({
       >
         {resolvedDisplay.image ? (
           <div className="relative min-h-[98px] overflow-hidden rounded-[1rem]">
-            <Image
+            <PublicMediaImage
               src={item.image}
               alt={item.imageAlt || item.title}
               fill

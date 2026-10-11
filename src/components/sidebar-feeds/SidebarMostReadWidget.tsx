@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import type { SidebarArticleItem } from "../../lib/content-feeds/types";
@@ -43,7 +43,7 @@ export default function SidebarMostReadWidget({
     showExcerpt,
   };
   const cards = items.map((item, index) => {
-    const showImage = resolveContentImageVisibility(imageAllowed, item.image);
+    const showImage = resolveContentImageVisibility(imageAllowed, item.image, "RESERVED");
     const hasDate =
       resolvedCardFormatting.showDate && Boolean(item.date?.trim());
     const hasExcerpt =
@@ -63,7 +63,7 @@ export default function SidebarMostReadWidget({
         </span>
         {showImage ? (
           <div className="relative h-14 w-16 shrink-0 overflow-hidden rounded-xl">
-            <Image
+            <PublicMediaImage
               src={item.image}
               alt={item.imageAlt}
               fill

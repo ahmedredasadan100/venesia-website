@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -46,7 +46,7 @@ function SeriesCard({
   navigation?: ReactNode;
   slideLabel?: string;
 }) {
-  const showImage = resolveContentImageVisibility(imageAllowed, item.image);
+  const showImage = resolveContentImageVisibility(imageAllowed, item.image, "RESERVED");
   const isSlider = layout === "slider";
   const isList = layout === "list";
   const hasHref = Boolean(item.href.trim());
@@ -65,7 +65,7 @@ function SeriesCard({
   const image = showImage ? (
     <div className={isList ? "relative min-h-36 w-full" : "relative aspect-video w-full"} data-feed-series-image-frame="">
       <div className={`absolute inset-0 overflow-hidden ${isList ? "rounded-r-2xl" : "rounded-t-2xl"}`}>
-        <Image src={item.image} alt={item.imageAlt} fill sizes={isList ? "112px" : "(max-width: 1024px) 100vw, 340px"} className="object-cover opacity-85 transition-transform duration-700 group-hover:scale-105" />
+        <PublicMediaImage src={item.image} alt={item.imageAlt} fill sizes={isList ? "112px" : "(max-width: 1024px) 100vw, 340px"} className="object-cover opacity-85 transition-transform duration-700 group-hover:scale-105" />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         {hasHref ? <Link href={item.href} scroll={false} className="absolute inset-0 z-10" aria-label={item.title} /> : null}
       </div>

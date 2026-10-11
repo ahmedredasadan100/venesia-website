@@ -189,7 +189,8 @@ export function mapProjectsHubMapProps(
 ): ProjectsHubMapPresentationProps {
   return {
     title: module.config.title || PROJECTS_HUB_MAP_DEFAULTS.title,
-    mapImage: module.config.mapImage || PROJECTS_HUB_MAP_DEFAULTS.mapImage,
+    // An explicitly absent public projection must not revive the default URL.
+    mapImage: module.config.mapImage,
     exploreButtonLabel: module.config.exploreButtonLabel || PROJECTS_HUB_MAP_DEFAULTS.exploreButtonLabel,
     mapPins: module.config.mapPins,
     showTitle: module.config.showTitle !== false,

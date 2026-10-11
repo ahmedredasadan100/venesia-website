@@ -1,4 +1,5 @@
 import "server-only";
+import { readUnavailableManagedValues } from "../admin/media-catalog/deleted-reference-state";
 
 import {
   buildProjectsHubRenderPlan,
@@ -39,5 +40,13 @@ export async function loadAndBuildProjectsHubPlan(): Promise<ProjectsHubPlanResu
     };
   }
 
-  return buildProjectsHubRenderPlan(loaded.composition);
+  const plan = buildProjectsHubRenderPlan(loaded.composition);
+  if (!plan.ready) return plan;
+  // Validate authored configuration first. Asset loss cannot invalidate a module.
+  const unavailable = new Set(await readUnavailableManagedValues(plan.modules.flatMap(module =>
+    module.slug === "projects-hub-map" ? [module.config.mapImage] : [])));
+  return { ...plan, modules: plan.modules.map(module =>
+    module.slug === "projects-hub-map" && unavailable.has(module.config.mapImage)
+      ? { ...module, config: { ...module.config, mapImage: "" } }
+      : module) };
 }

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 import {
   type CollectionDisplayOverrides,
@@ -30,7 +30,7 @@ export default function MediaContentCard({
       series={item.series ? { label: item.series } : undefined}
       display={display}
       image={
-        <Image
+        <PublicMediaImage
           src={item.image}
           alt={item.imageAlt || item.title}
           fill
