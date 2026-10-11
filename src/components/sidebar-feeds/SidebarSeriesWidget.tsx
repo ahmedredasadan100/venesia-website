@@ -10,7 +10,7 @@ import {
   type FeedSeriesCardPresentation,
   type FeedSeriesPresentationVariant,
 } from "../../lib/feed-modules/types";
-import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
+import { pageBlockTextAlignClass, resolveContentImageVisibility } from "../../lib/page-blocks/configs";
 import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import FeedCarouselNavigation from "../feed-modules/FeedCarouselNavigation";
 import FeedGroupedList from "../feed-modules/FeedGroupedList";
@@ -33,7 +33,7 @@ function SeriesCard({
   item,
   layout,
   linkText,
-  showImage,
+  showImage: imageAllowed,
   formatting,
   navigation,
   slideLabel,
@@ -46,6 +46,7 @@ function SeriesCard({
   navigation?: ReactNode;
   slideLabel?: string;
 }) {
+  const showImage = resolveContentImageVisibility(imageAllowed, item.image);
   const isSlider = layout === "slider";
   const isList = layout === "list";
   const hasHref = Boolean(item.href.trim());

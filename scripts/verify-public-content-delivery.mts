@@ -1873,6 +1873,17 @@ check("Public Gallery hides deleted cover and media while preserving stored row/
   deletedGallery?.content === MARKDOWN_FIXTURE && JSON.stringify(retainedGallerySource) === retainedSourceBefore);
 assertPlanConsumed("Retained deleted Gallery");
 
+resetScenario();
+const deletedArticleImage = "https://fixture.supabase.co/storage/v1/object/public/images/deleted-article.jpg";
+deletedMediaValues.add(deletedArticleImage);
+const retainedArticleSource = topicRow({ id: 204, slug: "deleted-article-image", image: deletedArticleImage });
+const retainedArticleBefore = JSON.stringify(retainedArticleSource);
+replaceQueryPlan([{ label: "retained deleted article source", table: "topics", result: success([retainedArticleSource], { count: 1 }) }]);
+const deletedArticleCollection = await loadPublicContentCollection({ contentTypes: ["article"], page: 1, pageSize: 12 });
+check("Deleted Article collection projects image absence without changing stored content", deletedArticleCollection.items[0]?.image === "" && JSON.stringify(retainedArticleSource) === retainedArticleBefore);
+assertPlanConsumed("Retained deleted Article collection");
+
+
 const VIDEO_THUMBNAIL = "https://cdn.example.test/video/thumbnail.jpg";
 resetScenario();
 replaceQueryPlan([

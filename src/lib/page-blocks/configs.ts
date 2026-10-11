@@ -476,6 +476,16 @@ export function buildContentDisplayOptionsFromFormData(
   ) as ContentDisplayOptions;
 }
 
+/** Presentation permission alone never makes an absent public image renderable.
+ * Deleted managed references are already projected to absence by the read owner.
+ */
+export function resolveContentImageVisibility(
+  allowed: boolean,
+  source: string | null | undefined,
+): boolean {
+  return allowed && typeof source === "string" && source.trim().length > 0;
+}
+
 export function resolveContentItemDisplay(
   display: ContentDisplayOptions,
   itemDisplay: ContentDisplayOptions,
@@ -484,7 +494,9 @@ export function resolveContentItemDisplay(
   return Object.fromEntries(
     CONTENT_DISPLAY_FIELDS.map((field) => [
       field,
-      display[field] && itemDisplay[field] && Boolean(values[field]),
+      field === "image"
+        ? resolveContentImageVisibility(display.image && itemDisplay.image, values.image)
+        : display[field] && itemDisplay[field] && Boolean(values[field]),
     ]),
   ) as ContentDisplayOptions;
 }
