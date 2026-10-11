@@ -1,7 +1,7 @@
 "use client";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
-import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
+import { AdminDeletedMediaStatus, AdminMediaOriginalDimensions, useAdminMediaReferenceState } from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -118,6 +118,7 @@ export default function AdminMediaGalleryField(
   const [items, setItems] = useState<NormalizedGalleryItem[]>(() =>
     resolveDefaultItems(props),
   );
+  const referenceState = useAdminMediaReferenceState(items.map(item => item.url));
   const nextItemKeyRef = useRef(items.length);
   const [prevDefaultKey, setPrevDefaultKey] = useState(defaultKey);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -138,7 +139,7 @@ export default function AdminMediaGalleryField(
     density === "compact"
       ? itemsMode
         ? "min-h-[315px]"
-        : "h-[167px]"
+        : "min-h-[167px]"
       : itemsMode
         ? "min-h-[330px]"
         : "min-h-[170px]";
@@ -259,7 +260,7 @@ export default function AdminMediaGalleryField(
 
       <span className="block text-xs font-semibold text-white/55">{label}</span>
       <AdminMediaSlotGuidance slot={mediaSlot} />
-      <AdminDeletedMediaNotice showOriginalDimensions values={items.map(item => item.url)} />
+      <AdminDeletedMediaStatus state={referenceState} />
         {helperText ? (
         <p className="text-xs leading-6 text-white/42">{helperText}</p>
       ) : null}
@@ -354,6 +355,7 @@ export default function AdminMediaGalleryField(
             </div>
 
             <div className="space-y-2 px-3 py-2">
+              <AdminMediaOriginalDimensions value={item.url} state={referenceState} />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p
                   className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/45"

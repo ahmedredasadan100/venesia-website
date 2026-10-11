@@ -1,3 +1,5 @@
+import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../components/venesia-scrollbar-styles";
+
 /** Shared Admin UI tokens — modals, forms, tables. Import from here for new screens.
  *
  * Admin Design System rule: every new Admin page MUST reuse the shared components
@@ -59,4 +61,9 @@ export function adminFormLabelClassName() {
 
 export function adminFormHintClassName() {
   return "block text-right text-[11px] leading-5 text-white/32";
+}
+
+/** Shared textarea adapter; scroll geometry remains owned by the field. */
+export function adminFormTextareaClassName(extra = "") {
+  return adminFormFieldClassName(`${VENESIA_SCROLLBAR_VISUAL_CLASSES} ${extra}`);
 }

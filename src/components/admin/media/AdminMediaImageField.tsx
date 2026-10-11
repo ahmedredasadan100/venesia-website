@@ -110,7 +110,7 @@ export default function AdminMediaImageField({
         aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
       >
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
-        <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
+
         <AdminMediaSlotGuidance slot={mediaSlot} />
 
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
@@ -165,6 +165,8 @@ export default function AdminMediaImageField({
           )}
         </div>
 
+        <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
+
         {altName ? (
           <label className="block space-y-2">
             <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{altLabel}</span>
@@ -201,7 +203,7 @@ export default function AdminMediaImageField({
       aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
     >
       <input ref={valueInputRef} type="hidden" name={name} value={value} />
-        <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
+
 
       {showLabel ? (
         <span className={`block text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
@@ -261,6 +263,8 @@ export default function AdminMediaImageField({
           <span>اختيار صورة</span>
         </button>
       )}
+
+      <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
 
       {altName ? (
         <label className="block max-w-sm space-y-2" data-admin-media-image-alt-field={altName}>

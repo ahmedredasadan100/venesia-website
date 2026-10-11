@@ -1,3 +1,4 @@
+import { verifyMediaGuidanceBrowser } from "./media-guidance-browser.mjs";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -19,6 +20,7 @@ function load(relative, ports = {}) {
   return m.exports;
 }
 export async function verifyMediaDimensionsContract() {
+  await verifyMediaGuidanceBrowser();
   const contract = load("src/lib/media/media-slot-contract.ts");
   const Component = load("src/components/admin/media/AdminMediaSlotGuidance.tsx", { "../../../lib/media/media-slot-contract": contract }).default;
   const hero = load("src/lib/hero/hero-content-controls.ts");
