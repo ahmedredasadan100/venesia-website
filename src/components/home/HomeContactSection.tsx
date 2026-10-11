@@ -2,6 +2,8 @@
 "use client";
 
 import { Fragment } from "react";
+import { isMediaSlotPresent } from "../../lib/media/media-slot-contract";
+import { contentModuleMediaSlot } from "../../lib/page-blocks/configs";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -201,6 +203,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
   const identity = usePublicBrand();
   const resolved = resolveHomeContactContent(content, identity);
   const hasImage = Boolean(resolved.image);
+  const slotPresent = isMediaSlotPresent(contentModuleMediaSlot("home-contact").presence!, hasImage);
   const titleLines = resolved.title.split("\n");
 
   return (
@@ -237,7 +240,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
         */}
         <div className="grid @4xl/slot-module:grid-cols-[1fr_288px]">
           {/* ══ MAIN AREA (DOM first → physical RIGHT in RTL) ══ */}
-          <div className={`relative flex flex-col overflow-hidden border-b border-white/[0.05] @4xl/slot-module:block @4xl/slot-module:min-h-0 @4xl/slot-module:border-b-0 @4xl/slot-module:border-l @4xl/slot-module:border-l-white/[0.06] ${hasImage ? "min-h-[440px]" : ""}`}>
+          <div className={`relative flex flex-col overflow-hidden border-b border-white/[0.05] @4xl/slot-module:block @4xl/slot-module:min-h-0 @4xl/slot-module:border-b-0 @4xl/slot-module:border-l @4xl/slot-module:border-l-white/[0.06] ${slotPresent ? "min-h-[440px]" : ""}`}>
             {/* mobile — full-bleed background image inside MAIN/CTA area */}
             {hasImage ? <div aria-hidden className="absolute inset-0 overflow-hidden @4xl/slot-module:hidden">
               <Image
@@ -269,7 +272,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
             />
 
             {/* content — headline, description, CTA */}
-            <div className={`relative z-10 flex flex-col justify-center px-6 pb-4 pr-6 @4xl/slot-module:px-12 @4xl/slot-module:py-12 ${hasImage ? "pt-28 @4xl/slot-module:pr-[52%]" : "py-12"}`}>
+            <div className={`relative z-10 flex flex-col justify-center px-6 pb-4 pr-6 @4xl/slot-module:px-12 @4xl/slot-module:py-12 ${slotPresent ? "pt-28 @4xl/slot-module:pr-[52%]" : "py-12"}`}>
               {/* micro label + gold rule */}
               <div className="mb-4 flex items-center gap-3">
                 <div className="h-px w-7 shrink-0 bg-gradient-to-r from-[#D8B87A]/55 to-transparent" />

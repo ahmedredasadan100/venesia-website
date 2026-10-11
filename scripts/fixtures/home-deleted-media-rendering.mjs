@@ -17,12 +17,12 @@ export function verifyHomeDeletedMediaRendering(){
  const image='/fixture-home.png';
  const story={template:{config:asAboutIntroConfig({title:'Story title',body:'Preserved story body',images:{main:image,secondary:image},button:{label:'Story CTA',href:'/about'}})}};
  const contact={template:{config:asAboutCtaConfig({title:'Contact title',description:'Preserved contact body',image,button:{label:'Contact CTA',href:'/contact'},contacts:[{icon:'phone',label:'Phone',value:'123'}]})}};
- const cases=[];
+ const cases=[];let geometry;const geometryCases=[];
  for(const spec of [{name:'valid',main:image,secondary:image},{name:'deleted-main',main:'',secondary:image},{name:'deleted-secondary',main:image,secondary:''},{name:'deleted-all',main:'',secondary:''},{name:'whitespace',main:' ',secondary:' '}]){
- const config={...story.template.config,images:{main:spec.main,secondary:spec.secondary}};const html=renderToStaticMarkup(React.createElement(Story,{content:mapHomeStoryBlock({template:{config}})}));assert(html.includes('Story title')&&html.includes('Preserved story body')&&html.includes('Story CTA'),spec.name+' must retain content');const count=(html.match(/<img\b/g)||[]).length;assert.equal(count,Number(!!spec.main.trim())+Number(!!spec.secondary.trim()),spec.name);assert(!/src="\s*"/.test(html));cases.push({name:spec.name,images:count});
+ const config={...story.template.config,images:{main:spec.main,secondary:spec.secondary}};const html=renderToStaticMarkup(React.createElement(Story,{content:mapHomeStoryBlock({template:{config}})}));assert(html.includes('Story title')&&html.includes('Preserved story body')&&html.includes('Story CTA'),spec.name+' must retain content');const count=(html.match(/<img\b/g)||[]).length;assert.equal(count,Number(!!spec.main.trim())+Number(!!spec.secondary.trim()),spec.name);assert(!/src="\s*"/.test(html));const frames=[...html.matchAll(/class="(home-story-frame group[^"]*)"/g)].map(m=>m[1]);assert.equal(frames.length,2);if(geometry)assert.deepEqual(frames,geometry);else geometry=frames;cases.push({name:spec.name,images:count});if(spec.name==='valid'||spec.name==='deleted-all')geometryCases.push({name:'story-'+spec.name,html});
  }
  const original=JSON.stringify(contact);const projected={template:{config:mapPageBlockImageSources(contact.template.config,()=> '')}};
- for(const [name,block,count] of [['valid',contact,2],['deleted',projected,0]]){const html=renderToStaticMarkup(React.createElement(Contact,{content:mapHomeContactBlock(block)}));assert(html.includes('Contact title')&&html.includes('Preserved contact body')&&html.includes('Contact CTA')&&html.includes('Phone'));assert.equal((html.match(/<img\b/g)||[]).length,count);assert(!/src="\s*"/.test(html));cases.push({name:'contact-'+name,images:count});}
+ for(const [name,block,count] of [['valid',contact,2],['deleted',projected,0]]){const html=renderToStaticMarkup(React.createElement(Contact,{content:mapHomeContactBlock(block)}));assert(html.includes('Contact title')&&html.includes('Preserved contact body')&&html.includes('Contact CTA')&&html.includes('Phone'));assert.equal((html.match(/<img\b/g)||[]).length,count);assert(!/src="\s*"/.test(html));cases.push({name:'contact-'+name,images:count});geometryCases.push({name:'contact-'+name,html});}
  assert.equal(JSON.stringify(contact),original,'Projection must preserve stored config');
 
  const {buildSlotRenderPlan}=load('src/components/page-composition/build-slot-render-plan.ts');
@@ -33,10 +33,18 @@ export function verifyHomeDeletedMediaRendering(){
  const projects=[{id:1,slug:'fixture',code:'F',englishName:'Project',shortDescription:'Project body',location:{label:'Location'},cardImage:{src:image,alt:'Project'}}];
  const plan=buildSlotRenderPlan([...entries].reverse(),{homepageProjects:projects},VENISIA_THEME_MODULE_PRESENTATION);
  assert.deepEqual(plan.map(p=>p.assignmentId),[25,28,26,27]);
+ const noImageProjects=projects.map(p=>({...p,cardImage:{...p.cardImage,src:""}}));
+ const noImagePlan=buildSlotRenderPlan(entries,{homepageProjects:noImageProjects},VENISIA_THEME_MODULE_PRESENTATION);
+ const projectValid=renderToStaticMarkup(plan.find(p=>p.assignmentId===28).node);
+ const projectEmpty=renderToStaticMarkup(noImagePlan.find(p=>p.assignmentId===28).node);
+ assert(projectEmpty.includes('Project body'));assert.equal((projectEmpty.match(/<img\b/g)||[]).length,0);
+ assert.equal((projectValid.match(/home-project-card group/g)||[]).length,(projectEmpty.match(/home-project-card group/g)||[]).length);
+ assert(!/src="\s*"/.test(projectEmpty));
+
  for(const item of plan){const html=renderToStaticMarkup(item.node);assert(html.includes('<section'),item.key+' must render an actual section');}
  assert.equal(new Set(plan.map(p=>p.assignmentId)).size,4);
  assert.equal(isPageModulePubliclyVisible(false,'published'),false);assert.equal(isPageModulePubliclyVisible(true,'draft'),false);
  const visibleEntries=entries.filter(e=>isPageModulePubliclyVisible(e.block.isVisible,e.block.template.status));
  assert.equal(buildSlotRenderPlan(visibleEntries,{homepageProjects:projects},VENISIA_THEME_MODULE_PRESENTATION).length,4);
- console.log('PASS Home deleted-media rendering: '+cases.length+' real React/Next Image cases; published copy/CTA survives missing images; deleted image stays absent');return { cases, html: renderToStaticMarkup(React.createElement("main", {dir:"rtl",className:"bg-[#05070B] text-white"}, plan.map(item=>React.createElement("div", {key:item.key,"data-fixture-assignment":item.assignmentId,className:"@container/slot-module"},item.node)))) };
+ console.log('PASS Home deleted-media rendering: '+cases.length+' real React/Next Image cases; published copy/CTA survives missing images; deleted image stays absent');return { cases, geometryCases, html: renderToStaticMarkup(React.createElement("main", {dir:"rtl",className:"bg-[#05070B] text-white"}, plan.map(item=>React.createElement("div", {key:item.key,"data-fixture-assignment":item.assignmentId,className:"@container/slot-module"},item.node)))) };
 }

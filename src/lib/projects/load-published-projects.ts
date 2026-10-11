@@ -1,5 +1,5 @@
 import "server-only";
-import { readDeletedManagedValues } from "../admin/media-catalog/deleted-reference-state";
+import { readUnavailableManagedValues } from "../admin/media-catalog/deleted-reference-state";
 
 import { cachePublicRead } from "../cache/public-cache-generation";
 
@@ -114,7 +114,7 @@ async function projectDeletedMedia(projects: PublicProject[]): Promise<PublicPro
     ...project.plans.flatMap(plan => [plan.architecturalImage?.src, plan.furnishingImage?.src]),
     ...[...project.overview.videos, ...project.gallery.videos].flatMap(video => [video.url, video.poster?.src]),
   ]);
-  const deleted = new Set(await readDeletedManagedValues(values));
+  const deleted = new Set(await readUnavailableManagedValues(values));
   if (!deleted.size) return projects;
   const image = <T extends { src: string }>(value: T): T => deleted.has(value.src) ? { ...value, src: "" } : value;
   const videos = (values: PublicProject["gallery"]["videos"]) => values.filter(video => !deleted.has(video.url))

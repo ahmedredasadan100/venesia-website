@@ -1,17 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /** Shared field feedback; deletion truth comes from Catalog, not image loading. */
 export function useAdminMediaReferenceState(values: readonly string[]) {
   const key = JSON.stringify([...new Set(values.filter(Boolean))]);
-  const [result, setResult] = useState<{ key: string; count: number; originals: { value: string; width: number | null; height: number | null }[] } | null>(null);
+  const [result, setResult] = useState<{ key: string; count: number; deleted: string[]; missing: string[]; available: boolean; originals: { value: string; width: number | null; height: number | null }[] } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     const assets: string[] = JSON.parse(key);
     if (!assets.length) return;
     async function read() {
       try {
-        let count = 0;
+        const deleted: string[] = [];
+        const missing: string[] = [];
         const originals: { value: string; width: number | null; height: number | null }[] = [];
         for (let offset = 0; offset < assets.length; offset += 100) {
           const response = await fetch("/api/admin/media-library", {
@@ -20,15 +21,16 @@ export function useAdminMediaReferenceState(values: readonly string[]) {
             signal: controller.signal,
           });
           if (!response.ok) throw new Error("media_reference_read_unavailable");
-          const body: { deleted?: unknown; originals?: { value: string; width: number | null; height: number | null }[] } = await response.json();
+          const body: { deleted?: unknown; missing?: unknown; originals?: { value: string; width: number | null; height: number | null }[] } = await response.json();
           if (!Array.isArray(body.deleted) || !body.deleted.every(value => typeof value === "string")) return;
-          count += body.deleted.length;
+          deleted.push(...body.deleted);
+          if (Array.isArray(body.missing) && body.missing.every(value => typeof value === "string")) missing.push(...body.missing);
           if (Array.isArray(body.originals)) originals.push(...body.originals);
         }
-        if (!controller.signal.aborted) setResult({ key, count, originals });
+        if (!controller.signal.aborted) setResult({ key, count: deleted.length, deleted, missing, available: true, originals });
       } catch {
         // A failed read never changes a field or grants save permission.
-        if (!controller.signal.aborted) setResult(previous => previous?.key === key ? previous : { key, count: 0, originals: [] });
+        if (!controller.signal.aborted) setResult(previous => previous?.key === key ? previous : { key, count: 0, deleted: [], missing: [], available: false, originals: [] });
       }
     }
     void read();
@@ -62,4 +64,29 @@ export default function AdminDeletedMediaNotice({ values, showOriginalDimensions
     {showOriginalDimensions ? [...new Set(values.filter(Boolean))].map(value => <AdminMediaOriginalDimensions key={value} value={value} state={state} />) : null}
     <AdminDeletedMediaStatus state={state} />
   </div>;
+}
+
+/** Loading/failed Catalog reads never flash a retained image before its state is known. */
+export function adminMediaPresentationState(value: string, state: ReferenceState) {
+  if (!value.trim()) return "empty";
+  if (!state) return "loading";
+  if (state.deleted.includes(value)) return "deleted";
+  if (state.missing.includes(value)) return "missing";
+  return state.available ? "active" : "unavailable";
+}
+
+export function AdminMediaPreview({ value, state, children, controlsOverlay = false }: { value: string; state: ReferenceState; children: ReactNode; controlsOverlay?: boolean }) {
+  const presentation = adminMediaPresentationState(value, state);
+  if (presentation === "active") return children;
+  const text = presentation === "deleted" ? "الأصل السابق محذوف" : presentation === "missing" ? "الأصل السابق غير متاح" : presentation === "empty" ? "لم تُحدّد صورة" : presentation === "loading" ? "جارٍ التحقق من الأصل…" : "تعذّر التحقق من الأصل";
+  return <div data-admin-media-preview-state={presentation} className={`flex h-full flex-col items-center justify-center gap-2 px-10 text-center text-xs text-slate-500 ${controlsOverlay ? "pb-12" : ""}`}>
+    <span>{text}</span>
+    {presentation === "deleted" || presentation === "missing" ? <span>اختر صورة بديلة</span> : null}
+  </div>;
+}
+
+export function AdminMediaReferenceLabel({ value, state }: { value: string; state: ReferenceState }) {
+  if (!value) return null;
+  const reference = <span className="block truncate font-mono text-[11px] text-slate-500" dir="ltr">{value}</span>;
+  return adminMediaPresentationState(value, state) === "active" ? reference : <details className="min-w-0 text-xs text-slate-500"><summary>تفاصيل المرجع المحفوظ</summary>{reference}</details>;
 }

@@ -1,3 +1,5 @@
+import { AdminMediaPreview } from "../../../../../../components/admin/media/AdminDeletedMediaNotice";
+import { readDeletedManagedValues, readMissingManagedValues } from "../../../../../../lib/admin/media-catalog/deleted-reference-state";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -42,6 +44,10 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
   if (!topic || !isContentType(topic.content_type)) notFound();
   const payload = parseMediaTopicPayload(topic.media_payload);
   const publication = getContentStatusMetadata(topic.status);
+  const values = [topic.image, ...(payload?.kind === "gallery" ? payload.images.map(image => image.url) : [])];
+  const [deleted, missing] = await Promise.all([readDeletedManagedValues(values), readMissingManagedValues(values)]);
+  const referenceState = { key: "preview", count: deleted.length, deleted, missing, available: true, originals: [] };
+
 
   return (
     <main className="space-y-7">
@@ -69,16 +75,16 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
       </div>
 
       <article className="overflow-hidden rounded-[34px] border border-white/10 bg-[#080B10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.35)]">
-        {topic.image ? (
+        {topic.image?.trim() ? (
           <div className="relative h-[320px] overflow-hidden bg-black/30">
-            <Image
+            <AdminMediaPreview value={topic.image} state={referenceState}><Image
               src={topic.image}
               alt={topic.image_alt || topic.title || ""}
               fill
               sizes="(min-width: 1280px) 1200px, 100vw"
               className="object-cover"
               unoptimized
-            />
+            /></AdminMediaPreview>
             <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/35 to-transparent" />
           </div>
         ) : null}
@@ -98,8 +104,12 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
             <div className="grid gap-4 sm:grid-cols-2">
               {payload.images.map((image, index) => (
                 <figure key={`${image.url}-${index}`} className="overflow-hidden rounded-[20px] border border-white/10">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={image.url} alt={image.alt || ""} className="h-64 w-full object-cover" />
+                  <div className="h-64">
+                    <AdminMediaPreview value={image.url} state={referenceState}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={image.url} alt={image.alt || ""} className="h-64 w-full object-cover" />
+                    </AdminMediaPreview>
+                  </div>
                   {image.caption ? <figcaption className="px-4 py-3 text-sm text-white/55">{image.caption}</figcaption> : null}
                 </figure>
               ))}

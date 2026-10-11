@@ -1,7 +1,7 @@
 "use client";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
-import { AdminDeletedMediaStatus, AdminMediaOriginalDimensions, useAdminMediaReferenceState } from "./AdminDeletedMediaNotice";
+import { AdminDeletedMediaStatus, AdminMediaOriginalDimensions, useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel } from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -339,7 +339,7 @@ export default function AdminMediaGalleryField(
             <div
               className={`relative ${density === "compact" ? "h-24" : "h-28"}`}
             >
-              {item.url ? (
+              <AdminMediaPreview value={item.url} state={referenceState}>
                 <Image
                   src={item.url}
                   alt={itemsMode ? item.alt : ""}
@@ -347,22 +347,13 @@ export default function AdminMediaGalleryField(
                   className="object-cover"
                   sizes="200px"
                 />
-              ) : (
-                <div className="grid h-full place-items-center text-xs text-white/35">
-                  لم تُحدّد صورة
-                </div>
-              )}
+              </AdminMediaPreview>
             </div>
 
             <div className="space-y-2 px-3 py-2">
               <AdminMediaOriginalDimensions value={item.url} state={referenceState} />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p
-                  className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/45"
-                  dir="ltr"
-                >
-                  {item.url}
-                </p>
+                <div className="min-w-0 flex-1"><AdminMediaReferenceLabel value={item.url} state={referenceState} /></div>
                 <button
                   id={
                     itemsMode && index === 0

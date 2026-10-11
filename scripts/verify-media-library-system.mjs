@@ -1475,21 +1475,31 @@ check('direct folder browse keeps only current-level assets and retains the comp
   const parse = value => typeof value === "string" && value.startsWith(base)
     ? { bucket: "cms-images", objectPath: value.slice(base.length) } : null;
   let unavailable = false, confirmed = true, retained = true, rpcCalls = [];
+  let presentationStatus = "deleted", missingObject = false;
   const deletedOwner = loadTypeScriptModule("src/lib/admin/media-catalog/deleted-reference-state.ts", {
     "server-only": {}, "./reference-providers": providerModule,
     "../../storage/upload-cms-asset": { parseManagedStorageAsset: parse },
     "../../supabase-admin": { getSupabaseAdmin: () => ({ from: () => ({
-      onlyConfirmed: false, keys: [], select() { return this; }, eq() { return this; },
+      onlyConfirmed: false, statusFilter: null, keys: [], select() { return this; }, eq(key, value) { if (key === "status") this.statusFilter = value; return this; },
       contains() { this.onlyConfirmed = true; return this; }, in(_column, keys) { this.keys = keys; return this; },
       then(resolve) { return Promise.resolve({ error: unavailable ? { code: "offline" } : null,
-        data: this.keys.includes("images/retired.jpg") && (!this.onlyConfirmed || confirmed)
-          ? [{ bucket: "cms-images", object_key: "images/retired.jpg", status: "deleted" }] : [] }).then(resolve); },
+        data: this.keys.includes("images/retired.jpg") && (!this.onlyConfirmed || confirmed) && (!this.statusFilter || this.statusFilter === presentationStatus)
+          ? [{ bucket: "cms-images", object_key: "images/retired.jpg", status: presentationStatus, missing_object: missingObject }] : [] }).then(resolve); },
     }) }) },
   });
   const stored = { images: [retired, active, retired + "-backup"], alt: "Building", nested: { title: "Keep", url: retired } };
   const projection = await deletedOwner.omitDeletedManagedMedia(stored);
   assert.deepEqual(projection, { ...stored, images: ["", active, retired + "-backup"], nested: { title: "Keep", url: "" } });
   assert.equal(stored.images[0], retired);
+  for (const status of ["missing", "deleting", "active"]) {
+    presentationStatus = status; missingObject = status === "active";
+    assert.deepEqual(await deletedOwner.readUnavailableManagedValues([retired, active]), [retired]);
+    assert.deepEqual(await deletedOwner.readDeletedManagedValues([retired], true), [], "Missing is not a confirmed-deletion save exemption");
+  }
+  presentationStatus = "active"; missingObject = false;
+  assert.deepEqual(await deletedOwner.readUnavailableManagedValues([retired]), []);
+  presentationStatus = "deleted";
+
   const leaseOwner = loadTypeScriptModule("src/lib/admin/media-catalog/write-lease.ts", {
     "server-only": {}, "./deleted-reference-state": deletedOwner, "./identity": identityModule,
     "../../storage/upload-cms-asset": { parseManagedStorageAsset: parse },

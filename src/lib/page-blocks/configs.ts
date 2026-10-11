@@ -1587,6 +1587,7 @@ export function contentModuleMediaSlot(module: string, slot = "image"): import("
     "home-trust": "صورة خلفية بطاقة متجاوبة؛ لا توجد أبعاد ملف مطلوبة. راجع المعاينة مع النص والتأثير الحركي.",
   };
   return { owner: "content-module/" + module, slot, device: "all",
+    presence: module === "home-story" || module === "home-contact" ? "RESERVED" : undefined,
     evidence: ["src/lib/page-blocks/configs.ts"],
     display: ratioBased ? { kind: "ratio", ratio: EDITORIAL_IMAGE_GEOMETRY.ratio } : { kind: "responsive", description: descriptions[module] ?? "لم يُعرّف هذا القالب إرشاد أبعاد موثوقًا لهذا الموضع." },
     fit: "cover", note: ratioBased ? "موضع الصورة عند المركز أفقيًا و36% رأسيًا، مع تكبير طفيف عند المرور." : undefined,

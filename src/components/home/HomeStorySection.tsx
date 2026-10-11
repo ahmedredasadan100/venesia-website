@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { isMediaSlotPresent } from "../../lib/media/media-slot-contract";
 import Image from "next/image";
 
 import RichTextContent from "../content/RichTextContent";
@@ -10,6 +11,7 @@ import type {
   HomeStoryContent,
 } from "./home-cms-mappers";
 import {
+  contentModuleMediaSlot,
   pageBlockTextAlignClass,
   pageBlockTextPlacementClass,
 } from "../../lib/page-blocks/configs";
@@ -84,13 +86,13 @@ function HomeStoryMediaFrame({
 }) {
   return (
     <div className={`home-story-frame group ${className}`}>
-      <Image
+      {imageSrc.trim() ? <Image
         src={imageSrc}
         alt={imageAlt}
         fill
         sizes={sizes}
         className="home-story-frame__image object-cover transition duration-[1200ms] ease-out group-hover:scale-105"
-      />
+      /> : null}
 
       <div className={`absolute inset-0 ${overlayClassName}`} />
 
@@ -144,7 +146,10 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
   const { ref: mediaRef, inViewProps } = useTouchInViewReveal(0.4);
   const hasMainImage = Boolean(resolved.images.main.trim());
   const hasSecondaryImage = Boolean(resolved.images.secondary.trim());
-  const hasImages = hasMainImage || hasSecondaryImage;
+  const presence = contentModuleMediaSlot("home-story").presence!;
+  const mainPresent = isMediaSlotPresent(presence, hasMainImage);
+  const secondaryPresent = isMediaSlotPresent(presence, hasSecondaryImage);
+  const hasImages = mainPresent || secondaryPresent;
 
   return (
     <section className="relative overflow-hidden bg-[#05070B] py-10 text-white @xl/slot-module:py-16 @4xl/slot-module:py-24">
@@ -156,7 +161,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               {...inViewProps}
               className="home-story-media relative min-h-[280px] @xl/slot-module:mx-auto @xl/slot-module:min-h-[360px] @xl/slot-module:w-full @xl/slot-module:max-w-md @4xl/slot-module:min-h-[500px] @4xl/slot-module:max-w-none"
             >
-              {hasMainImage ? <HomeStoryMediaFrame
+              {mainPresent ? <HomeStoryMediaFrame
                 className="home-story-frame--main absolute right-0 top-0 z-[1] h-[220px] w-[70%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 @xl/slot-module:h-[265px] @xl/slot-module:w-[74%] @4xl/slot-module:h-[380px] @4xl/slot-module:w-[78%]"
                 imageSrc={resolved.images.main}
                 imageAlt={resolved.images.mainAlt}
@@ -164,7 +169,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
                 overlayClassName="bg-gradient-to-t from-[#05070B]/65 via-transparent to-transparent"
               /> : null}
 
-              {hasSecondaryImage ? <HomeStoryMediaFrame
+              {secondaryPresent ? <HomeStoryMediaFrame
                 className="home-story-frame--secondary absolute bottom-0 left-0 z-[2] h-[185px] w-[58%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 @xl/slot-module:h-[220px] @xl/slot-module:w-[60%] @4xl/slot-module:h-[320px] @4xl/slot-module:w-[65%]"
                 imageSrc={resolved.images.secondary}
                 imageAlt={resolved.images.secondaryAlt}

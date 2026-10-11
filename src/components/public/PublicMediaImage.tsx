@@ -50,7 +50,7 @@ export default function PublicMediaImage({
   const [failedSourceKey, setFailedSourceKey] = useState<string | null>(null);
   const failed = failedSourceKey === sourceKey;
 
-  if (!sourceKey || (failed && fallbackSrc == null)) return null;
+  if (!sourceKey.trim() || (failed && fallbackSrc == null)) return null;
 
   return (
     <Image

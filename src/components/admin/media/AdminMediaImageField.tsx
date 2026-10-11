@@ -1,7 +1,7 @@
 "use client";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
-import AdminDeletedMediaNotice from "./AdminDeletedMediaNotice";
+import { useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel, AdminMediaOriginalDimensions, AdminDeletedMediaStatus } from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useId, useRef, useState } from "react";
@@ -64,6 +64,7 @@ export default function AdminMediaImageField({
   const [altValue, setAltValue] = useState(defaultAlt);
   const [prevDefaultAlt, setPrevDefaultAlt] = useState(defaultAlt);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const referenceState = useAdminMediaReferenceState([value]);
   const valueInputRef = useRef<HTMLInputElement>(null);
   const altInputRef = useRef<HTMLInputElement>(null);
 
@@ -116,14 +117,14 @@ export default function AdminMediaImageField({
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
           {value ? (
             <>
-              <Image
+              <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image
                 src={value}
                 alt=""
                 fill
                 className="object-cover"
                 loading={previewLoading}
                 sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              />
+              /></AdminMediaPreview>
               <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-2 pt-8">
                 <button
                   id={triggerId}
@@ -165,7 +166,8 @@ export default function AdminMediaImageField({
           )}
         </div>
 
-        <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
+        <AdminMediaOriginalDimensions value={value} state={referenceState} />
+        <AdminDeletedMediaStatus state={referenceState} />
 
         {altName ? (
           <label className="block space-y-2">
@@ -218,7 +220,7 @@ export default function AdminMediaImageField({
           data-admin-media-image-card="selected"
         >
           <div className="relative h-44">
-            <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" />
+            <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" /></AdminMediaPreview>
             <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
               <button
                 id={triggerId}
@@ -243,9 +245,7 @@ export default function AdminMediaImageField({
               ) : null}
             </div>
           </div>
-          <p className={`truncate px-3 py-2 font-mono text-[11px] ${light ? "text-slate-500" : "text-white/45"}`} dir="ltr">
-            {value}
-          </p>
+          <div className="px-3 py-2"><AdminMediaReferenceLabel value={value} state={referenceState} /></div>
         </div>
       ) : (
         <button
@@ -264,7 +264,8 @@ export default function AdminMediaImageField({
         </button>
       )}
 
-      <AdminDeletedMediaNotice showOriginalDimensions values={[value]} />
+      <AdminMediaOriginalDimensions value={value} state={referenceState} />
+        <AdminDeletedMediaStatus state={referenceState} />
 
       {altName ? (
         <label className="block max-w-sm space-y-2" data-admin-media-image-alt-field={altName}>

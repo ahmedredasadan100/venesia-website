@@ -1344,14 +1344,20 @@ async function runCategoryPresentationChecks() {
 }
 
 async function runTopicPreviewRouteChecks() {
-  async function renderPreview(result: QueryResult) {
+  async function renderPreview(result: QueryResult, mediaError: Error | null = null) {
     const navigation = makeNotFound();
     const recorder = createJsxRecorder();
     let authCalls = 0;
+    let mediaReads = 0;
     const page = loadTypeScriptModule(
       "src/app/admin/content/topics/[id]/preview/page.tsx",
       {
         "react/jsx-runtime": recorder.runtime,
+        "../../../../../../components/admin/media/AdminDeletedMediaNotice": { AdminMediaPreview: marker("AdminMediaPreview") },
+        "../../../../../../lib/admin/media-catalog/deleted-reference-state": {
+          readDeletedManagedValues: async () => { mediaReads += 1; if (mediaError) throw mediaError; return []; },
+          readMissingManagedValues: async () => { mediaReads += 1; if (mediaError) throw mediaError; return []; },
+        },
         "next/image": defaultModule(marker("Image")),
         "next/link": defaultModule(marker("Link")),
         "next/navigation": { notFound: navigation.notFound },
@@ -1386,13 +1392,14 @@ async function runTopicPreviewRouteChecks() {
     const error = await captureError(() =>
       callPage(page, { params: Promise.resolve({ id: "31" }) }),
     );
-    return { error, navigation, recorder, authCalls };
+    return { error, navigation, recorder, authCalls, mediaReads };
   }
 
   await verify("Topic Preview read failure reaches the Admin error boundary, not notFound", async () => {
     const cause = databaseError();
     const outcome = await renderPreview({ data: null, error: cause });
     assert.equal(outcome.authCalls, 1);
+    assert.equal(outcome.mediaReads, 0);
     assert.equal(outcome.navigation.calls, 0);
     assert.ok(outcome.error instanceof Error);
     assert.equal(outcome.error.cause, cause);
@@ -1403,6 +1410,7 @@ async function runTopicPreviewRouteChecks() {
   await verify("Topic Preview true absence remains notFound", async () => {
     const outcome = await renderPreview({ data: null, error: null });
     assert.equal(outcome.authCalls, 1);
+    assert.equal(outcome.mediaReads, 0);
     assert.equal(outcome.error, outcome.navigation.signal);
     assert.equal(outcome.navigation.calls, 1);
   });
@@ -1416,6 +1424,15 @@ async function runTopicPreviewRouteChecks() {
     assert.equal(outcome.error, null);
     assert.equal(outcome.navigation.calls, 0);
     assert.ok(outcome.recorder.renders.some((render) => render.type === "article"));
+    assert.equal(outcome.mediaReads, 2);
+  });
+
+  await verify("Topic Preview media-state read failure cannot render a retained image", async () => {
+    const mediaError = new Error("media_reference_read_unavailable");
+    const outcome = await renderPreview({data:{id:31,title:"Preview",content_type:"article",image:"/retained.png"},error:null}, mediaError);
+    assert.equal(outcome.error, mediaError);
+    assert.equal(outcome.navigation.calls, 0);
+    assert.equal(outcome.recorder.renders.length, 0);
   });
 }
 

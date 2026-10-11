@@ -1,5 +1,7 @@
 /** Presentation-owned guidance, never an upload validation or asset metadata. */
 export type MediaSlotContract = {
+  /** Geometry decision belongs to the presentation, independently of asset availability. */
+  presence?: "RESERVED" | "COLLAPSIBLE";
   owner: string;
   slot: string;
   evidence: readonly string[];
@@ -22,4 +24,8 @@ export function mediaSlotGuidance(slot: MediaSlotContract): string[] {
     slot.fit === "cover" ? "تملأ الصورة الحاوية؛ قد تُقص الجوانب أو أعلى وأسفل حسب نسبة الأصل ومساحة العرض." : slot.fit === "contain" ? "تظهر الصورة كاملة داخل الحاوية مع الحفاظ على نسبتها." : "",
     slot.note ?? "",
   ].filter(Boolean);
+}
+
+export function isMediaSlotPresent(presence: "RESERVED" | "COLLAPSIBLE", renderable: boolean): boolean {
+  return presence === "RESERVED" || renderable;
 }
