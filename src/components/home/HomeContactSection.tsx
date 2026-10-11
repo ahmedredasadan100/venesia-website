@@ -200,7 +200,7 @@ function HomeContactCtaButton({
 export default function HomeContactSection({ content }: HomeContactSectionProps) {
   const identity = usePublicBrand();
   const resolved = resolveHomeContactContent(content, identity);
-  if (!resolved.image) return null;
+  const hasImage = Boolean(resolved.image);
   const titleLines = resolved.title.split("\n");
 
   return (
@@ -237,9 +237,9 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
         */}
         <div className="grid @4xl/slot-module:grid-cols-[1fr_288px]">
           {/* ══ MAIN AREA (DOM first → physical RIGHT in RTL) ══ */}
-          <div className="relative flex min-h-[440px] flex-col overflow-hidden border-b border-white/[0.05] @4xl/slot-module:block @4xl/slot-module:min-h-0 @4xl/slot-module:border-b-0 @4xl/slot-module:border-l @4xl/slot-module:border-l-white/[0.06]">
+          <div className={`relative flex flex-col overflow-hidden border-b border-white/[0.05] @4xl/slot-module:block @4xl/slot-module:min-h-0 @4xl/slot-module:border-b-0 @4xl/slot-module:border-l @4xl/slot-module:border-l-white/[0.06] ${hasImage ? "min-h-[440px]" : ""}`}>
             {/* mobile — full-bleed background image inside MAIN/CTA area */}
-            <div aria-hidden className="absolute inset-0 overflow-hidden @4xl/slot-module:hidden">
+            {hasImage ? <div aria-hidden className="absolute inset-0 overflow-hidden @4xl/slot-module:hidden">
               <Image
                 src={resolved.image}
                 alt=""
@@ -250,10 +250,10 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
               />
               {/* readability — dark base at bottom for text, advisor stays clear at top; anchored to page bg so block end blends seamlessly */}
               <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,#05070B_0%,rgba(5,7,11,0.82)_30%,rgba(5,7,11,0.45)_58%,rgba(5,7,11,0.15)_80%,transparent_100%)]" />
-            </div>
+            </div> : null}
 
             {/* building image — full-bleed inside MAIN column, advisor anchored right */}
-            <Image
+            {hasImage ? <Image
               src={resolved.image}
               alt=""
               aria-hidden
@@ -261,7 +261,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
               sizes="100vw"
               className="hidden object-cover object-[right_center] opacity-[1] @4xl/slot-module:block"
               style={{ filter: "brightness(1) contrast(1.03)" }}
-            />
+            /> : null}
             {/* text legibility — single soft dissolve from the left, keeps image natural */}
             <div
               aria-hidden
@@ -269,7 +269,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
             />
 
             {/* content — headline, description, CTA */}
-            <div className="relative z-10 flex flex-col justify-center px-6 pb-4 pr-6 pt-28 @4xl/slot-module:px-12 @4xl/slot-module:py-12 @4xl/slot-module:pr-[52%]">
+            <div className={`relative z-10 flex flex-col justify-center px-6 pb-4 pr-6 @4xl/slot-module:px-12 @4xl/slot-module:py-12 ${hasImage ? "pt-28 @4xl/slot-module:pr-[52%]" : "py-12"}`}>
               {/* micro label + gold rule */}
               <div className="mb-4 flex items-center gap-3">
                 <div className="h-px w-7 shrink-0 bg-gradient-to-r from-[#D8B87A]/55 to-transparent" />

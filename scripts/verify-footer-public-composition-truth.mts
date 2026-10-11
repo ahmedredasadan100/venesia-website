@@ -1,3 +1,4 @@
+import { verifyHomeDeletedMediaRendering } from "./fixtures/home-deleted-media-rendering.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -69,3 +70,5 @@ assert.ok(migration.includes("brand_value <> canonical_brand") && migration.incl
 assert.ok(migration.includes("revoke all on function public.save_footer_settings") && migration.includes("grant execute on function public.save_footer_settings") && migration.includes("to service_role"), "Atomic Footer writer must remain service-role only");
 
 console.log("PASS Footer/Public Composition Truth: canonical Footer persistence, CMS-only Home, one Page Composition resolver, specialized Media adoption, fail-safe outage behavior, diagnostics, cache and guards.");
+
+verifyHomeDeletedMediaRendering();
