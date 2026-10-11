@@ -24,5 +24,6 @@ function App(){const [variant,setVariant]=React.useState('image');return <main d
 <section data-qa="deleted-compact"><ImageField name="deleted_compact" label="Deleted compact" defaultValue="/deleted.png" variant="compact" /></section>
 <section data-qa="missing"><ImageField name="missing" label="Missing" defaultValue="/missing.png" /></section>
 <RetainedFixture/>
+<section data-qa="compact-deleted"><Gallery label="Deleted compact gallery" name="compact_deleted" defaultPaths={["/deleted.png","/missing.png"]} density="compact" /></section>
 <div data-qa="scrollbar-owner" className={`h-20 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}><div className="h-96">Shared owner</div></div>
 </main>};flushSync(()=>root.render(<App/>));window.guidanceFixtureReady=true;

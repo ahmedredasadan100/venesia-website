@@ -117,7 +117,7 @@ export default function AdminMediaImageField({
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
           {value ? (
             <>
-              <AdminMediaPreview value={value} state={referenceState}><Image
+              <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image
                 src={value}
                 alt=""
                 fill
@@ -220,7 +220,7 @@ export default function AdminMediaImageField({
           data-admin-media-image-card="selected"
         >
           <div className="relative h-44">
-            <AdminMediaPreview value={value} state={referenceState}><Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" /></AdminMediaPreview>
+            <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" /></AdminMediaPreview>
             <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
               <button
                 id={triggerId}

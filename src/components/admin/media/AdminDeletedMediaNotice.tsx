@@ -75,11 +75,11 @@ export function adminMediaPresentationState(value: string, state: ReferenceState
   return state.available ? "active" : "unavailable";
 }
 
-export function AdminMediaPreview({ value, state, children }: { value: string; state: ReferenceState; children: ReactNode }) {
+export function AdminMediaPreview({ value, state, children, controlsOverlay = false }: { value: string; state: ReferenceState; children: ReactNode; controlsOverlay?: boolean }) {
   const presentation = adminMediaPresentationState(value, state);
   if (presentation === "active") return children;
   const text = presentation === "deleted" ? "الأصل السابق محذوف" : presentation === "missing" ? "الأصل السابق غير متاح" : presentation === "empty" ? "لم تُحدّد صورة" : presentation === "loading" ? "جارٍ التحقق من الأصل…" : "تعذّر التحقق من الأصل";
-  return <div data-admin-media-preview-state={presentation} className="flex h-full flex-col items-center justify-center gap-2 px-10 pb-12 text-center text-xs text-slate-500">
+  return <div data-admin-media-preview-state={presentation} className={`flex h-full flex-col items-center justify-center gap-2 px-10 text-center text-xs text-slate-500 ${controlsOverlay ? "pb-12" : ""}`}>
     <span>{text}</span>
     {presentation === "deleted" || presentation === "missing" ? <span>اختر صورة بديلة</span> : null}
   </div>;
