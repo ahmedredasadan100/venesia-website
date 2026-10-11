@@ -180,7 +180,8 @@ assert(
   plan.includes("isFeedModuleRenderable(entry.module)") &&
     plan.includes("isFeaturedModuleRenderable(entry.module)") &&
     plan.includes("isMediaHubModuleRenderable(entry.module") &&
-    nodes.includes("if (!context.homepageProjects?.length) continue") &&
+    !nodes.includes("if (!context.homepageProjects?.length) continue") &&
+    nodes.includes("projects={context.homepageProjects ?? []}") &&
     nodes.includes("if (context.listingContext)"),
   "The shared plan must filter contextually non-renderable assignments before geometry",
 );

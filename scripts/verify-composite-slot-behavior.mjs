@@ -108,16 +108,13 @@ function planSlotEntries(entries, context = {}) {
         return entry.emptyBehavior !== "hide" || entry.itemCount > 0;
       }
       if (entry.kind === "featured") {
-        return !context.suppressFeaturedDuringSearch && entry.itemCount > 0;
+        return !context.suppressFeaturedDuringSearch && (entry.itemCount > 0 || entry.hasStaticCopy === true);
       }
       if (entry.kind === "media-hub" && entry.placement === "listing") {
         return Boolean(context.listingContext);
       }
       if (entry.kind === "block" && entry.template === "topics-listing") {
         return Boolean(context.listingContext);
-      }
-      if (entry.kind === "block" && entry.template === "home-projects") {
-        return Boolean(context.homepageProjects?.length);
       }
       return entry.renderable !== false;
     })
@@ -338,8 +335,8 @@ function assert(cond, msg) {
   ];
   const closed = planSlotEntries(entries);
   assert(
-    closed.length === 0,
-    "missing listing/data context must fail closed before layout presence",
+    closed.map(item => item.assignmentId).join(",") === "6",
+    "missing listing context remains closed while Home Projects delegates empty collection presentation to its owner",
   );
 
   const opened = planSlotEntries(entries, {
@@ -362,6 +359,8 @@ function assert(cond, msg) {
     itemCount: 2,
   };
   assert(planSlotEntries([featured]).length === 1, "non-empty Featured assignment must render");
+  assert(planSlotEntries([{...featured,itemCount:0,hasStaticCopy:true}]).length === 1, "empty Featured with authored copy must retain its shell");
+  assert(planSlotEntries([{...featured,itemCount:0,hasStaticCopy:false}]).length === 0, "empty Featured without static presentation remains collapsible");
   assert(
     planSlotEntries([featured], { suppressFeaturedDuringSearch: true }).length === 0,
     "suppressed Featured assignment must leave no render-plan presence",

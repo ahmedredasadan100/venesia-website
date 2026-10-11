@@ -672,7 +672,8 @@ assert.ok(
   slotPlan.includes("isFeedModuleRenderable(entry.module)") &&
     slotPlan.includes("isFeaturedModuleRenderable(entry.module)") &&
     slotPlan.includes("isMediaHubModuleRenderable(entry.module") &&
-    slotNodes.includes("if (!context.homepageProjects?.length) continue") &&
+    !slotNodes.includes("if (!context.homepageProjects?.length) continue") &&
+    slotNodes.includes("projects={context.homepageProjects ?? []}") &&
     slotNodes.includes("if (context.listingContext)") &&
     slotLayout.includes("hasRenderableSlotEntries(sidebarEntries, slotContentOptions)") &&
     slotLayout.includes("buildContextualSlotRenderPlan(entries, options).length > 0"),
