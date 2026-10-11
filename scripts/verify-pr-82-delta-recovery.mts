@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -58,7 +59,7 @@ const { buildPublicMenuTree } = loadTypeScriptModule(
 ) as typeof import("../src/lib/navigation/build-public-menu.ts");
 
 const read = (path: string) =>
-  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\r\n?/gu, "\n");
+  normalizeVerificationText(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"), { loneCR: true });
 
 const navigationOwner = read("src/lib/navigation/get-public-navigation.ts");
 const navigationRoute = read("src/app/api/navigation/[location]/route.ts");

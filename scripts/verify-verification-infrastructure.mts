@@ -1,3 +1,4 @@
+import { verifyVerificationTextContract } from "./fixtures/verification-text-contract.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -181,3 +182,5 @@ for (const stale of ["before-current-job.json", "before-ready.json", "before-res
   assert.throws(() => assertFreshMeasurementControl([stale], "before"), /cannot resume/u);
 
 console.log("PASS verification infrastructure: source, loader, owner boundaries and restore transition positive/negative controls.");
+
+await verifyVerificationTextContract(root);

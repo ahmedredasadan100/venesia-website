@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -13,7 +14,7 @@ import {
 
 const ROOT = process.cwd();
 const read = (relativePath: string) =>
-  readFileSync(resolve(ROOT, relativePath), "utf8").replace(/\r\n?/gu, "\n");
+  normalizeVerificationText(readFileSync(resolve(ROOT, relativePath), "utf8"), { loneCR: true });
 
 const assignmentCreate = read(
   "src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts",

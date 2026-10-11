@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import { createJiti } from "jiti";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
@@ -22,7 +23,7 @@ import {
 } from "../src/components/page-composition/venisia-theme-main-layout-plan.ts";
 
 const root = resolve(process.cwd());
-const read = (path) => readFileSync(resolve(root, path), "utf8").replace(/\r\n?/gu, "\n");
+const read = (path) => normalizeVerificationText(readFileSync(resolve(root, path), "utf8"), { loneCR: true });
 const withoutComments = (source) =>
   source
     .replace(/\/\*[\s\S]*?\*\//gu, "")

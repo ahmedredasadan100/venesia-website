@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,7 +8,7 @@ import { verifyFeaturedReferenceReadContract } from "./fixtures/page-block-perfo
 
 const ROOT = process.cwd();
 const read = (path: string) =>
-  readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n/gu, "\n");
+  normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"));
 const jiti = createJiti(import.meta.url);
 const { buildFeaturedModuleConfig, parseFeaturedModuleConfig } =
   await jiti.import<typeof import("../src/lib/featured-modules/config.ts")>(

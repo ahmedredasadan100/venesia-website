@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -35,7 +36,7 @@ type AdoptionRow = {
 const ROOT = process.cwd();
 
 function read(relativePath: string) {
-  return readFileSync(path.join(ROOT, relativePath), "utf8").replace(/\r\n/gu, "\n");
+  return normalizeVerificationText(readFileSync(path.join(ROOT, relativePath), "utf8"));
 }
 
 function sourceFilesBelow(relativeDirectory: string): string[] {

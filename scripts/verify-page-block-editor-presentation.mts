@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -9,7 +10,7 @@ import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) =>
-  readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n/gu, "\n");
+  normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"));
 const jiti = createJiti(import.meta.url);
 const {
   HERO_BULK_ACTIONS,

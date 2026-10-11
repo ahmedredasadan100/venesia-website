@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -11,7 +12,7 @@ import {
 
 const root = resolve(import.meta.dirname, "..");
 const read = async (path: string) =>
-  (await readFile(resolve(root, path), "utf8")).replace(/\r\n/g, "\n");
+  normalizeVerificationText((await readFile(resolve(root, path), "utf8")));
 
 let passed = 0;
 function check(label: string, condition: unknown) {

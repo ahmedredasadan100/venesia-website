@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -25,7 +26,7 @@ const BASELINE_MIGRATIONS = [
 ] as const;
 
 const read = (path: string) =>
-  readFileSync(join(ROOT, path), "utf8").replace(/\r\n?/g, "\n");
+  normalizeVerificationText(readFileSync(join(ROOT, path), "utf8"), { loneCR: true });
 
 let passed = 0;
 function check(label: string, condition: unknown) {

@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
@@ -46,7 +47,7 @@ const { getProjectHref, getProjectTrackHref } = await jiti.import<
 >("../src/lib/projects/public-helpers.ts");
 
 const read = (path: string) =>
-  readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n?/gu, "\n");
+  normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"), { loneCR: true });
 
 function walkFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -71,7 +72,7 @@ const sourceFiles = walkFiles(resolve(ROOT, "src")).filter((path) =>
 );
 const sourceEntries = sourceFiles.map((path) => ({
   path: relative(ROOT, path).replace(/\\/gu, "/"),
-  source: readFileSync(path, "utf8").replace(/\r\n?/gu, "\n"),
+  source: normalizeVerificationText(readFileSync(path, "utf8"), { loneCR: true }),
 }));
 
 const registryDeclarations = sourceEntries.filter(({ source }) =>

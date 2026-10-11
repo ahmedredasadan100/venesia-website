@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -11,7 +12,7 @@ const files = {
   retiredBrowserWriter: resolve(ROOT, "scripts/qa-media-recovery-browser.mts"),
   example: resolve(ROOT, "scripts/fixtures/media-live-qa-authority.example.json"),
 };
-const normalize = (source) => source.replace(/\r\n?/g, "\n");
+const normalize = (source) => normalizeVerificationText(source, { loneCR: true });
 const guard = normalize(readFileSync(files.guard, "utf8"));
 const live = normalize(readFileSync(files.live, "utf8"));
 const example = normalize(readFileSync(files.example, "utf8"));

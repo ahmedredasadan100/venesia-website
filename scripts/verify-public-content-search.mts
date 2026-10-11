@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -6,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
+const read = (path: string) => normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"));
 const jiti = createJiti(import.meta.url);
 const {
   DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY,

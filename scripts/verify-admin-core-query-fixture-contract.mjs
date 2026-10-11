@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import{createHash,randomUUID}from'node:crypto';import ts from'typescript';import{createJiti}from'jiti';import{PGlite}from'@electric-sql/pglite';
 import{loadEntitySeoPersistenceOwner}from'./backfill-entity-seo-scores.mts';
 const fixturePath='scripts/fixtures/admin-core-query-presentation-fixtures.mts',migrationPath='sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql',source=fs.readFileSync(path.resolve(fixturePath),'utf8'),migration=fs.readFileSync(path.resolve(migrationPath),'utf8'),tree=ts.createSourceFile(fixturePath,source,ts.ScriptTarget.Latest,true),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),entry=await jiti.import('../src/lib/admin/projects/project-entry-contract.ts'),seo=loadEntitySeoPersistenceOwner(),cases=[];
@@ -76,6 +77,7 @@ try{
 
 /** Execute the actual fixture scheduling body with a controlled parent-idle clock. */
 export async function verifyCoreQueryFixtureScheduling(fixtureSource,plan){
+ fixtureSource=normalizeVerificationText(fixtureSource);
  const build=source=>{const ast=ts.createSourceFile('fixture.mts',source,ts.ScriptTarget.Latest,true),loops=[];function visit(node){if(ts.isForOfStatement(node)&&node.expression.getText(ast)==='plan'&&node.initializer.getText(ast)==='const spec')loops.push(node.getText(ast));ts.forEachChild(node,visit);}visit(ast);assert.equal(loops.length,1);return new Function('ports',ts.transpileModule('async function run(){const {assert,handle,plan,namespace,contexts,columns,projectSources,actorId,passwordHash,randomUUID,topic,category,series,page,seo,duplicate,entry} = ports;'+loops[0]+';return contexts;}return run();',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText);};
  const original=fixtureSource.replace("const chunkSize=spec.entity==='projects'?1:spec.level||spec.kind||['admin_users','redirects','activity_log'].includes(spec.entity)?4:count;",'').replace('for(let chunk=0;chunk<count;chunk+=chunkSize){',"for(let chunk=0;chunk<(spec.entity==='projects'?count:1);chunk++){").replaceAll('for(let i=chunk;i<Math.min(chunk+chunkSize,count);i++)','for(let i=0;i<count;i++)').replace('  await handle.renewDatabaseControlConnection();\n  }',"  if(spec.entity==='projects'&&chunk%4===3)await handle.renewDatabaseControlConnection();\n  }");
  // Restore only the old final context renewal; its exact former placement is source-bound.

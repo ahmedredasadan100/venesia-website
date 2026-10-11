@@ -1,8 +1,9 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (path: string) =>
-  readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\r\n?/gu, "\n");
+  normalizeVerificationText(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"), { loneCR: true });
 const resolver = read("src/lib/seo/resolve-global-seo-effective.ts");
 const loader = read("src/lib/seo/load-global-seo-settings.ts");
 const editor = read("src/app/admin/seo/meta-manager/MetaManagerClient.tsx");

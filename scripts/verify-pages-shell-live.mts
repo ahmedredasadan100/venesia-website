@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -10,9 +11,8 @@ const migrationVersion = "20260810010000";
 const migrationName = "page_delete_hero_assignment_integrity";
 const migrationPath =
   "sql/migrations/20260810010000_page_delete_hero_assignment_integrity.sql";
-const migrationSource = readFileSync(migrationPath, "utf8")
-  .replace(/^\uFEFF/u, "")
-  .replace(/\r\n?/gu, "\n");
+const migrationSource = normalizeVerificationText(readFileSync(migrationPath, "utf8")
+  .replace(/^\uFEFF/u, ""), { loneCR: true });
 const migrationSha256 = createHash("sha256")
   .update(migrationSource)
   .digest("hex");

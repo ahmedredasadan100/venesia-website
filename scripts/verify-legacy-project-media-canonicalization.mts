@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -8,7 +9,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATION = "sql/migrations/20260813220634_legacy_project_media_canonicalization.sql";
-const migration = readFileSync(join(ROOT, MIGRATION), "utf8").replace(/\r\n?/g, "\n");
+const migration = normalizeVerificationText(readFileSync(join(ROOT, MIGRATION), "utf8"), { loneCR: true });
 
 let passed = 0;
 function check(label: string, condition: unknown) {

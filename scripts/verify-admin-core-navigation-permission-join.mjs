@@ -1,3 +1,4 @@
+import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import {CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection,coreNavigationSelectedIds,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,7 +13,7 @@ import {coreDescendantCheckpointPhases} from './fixtures/admin-core-descendant-p
 // Actual current Page/native join and owned Navigation completion under controlled ports.
 const root=path.resolve(import.meta.dirname,'..');process.chdir(root);
 const dir=path.join(root,'.tmp-qa/core-final-closure');fs.mkdirSync(dir,{recursive:true});
-const target='scripts/verify-admin-adoption-readback-isolated.mts',sourceBytes=fs.readFileSync(target),source=sourceBytes.toString('utf8').replace(/\r\n/gu,'\n');
+const target='scripts/verify-admin-adoption-readback-isolated.mts',sourceBytes=fs.readFileSync(target),source=normalizeVerificationText(sourceBytes.toString('utf8'));
 function extract(text,names){const ast=ts.createSourceFile('actual.mts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);return names.map(name=>{const rows=ast.statements.filter(node=>(ts.isFunctionDeclaration(node)&&node.name?.text===name)||(ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>row.name.getText(ast)===name)));assert.equal(rows.length,1);return rows[0].getText(ast).replace(/^export /,'');}).join('\n');}
 const ownerSource=fs.readFileSync('scripts/verify-admin-core-navigation-settings-isolated.mts','utf8');
 const declarations=extract(ownerSource,['NAVIGATION_SETTINGS_PHASES','coreNavigationPhases','CORE_NAVIGATION_RECIPE','assertCoreNavigationSettingsCompleted','assertCoreNavigationRowActionsCompletion'])+'\n'+extract(source,['assertCoreNavigationPermissionReceipts']);
