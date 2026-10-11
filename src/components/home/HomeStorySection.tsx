@@ -142,35 +142,37 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
   const titleFormat = resolved.formatting.title!;
   const descriptionFormat = resolved.formatting.description!;
   const { ref: mediaRef, inViewProps } = useTouchInViewReveal(0.4);
-  if (!resolved.images.main || !resolved.images.secondary) return null;
+  const hasMainImage = Boolean(resolved.images.main.trim());
+  const hasSecondaryImage = Boolean(resolved.images.secondary.trim());
+  const hasImages = hasMainImage || hasSecondaryImage;
 
   return (
     <section className="relative overflow-hidden bg-[#05070B] py-10 text-white @xl/slot-module:py-16 @4xl/slot-module:py-24">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="grid items-center gap-10 @4xl/slot-module:grid-cols-[0.95fr_1.05fr] @4xl/slot-module:gap-14">
-          <div data-reveal="fade-up" data-delay="0" className="home-story-reveal">
+        <div className={`grid items-center gap-10 ${hasImages ? "@4xl/slot-module:grid-cols-[0.95fr_1.05fr] @4xl/slot-module:gap-14" : ""}`}>
+          {hasImages ? <div data-reveal="fade-up" data-delay="0" className="home-story-reveal">
             <div
               ref={mediaRef}
               {...inViewProps}
               className="home-story-media relative min-h-[280px] @xl/slot-module:mx-auto @xl/slot-module:min-h-[360px] @xl/slot-module:w-full @xl/slot-module:max-w-md @4xl/slot-module:min-h-[500px] @4xl/slot-module:max-w-none"
             >
-              <HomeStoryMediaFrame
+              {hasMainImage ? <HomeStoryMediaFrame
                 className="home-story-frame--main absolute right-0 top-0 z-[1] h-[220px] w-[70%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 @xl/slot-module:h-[265px] @xl/slot-module:w-[74%] @4xl/slot-module:h-[380px] @4xl/slot-module:w-[78%]"
                 imageSrc={resolved.images.main}
                 imageAlt={resolved.images.mainAlt}
                 sizes="(max-width: 768px) 70vw, 40vw"
                 overlayClassName="bg-gradient-to-t from-[#05070B]/65 via-transparent to-transparent"
-              />
+              /> : null}
 
-              <HomeStoryMediaFrame
+              {hasSecondaryImage ? <HomeStoryMediaFrame
                 className="home-story-frame--secondary absolute bottom-0 left-0 z-[2] h-[185px] w-[58%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 @xl/slot-module:h-[220px] @xl/slot-module:w-[60%] @4xl/slot-module:h-[320px] @4xl/slot-module:w-[65%]"
                 imageSrc={resolved.images.secondary}
                 imageAlt={resolved.images.secondaryAlt}
                 sizes="(max-width: 768px) 58vw, 35vw"
                 overlayClassName="bg-gradient-to-t from-[#05070B]/80 via-transparent to-transparent"
-              />
+              /> : null}
             </div>
-          </div>
+          </div> : null}
 
           <div data-reveal="fade-up" data-delay="120" className="home-story-reveal">
             {eyebrowFormat.visible ? <p className={`font-en text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>
