@@ -1684,6 +1684,36 @@ check(
     ),
 );
 
+check(
+  "shared link presentation exposes resolved destination and stacked Anchor for every variant",
+  (() => {
+    const owner = read("src/components/admin/ui/AdminLinkField.tsx");
+    return owner.includes('data-admin-link-field={presentation}') &&
+      owner.includes('data-admin-link-destination=""') &&
+      owner.includes('previewDisplay?.title') && owner.includes('previewDisplay?.publicPath') &&
+      !owner.includes('if (presentation === "inline")') &&
+      owner.includes('className="min-w-0 flex-1"') &&
+      owner.includes('Anchor (اختياري)') && owner.includes('adminFormLabelClassName()');
+  })(),
+);
+check(
+  "shared form grid owns compact control cards and Hero paired panels without identity-specific styles",
+  adminFormGridOwner.includes('presentation?: "plain" | "control-cards"') &&
+    read("src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx").includes('columns={3} presentation="control-cards"') &&
+    heroCtaEditor.includes('<AdminFormGrid columns={1}>') &&
+    heroEditor.includes('<AdminFormGrid columns={2}') &&
+    heroEditor.includes('<HeroRenderedAreaCard previewPath={previewPath} />'),
+);
+check(
+  "shared media cards fill their parent and stack on mobile while preserving explicit compact desktop density",
+  !mediaOwner.includes('max-w-sm') && mediaOwner.includes('aspect-[4/3]') &&
+    (() => { const gallery = read("src/components/admin/media/AdminMediaGalleryField.tsx");
+      return gallery.includes('grid-cols-1 md:grid-cols-2') &&
+        gallery.includes('grid-cols-1 md:grid-cols-3 xl:grid-cols-4') &&
+        gallery.includes('aspect-[4/3]') && gallery.includes('AdminMediaOriginalDimensions');
+    })(),
+);
+
 console.log(
   `Page Block Editor Presentation verification passed (${passed} checks).`,
 );

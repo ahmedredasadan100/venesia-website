@@ -266,8 +266,8 @@ export default function AdminMediaGalleryField(
       <div
         className={`grid gap-3 ${
           density === "compact"
-            ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
-            : "sm:grid-cols-2"
+            ? "grid-cols-1 md:grid-cols-3 xl:grid-cols-4"
+            : "grid-cols-1 md:grid-cols-2"
         }`}
         data-admin-media-gallery-density={density}
       >
@@ -335,7 +335,7 @@ export default function AdminMediaGalleryField(
             </button>
 
             <div
-              className={`relative ${density === "compact" ? "h-24" : "h-28"}`}
+              className="relative aspect-[4/3]"
             >
               <AdminMediaPreview value={item.url} state={referenceState}>
                 <Image
@@ -343,7 +343,7 @@ export default function AdminMediaGalleryField(
                   alt={itemsMode ? item.alt : ""}
                   fill
                   className="object-cover"
-                  sizes="200px"
+                  sizes="(max-width: 768px) 100vw, 50vw"
                 />
               </AdminMediaPreview>
             </div>

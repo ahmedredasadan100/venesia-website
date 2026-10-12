@@ -820,10 +820,12 @@ function AdminFormRuntimeInstance<TResult = unknown>({
 export function AdminFormGrid({
   children,
   columns = 2,
+  presentation = "plain",
   className = "",
 }: {
   children: ReactNode;
   columns?: 1 | 2 | 3 | 4 | 5 | 12;
+  presentation?: "plain" | "control-cards";
   className?: string;
 }) {
   const columnsClassName =
@@ -839,7 +841,7 @@ export function AdminFormGrid({
               ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
               : "grid-cols-1 md:grid-cols-2";
   return (
-    <div className={`grid gap-4 ${columnsClassName} ${className}`.trim()}>
+    <div data-admin-form-grid={presentation} className={`grid min-w-0 gap-4 [&>*]:min-w-0 ${columnsClassName} ${presentation === "control-cards" ? "items-stretch [&>*]:rounded-2xl [&>*]:border [&>*]:border-white/10 [&>*]:bg-[#05070B] [&>*]:p-3" : ""} ${className}`.trim()}>
       {children}
     </div>
   );

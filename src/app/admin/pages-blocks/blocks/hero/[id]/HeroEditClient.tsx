@@ -1,4 +1,6 @@
 "use client";
+
+import { AdminFormGrid } from "../../../../../../components/admin/ui";
 import { resolveHeroMediaSlot } from "../../../../../../lib/hero/hero-content-controls";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -392,7 +394,7 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
   return (
     <div
       ref={surfaceRef}
-      className={HERO_CONTROL_CARD_CLASS_NAME}
+      className={`${HERO_CONTROL_CARD_CLASS_NAME} h-full`}
       data-hero-rendered-area-state={state.status}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -752,21 +754,22 @@ export default function HeroEditClient({
               content: (
                 <div className="space-y-4" data-hero-media-sections="">
                   <div data-hero-image-composition="">
-                    <ModuleEditorFieldGrid className="gap-4 xl:grid-cols-12">
-                      <ModuleEditorField nature="standard" span={6}>
-                        <div className={HERO_CONTROL_CARD_CLASS_NAME}>
+                    <AdminFormGrid columns={2} className="items-stretch [&>*]:h-full">
+                      <div className="h-full">
+                        <div className={`${HERO_CONTROL_CARD_CLASS_NAME} h-full`}>
                           <AdminFormListboxSelect
                             name="image_composition"
+                            sizing="full"
                             label="تكوين الصورة"
                             defaultValue={imageComposition}
                             options={HERO_IMAGE_COMPOSITION_OPTIONS_AR}
                           />
                         </div>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="standard" span={6}>
+                      </div>
+                      <div className="h-full">
                         <HeroRenderedAreaCard previewPath={previewPath} />
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
+                      </div>
+                    </AdminFormGrid>
                   </div>
                   {!isProjectDetail ? (
                     <div data-hero-media-section="desktop">

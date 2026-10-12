@@ -7,7 +7,7 @@ import { resolveAdminLinkAjax } from "../../../lib/admin/links/actions";
 import { adminLinkHiddenInputNames } from "../../../lib/admin/links/form-fields";
 import { emptyAdminLink, serializeAdminLink } from "../../../lib/admin/links/serialize";
 import type { AdminLinkDisplay, AdminLinkValue } from "../../../lib/admin/links/types";
-import { adminFormFieldClassName, adminFormHintClassName, adminFormLabelClassName } from "../VenesiaModal";
+import { adminFormFieldClassName, adminFormLabelClassName } from "../VenesiaModal";
 import AdminActionButton from "./AdminActionButton";
 import AdminLinkPicker from "./AdminLinkPicker";
 
@@ -133,62 +133,13 @@ export default function AdminLinkField({
     </>
   );
 
-  if (presentation === "inline") {
-    return (
-      <div className="min-w-0" data-admin-link-field="inline">
-        <div className="flex min-w-0 items-stretch">
-          <AdminActionButton
-            variant="gold"
-            onClick={() => setPickerOpen(true)}
-            className="h-11 min-h-11 shrink-0 rounded-s-none px-3 sm:px-4"
-          >
-            <span>{chooseLinkLabel}</span>
-            {value.link_kind !== "none" ? (
-              <span aria-hidden="true" className="size-1.5 rounded-full bg-[#D8B87A]" />
-            ) : null}
-          </AdminActionButton>
-          {value.link_kind !== "none" ? (
-            <AdminActionButton
-              variant="ghost"
-              onClick={() => setLink(emptyAdminLink())}
-              className="h-11 min-h-11 shrink-0 rounded-s-none border border-s-0 border-white/10 px-3"
-            >
-              {clearLinkLabel}
-            </AdminActionButton>
-          ) : null}
-        </div>
-        <span className="sr-only" aria-live="polite">
-          {value.link_kind === "none"
-            ? `${label}: لم يتم اختيار رابط بعد.`
-            : `${label}: ${previewDisplay?.title ?? KIND_LABELS[value.link_kind]}`}
-          {helperText ? ` ${helperText}` : ""}
-        </span>
-        {canEditAnchor ? (
-          <label className="mt-2 flex min-w-0 items-center gap-2 text-xs text-white/55">
-            <span className="shrink-0">Anchor</span>
-            <input
-              value={value.anchor ?? ""}
-              onChange={(event) => updateAnchor(event.target.value)}
-              placeholder="team"
-              dir="ltr"
-              className={adminFormFieldClassName("h-9 min-w-0 py-2 text-left font-en")}
-            />
-          </label>
-        ) : null}
-        {fieldState}
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full max-w-2xl space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold text-white/55">{label}</p>
-          {helperText ? <p className="mt-1 text-xs text-white/40">{helperText}</p> : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <AdminActionButton variant="gold" onClick={() => setPickerOpen(true)}>
+    <div data-admin-link-field={presentation} className={`min-w-0 w-full space-y-3 ${presentation === "card" ? "rounded-2xl border border-white/10 bg-[#05070B] p-3" : ""}`}>
+      <div className="min-w-0 space-y-2">
+        <p className="text-xs font-semibold text-white/55">{label}</p>
+        {helperText ? <p className="text-xs text-white/40">{helperText}</p> : null}
+        <div className="flex min-w-0 flex-wrap items-stretch gap-2">
+          <AdminActionButton variant="gold" onClick={() => setPickerOpen(true)} className="min-w-0 flex-1">
             {chooseLinkLabel}
           </AdminActionButton>
           {value.link_kind !== "none" ? (
@@ -198,23 +149,12 @@ export default function AdminLinkField({
           ) : null}
         </div>
       </div>
-
-      {value.link_kind !== "none" ? (
-        <div className="rounded-2xl border border-white/8 bg-[#080B10]/80 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-[#D8B87A]/12 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A]">
-              {previewDisplay?.kindLabel ?? KIND_LABELS[value.link_kind]}
-            </span>
-          </div>
-          <p className="mt-2 text-sm font-semibold text-white">{previewDisplay?.title ?? "—"}</p>
-          <p className="mt-1 truncate text-xs text-white/50" dir="ltr">
-            {previewDisplay?.publicPath ?? value.href ?? "—"}
-          </p>
-        </div>
-      ) : (
-        <p className="text-sm text-white/40">لم يتم اختيار رابط بعد.</p>
-      )}
-
+      <div aria-live="polite" data-admin-link-destination="" className="min-w-0 space-y-1 rounded-xl border border-white/8 bg-[#080B10]/80 px-3 py-2">
+        {value.link_kind !== "none" ? <>
+          <p className="break-words text-sm font-semibold text-white">{previewDisplay?.title ?? KIND_LABELS[value.link_kind]}</p>
+          <p className="break-all text-xs text-white/50" dir="ltr">{previewDisplay?.publicPath ?? value.href ?? "—"}</p>
+        </> : <p className="text-sm text-white/40">لم يتم اختيار رابط بعد.</p>}
+      </div>
       {canEditAnchor ? (
         <label className={adminFormLabelClassName()}>
           <span>Anchor (اختياري)</span>
@@ -225,12 +165,8 @@ export default function AdminLinkField({
             dir="ltr"
             className={adminFormFieldClassName("text-left font-en")}
           />
-          <span className={adminFormHintClassName()}>
-            يُلحق بالرابط الداخلي، مثل: /about#team — بدون كتابة الرابط يدويًا.
-          </span>
         </label>
       ) : null}
-
       {fieldState}
     </div>
   );

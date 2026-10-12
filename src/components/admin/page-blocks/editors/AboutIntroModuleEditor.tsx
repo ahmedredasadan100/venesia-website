@@ -15,7 +15,7 @@ import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormListboxSelect, AdminLinkField } from "../../ui";
+import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
@@ -107,7 +107,7 @@ function HomeStoryButtonPresentationFields({
   const [iconPosition, setIconPosition] = useState<HomeStoryButtonIconPosition>(initialIconPosition);
 
   return (
-    <div className="space-y-4 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+    <AdminFormGrid columns={3} presentation="control-cards">
       <SegmentedChoice
         label="محاذاة الزر"
         name="button_alignment"
@@ -143,7 +143,7 @@ function HomeStoryButtonPresentationFields({
       ) : (
         <input type="hidden" name="button_icon_position" value={iconPosition} />
       )}
-    </div>
+    </AdminFormGrid>
   );
 }
 
@@ -263,8 +263,8 @@ export default function AboutIntroModuleEditor({
             </ModuleEditorSectionHeading>
           ) : null}
           {isHomeStory ? (
-            <div className="grid gap-5 md:grid-cols-2">
-              <div className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+            <AdminFormGrid columns={2}>
+              <div className="min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold text-[#D8B87A]/70">{fieldLabels.imageMain}</p>
                   <button
@@ -293,7 +293,7 @@ name="image_main"
                   browseFolder="images/home"
                 />
               </div>
-              <div className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+              <div className="min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold text-[#D8B87A]/70">{fieldLabels.imageSecondary}</p>
                   <button
@@ -326,7 +326,7 @@ name="image_secondary"
                   browseFolder="images/home"
                 />
               </div>
-            </div>
+            </AdminFormGrid>
           ) : (
             <>
               <div className="grid gap-5 lg:grid-cols-3">
@@ -384,6 +384,7 @@ name="image_accent"
             />
             <AdminFormListboxSelect
               name="button_open_target"
+              sizing="full"
               label="فتح الرابط"
               defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
               options={[
