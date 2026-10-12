@@ -37,11 +37,8 @@ async function verifyHeroImagePresentation(page, variant) {
 
 async function verifyHomeStoryImagePresentation(page, origin, assets) {
   await page.goto(origin + '/admin/pages-blocks/blocks/content');
-  await page.getByRole('button', { name: 'إضافة بلوك', exact: true }).click();
-  const create = page.getByRole('dialog', { name: 'إضافة بلوك جديد', exact: true });
-  await create.locator('[name="name"]').fill('QA Home Story guidance');
-  await create.locator('[name="slug"]').fill('home-story');
-  await create.getByRole('button', { name: 'إنشاء وفتح', exact: true }).click();
+  await page.getByPlaceholder('ابحث باسم البلوك أو المعرّف الداخلي…', { exact: true }).fill('home-story');
+  await page.getByRole('link', { name: 'Home — Story', exact: true }).click();
   await page.waitForURL(/\/content\/\d+/);
   const editPath = new URL(page.url()).pathname;
   async function reopen() { await page.goto(origin + editPath); await page.locator('[data-admin-tab-id="images"]').click(); }
