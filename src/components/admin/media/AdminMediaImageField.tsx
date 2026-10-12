@@ -214,11 +214,11 @@ export default function AdminMediaImageField({
 
       {value ? (
         <div
-          className={`relative max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
+          className={`relative w-full overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
           data-admin-media-image-card="selected"
         >
-          <div className="relative h-44">
-            <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" /></AdminMediaPreview>
+          <div className="relative aspect-[4/3]">
+            <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="(max-width: 768px) 100vw, 50vw" /></AdminMediaPreview>
             <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
               <button
                 id={triggerId}
@@ -255,7 +255,7 @@ export default function AdminMediaImageField({
           aria-describedby={ariaDescribedBy}
           onClick={() => setPickerOpen(true)}
           data-admin-media-image-card="add"
-          className={`flex h-44 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"} ${showLabel ? "max-w-sm" : ""}`}
+          className={`flex h-44 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"}`}
         >
           <span aria-hidden="true" className="text-2xl leading-none">+</span>
           <span>اختيار صورة</span>
@@ -265,7 +265,7 @@ export default function AdminMediaImageField({
       <AdminMediaOriginalDimensions value={value} state={referenceState} />
 
       {altName ? (
-        <label className="block max-w-sm space-y-2" data-admin-media-image-alt-field={altName}>
+        <label className="block w-full space-y-2" data-admin-media-image-alt-field={altName}>
           <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{altLabel}</span>
           <input
             ref={altInputRef}
