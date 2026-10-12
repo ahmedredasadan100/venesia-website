@@ -1627,7 +1627,7 @@ check(
 const runtime = read("src/components/admin/ui/AdminFormRuntime.tsx");
 check(
   "shared Admin form grids use the dense but comfortable 16px rhythm",
-  runtime.includes("grid gap-4") && !runtime.includes("grid gap-5"),
+  runtime.includes("grid min-w-0 gap-4") && runtime.includes("[&>*]:min-w-0") && !runtime.includes("grid gap-5"),
 );
 const formRuntimeContract = read("src/lib/admin/form-runtime.ts");
 const actionsSource = runtime.slice(

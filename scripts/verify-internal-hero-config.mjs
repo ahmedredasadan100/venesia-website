@@ -480,7 +480,9 @@ assert(
     heroVisibilitySource.includes(
       "value={String(enableVisibility ? show : showDefault)}",
     ) &&
-    adminLinkFieldSource.includes('data-admin-link-field="inline"'),
+    adminLinkFieldSource.includes('data-admin-link-field={presentation}') &&
+    adminLinkFieldSource.includes('data-admin-link-destination=""') &&
+    heroCtaEditorSource.includes('<AdminFormGrid columns={1}>'),
   "Hero CTA text and shared link picker use two balanced cards with synchronized formatting inside each card",
 );
 assert(
