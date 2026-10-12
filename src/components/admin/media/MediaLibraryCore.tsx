@@ -652,7 +652,7 @@ export default function MediaLibraryCore({
         } else {
           setConfirmation(null);
           if (activeConfirmation.folder) openFolder(activeConfirmation.folder.split("/").slice(0, -1).join("/"));
-          announce(catalogWarnings.length ? "warning" : "success", "تم الحذف", `تم حذف ${deleted} ملف${activeConfirmation.folder ? " والمجلد" : ""}. تبقى بيانات الصفوف والمراجع السابقة محفوظة كأصول محذوفة، ويمكن حفظ التعديلات واختيار بدائل.${catalogWarnings.length ? " تعذر تحديث جاهزية المكتبة: " + catalogWarnings.join("، ") : ""}`);
+          announce(catalogWarnings.length ? "warning" : "success", "تم الحذف", `تم حذف ${deleted} ملف${activeConfirmation.folder ? " والمجلد" : ""}.${catalogWarnings.length ? " تعذر تحديث جاهزية المكتبة: " + catalogWarnings.join("، ") : ""}`);
         }
       } finally { setBusy(null); }
       return;
@@ -729,7 +729,7 @@ export default function MediaLibraryCore({
     : confirmation?.kind === "move"
       ? `تم تحديد ${confirmation.assets.length} صور؛ ${confirmation.previews.filter(item => (item.references?.length ?? 0) > 0).length} مستخدمة، وسيتم تحديث ${confirmation.previews.reduce((sum, item) => sum + (item.references?.length ?? 0), 0)} مراجع تلقائيًا عند المتابعة. الوجهة: ${confirmation.targetFolder}. راجع المسارات والاستخدامات لكل صورة.`
       : confirmation?.kind === "delete" && confirmation.phase === "checking" ? "جارٍ فحص الاستخدامات الحالية…"
-      : "راجع الملفات ومواضع استخدامها. الحذف نهائي؛ تُحفظ بيانات الصفوف ومراجعها كأصول محذوفة لا تظهر للزوار ولا تمنع حفظ التعديلات.";
+      : "راجع الملفات ومواضع استخدامها. الحذف نهائي.";
 
   return (
     <div
@@ -765,7 +765,6 @@ export default function MediaLibraryCore({
               <button type="button" disabled={busy === "folder"} onClick={() => void createFolder()} className="w-full rounded-xl bg-[#D8B87A] px-3 py-2 text-xs font-bold text-[#05070B] disabled:opacity-50">إنشاء داخل {folder}</button>
             </div>
           ) : null}
-          {pickerKind ? <p className="mt-3 text-xs leading-6 text-white/50">{pickerKind === "image" ? "تظهر مجلدات الصور فقط. أنشئ مجلدات الصور داخل الصور من مكتبة الوسائط." : "تظهر مجلدات المستندات فقط."}</p> : null}
           <nav className="mt-4 space-y-1" aria-label="مجلدات الوسائط">
             {availableFolders.map((item) => (
               <button

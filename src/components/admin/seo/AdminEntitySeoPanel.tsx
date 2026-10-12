@@ -722,9 +722,6 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       <h3 className="text-base font-semibold text-white">
         {ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettings}
       </h3>
-      <p className="mt-2 text-sm leading-7 text-white/42">
-        {ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettingsDescription}
-      </p>
       <div id={social.fieldIds.imageSection} className="mt-5 scroll-mt-28">
         <AdminMediaImageField
           name={fieldNames.ogImage}
@@ -746,9 +743,6 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           />
           <AdminFormError name={fieldNames.ogImageAlt} />
         </label>
-        <p className="mt-3 text-xs leading-6 text-white/38">
-          عند ترك الصورة فارغة تُستخدم صورة {entityLabel}، ثم صورة Open Graph العامة.
-        </p>
       </div>
     </section>
   );
@@ -790,9 +784,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           aria-label={previewImageAlt || title}
         />
       ) : (
-        <div className="grid aspect-[1.91/1] place-items-center border-b border-white/10 text-xs text-white/30">
-          تُستخدم صورة Open Graph العامة
-        </div>
+        <div className="aspect-[1.91/1] border-b border-white/10" aria-hidden="true" />
       )}
       <div className="p-4">
         <p className="line-clamp-2 text-sm font-semibold leading-6 text-white/78">

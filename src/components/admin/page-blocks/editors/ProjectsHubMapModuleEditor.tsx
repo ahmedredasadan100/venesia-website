@@ -82,7 +82,6 @@ name="map_image"
           label="صورة الخريطة"
           defaultValue={config.mapImage || PROJECTS_HUB_DEFAULT_MAP_IMAGE}
           browseFolder="images/projects"
-          helperText={`الافتراضي: ${PROJECTS_HUB_DEFAULT_MAP_IMAGE}`}
           allowRemove={false}
         />
         </ModuleEditorField>

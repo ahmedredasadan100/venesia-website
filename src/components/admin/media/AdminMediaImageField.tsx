@@ -1,7 +1,7 @@
 "use client";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
-import { useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel, AdminMediaOriginalDimensions, AdminDeletedMediaStatus } from "./AdminDeletedMediaNotice";
+import { useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel, AdminMediaOriginalDimensions, adminMediaPresentationState } from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useId, useRef, useState } from "react";
@@ -17,7 +17,6 @@ type AdminMediaImageFieldProps = {
   mediaSlot?: MediaSlotContract;
   showGuidance?: boolean;
   showReferenceLabel?: boolean;
-  helperText?: string;
   browseFolder?: string;
   variant?: "default" | "compact";
   showLabel?: boolean;
@@ -28,7 +27,6 @@ type AdminMediaImageFieldProps = {
   altName?: string;
   defaultAlt?: string;
   altLabel?: string;
-  altHelperText?: string;
   onAltValueChange?: (value: string) => void;
   allowRemove?: boolean;
   focusTargetId?: string;
@@ -42,8 +40,7 @@ export default function AdminMediaImageField({
   defaultValue = "",
   mediaSlot,
   showGuidance = true,
-  showReferenceLabel = true,
-  helperText,
+  showReferenceLabel = false,
   browseFolder = "images",
   variant = "default",
   showLabel = true,
@@ -54,7 +51,6 @@ export default function AdminMediaImageField({
   altName,
   defaultAlt = "",
   altLabel = "النص البديل للصورة",
-  altHelperText,
   onAltValueChange,
   allowRemove = true,
   focusTargetId,
@@ -69,6 +65,7 @@ export default function AdminMediaImageField({
   const [prevDefaultAlt, setPrevDefaultAlt] = useState(defaultAlt);
   const [pickerOpen, setPickerOpen] = useState(false);
   const referenceState = useAdminMediaReferenceState([value]);
+  const presentation = adminMediaPresentationState(value, referenceState);
   const valueInputRef = useRef<HTMLInputElement>(null);
   const altInputRef = useRef<HTMLInputElement>(null);
 
@@ -140,7 +137,7 @@ export default function AdminMediaImageField({
                   onClick={() => setPickerOpen(true)}
                   className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15"
                 >
-                  استبدال
+                  {presentation === "deleted" || presentation === "missing" ? "اختيار بديل" : "استبدال"}
                 </button>
                 {allowRemove ? (
                   <button
@@ -171,7 +168,6 @@ export default function AdminMediaImageField({
         </div>
 
         <AdminMediaOriginalDimensions value={value} state={referenceState} />
-        <AdminDeletedMediaStatus state={referenceState} />
 
         {altName ? (
           <label className="block space-y-2">
@@ -186,7 +182,6 @@ export default function AdminMediaImageField({
               }}
               className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition ${light ? "border-slate-200 bg-white text-slate-900 focus:border-[#b98724]" : "border-white/10 bg-black/25 text-white focus:border-[#D8B87A]/45"}`}
             />
-            {altHelperText ? <span className={`block text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{altHelperText}</span> : null}
           </label>
         ) : null}
 
@@ -216,7 +211,6 @@ export default function AdminMediaImageField({
       ) : null}
 
       {showGuidance ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
-      {helperText ? <p className={`text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{helperText}</p> : null}
 
       {value ? (
         <div
@@ -236,7 +230,7 @@ export default function AdminMediaImageField({
                 onClick={() => setPickerOpen(true)}
                 className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-black/45 px-3 py-1.5 text-xs font-semibold text-[#F2D99B] backdrop-blur-sm hover:bg-[#D8B87A]/15"
               >
-                استبدال
+                {presentation === "deleted" || presentation === "missing" ? "اختيار بديل" : "استبدال"}
               </button>
               {allowRemove ? (
                 <button
@@ -269,7 +263,6 @@ export default function AdminMediaImageField({
       )}
 
       <AdminMediaOriginalDimensions value={value} state={referenceState} />
-        <AdminDeletedMediaStatus state={referenceState} />
 
       {altName ? (
         <label className="block max-w-sm space-y-2" data-admin-media-image-alt-field={altName}>
@@ -284,7 +277,6 @@ export default function AdminMediaImageField({
             }}
             className={`h-11 w-full rounded-xl border px-3 text-sm outline-none transition ${light ? "border-slate-200 bg-white text-slate-900 focus:border-[#b98724]" : "border-white/10 bg-black/25 text-white focus:border-[#D8B87A]/45"}`}
           />
-          {altHelperText ? <span className={`block text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{altHelperText}</span> : null}
         </label>
       ) : null}
 

@@ -443,7 +443,6 @@ name="image_urls"
               }
               browseFolder="images/projects"
               density="compact"
-              helperText="يمكن إعادة استخدام الأصل نفسه في أكثر من تحديث؛ الحذف من التحديث يزيل المرجع فقط."
             />
             <TrackingVideoFields media={update?.media ?? []} />
             <AdminFormError name="image_urls" />

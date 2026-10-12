@@ -1,7 +1,7 @@
 "use client";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
-import { AdminDeletedMediaStatus, AdminMediaOriginalDimensions, useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel } from "./AdminDeletedMediaNotice";
+import { adminMediaPresentationState, AdminMediaOriginalDimensions, useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel } from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -29,7 +29,6 @@ type NormalizedGalleryItem = {
 
 type AdminMediaGalleryFieldBaseProps = {
   label: string;
-  helperText?: string;
   mediaSlot?: MediaSlotContract;
   showGuidance?: boolean;
   showReferenceLabel?: boolean;
@@ -110,10 +109,9 @@ export default function AdminMediaGalleryField(
 ) {
   const {
     label,
-    helperText,
     mediaSlot,
     showGuidance = true,
-    showReferenceLabel = true,
+    showReferenceLabel = false,
     browseFolder = "images",
     density = "default",
   } = props;
@@ -264,10 +262,6 @@ export default function AdminMediaGalleryField(
 
       <span className="block text-xs font-semibold text-white/55">{label}</span>
       {showGuidance ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
-      <AdminDeletedMediaStatus state={referenceState} />
-        {helperText ? (
-        <p className="text-xs leading-6 text-white/42">{helperText}</p>
-      ) : null}
 
       <div
         className={`grid gap-3 ${
@@ -376,7 +370,7 @@ export default function AdminMediaGalleryField(
                   className="cursor-pointer shrink-0 rounded-lg border border-[#D8B87A]/30 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10"
                   data-admin-media-gallery-action="replace"
                 >
-                  استبدال
+                  {["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال"}
                 </button>
               </div>
 

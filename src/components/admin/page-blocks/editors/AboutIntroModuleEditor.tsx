@@ -262,11 +262,6 @@ export default function AboutIntroModuleEditor({
               {isHomeStory ? "الصور (2 متداخلة)" : "الصور (3 كحد أقصى)"}
             </ModuleEditorSectionHeading>
           ) : null}
-          {!isHomeStory ? (
-            <p className="text-xs leading-6 text-white/45">
-              كل صورة موضع مستقل في التخطيط الحالي. اترك الموضع فارغًا لإخفائه من العرض.
-            </p>
-          ) : null}
           {isHomeStory ? (
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">

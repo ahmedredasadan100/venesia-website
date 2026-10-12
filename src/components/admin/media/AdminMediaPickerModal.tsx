@@ -36,7 +36,6 @@ export default function AdminMediaPickerModal({
             ? "اختيار مستند من المكتبة"
             : "اختيار صورة من المكتبة"
         }
-        description="التحديد لا يغيّر الحقل. اضغط «تأكيد الاختيار» بعد المراجعة."
         size="xl"
         closeOnEscape
         bodyClassName="flex flex-col !overflow-hidden !p-0"

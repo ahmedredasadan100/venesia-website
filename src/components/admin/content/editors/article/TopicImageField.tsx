@@ -31,11 +31,6 @@ name="image"
       />
       <AdminFormError name="image" />
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] leading-5 text-white/42">
-        <span>JPG، PNG، WEBP، GIF، AVIF</span>
-        <span>حجم الرفع حسب إعدادات مكتبة الوسائط</span>
-      </div>
-
       <label className="block">
         <span className="inline-flex items-center gap-2 text-xs font-medium text-white/58">
           <span>النص البديل للصورة (Alt Text)</span>

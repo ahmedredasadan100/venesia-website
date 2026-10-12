@@ -120,9 +120,6 @@ name="image_main"
               );
             })}
           </div>
-          <p className="text-xs leading-6 text-white/45">
-            على الموبايل تظهر الصورة دائمًا أعلى النص بغض النظر عن هذا الاختيار.
-          </p>
         </div>
       </ModuleEditorSection>
 

@@ -53,7 +53,7 @@ export function AdminMediaOriginalDimensions({ value, state }: { value: string; 
 
 export function AdminDeletedMediaStatus({ state }: { state: ReferenceState }) {
   return state?.count ? <p role="status" data-admin-deleted-media-count={state.count} className="text-xs leading-6 text-amber-500">
-    يوجد {state.count} أصل محذوف. بياناته محفوظة هنا، لكنه لا يظهر للزوار. المراجع المحفوظة مسبقًا لا تمنع حفظ التعديلات؛ يمكنك اختيار بديل دون إزالة بيانات الصف.
+    الأصل محذوف
   </p> : null;
 }
 
@@ -78,10 +78,9 @@ export function adminMediaPresentationState(value: string, state: ReferenceState
 export function AdminMediaPreview({ value, state, children, controlsOverlay = false }: { value: string; state: ReferenceState; children: ReactNode; controlsOverlay?: boolean }) {
   const presentation = adminMediaPresentationState(value, state);
   if (presentation === "active") return children;
-  const text = presentation === "deleted" ? "الأصل السابق محذوف" : presentation === "missing" ? "الأصل السابق غير متاح" : presentation === "empty" ? "لم تُحدّد صورة" : presentation === "loading" ? "جارٍ التحقق من الأصل…" : "تعذّر التحقق من الأصل";
-  return <div data-admin-media-preview-state={presentation} className={`flex h-full flex-col items-center justify-center gap-2 px-10 text-center text-xs text-slate-500 ${controlsOverlay ? "pb-12" : ""}`}>
+  const text = presentation === "deleted" ? "الأصل محذوف" : presentation === "missing" ? "الأصل غير متاح" : presentation === "empty" ? "لم تُحدّد صورة" : presentation === "loading" ? "جارٍ التحقق من الأصل…" : "تعذّر التحقق من الأصل";
+  return <div role={presentation === "deleted" ? "status" : undefined} data-admin-media-preview-state={presentation} data-admin-deleted-media-count={presentation === "deleted" ? 1 : undefined} className={`flex h-full flex-col items-center justify-center gap-2 px-10 text-center text-xs text-slate-500 ${controlsOverlay ? "pb-12" : ""}`}>
     <span>{text}</span>
-    {presentation === "deleted" || presentation === "missing" ? <span>اختر صورة بديلة</span> : null}
   </div>;
 }
 

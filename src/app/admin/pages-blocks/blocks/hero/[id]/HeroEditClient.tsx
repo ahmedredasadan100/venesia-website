@@ -388,14 +388,6 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
   }, [measure, shouldMeasure]);
 
   const metrics = state.status === "ready" ? state.metrics : null;
-  const hasCrop = metrics
-    ? [
-        metrics.cropTop,
-        metrics.cropRight,
-        metrics.cropBottom,
-        metrics.cropLeft,
-      ].some((value) => roundedPixels(value) > 0)
-    : false;
 
   return (
     <div
@@ -443,36 +435,6 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
               </dd>
             </div>
           </dl>
-          {metrics.sourceWidth > 0 && metrics.sourceHeight > 0 ? (
-            <div className="space-y-1 text-[11px] leading-5 text-white/48">
-              <p dir="ltr">
-                Original: {metrics.sourceWidth} × {metrics.sourceHeight} px
-              </p>
-              <p dir="ltr">
-                Visible Source Area (current viewport):{" "}
-                {roundedPixels(metrics.visibleSourceWidth)} ×{" "}
-                {roundedPixels(metrics.visibleSourceHeight)} px
-              </p>
-              <p dir="ltr">
-                Object Fit: {metrics.objectFit} · Object Position:{" "}
-                {metrics.objectPosition}
-              </p>
-              {hasCrop ? (
-                <p>
-                  القص من المصدر: أعلى {roundedPixels(metrics.cropTop)}px · يمين{" "}
-                  {roundedPixels(metrics.cropRight)}px · أسفل{" "}
-                  {roundedPixels(metrics.cropBottom)}px · يسار{" "}
-                  {roundedPixels(metrics.cropLeft)}px
-                </p>
-              ) : (
-                <p>الصورة ظاهرة بالكامل داخل مساحة الهيرو الحالية دون قص.</p>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs leading-6 text-white/42">
-              أبعاد المصدر الأصلي غير متاحة بعد؛ قياس الحاوية أعلاه مستقل عنها.
-            </p>
-          )}
           <p className="truncate font-mono text-[10px] text-white/30" dir="ltr">
             {previewPath}
           </p>
@@ -798,7 +760,6 @@ export default function HeroEditClient({
                             label="تكوين الصورة"
                             defaultValue={imageComposition}
                             options={HERO_IMAGE_COMPOSITION_OPTIONS_AR}
-                            hint="يُطبق موضع العنصر الأساسي نفسه على صور الديسكتوب والموبايل."
                           />
                         </div>
                       </ModuleEditorField>
@@ -807,15 +768,9 @@ export default function HeroEditClient({
                       </ModuleEditorField>
                     </ModuleEditorFieldGrid>
                   </div>
-                  <div data-hero-media-section="desktop">
-                    <ModuleEditorSection>
-                      {isProjectDetail ? (
-                        <p className="rounded-2xl border border-white/10 bg-[#05070B]/72 px-4 py-3 text-xs leading-6 text-white/45">
-                          صورة Hero تأتي من Project Domain. إعداد التكوين التالي
-                          Presentation مشتركة تطبق على الصورة من دون نسخ مسارها
-                          داخل Hero Configuration.
-                        </p>
-                      ) : (
+                  {!isProjectDetail ? (
+                    <div data-hero-media-section="desktop">
+                      <ModuleEditorSection>
                         <AdminImagePathListField
                           name="images"
                           mediaSlot={resolveHeroMediaSlot(guidanceVariant, "desktop")}
@@ -825,9 +780,9 @@ export default function HeroEditClient({
                           defaultValue={imagesText}
                           density="compact"
                         />
-                      )}
-                    </ModuleEditorSection>
-                  </div>
+                      </ModuleEditorSection>
+                    </div>
+                  ) : null}
                   {!isProjectDetail ? (
                     <div data-hero-media-section="mobile">
                       <ModuleEditorSection>
