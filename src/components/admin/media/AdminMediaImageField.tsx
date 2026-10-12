@@ -15,6 +15,8 @@ type AdminMediaImageFieldProps = {
   label: string;
   defaultValue?: string;
   mediaSlot?: MediaSlotContract;
+  showGuidance?: boolean;
+  showReferenceLabel?: boolean;
   helperText?: string;
   browseFolder?: string;
   variant?: "default" | "compact";
@@ -39,6 +41,8 @@ export default function AdminMediaImageField({
   label,
   defaultValue = "",
   mediaSlot,
+  showGuidance = true,
+  showReferenceLabel = true,
   helperText,
   browseFolder = "images",
   variant = "default",
@@ -112,7 +116,7 @@ export default function AdminMediaImageField({
       >
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
-        <AdminMediaSlotGuidance slot={mediaSlot} />
+        {showGuidance ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
 
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
           {value ? (
@@ -211,7 +215,7 @@ export default function AdminMediaImageField({
         <span className={`block text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
       ) : null}
 
-      <AdminMediaSlotGuidance slot={mediaSlot} />
+      {showGuidance ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
       {helperText ? <p className={`text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{helperText}</p> : null}
 
       {value ? (
@@ -245,7 +249,7 @@ export default function AdminMediaImageField({
               ) : null}
             </div>
           </div>
-          <div className="px-3 py-2"><AdminMediaReferenceLabel value={value} state={referenceState} /></div>
+          {showReferenceLabel ? <div className="px-3 py-2"><AdminMediaReferenceLabel value={value} state={referenceState} /></div> : null}
         </div>
       ) : (
         <button

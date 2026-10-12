@@ -819,10 +819,11 @@ export default function HeroEditClient({
                         <AdminImagePathListField
                           name="images"
                           mediaSlot={resolveHeroMediaSlot(guidanceVariant, "desktop")}
+                          showGuidance={false}
+                          showReferenceLabel={false}
                           label="صور سطح المكتب"
                           defaultValue={imagesText}
                           density="compact"
-                          helperText="قائمة مستقلة لسطح المكتب. اختر أو ارفع الصور ورتّب الشرائح؛ لن تُضاف إليها صور الهاتف."
                         />
                       )}
                     </ModuleEditorSection>
@@ -833,10 +834,11 @@ export default function HeroEditClient({
                         <AdminImagePathListField
                           name="mobile_images"
                           mediaSlot={resolveHeroMediaSlot(guidanceVariant, "mobile")}
+                          showGuidance={false}
+                          showReferenceLabel={false}
                           label="صور الهاتف المحمول"
                           defaultValue={mobileImagesText}
                           density="compact"
-                          helperText="قائمة مستقلة للهاتف، بترتيب وعدد مستقلين. إذا كانت فارغة تمامًا تُستخدم قائمة سطح المكتب كاملة؛ وإذا أضفت صورًا تُعرض هذه القائمة وحدها."
                         />
                       </ModuleEditorSection>
                     </div>

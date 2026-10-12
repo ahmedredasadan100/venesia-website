@@ -31,6 +31,8 @@ type AdminMediaGalleryFieldBaseProps = {
   label: string;
   helperText?: string;
   mediaSlot?: MediaSlotContract;
+  showGuidance?: boolean;
+  showReferenceLabel?: boolean;
   browseFolder?: string;
   density?: "default" | "compact";
 };
@@ -110,6 +112,8 @@ export default function AdminMediaGalleryField(
     label,
     helperText,
     mediaSlot,
+    showGuidance = true,
+    showReferenceLabel = true,
     browseFolder = "images",
     density = "default",
   } = props;
@@ -259,7 +263,7 @@ export default function AdminMediaGalleryField(
       )}
 
       <span className="block text-xs font-semibold text-white/55">{label}</span>
-      <AdminMediaSlotGuidance slot={mediaSlot} />
+      {showGuidance ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
       <AdminDeletedMediaStatus state={referenceState} />
         {helperText ? (
         <p className="text-xs leading-6 text-white/42">{helperText}</p>
@@ -353,7 +357,7 @@ export default function AdminMediaGalleryField(
             <div className="space-y-2 px-3 py-2">
               <AdminMediaOriginalDimensions value={item.url} state={referenceState} />
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0 flex-1"><AdminMediaReferenceLabel value={item.url} state={referenceState} /></div>
+                {showReferenceLabel ? <div className="min-w-0 flex-1"><AdminMediaReferenceLabel value={item.url} state={referenceState} /></div> : null}
                 <button
                   id={
                     itemsMode && index === 0

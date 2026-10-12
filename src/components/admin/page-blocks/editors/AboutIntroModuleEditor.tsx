@@ -262,11 +262,11 @@ export default function AboutIntroModuleEditor({
               {isHomeStory ? "الصور (2 متداخلة)" : "الصور (3 كحد أقصى)"}
             </ModuleEditorSectionHeading>
           ) : null}
-          <p className="text-xs leading-6 text-white/45">
-            {isHomeStory
-              ? "صورتان متداخلتان في يسار السكشن. استخدم الأسهم لتبديل ترتيبهما. اترك الموضع فارغًا لإخفائه من العرض."
-              : "كل صورة موضع مستقل في التخطيط الحالي. اترك الموضع فارغًا لإخفائه من العرض."}
-          </p>
+          {!isHomeStory ? (
+            <p className="text-xs leading-6 text-white/45">
+              كل صورة موضع مستقل في التخطيط الحالي. اترك الموضع فارغًا لإخفائه من العرض.
+            </p>
+          ) : null}
           {isHomeStory ? (
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
@@ -284,6 +284,8 @@ export default function AboutIntroModuleEditor({
                 </div>
                 <AdminMediaImageField
                   mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+                  showGuidance={false}
+                  showReferenceLabel={false}
 name="image_main"
                   label={fieldLabels.imageMain}
                   showLabel={false}
@@ -311,6 +313,8 @@ name="image_main"
                 </div>
                 <AdminMediaImageField
                   mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
+                  showGuidance={false}
+                  showReferenceLabel={false}
 name="image_secondary"
                   label={fieldLabels.imageSecondary}
                   showLabel={false}
