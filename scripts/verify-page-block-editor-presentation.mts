@@ -603,10 +603,11 @@ check(
 );
 
 check(
-  "Hero image metrics eagerly read the canonical public DOM without duplicating rendering geometry",
+  "Hero measurement control retains canonical geometry without verbose source/crop diagnostics",
   heroEditor.includes('querySelector<HTMLElement>("[data-hero-family]")') &&
     heroEditor.includes("Rendered Hero Area:") &&
-    heroEditor.includes("Visible Source Area (current viewport):") &&
+    !heroEditor.includes("Visible Source Area (current viewport):") &&
+    heroEditor.includes("visibleSourceWidth") &&
     !heroEditor.includes("commitMetrics(image.naturalWidth, image.naturalHeight)") &&
     heroEditor.includes("commitMetrics(sourceProbe.naturalWidth, sourceProbe.naturalHeight)") &&
     heroEditor.includes("frameWindow.getComputedStyle(image)") &&

@@ -202,7 +202,6 @@ valueMode="items"
             altName="gallery_image_alt"
             captionName="gallery_image_caption"
             label="صور المعرض"
-            helperText="اختر الصور من مكتبة الميديا المشتركة، ثم اضبط النص البديل والتعليق وترتيب العرض."
             defaultItems={galleryDefaults}
             focusTargetId="gallery_image_url"
             altFocusTargetId="gallery_image_alt"

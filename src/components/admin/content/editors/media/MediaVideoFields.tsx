@@ -73,7 +73,6 @@ name="video_thumbnail"
           label="صورة مصغّرة (اختياري)"
           defaultValue={defaultThumbnail ?? ""}
           browseFolder="images/topics"
-          helperText="إن تُركت فارغة تُستخدم الصورة الرئيسية للغلاف."
           focusTargetId="video_thumbnail_control"
           ariaInvalid={hasError("video_thumbnail")}
           ariaDescribedBy={

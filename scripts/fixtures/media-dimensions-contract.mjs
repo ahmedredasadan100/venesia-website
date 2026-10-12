@@ -19,8 +19,8 @@ function load(relative, ports = {}) {
   });
   return m.exports;
 }
-export async function verifyMediaDimensionsContract() {
-  await verifyMediaGuidanceBrowser();
+export async function verifyMediaDimensionsContract({ authoringOnly = false } = {}) {
+  await verifyMediaGuidanceBrowser({ authoringOnly });
   const adminPresentation = load("src/components/admin/media/AdminDeletedMediaNotice.tsx");
   const payloadOwner = load("src/lib/admin/media-topic-payload.ts");
   for (const status of ["active", "deleted", "missing", "empty"]) {
@@ -78,9 +78,14 @@ export async function verifyMediaDimensionsContract() {
     "./AdminMediaPickerModal": { default: () => null },
   }).default;
   const markup = renderToStaticMarkup(React.createElement(Field, { name: "fixture", label: "fixture", mediaSlot: fixture }));
-  assert.match(markup, /2:3/); assert.ok(markup.includes("fixture/new-template"));
+  assert.doesNotMatch(markup, /2:3|data-media-slot|نسبة حاوية العرض/);
   assert.doesNotMatch(markup, /1920|1080|1600/);
-  assert.notEqual(markup, renderToStaticMarkup(React.createElement(Component, { slot: mobile })));
+  assert.equal(renderToStaticMarkup(React.createElement(Component, { slot: mobile })), "");
+  const recommended = {...fixture, design: {kind: "recommended", width: 1234, height: 876, rationale: "density rationale", composition: "Safe Area crop"}};
+  const guidance = renderToStaticMarkup(React.createElement(Component, {slot: recommended}));
+  assert.match(guidance, /1234 × 876 px/);
+  assert.doesNotMatch(guidance, /density|Safe Area|crop|2:3|شرط/);
+  assert.ok(guidance.includes("fixture/new-template"));
   assert.match(hero.resolveHeroMediaSlot("internal-page", "desktop").display.description, /62vh/);
   const queryCalls = [];
   const query = { select(value) { queryCalls.push(value); return this; }, eq(key, value) { queryCalls.push([key,value]); return this; }, async in(key, values) { queryCalls.push([key,values]); return { data: [{ bucket: "images", object_key: "images/original.png", width: 400, height: 600 }], error: null }; } };

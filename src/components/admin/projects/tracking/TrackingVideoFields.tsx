@@ -22,7 +22,7 @@ export default function TrackingVideoFields({ media }: { media: TrackingMediaAdm
     <div className="space-y-3" data-project-tracking-video-fields>
       <input type="hidden" name="videos_json" value={JSON.stringify(videos)} />
       <div className="flex items-center justify-between gap-3">
-        <div><h3 className="text-sm font-semibold text-white">الفيديوهات</h3><p className="mt-1 text-xs text-white/42">الرابط يبقى External Video وفق العقد الحالي، وصورة الغلاف تُختار من Media Catalog.</p></div>
+        <div><h3 className="text-sm font-semibold text-white">الفيديوهات</h3></div>
         <button type="button" onClick={() => setVideos((current) => [...current, { client_key: crypto.randomUUID(), url: "", poster_url: "", title: "" }])} className="rounded-xl border border-[#D8B87A]/35 px-4 py-2 text-xs font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10">إضافة فيديو</button>
       </div>
       {videos.map((video, index) => (
