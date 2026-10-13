@@ -2485,6 +2485,64 @@ function formConsumerFixture(input: {
   } as ConsumerCapabilityAuditRecord;
 }
 
+function verifyParsedSourceReuse() {
+  const file = "src/fixtures/governance/parsed-source-cache.tsx";
+  const original = "export const value = <p>Original</p>;";
+  const changed = "export const value = <button>Changed</button>;";
+  const invalid = "export const value = <p>;";
+  const parsed = parseTypeScriptSource(file, original);
+  check("parsed source reuse requires identical filename and contents",
+    parseTypeScriptSource(file, original) === parsed &&
+    parseTypeScriptSource(file.replace("/governance/", "/other/"), original) !== parsed);
+  const replacement = parseTypeScriptSource(file, changed);
+  check("changed source replaces the prior parsed tree",
+    replacement !== parsed && replacement.text === changed);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    assert.throws(() => parseTypeScriptSource(file, invalid), /parsed-source-cache\.tsx:/);
+  }
+  check("invalid source never reuses or replaces the current valid tree",
+    parseTypeScriptSource(file, changed) === replacement);
+  const restored = parseTypeScriptSource(file, original);
+  check("restoring prior source reparses its exact contents",
+    restored !== parsed && restored !== replacement && restored.text === original &&
+    parseTypeScriptSource(file, original) === restored);
+
+  const overrides = new Map([[file, original]]);
+  const overriddenTree = () => collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [file],
+    sourceOverrides: overrides,
+    symbolAware: false,
+  }).get(file);
+  assert.equal(overriddenTree()?.text, original);
+  overrides.set(file, changed);
+  assert.equal(overriddenTree()?.text, changed);
+  overrides.set(file, invalid);
+  assert.throws(overriddenTree, /parsed-source-cache\.tsx:/);
+  overrides.set(file, original);
+  check("one override map preserves changed, invalid, and restored source truth",
+    overriddenTree()?.text === original);
+}
+
+function verifyWarmedConfirmationSource(
+  id: string,
+  file: string,
+  probes: Readonly<Record<string, string>>,
+) {
+  const overrides = new Map<string, string>();
+  for (const mode of ["request", "shadow", "request", "foreign", "destructured", "dead", "destructured"] as const) {
+    const source = probes[mode];
+    overrides.set(file, source);
+    const graph = new Map([[file, parseTypeScriptSource(file, source)]]);
+    const expected = mode === "request" || mode === "destructured";
+    check(`${id} warmed Confirmation preserves ${mode} provenance`,
+      graphRequestsFloatingConfirmation(graph, overrides) === expected &&
+      graphRequestsFloatingConfirmation(graph, overrides) === expected);
+  }
+}
+
+verifyParsedSourceReuse();
+
 // Read-only consumers have no guarded intent; their shared defaults must not invent one.
 for(const id of ["activity-log","topics-without-image-report"]){
  const consumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.id===id);assert.ok(consumer?.collectionSurface);
@@ -2506,6 +2564,7 @@ for(const id of ["activity-log","topics-without-image-report"]){
  probes.shadow='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();layer.toggleLayer("columns");function child(layer:{openConfirmation:()=>void}){layer.openConfirmation();}return <button onClick={()=>child({openConfirmation:()=>{}})}>Unrelated</button>;}';
  probes.dead='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();if(false){layer.openConfirmation({title:"Never"});}return <p>Read only</p>;}';
  for(const[mode,source]of Object.entries(probes)){const failures=collectConsumerCapabilityAuditFailures(consumer,"source_proof",new Map([[file,source]]));check(id+" Confirmation boundary "+mode,["surface","menu","foreign","shadow","dead"].includes(mode)?!failures.some(f=>f.startsWith("confirmation:")):failures.includes(mode==="local"?"confirmation:local_implementation":"confirmation:hidden_adoption"));}
+ verifyWarmedConfirmationSource(id, file, probes);
 }
 const guardedConfirmationConsumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.collectionSurface?.confirmationOwner==="AdminConfirmDialog");assert.ok(guardedConfirmationConsumer);
 check("Existing guarded Collection keeps Confirmation adoption",resolveConsumerCapabilityAudit(guardedConfirmationConsumer).confirmation.state==="adopted");

@@ -1436,7 +1436,9 @@ export type PublicGateRequest = {
   /** Explicit retained Final27 admission from the existing accounting owner; no Admin replay. */
   retainedAdminBehaviorAdmissionSha256?: string;
   /** Fixed affected-build subset; omission retains the complete Public gate contract. */
-  selection?: "build-contracts" | "admin-interactions" | "admin-adoption" | "media-upload-limit";
+  selection?: "build-contracts" | "admin-interactions" | "admin-adoption" | "media-upload-limit" | "hero-compatibility";
+  /** Owner-authorized narrow Hero proof followed by the unchanged complete ci:check gate. */
+  heroCompatibilityFinalHead?: string;
   /** Fixed follow-up journeys; retained Audit2 outcomes are not replayed. */
   adoptionScope?: "core-closure";
   /** Bounded independent Core families; the final gate still runs the Public suite. */
@@ -1743,11 +1745,18 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
   await context.assertOwned();
   const readiness = prepared.get(context); assert.ok(readiness, "Public fixture readiness must precede gates.");
-  assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit", "Unknown fixed Public gate selection.");
+  assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit" || request.selection === "hero-compatibility", "Unknown fixed Public gate selection.");
   const measurement = request.selection === "admin-interactions" ? request.adminMeasurement : undefined;
   assert.equal(Boolean(request.adminMeasurement), Boolean(measurement));
   const adoption = request.selection === "admin-adoption";
   const mediaUpload = request.selection === "media-upload-limit";
+  const heroCompatibility = request.selection === "hero-compatibility";
+  if (request.heroCompatibilityFinalHead !== undefined) {
+    assert.ok(heroCompatibility && request.finalQualityGate === true);
+    assert.match(request.heroCompatibilityFinalHead, /^[a-f0-9]{40}$/u);
+    assert.equal(await gitHead(context), request.heroCompatibilityFinalHead, "Hero Final Quality must run on the explicitly selected final HEAD.");
+  }
+  if (heroCompatibility && request.finalQualityGate) assert.ok(request.heroCompatibilityFinalHead);
   const retainedQuality = request.retainedAdminBehaviorAdmissionSha256 !== undefined;
   if (retainedQuality) {
     assert.equal(request.finalQualityGate, true); assert.equal(request.selection, undefined);
@@ -1761,9 +1770,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   if (request.adoptionJourneySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) validateCorePreviewPublicImpactSelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
   else validateCoreJourneySelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
   if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption");
-  assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && (adoption || retainedQuality)), "Final Quality Gate requires complete Admin adoption or the explicit retained Final27 admission.");
-  const credentials = measurement || adoption || mediaUpload ? adminCredentials.get(context) : undefined;
-  if (adoption || mediaUpload) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");
+  assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && (adoption || retainedQuality || heroCompatibility)), "Final Quality Gate requires complete Admin adoption, retained Final27 admission, or the explicit Hero compatibility final HEAD.");
+  const credentials = measurement || adoption || mediaUpload || heroCompatibility ? adminCredentials.get(context) : undefined;
+  if (adoption || mediaUpload || heroCompatibility) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");
   const originalContext = context;
   let frozenDirectory: string | undefined;
   let frozenManifest: Array<{ file: string; sha256: string }> | undefined;
@@ -1832,14 +1841,15 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     context = { ...context, runDirectory: phaseDirectory,
       sanitize: value => [credentials.username, credentials.password, credentials.secret].reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
   }
-  if ((adoption || mediaUpload) && credentials) {
+  if ((adoption || mediaUpload || heroCompatibility) && credentials) {
     const baseSanitize = context.sanitize;
     context = { ...context, sanitize: value => [credentials.username, credentials.password, credentials.secret]
       .reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
   }
-  const gates = mediaUpload ? [GATES[0], { name: "media-upload-limit", script: "scripts/fixtures/media-upload-limit-journey.mjs", args: [], limitMs: 600_000 }] : adoption ? [...(request.adoptionCohort && !request.finalQualityGate ? GATES.filter(gate => gate.name !== "public-e2e") : GATES), { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: request.adoptionScope === "core-closure" ? ["--core-closure", ...(request.adoptionCohort ? ["--core-cohort=" + request.adoptionCohort] : []), ...(request.adoptionJourneySelection ? ["--core-journey-selection=" + request.adoptionJourneySelection] : [])] : [], limitMs: request.adoptionCohort === "media-recovery" ? 1_200_000 : (request.adoptionCohort === "domain-commands" || request.adoptionCohort === "query-presentation") ? 1_800_000 : 900_000 }] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
+  const heroGate = { name: "hero-compatibility", script: "scripts/fixtures/hero-compatibility-journey.mjs", args: [], limitMs: 600_000 };
+  const gates = heroCompatibility ? [GATES[0], heroGate] : mediaUpload ? [GATES[0], { name: "media-upload-limit", script: "scripts/fixtures/media-upload-limit-journey.mjs", args: [], limitMs: 600_000 }] : adoption ? [...(request.adoptionCohort && !request.finalQualityGate ? GATES.filter(gate => gate.name !== "public-e2e") : GATES), { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: request.adoptionScope === "core-closure" ? ["--core-closure", ...(request.adoptionCohort ? ["--core-cohort=" + request.adoptionCohort] : []), ...(request.adoptionJourneySelection ? ["--core-journey-selection=" + request.adoptionJourneySelection] : [])] : [], limitMs: request.adoptionCohort === "media-recovery" ? 1_200_000 : (request.adoptionCohort === "domain-commands" || request.adoptionCohort === "query-presentation") ? 1_800_000 : 900_000 }] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
     ? GATES.filter(gate => gate.name !== "public-e2e") : GATES;
-  assert.equal(gates.length, mediaUpload ? 2 : adoption ? (request.adoptionCohort && !request.finalQualityGate ? 4 : 5) : measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
+  assert.equal(gates.length, heroCompatibility ? 2 : mediaUpload ? 2 : adoption ? (request.adoptionCohort && !request.finalQualityGate ? 4 : 5) : measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
   assert.equal(completed.has(originalContext), false, "Successful selected gates cannot be rerun in this fixture.");
   const sourceDirectory = ownedPath(context, "public-build-source");
   assert.equal(existsSync(sourceDirectory), false, "Preserve any prior build workspace.");
@@ -1916,6 +1926,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       writeFileSync(target, downloadFixture, { flag: "wx" });
       receipt(context, "owned-download-fixture.json", { path: CORE_DOWNLOAD_MEDIA_KEY, sha256: digest(downloadFixture), deployedContentDependency: false });
     }
+    if (heroCompatibility) {
+      const fixtureRoute = join(sourceDirectory, "src/app/qa-isolated-hero-compatibility/page.tsx");
+      mkdirSync(dirname(fixtureRoute), { recursive: true });
+      const fixtureSource = readFileSync(sourcePath("scripts/fixtures/hero-compatibility-preview.tsx.fixture"), "utf8");
+      writeFileSync(fixtureRoute, fixtureSource, { flag: "wx" });
+      receipt(context, "hero-compatibility-preview-fixture.json", { path: "src/app/qa-isolated-hero-compatibility/page.tsx", sha256: digest(fixtureSource), isolatedOnly: true, deployed: false });
+    }
     if (mediaUpload) {
       // Only the owned, loopback-only build receives this fixture. No app route is deployed.
       const fixtureRoute = join(sourceDirectory, "src/app/qa-isolated-hero/page.tsx");
@@ -1965,18 +1982,22 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       qualityEnvironment = { ...context.cleanEnvironment(), GIT_DIR: gitDirectory, GIT_WORK_TREE: sourceDirectory,
         GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", npm_config_userconfig: npmUserConfig, npm_config_globalconfig: npmGlobalConfig };
       receipt(context, "final-quality-plan.json", { headSha, sourceSha256: digest(JSON.stringify(manifest)),
-        prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: !retainedQuality,
+        prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: adoption,
+        ...(heroCompatibility ? { mode: "hero-compatibility", targetedBrowserBeforeQuality: true, expectedHead: request.heroCompatibilityFinalHead } : {}),
         ...(retainedAdmission ? { mode: "retained-admin-behavior", retainedAdminBehavior: retainedAdmission.receipt } : {}),
         privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
     }
-    const executionGates = [...qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 })), ...gates];
+    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 }));
+    const executionGates = heroCompatibility && request.finalQualityGate
+      ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...qualityPrefix, ...GATES]
+      : [...qualityPrefix, ...gates];
     for (const gate of executionGates) {
       await drainControlPulse(); verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
       let gateApp: ChildProcess | undefined;
-      if (gate.name === "normal-build") env = childEnvironment;
-      if (!("qualityScript" in gate) && gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
-      if (gate.name === "public-e2e" || gate.name === "admin-interactions" || gate.name === "admin-adoption" || gate.name === "media-upload-limit") {
+      if (gate.name === "normal-build" || gate.name === "hero-compatibility-build") env = childEnvironment;
+      if (!("qualityScript" in gate) && gate.name !== "normal-build" && gate.name !== "hero-compatibility-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
+      if (gate.name === "public-e2e" || gate.name === "admin-interactions" || gate.name === "admin-adoption" || gate.name === "media-upload-limit" || gate.name === "hero-compatibility") {
         const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
           .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
         if (measurement?.study === "heavy-editor-performance") {
@@ -2015,10 +2036,11 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         }
         assert.ok(ready, "Owned application readiness failed.");
         env = { ...context.cleanEnvironment(), E2E_BASE_URL: origin, E2E_ADMIN_STORAGE_STATE: "", E2E_TOPICS_CMS_STATE: readiness.topicsCmsState };
-        if ((adoption || mediaUpload) && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
+        if ((adoption || mediaUpload || heroCompatibility) && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
           QA_ADMIN_OUTPUT: context.runDirectory, QA_ADMIN_FIXTURES: ownedPath(originalContext, "admin-adoption-fixtures.json"),
           QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)),
           QA_ADMIN_STORAGE_PUBLIC_PREFIXES: JSON.stringify(["cms-images", "cms-documents"].map(bucket => `http://127.0.0.1:${context.apiPort}/storage/v1/object/public/${bucket}/`)) };
+        if (heroCompatibility) env = { ...env, QA_HERO_FIXTURES: ownedPath(originalContext, "hero-compatibility-fixtures.json"), QA_HERO_CONTROL: ownedPath(originalContext, "hero-compatibility-control") };
         if (measurement && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
           QA_ADMIN_PHASE: measurement.phase, QA_ADMIN_CONTROL: resolve(measurement.controlDirectory), QA_ADMIN_OUTPUT: context.runDirectory,
           ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_STUDY: measurement.study } : {}),
@@ -2048,9 +2070,37 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       reports.push(report); receipt(context, `public-${gate.name}.json`, report);
       assert.equal(result.code, 0, `Required Public gate failed: ${gate.name}`);
       if (gate.name === "public-e2e") assert.equal(/(?:^|\n)\s*[1-9][0-9]*\s+(?:skipped|flaky)\b/iu.test(result.stdout), false, "Public E2E skipped/flaky coverage cannot pass.");
-      if (gate.name === "normal-build") buildIdSha256 = digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID")));
+      if (gate.name === "normal-build" || gate.name === "hero-compatibility-build") buildIdSha256 = digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID")));
       context.record("public-gate-pass", { gate: gate.name });
       if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
+      if (heroCompatibility && request.finalQualityGate && gate.name === "hero-compatibility") {
+        // The targeted preview must not become part of canonical final-HEAD coverage.
+        const fixtureDirectory = join(sourceDirectory, "src/app/qa-isolated-hero-compatibility");
+        const fixtureRoute = join(fixtureDirectory, "page.tsx");
+        assert.equal(digest(readFileSync(fixtureRoute)), digest(readFileSync(sourcePath("scripts/fixtures/hero-compatibility-preview.tsx.fixture"))));
+        assert.deepEqual(readdirSync(fixtureDirectory), ["page.tsx"]);
+        const generated = ["src/app/qa-isolated-hero-compatibility", ".next", "next-env.d.ts", "tsconfig.tsbuildinfo"];
+        assert.equal(realpathSync(sourceDirectory), sourceDirectory);
+        assert.ok(sourceDirectory.startsWith(realpathSync(context.runDirectory) + sep));
+        for (const file of generated) {
+          assert.equal(manifest.some(row => row.file === file || row.file.startsWith(file + "/")), false);
+          const target = resolve(sourceDirectory, file);
+          assert.ok(target.startsWith(sourceDirectory + sep));
+          if (existsSync(target)) {
+            assert.equal(realpathSync(target), target, "Owned generated cleanup cannot cross a symlink or junction.");
+            rmSync(target, { recursive: true, force: false });
+          }
+          assert.equal(existsSync(target), false);
+        }
+        buildIdSha256 = null;
+        // Regenerate route helpers from the final HEAD before its normal typecheck.
+        const types = await runChild([join(sourceDirectory, "node_modules/next/dist/bin/next"), "typegen"], childEnvironment, "hero-compatibility-typegen", 180_000);
+        assert.equal(types.code, 0, "Final-HEAD route type generation failed.");
+        assert.equal(existsSync(fixtureDirectory), false);
+        // The next gate drains the control pulse before verifying the reset source.
+        receipt(context, "hero-compatibility-final-source-reset.json", { fixtureRemoved: true, prerequisiteBuildRemoved: true,
+          generatedTypesFromFinalHead: true, headSha, stdoutSha256: digest(types.stdout), stderrSha256: digest(types.stderr) });
+      }
     }
     await drainControlPulse(); verifySource(); await retainedAdmission?.verify();
     assert.equal(await gitHead(context), headSha, "Repository HEAD changed during the source snapshot gates.");
@@ -2084,6 +2134,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       ...(request.finalQualityGate ? { finalQualityGate: { status: "pass", prefix: qualityReports, tail: reports.filter(report => report.name !== "admin-adoption") } } : {}) };
     if (request.finalQualityGate) receipt(context, "final-quality-gate.json", { ...value.finalQualityGate, sourceSha256: result.sourceSha256, buildIdSha256 });
     receipt(context, "public-and-admin-adoption-gates.json", value); return value;
+  }
+  if (heroCompatibility) {
+    const tail = reports.filter(report => GATES.some(gate => gate.name === report.name));
+    if (request.finalQualityGate) assert.deepEqual(tail.map(report => report.name), GATES.map(gate => gate.name));
+    const value = { ...result, selection: "hero-compatibility", globalClosedClaimed: false,
+      ...(request.finalQualityGate ? { finalQualityGate: { status: "pass", prefix: qualityReports, tail, headSha: request.heroCompatibilityFinalHead } } : {}) };
+    if (request.finalQualityGate) receipt(context, "final-quality-gate.json", { ...value.finalQualityGate, sourceSha256: result.sourceSha256, buildIdSha256 });
+    receipt(context, "hero-compatibility-gates.json", value); return value;
   }
   if (mediaUpload) {
     const value = { ...result, selection: "media-upload-limit", scope: "configured-image-size", globalClosedClaimed: false };

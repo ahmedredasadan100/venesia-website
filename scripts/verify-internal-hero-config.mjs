@@ -6,110 +6,22 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const HERO_ELEMENT_KEYS = [
-  "eyebrow",
-  "title",
-  "highlight",
-  "subtitle",
-  "description",
-  "cta",
-];
-
-const DEFAULT_HERO_ELEMENT_ORDER = [...HERO_ELEMENT_KEYS];
-
-function parseOptionalBool(value) {
-  if (typeof value === "boolean") return value;
-  if (value === "true" || value === 1 || value === "1" || value === "on")
-    return true;
-  if (value === "false" || value === 0 || value === "0") return false;
-  return undefined;
-}
-
-function parseHeroTextAlignment(value, fallback = "right") {
-  const text = String(value ?? "")
-    .trim()
-    .toLowerCase();
-  if (text === "right" || text === "center" || text === "left") return text;
-  return fallback;
-}
-
-function normalizeHeroElementOrder(raw) {
-  const allowed = new Set(HERO_ELEMENT_KEYS);
-  const collected = [];
-  const seen = new Set();
-
-  const push = (key) => {
-    const canonicalKey = key === "explore" ? "cta" : key;
-    if (!allowed.has(canonicalKey) || seen.has(canonicalKey)) return;
-    seen.add(canonicalKey);
-    collected.push(canonicalKey);
-  };
-
-  if (Array.isArray(raw)) {
-    for (const item of raw) push(String(item).trim());
-  } else if (typeof raw === "string" && raw.trim()) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) push(String(item).trim());
-      } else {
-        for (const part of raw.split(/[,\s]+/)) push(part);
-      }
-    } catch {
-      for (const part of raw.split(/[,\s]+/)) push(part);
-    }
-  }
-
-  for (const key of DEFAULT_HERO_ELEMENT_ORDER) {
-    if (!seen.has(key)) collected.push(key);
-  }
-  return collected;
-}
-
-function resolveHeroContentControls(raw = {}) {
-  const boolOr = (value, fallback) => parseOptionalBool(value) ?? fallback;
-  const showCtaResolved =
-    parseOptionalBool(raw.showCta) ?? parseOptionalBool(raw.show_cta) ?? true;
-
-  return {
-    showEyebrow: boolOr(raw.showEyebrow, true),
-    eyebrowBold: boolOr(raw.eyebrowBold, false),
-    eyebrowAlignment: parseHeroTextAlignment(raw.eyebrowAlignment, "right"),
-    showTitle: boolOr(raw.showTitle, true),
-    titleBold: boolOr(raw.titleBold, true),
-    titleAlignment: parseHeroTextAlignment(raw.titleAlignment, "right"),
-    showHighlight: boolOr(raw.showHighlight, true),
-    highlightBold: boolOr(raw.highlightBold, false),
-    highlightAlignment: parseHeroTextAlignment(raw.highlightAlignment, "right"),
-    showSubtitle: boolOr(raw.showSubtitle, true),
-    subtitleBold: boolOr(raw.subtitleBold, false),
-    subtitleAlignment: parseHeroTextAlignment(raw.subtitleAlignment, "right"),
-    showDescription: boolOr(raw.showDescription, true),
-    descriptionAlignment: (() => {
-      const text = String(raw.descriptionAlignment ?? "")
-        .trim()
-        .toLowerCase();
-      if (["right", "center", "left", "justify"].includes(text)) return text;
-      return "right";
-    })(),
-    showCta:
-      parseOptionalBool(raw.showCta) ??
-      parseOptionalBool(raw.show_cta) ??
-      parseOptionalBool(raw.showExploreLink) ??
-      parseOptionalBool(raw.show_explore_link) ??
-      showCtaResolved,
-    ctaAlignment: parseHeroTextAlignment(
-      raw.ctaAlignment ??
-        raw.cta_alignment ??
-        raw.exploreAlignment ??
-        raw.explore_alignment,
-      "right",
-    ),
-    heroElementOrder: normalizeHeroElementOrder(
-      raw.heroElementOrder ?? raw.hero_element_order,
-    ),
-  };
-}
+import {
+  DEFAULT_HERO_ELEMENT_ORDER,
+  HERO_MEDIA_GEOMETRY,
+  HERO_VARIANTS,
+  normalizeHeroElementOrder,
+  normalizeHeroTemplateProductConfig,
+  parseOptionalBool,
+  parseHeroTextAlignment,
+  parseHeroContentControlsFormData,
+  resolveDistinctHeroDescription,
+  resolveHeroContentControls,
+  resolveHeroContentControlsForVariant,
+  resolveHeroFamily,
+  resolveHeroImageCompositionPreset,
+  resolveHeroMediaSlot,
+} from "../src/lib/hero/hero-content-controls.ts";
 
 function assert(condition, message) {
   if (!condition) {
@@ -272,8 +184,16 @@ const adminTextFormatControlsSource = readFileSync(
   resolve("src/components/admin/ui/AdminTextFormatControls.tsx"),
   "utf8",
 );
-const adminRichTextSource = readFileSync(
-  resolve("src/components/admin/AdminRichTextEditor.tsx"),
+const heroTextFieldSource = readFileSync(
+  resolve("src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx"),
+  "utf8",
+);
+const projectsHubEditorSource = readFileSync(
+  resolve("src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx"),
+  "utf8",
+);
+const mediaGuidanceSource = readFileSync(
+  resolve("src/components/admin/media/AdminMediaSlotGuidance.tsx"),
   "utf8",
 );
 const mediaGallerySource = readFileSync(
@@ -315,13 +235,6 @@ const heroClosureMigration = readFileSync(
   ),
   "utf8",
 );
-const {
-  normalizeHeroTemplateProductConfig,
-  parseHeroContentControlsFormData,
-  resolveHeroContentControlsForVariant,
-  resolveHeroFamily,
-  resolveHeroImageCompositionPreset,
-} = await import("../src/lib/hero/hero-content-controls.ts");
 assert(
   heroSource.includes("data-hero-slot-visible"),
   "reserved-space attribute present",
@@ -363,7 +276,7 @@ assert(
       "onClick={() => onBoldChange(!bold)}",
     ) &&
     heroVisibilitySource.includes(
-      "value={String(enableBold ? bold : boldDefault)}",
+      "value={String(hasBoldControl ? bold : boldDefault)}",
     ),
   "Hero text weight uses one shared toolbar button and preserves the canonical submitted field",
 );
@@ -418,53 +331,28 @@ assert(
   "Hero controls share one dense responsive header/footer owner",
 );
 assert(
-  (heroEditorSource.match(/name="name"/g) ?? []).length === 1 &&
-    (heroEditorSource.match(/name="template_description"/g) ?? []).length ===
-      1 &&
-    /<input\s+type="hidden"\s+name="template_description"/.test(
-      heroEditorSource,
-    ) &&
-    !heroEditorSource.includes("الوصف الداخلي") &&
-    (heroEditorSource.match(/nature="standard"\s+span=\{3\}/g) ?? []).length >=
-      2 &&
-    /nature="binary-state"\s+span=\{3\}/.test(heroEditorSource) &&
-    heroEditorSource.includes('className="flex h-full items-end pb-1.5"') &&
-    heroEditorSource.includes("surface={false}") &&
-    /<span className="block text-sm font-medium text-white\/70">\s*اسم الهيرو\s*<\/span>/.test(
-      heroEditorSource,
-    ) &&
-    heroEditorSource.indexOf("اسم الهيرو") <
-      heroEditorSource.indexOf('label="نمط العرض"') &&
-    heroEditorSource.indexOf('label="نمط العرض"') <
-      heroEditorSource.indexOf('label="حالة النشر"') &&
-    adminFormSwitchSource.includes(
-      "ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME",
-    ) &&
-    adminFormSwitchSource.includes(
-      'data-admin-form-switch-surface={surface ? "card" : "compact"}',
-    ) &&
-    adminFormSwitchSource.includes("border border-white/10 bg-white/[0.035]") &&
-    !heroEditorSource.includes('className="min-h-11"'),
-  "Hero identity row keeps three visible equal-quarter fields and an empty fourth quarter while preserving internal metadata",
+  /<input\s+type="hidden"\s+name="template_description"/.test(heroEditorSource) &&
+    heroEditorSource.includes("<ModuleEditorIdentitySection") &&
+    heroEditorSource.includes('nameLabel="اسم الهيرو"') &&
+    heroEditorSource.includes('name="variant"') &&
+    heroEditorSource.includes('label="نمط العرض"') &&
+    heroVisibilitySource.includes('data-module-editor-identity=""') &&
+    heroVisibilitySource.includes('name="name"') &&
+    heroVisibilitySource.includes("<ModuleEditorStatusSwitch") &&
+    heroVisibilitySource.includes("surface={false}") &&
+    adminFormSwitchSource.includes("ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME"),
+  "Hero identity delegates name, variant and status to the shared identity owner while preserving internal metadata",
 );
 assert(
-  heroEditorSource.includes('nature="long-content" span={6}') &&
-    heroEditorSource.includes("minHeight={56}") &&
-    heroEditorSource.includes("maxHeight={88}") &&
-    adminRichTextSource.includes("maxHeight?: number") &&
-    adminRichTextSource.includes(
-      'overflowY: maxHeight === undefined ? undefined : "clip"',
-    ) &&
-    !adminRichTextSource.includes("data-admin-rich-text-constrained=") &&
-    !adminRichTextSource.includes(
-      '[data-admin-rich-text-constrained="true"]:focus-within',
-    ) &&
-    !adminRichTextSource.includes("overscroll-contain") &&
-    !heroEditorSource.includes("minHeight={140}") &&
-    !heroEditorSource.includes("عنصر مستقل عن العنوان الفرعي") &&
-    !heroEditorSource.includes("وجهات الإجراءات تُشتق من Route") &&
-    !heroVisibilitySource.includes("helperText"),
-  "Hero description keeps a fixed two-line card with clipped overflow and no focus expansion",
+  /<HeroTextFieldRow\s+label="الوصف"\s+name="description"[\s\S]*?preserveRichText/.test(heroEditorSource) &&
+    heroEditorSource.includes('defaultValue={String(config.description ?? "")}') &&
+    heroEditorSource.includes('boldName="description_bold"') &&
+    !heroEditorSource.includes("<AdminRichTextEditor") &&
+    heroTextFieldSource.includes('name={preserveRichText ? `${name}_editor` : name}') &&
+    heroTextFieldSource.includes("value={text === initialText ? defaultValue : text}") &&
+    heroTextFieldSource.includes("onChange={(event) => setText(event.target.value)}") &&
+    heroTextFieldSource.includes("<HeroVisibilityAlignRow"),
+  "Hero compact description retains original rich value until authored text changes and uses the shared Bold control",
 );
 assert(
   (heroCtaEditorSource.match(/data-hero-cta-row=/g) ?? []).length === 2 &&
@@ -573,15 +461,28 @@ assert(
   "Hero galleries use one equal-size add card and image composition is an independent text-style card",
 );
 assert(
-  heroEditorSource.includes('dimensionHint="hero"') &&
-    heroEditorSource.includes('dimensionHint="hero-mobile"') &&
-    (heroEditorSource.match(/density="compact"/g) ?? []).length === 2,
-  "Hero media tabs use compact cards with distinct desktop and mobile specifications",
+  heroEditorSource.includes('mediaSlot={resolveHeroMediaSlot(guidanceVariant, "desktop")}') &&
+    heroEditorSource.includes('mediaSlot={resolveHeroMediaSlot(guidanceVariant, "mobile")}') &&
+    (heroEditorSource.match(/density="compact"/g) ?? []).length === 2 &&
+    HERO_VARIANTS.every((variant) => {
+      const desktop = resolveHeroMediaSlot(variant, "desktop");
+      const mobile = resolveHeroMediaSlot(variant, "mobile");
+      return desktop.owner === `hero/${variant}` &&
+        mobile.owner === desktop.owner &&
+        desktop.device === "desktop" && mobile.device === "mobile" &&
+        desktop.slot !== mobile.slot && desktop.fit === "cover" && mobile.fit === "cover";
+    }),
+  "Hero compact galleries retain distinct desktop and mobile contracts in the shared presentation owner",
 );
 assert(
-  mediaGallerySource.includes('"hero-mobile"') &&
-    mediaGallerySource.includes("DIMENSION_CARD_LABELS[dimensionHint]"),
-  "Hero image specifications stay visible on every media card",
+  mediaGallerySource.includes("<AdminMediaOriginalDimensions") &&
+    mediaGallerySource.includes("<AdminMediaSlotGuidance slot={mediaSlot}") &&
+    mediaGuidanceSource.includes('slot.design?.kind !== "recommended"') &&
+    mediaGuidanceSource.includes("slot.design.width") &&
+    mediaGuidanceSource.includes("slot.design.height") &&
+    !mediaGuidanceSource.includes("slot.display") &&
+    !mediaGuidanceSource.includes("slot.note"),
+  "Media cards retain original dimensions and practical recommended sizes while technical guidance stays out of Admin",
 );
 assert(
   mediaGallerySource.includes("الصورة في أول الترتيب ولا يمكن تحريكها لأعلى") &&
@@ -671,7 +572,8 @@ assert(
       "data-hero-composition-baseline={STANDARD_INTERNAL_HERO_COMPOSITION_BASELINE}",
     ) &&
     heroSource.includes('data-hero-composition-root="standard-internal"') &&
-    heroSource.includes("h-[min(62vh,580px)] min-h-[440px]") &&
+    heroSource.includes("HERO_MEDIA_GEOMETRY.internal.containerClass") &&
+    HERO_MEDIA_GEOMETRY.internal.containerClass === "h-[min(62vh,580px)] min-h-[440px]" &&
     !heroSource.includes("h-[min(46vh,500px)]") &&
     !heroSource.includes("config.heroLayout"),
   "Family B owns one height and one composition anchor",
@@ -703,10 +605,10 @@ assert(
     !heroEditorSource.includes("enableAlignment={!isStandardInternal}") &&
     !heroEditorSource.includes("enableBold={!isStandardInternal}") &&
     heroVisibilitySource.includes(
-      "alignment={enableAlignment ? alignment : undefined}",
+      "alignment={hasAlignmentControl ? alignment : undefined}",
     ) &&
     heroVisibilitySource.includes(
-      "bold={boldName && enableBold ? bold : undefined}",
+      "bold={hasBoldControl ? bold : undefined}",
     ) &&
     heroEditorSource.includes("...(!isStandardInternal"),
   "Standard Internal CMS exposes supported typography tools while keeping ordering fixed",
@@ -803,40 +705,93 @@ assert(
   "Home hero router gate preserved",
 );
 
-// Render contract: Highlight and Subtitle are independent (no goldAccent merge).
-function resolveIndependentHeroText(config, isAboutPage) {
-  const highlight = String(config.highlight || "").trim();
-  const subtitle = String(config.subtitle || "").trim();
-  // Legacy About bug (must stay removed):
-  // const goldAccent = highlight || (isAboutPage ? subtitle : "");
-  void isAboutPage;
-  return {
-    showHighlight: Boolean(highlight) && config.showHighlight !== false,
-    showSubtitle: Boolean(subtitle) && config.showSubtitle !== false,
-    highlight,
-    subtitle,
-  };
+// Canonical content resolution keeps independently authored text and removes only duplicate description.
+const independent = resolveHeroContentControls({ showHighlight: false, showSubtitle: true });
+assert(
+  independent.showHighlight === false && independent.showSubtitle === true &&
+    resolveDistinctHeroDescription("Description", "Subtitle") === "Description" &&
+    resolveDistinctHeroDescription("Subtitle", "Subtitle") === "",
+  "actual Hero content owner preserves independent visibility and distinct description",
+);
+
+// Compatibility regressions execute the production parser/resolver, not local models.
+assert(
+  !/descriptionAlignment\s*===\s*"justify"\s*\?\s*"right"/u.test(
+    `${heroEditorSource}\n${projectsHubEditorSource}`,
+  ) &&
+    (heroEditorSource.match(/alignmentDefault=\{controls.descriptionAlignment\}/gu) ?? []).length === 2 &&
+    projectsHubEditorSource.includes("alignmentDefault={config.descriptionAlignment}") &&
+    heroVisibilitySource.includes("useState<AdminTextAlignment>(alignmentDefault)") &&
+    heroVisibilitySource.includes("value={hasAlignmentControl ? alignment : alignmentDefault}"),
+  "Generic, Detail and Projects Hub editors pass supported description alignment unchanged into the shared submitted field",
+);
+for (const variant of HERO_VARIANTS) {
+  for (const alignment of ["right", "center", "left", "justify"]) {
+    const formData = new FormData();
+    formData.set("description_alignment", alignment);
+    const saved = normalizeHeroTemplateProductConfig(
+      parseHeroContentControlsFormData(formData),
+      variant,
+    );
+    const reloaded = resolveHeroContentControlsForVariant(
+      JSON.parse(JSON.stringify(saved)),
+      variant,
+    );
+    assert(
+      reloaded.descriptionAlignment === alignment,
+      `${variant}: authored ${alignment} description alignment survives parser, persistence normalization and reload`,
+    );
+  }
 }
-
-const both = resolveIndependentHeroText(
-  { highlight: "HL", subtitle: "ST", showHighlight: true, showSubtitle: true },
-  true,
-);
+const invalidAlignmentForm = new FormData();
+invalidAlignmentForm.set("description_alignment", "unsupported");
 assert(
-  both.showHighlight &&
-    both.showSubtitle &&
-    both.highlight === "HL" &&
-    both.subtitle === "ST",
-  "independent highlight+subtitle both show on About",
+  parseHeroContentControlsFormData(invalidAlignmentForm).descriptionAlignment === "right",
+  "invalid description alignment retains the canonical fallback",
 );
 
-const onlySub = resolveIndependentHeroText(
-  { highlight: "", subtitle: "ST", showHighlight: true, showSubtitle: true },
-  true,
-);
+const actionFields = [
+  ["showProjectDownloadAction", "show_project_download_action"],
+  ["showProjectTrackingAction", "show_project_tracking_action"],
+  ["showProjectReservationAction", "show_project_reservation_action"],
+];
+const detailActionCases = [
+  ["empty legacy config", {}, [true, true, true]],
+  ["legacy collective false", { showCta: false }, [false, false, false]],
+  ["legacy collective true", { showCta: true }, [true, true, true]],
+  ["legacy snake string false", { show_cta: "false" }, [false, false, false]],
+  ["legacy snake numeric false", { show_cta: 0 }, [false, false, false]],
+  ["partial modern true", { showCta: false, showProjectDownloadAction: true }, [true, false, false]],
+  ["partial modern false", { showCta: true, showProjectTrackingAction: false }, [true, false, true]],
+  ["partial snake modern true", { show_cta: false, show_project_reservation_action: "true" }, [false, false, true]],
+  ["partial snake modern false", { showCta: true, show_project_download_action: "false" }, [false, true, true]],
+  ["explicit camel flags win", { showCta: false, showProjectDownloadAction: true, showProjectTrackingAction: false, showProjectReservationAction: true }, [true, false, true]],
+  ["explicit snake flags win", { showCta: false, show_project_download_action: true, show_project_tracking_action: true, show_project_reservation_action: false }, [true, true, false]],
+  ["explicit camel false wins over snake true", { showCta: true, showProjectDownloadAction: false, show_project_download_action: true }, [false, true, true]],
+];
+for (const [label, raw, expected] of detailActionCases) {
+  const stored = { ...raw, projectActionOrder: ["reservation", "download", "tracking"], ctaAlignment: "left" };
+  const before = JSON.stringify(stored);
+  const resolved = resolveHeroContentControlsForVariant(stored, "project-detail");
+  const formData = new FormData();
+  for (const [key, field] of actionFields) formData.set(field, String(resolved[key]));
+  formData.set("project_action_order", JSON.stringify(resolved.projectActionOrder));
+  formData.set("cta_alignment", resolved.ctaAlignment);
+  const saved = normalizeHeroTemplateProductConfig(parseHeroContentControlsFormData(formData), "project-detail");
+  const reloaded = resolveHeroContentControlsForVariant(JSON.parse(JSON.stringify(saved)), "project-detail");
+  assert(
+    actionFields.every(([key], index) => resolved[key] === expected[index] && reloaded[key] === expected[index]) &&
+      JSON.stringify(reloaded.projectActionOrder) === JSON.stringify(stored.projectActionOrder) &&
+      reloaded.ctaAlignment === "left" && before === JSON.stringify(stored),
+    `Project Detail ${label}: independent action visibility survives save/reload without changing order, alignment or input data`,
+  );
+}
 assert(
-  !onlySub.showHighlight && onlySub.showSubtitle,
-  "subtitle alone does not fabricate highlight",
+  HERO_VARIANTS.filter((variant) => variant !== "project-detail").every((variant) => {
+    const resolved = resolveHeroContentControlsForVariant({ showCta: false }, variant);
+    return resolved.showCta === false && actionFields.every(([key]) => resolved[key] === true);
+  }),
+  "legacy Detail CTA compatibility leaves every other Hero variant unchanged",
 );
 
 if (process.exitCode) {

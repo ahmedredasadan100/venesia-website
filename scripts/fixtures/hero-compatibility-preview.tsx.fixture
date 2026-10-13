@@ -1,0 +1,33 @@
+import DynamicHeroSection from "../../components/sections/DynamicHeroSection";
+import ProjectDetailsHero from "../../components/projects/details/ProjectDetailsHero";
+import ProjectsHubCanonicalHero from "../../components/projects/ProjectsHubCanonicalHero";
+import { getSupabaseAdmin } from "../../lib/supabase-admin";
+import { getHeroConfig, type HeroSectionData } from "../../lib/page-sections";
+import { loadProjectForAdminPreviewResult } from "../../lib/projects/load-published-projects";
+import { asProjectsHubHeroConfig } from "../../lib/page-blocks/projects-hub-config";
+import { resolveHeroConfigLinks } from "../../lib/admin/links/hero-config";
+export const dynamic = "force-dynamic";
+
+/** Copied only into an owned loopback build; never an application route in Git. */
+export default async function HeroCompatibilityPreview({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
+  const { kind = "home" } = await searchParams;
+  if (!["home", "internal", "detail", "hub"].includes(kind)) throw new Error("invalid_isolated_hero_kind");
+  const slug = kind === "hub" ? "projects-hub-hero" : "qa-hero-compatibility-" + kind;
+  const database = getSupabaseAdmin();
+  const { data, error } = await database.from(kind === "hub" ? "content_block_templates" : "hero_templates").select("id,variant,status,config").eq("slug", slug).single();
+  if (error || !data || data.status !== "unpublished") throw new Error("isolated_hero_fixture_missing");
+  const config = await resolveHeroConfigLinks(data.config as Record<string, unknown>);
+  const hero: HeroSectionData = { id: data.id, page_id: 0, section_key: "qa", section_type: "hero", slot: "hero", variant: data.variant,
+    style_preset: "default", source_type: kind === "detail" ? "domain-backed" : "manual", source_id: null, source_slug: null,
+    limit_count: 1, is_visible: true, sort_order: 0, config };
+  let content;
+  if (kind === "detail" || kind === "hub") {
+    const result = await database.from("projects").select("id").eq("slug", "qa-admin-complete-project").single();
+    if (result.error || !result.data) throw new Error("isolated_project_fixture_missing");
+    const project = await loadProjectForAdminPreviewResult(result.data.id);
+    if (project.status !== "ok") throw new Error("isolated_project_read_failed");
+    content = kind === "detail" ? <ProjectDetailsHero project={project.project} presentation={getHeroConfig(hero)} />
+      : <ProjectsHubCanonicalHero projects={[project.project]} module={{ slug: "projects-hub-hero", assignmentId: data.id, sortOrder: 0, position: "hero", isVisible: true, config: asProjectsHubHeroConfig(config) }} />;
+  } else content = <DynamicHeroSection hero={hero} autoplayMs={600000} />;
+  return <main dir="rtl" data-qa-hero-kind={kind} data-qa-hero-config={JSON.stringify(config)}>{content}</main>;
+}

@@ -1,3 +1,4 @@
+import { prepareHeroCompatibilityFixtures, runHeroCompatibilityCheckpoints } from "./fixtures/hero-compatibility-proof.mts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -331,6 +332,36 @@ async function mediaUploadLimitProof(argv: string[]) {
   return result;
 }
 
+/** Narrow Hero proof; --final-quality-head explicitly adds the unchanged complete final gate. */
+async function heroCompatibilityProof(argv: string[]) {
+  const finalIndex = argv.indexOf("--final-quality-head");
+  const finalHead = finalIndex < 0 ? undefined : argv[finalIndex + 1];
+  if (finalIndex >= 0) {
+    assert.equal(argv.filter(arg => arg === "--final-quality-head").length, 1);
+    assert.match(finalHead ?? "", /^[a-f0-9]{40}$/u);
+    argv = argv.filter((_, index) => index !== finalIndex && index !== finalIndex + 1);
+    assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", windowsHide: true }).trim(), finalHead);
+  }
+  const { parsed, output, sourceHash, files } = proofInputs(argv);
+  if (finalHead) assert.deepEqual(files, [], "Final Hero quality uses committed membership only.");
+  const save = createProofRecorder(output, sourceHash, files);
+  const result = await runIsolatedSupabase({ ...parsed, artifactDir: resolve(output, "run"), async handoff(handle) {
+    await runApplicationHandoff(handle, [], { mode: "measurement-provision" });
+    await handle.preparePublicVerification();
+    const admin = await handle.prepareAdminInteractions();
+    const fixtures = await prepareHeroCompatibilityFixtures(handle, admin);
+    const gates = await runHeroCompatibilityCheckpoints(handle, resolve(output, "run"), fixtures,
+      () => handle.runPublicVerification({ selection: "hero-compatibility", additionalSourceFiles: files,
+        ...(finalHead ? { finalQualityGate: true as const, heroCompatibilityFinalHead: finalHead } : {}) }));
+    save("hero-compatibility-proof.json", { status: "pass", gates, finalHead: finalHead ?? null,
+      finalQualityExecuted: Boolean(finalHead), migrationsCreated: false, productionAccess: false, globalClosed: false });
+  } });
+  const cleanup = JSON.parse(readFileSync(resolve(output, "run/cleanup.json"), "utf8"));
+  assert.equal(cleanup.status, "complete"); assert.equal(cleanup.remainingOwnedResources, 0);
+  assert.equal(cleanup.originalResourcesUnchanged, true); assert.equal(cleanup.privateEnvRemoved, true);
+  return result;
+}
+
 function options(argv: string[]): QaOptions {
   const values = new Map<string, string>();
   const flags = new Set<string>();
@@ -366,7 +397,7 @@ function options(argv: string[]): QaOptions {
 
 try {
   const args = process.argv.slice(2);
-  const proofModes = args.filter(arg => arg === "--final-public-proof" || arg === "--build-contracts-proof" || arg === "--media-upload-limit-proof");
+  const proofModes = args.filter(arg => arg === "--final-public-proof" || arg === "--build-contracts-proof" || arg === "--media-upload-limit-proof" || arg === "--hero-compatibility-proof");
   assert.ok(proofModes.length <= 1, "Choose one fixed proof mode exactly once.");
   assert.ok(!args.includes("--retained-proof") || args.includes("--final-public-proof"));
   const result = args.includes("--final-public-proof")
@@ -375,6 +406,8 @@ try {
       ? await buildContractsProof(args.filter(arg => arg !== "--build-contracts-proof"))
     : args.includes("--media-upload-limit-proof")
       ? await mediaUploadLimitProof(args.filter(arg => arg !== "--media-upload-limit-proof"))
+    : args.includes("--hero-compatibility-proof")
+      ? await heroCompatibilityProof(args.filter(arg => arg !== "--hero-compatibility-proof"))
     : await runIsolatedSupabase(options(args));
   process.stdout.write(`${JSON.stringify(result)}\n`);
 } catch (error) {

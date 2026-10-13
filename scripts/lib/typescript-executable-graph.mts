@@ -27,6 +27,10 @@ export type LocalImplementationKind =
   | "local_scrollbar_style";
 
 const parsedModuleCache = new Map<string, ts.SourceFile>();
+const parsedSourceCache = new Map<
+  string,
+  { source: string; parsed: ts.SourceFile }
+>();
 const moduleResolutionCache = new Map<string, string | null>();
 const exportBindingCache = new Map<string, boolean>();
 const executableExportPathCache = new Map<string, readonly string[]>();
@@ -69,6 +73,8 @@ function scriptKind(sourceFile: string) {
 }
 
 export function parseTypeScriptSource(sourceFile: string, source: string) {
+  const cached = parsedSourceCache.get(sourceFile);
+  if (cached?.source === source) return cached.parsed;
   const parsed = ts.createSourceFile(
     sourceFile,
     source,
@@ -87,6 +93,7 @@ export function parseTypeScriptSource(sourceFile: string, source: string) {
       .join("; ");
     throw new Error(`${sourceFile}: ${details}`);
   }
+  parsedSourceCache.set(sourceFile, { source, parsed });
   return parsed;
 }
 

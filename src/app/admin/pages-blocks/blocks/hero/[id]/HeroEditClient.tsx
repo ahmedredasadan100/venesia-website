@@ -29,7 +29,6 @@ import {
 } from "../../../../../../lib/hero/hero-content-controls";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
-import { stripHtml } from "../../../../../../lib/rich-text/html-utils";
 import { resolveSafeInternalPath } from "../../../../../../lib/security/safe-internal-path";
 import { updateHeroTemplateDetails } from "../actions";
 import HeroCtaFields from "./HeroCtaFields";
@@ -561,11 +560,7 @@ export default function HeroEditClient({
               alignmentName="description_alignment"
               showName="show_description"
               boldName="description_bold"
-              alignmentDefault={
-                controls.descriptionAlignment === "justify"
-                  ? "right"
-                  : controls.descriptionAlignment
-              }
+              alignmentDefault={controls.descriptionAlignment}
               boldDefault={controls.descriptionBold}
               showDefault={controls.showDescription}
             />
@@ -637,19 +632,13 @@ export default function HeroEditClient({
             <HeroTextFieldRow
               label="الوصف"
               name="description"
-              defaultValue={stripHtml(String(config.description ?? "")).replace(
-                /\s+/gu,
-                " ",
-              )}
+              defaultValue={String(config.description ?? "")}
+              preserveRichText
               boldName="description_bold"
               alignmentName="description_alignment"
               showName="show_description"
               boldDefault={controls.descriptionBold}
-              alignmentDefault={
-                controls.descriptionAlignment === "justify"
-                  ? "right"
-                  : controls.descriptionAlignment
-              }
+              alignmentDefault={controls.descriptionAlignment}
               showDefault={controls.showDescription}
               placeholder="اكتب وصف الهيرو..."
             />

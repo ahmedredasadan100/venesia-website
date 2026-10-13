@@ -23,7 +23,7 @@ import {
   type AdminModuleTab,
   type AdminModuleTabsProps,
 } from "../ui";
-import type { PageBlockTextAlignment } from "../../../lib/page-blocks/configs";
+import type { AdminTextAlignment } from "../ui/AdminTextFormatControls";
 import AdminModuleTabs from "../ui/AdminModuleTabs";
 import BlockEditorContextHeader, {
   BlockEditorSaveFeedback,
@@ -427,7 +427,7 @@ type ModuleEditorVisibilityAlignRowProps =
           controlMode?: "text";
           alignmentName: string;
           boldName?: string;
-          alignmentDefault?: PageBlockTextAlignment;
+          alignmentDefault?: AdminTextAlignment;
           boldDefault?: boolean;
           enableAlignment?: boolean;
           enableBold?: boolean;
@@ -461,7 +461,7 @@ export function ModuleEditorVisibilityAlignRow({
   children,
 }: ModuleEditorVisibilityAlignRowProps) {
   const [alignment, setAlignment] =
-    useState<PageBlockTextAlignment>(alignmentDefault);
+    useState<AdminTextAlignment>(alignmentDefault);
   const [show, setShow] = useState(showDefault);
   const [bold, setBold] = useState(boldDefault);
   const hasAlignmentControl =
@@ -515,7 +515,7 @@ export function ModuleEditorVisibilityAlignRow({
           alignment={hasAlignmentControl ? alignment : undefined}
           onAlignmentChange={
             hasAlignmentControl
-              ? (next) => setAlignment(next as PageBlockTextAlignment)
+              ? setAlignment
               : undefined
           }
           bold={hasBoldControl ? bold : undefined}
