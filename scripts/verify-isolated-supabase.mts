@@ -587,19 +587,75 @@ async function adminControlLeaseOnly() {
 
 function verifyAdminMeasurementRestartPolicy() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
-  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  let policy: ts.IfStatement | undefined;
-  let driverLaunches = 0;
-  const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && node.expression.getText(file) === "runChild") driverLaunches++;
-    if (ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
-      && node.thenStatement.statements.some(statement => ts.isExpressionStatement(statement)
-        && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "receipt"
-        && statement.expression.arguments[1]?.getText(file) === '"admin-driver-restart-rejected.json"')) policy = node;
-    ts.forEachChild(node, visit);
+  const inspectLaunches = (candidate: string) => {
+    const file = ts.createSourceFile("isolated-public-verification.mts", candidate, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const launches: ts.CallExpression[] = [];
+    const policies: ts.IfStatement[] = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && node.expression.getText(file) === "runChild") launches.push(node);
+      if (ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
+        && node.thenStatement.statements.some(statement => ts.isExpressionStatement(statement)
+          && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "receipt"
+          && statement.expression.arguments[1]?.getText(file) === '"admin-driver-restart-rejected.json"')) policies.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert.equal(policies.length, 1, "Admin measurement failure must reject reuse at the canonical owner.");
+    assert.equal(launches.length, 2, "Only the canonical gate driver and fixed successful Hero typegen prerequisite may launch children.");
+    const driver = launches.filter(call => call.arguments[0]?.getText(file) === "args");
+    assert.equal(driver.length, 1, "Exactly one generic gate driver may launch.");
+    assert.deepEqual(driver[0].arguments.map(argument => argument.getText(file)), ["args", "env", "gate.name", "gate.limitMs"]);
+    const prerequisite = launches.find(call => call !== driver[0])!;
+    assert.deepEqual(prerequisite.arguments.map(argument => argument.getText(file)), [
+      '[join(sourceDirectory, "node_modules/next/dist/bin/next"), "typegen"]',
+      "childEnvironment", '"hero-compatibility-typegen"', "180_000",
+    ], "The extra child is exactly the fixed Next typegen prerequisite.");
+    const declarationStatement = (call: ts.CallExpression, name: string) => {
+      assert.ok(ts.isAwaitExpression(call.parent) && ts.isVariableDeclaration(call.parent.parent));
+      const declaration = call.parent.parent;
+      assert.equal(declaration.name.getText(file), name);
+      assert.ok(ts.isVariableDeclarationList(declaration.parent) && ts.isVariableStatement(declaration.parent.parent));
+      return declaration.parent.parent;
+    };
+    const driverStatement = declarationStatement(driver[0], "result");
+    const prerequisiteStatement = declarationStatement(prerequisite, "types");
+    const resetBody = prerequisiteStatement.parent;
+    assert.ok(ts.isBlock(resetBody) && ts.isIfStatement(resetBody.parent));
+    const reset = resetBody.parent;
+    assert.equal(reset.thenStatement, resetBody);
+    assert.equal(reset.expression.getText(file), 'heroCompatibility && request.finalQualityGate && gate.name === "hero-compatibility"');
+    const gateBody = driverStatement.parent;
+    assert.ok(ts.isBlock(gateBody) && ts.isForOfStatement(gateBody.parent));
+    assert.equal(gateBody.parent.expression.getText(file), "executionGates");
+    assert.equal(reset.parent, gateBody, "Typegen belongs only to the successful Hero gate reset.");
+    const policy = policies[0];
+    assert.equal(policy.parent, gateBody);
+    const successIndex = gateBody.statements.findIndex(statement => ts.isExpressionStatement(statement)
+      && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "assert.equal"
+      && statement.expression.arguments[0]?.getText(file) === "result.code" && statement.expression.arguments[1]?.getText(file) === "0");
+    const stopIndex = gateBody.statements.findIndex(statement => ts.isIfStatement(statement)
+      && statement.expression.getText(file) === "gateApp"
+      && statement.thenStatement.getText(file) === "await stopChild(gateApp, context.cleanEnvironment());");
+    const driverIndex = gateBody.statements.indexOf(driverStatement), policyIndex = gateBody.statements.indexOf(policy), resetIndex = gateBody.statements.indexOf(reset);
+    assert.ok(driverIndex < policyIndex && policyIndex < successIndex && successIndex < stopIndex && stopIndex < resetIndex,
+      "Typegen can run only after canonical failure rejection, successful completion and app shutdown.");
+    return { file, policy, reset, prerequisiteStatement };
   };
-  visit(file); assert.ok(policy, "Admin measurement failure must reject reuse at the canonical owner.");
-  assert.equal(driverLaunches, 1, "A failed measurement driver cannot launch a repair child against the same fixture.");
+  const { file, policy, reset, prerequisiteStatement } = inspectLaunches(source);
+  const replaceOnce = (before: string, after: string) => {
+    assert.equal(source.split(before).length, 2);
+    return source.replace(before, after);
+  };
+  const moved = source.slice(0, prerequisiteStatement.getStart(file)) + source.slice(prerequisiteStatement.end);
+  const resetEndAfterRemoval = reset.end - (prerequisiteStatement.end - prerequisiteStatement.getStart(file));
+  for (const [name, changed] of [
+    ["changed prerequisite command", replaceOnce('[join(sourceDirectory, "node_modules/next/dist/bin/next"), "typegen"]', '[join(sourceDirectory, "node_modules/next/dist/bin/next"), "build"]')],
+    ["widened prerequisite scope", replaceOnce(reset.expression.getText(file), 'request.finalQualityGate && gate.name === "hero-compatibility"')],
+    ["prerequisite moved outside reset", moved.slice(0, resetEndAfterRemoval) + "\n" + prerequisiteStatement.getText(file) + moved.slice(resetEndAfterRemoval)],
+    ["duplicated prerequisite", replaceOnce(prerequisiteStatement.getText(file), prerequisiteStatement.getText(file) + "\n" + prerequisiteStatement.getText(file))],
+    ["missing success boundary", replaceOnce('assert.equal(result.code, 0, `Required Public gate failed: ${gate.name}`);', '')],
+  ]) assert.throws(() => inspectLaunches(changed), name);
+  cases.push("child launch guard permits only one generic driver and one fixed typegen after successful Hero reset; changed command, scope, placement, duplication and missing success boundary are rejected");
   const events: unknown[] = [];
   const evaluate = new Function("measurement", "gate", "result", "receipt", "context", "assert", "manifest", "digest",
     ts.transpileModule(policy.getText(file), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
@@ -1168,9 +1224,16 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   await assert.rejects(guard({ additionalSourceFiles: [], finalQualityGate: true }));
   cases.push("actual request guard preserves legacy combined Quality and rejects mixed retained/subset/measurement admission");
   const gateDeclaration = run.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "gates")); assert.ok(gateDeclaration);
-  const gates = new Function("request", "adoption", "measurement", compile(statement("GATES").getText(file) + "\n" + gateDeclaration.getText(file)) + ";return gates;") as (request: object, adoption: boolean, measurement?: unknown) => Array<{ name: string }>;
+  const gateDependencies = ["mediaUpload", "heroCompatibility", "heroGate"].map(name => {
+    const declaration = run.body!.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
+    assert.ok(declaration); return declaration.getText(file);
+  }).join("\n");
+  const gates = new Function("request", "adoption", "measurement", compile(statement("GATES").getText(file) + "\n" + gateDependencies + "\n" + gateDeclaration.getText(file)) + ";return gates;") as (request: object, adoption: boolean, measurement?: unknown) => Array<{ name: string }>;
   assert.deepEqual(gates(requests.retained, false).map(row => row.name), ["normal-build", "product-surface-build", "platform-contracts", "public-e2e"]);
   assert.deepEqual(gates(requests.legacy, true).map(row => row.name), ["normal-build", "product-surface-build", "platform-contracts", "public-e2e", "admin-adoption"]);
+  assert.deepEqual(gates({ selection: "media-upload-limit" }, false).map(row => row.name), ["normal-build", "media-upload-limit"]);
+  assert.deepEqual(gates({ selection: "hero-compatibility" }, false).map(row => row.name), ["normal-build", "hero-compatibility"]);
+  cases.push("actual gate selection preserves retained, adoption and media gates while isolating the fixed Hero journey");
   const finalBranch = run.body.statements.find(node => ts.isIfStatement(node) && node.expression.getText(file) === "retainedAdmission"); assert.ok(finalBranch);
   const receipts: Array<[string, unknown]> = [], retained = invoke(fixture()), reports = gates(requests.retained, false).map(row => ({ ...row, code: 0 }));
   const value = new Function("assert", "GATES", "reports", "retainedAdmission", "result", "qualityReports", "buildIdSha256", "receipt", "context", compile(finalBranch.getText(file)))(assert, reports, reports, retained, { status: "pass", gates: reports, sourceSha256: "a".repeat(64) }, [], retained.receipt.buildIdSha256, (_context: unknown, name: string, data: unknown) => receipts.push([name, data]), {}) as { finalQualityGate: { retainedAdminBehavior: { reexecuted: boolean }; buildIdSha256: string }; globalClosedClaimed: boolean };
@@ -1198,6 +1261,26 @@ function verifyFinalQualityGatePlan() {
     { ...scripts, "test:e2e:public": "echo skipped" },
   ]) assert.throws(() => plan(changed));
   cases.push("Final Quality Gate derives every non-build step from ci:check and rejects skipped, duplicated, shell-injected or changed Public tails");
+  const run = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification") as ts.FunctionDeclaration;
+  assert.ok(run?.body);
+  const body = run.body.statements.find(ts.isTryStatement); assert.ok(body);
+  const declaration = (name: string, nodes: ts.NodeArray<ts.Statement>) => {
+    const result = nodes.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
+    assert.ok(result); return result.getText(file);
+  };
+  const executionCode = ts.transpileModule([gates.getText(file), declaration("heroGate", run.body.statements),
+    declaration("qualityPrefix", body.tryBlock.statements), declaration("executionGates", body.tryBlock.statements)].join("\n"),
+  { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  type Gate = { name: string; qualityScript?: string };
+  const execution = new Function("qualityScripts", "heroCompatibility", "request", "gates", executionCode + ";return executionGates;") as (scripts: string[], hero: boolean, request: object, gates: Gate[]) => Gate[];
+  const canonical = new Function(code + ";return GATES;")() as Gate[];
+  const standard = execution(prefix, false, { finalQualityGate: true }, canonical);
+  assert.deepEqual(standard.slice(0, prefix.length).map(gate => gate.qualityScript), prefix);
+  assert.deepEqual(standard.slice(prefix.length), canonical);
+  const hero = execution(prefix, true, { finalQualityGate: true }, []);
+  assert.deepEqual(hero.slice(0, 2).map(gate => gate.name), ["hero-compatibility-build", "hero-compatibility"]);
+  assert.deepEqual(hero.slice(2), standard);
+  cases.push("Hero prerequisite build and journey precede the complete unchanged canonical Quality prefix and Public tail");
 }
 
 async function verifyMigrationToolPlatforms(lock: StackLock) {

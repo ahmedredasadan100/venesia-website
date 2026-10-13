@@ -1447,7 +1447,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               try {
                 // This timer has no application transaction or concurrent SQL
                 // operation: only this serialized ownership/heartbeat pulse.
-                await applicationLease.renewIfDue(request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit"
+                await applicationLease.renewIfDue(request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit" || request.selection === "hero-compatibility"
                   || (request.finalQualityGate === true && request.selection === undefined
                     && typeof request.retainedAdminBehaviorAdmissionSha256 === "string"
                     && /^[a-f0-9]{64}$/u.test(request.retainedAdminBehaviorAdmissionSha256)
@@ -1470,7 +1470,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
           catch(error) {throw heartbeatFailure ?? error;}
           finally { heartbeatActive = false; clearInterval(timer); await pulse;
-            if (request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit") publicJob = undefined; }
+            if (request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit" || request.selection === "hero-compatibility") publicJob = undefined; }
         }, record: safeRecord });
       activeHandles.add(handle);
       const boundHandle = handle;

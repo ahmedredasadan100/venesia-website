@@ -143,11 +143,7 @@ export default function ProjectsHubHeroModuleEditor({
             label="وصف المشروع"
             alignmentName="description_alignment"
             showName="show_description"
-            alignmentDefault={
-              config.descriptionAlignment === "justify"
-                ? "right"
-                : config.descriptionAlignment
-            }
+            alignmentDefault={config.descriptionAlignment}
             showDefault={config.showDescription}
           />
         </AdminFormGrid>

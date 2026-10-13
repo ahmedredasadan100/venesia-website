@@ -404,9 +404,24 @@ export function resolveHeroContentControlsForVariant(
 ): HeroContentControls {
   const controls = resolveHeroContentControls(raw);
   if (variant === "project-detail") {
+    // Legacy group visibility supplies only missing independent action settings.
+    const legacyActionVisibility =
+      parseOptionalBool(raw.showCta) ?? parseOptionalBool(raw.show_cta) ?? true;
     return {
       ...controls,
       showCta: true,
+      showProjectDownloadAction:
+        parseOptionalBool(raw.showProjectDownloadAction) ??
+        parseOptionalBool(raw.show_project_download_action) ??
+        legacyActionVisibility,
+      showProjectTrackingAction:
+        parseOptionalBool(raw.showProjectTrackingAction) ??
+        parseOptionalBool(raw.show_project_tracking_action) ??
+        legacyActionVisibility,
+      showProjectReservationAction:
+        parseOptionalBool(raw.showProjectReservationAction) ??
+        parseOptionalBool(raw.show_project_reservation_action) ??
+        legacyActionVisibility,
       subtitleBold:
         parseOptionalBool(raw.subtitleBold ?? raw.subtitle_bold) ?? true,
       showHighlight: false,
