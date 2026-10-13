@@ -929,13 +929,23 @@ function collectConsumerCapabilityAuditFailures(
     }
   }
 
+  const consumerOwnedGraph = graphWithoutOwnerSources(
+    ownershipGraph,
+    canonicalCapabilityOwnerSourceFiles,
+  );
+  const localImplementations = detectLocalImplementations(consumerOwnedGraph);
+
   for (const capability of currentSharedCapabilityKeys) {
     const decision = decisions[capability];
     const definition: AdminSharedConsumerCapabilityDefinition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
-    const consumerOwnedGraph = graphWithoutOwnerSources(
-      ownershipGraph,
-      canonicalCapabilityOwnerSourceFiles,
-    );
+    if (
+      !(
+        ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability]
+          .consumerBoundaries as readonly ConsumerCapabilityAuditBoundary[]
+      ).includes(consumer.boundary)
+    ) {
+      continue;
+    }
     const consumerDirectlyOwnsBinding = definition.executableBindings.some(
       (binding) =>
         consumer.sourceFiles
@@ -951,14 +961,16 @@ function collectConsumerCapabilityAuditFailures(
         sourceOverrides,
       });
     const hasConsumerBoundaryBinding =
-      consumerDirectlyOwnsBinding ||
-      (capability === "confirmation" && graphRequestsFloatingConfirmation(consumerOwnedGraph, sourceOverrides)) ||
-      graphUsesExecutableBinding({
-        root: ROOT,
-        graph: consumerOwnedGraph,
-        bindings: definition.executableBindings,
-        sourceOverrides,
-      });
+      decision.state === "not_applicable" && (
+        consumerDirectlyOwnsBinding ||
+        (capability === "confirmation" && graphRequestsFloatingConfirmation(consumerOwnedGraph, sourceOverrides)) ||
+        graphUsesExecutableBinding({
+          root: ROOT,
+          graph: consumerOwnedGraph,
+          bindings: definition.executableBindings,
+          sourceOverrides,
+        })
+      );
     const bindingIsExplainedByAdoptedCapability =
       decision.state === "not_applicable" &&
       currentSharedCapabilityKeys.some(
@@ -968,9 +980,6 @@ function collectConsumerCapabilityAuditFailures(
           capabilityExecutableBindingSignature(otherCapability) ===
             capabilityExecutableBindingSignature(capability),
       );
-    const localImplementations = detectLocalImplementations(
-      consumerOwnedGraph,
-    );
     const localMatches = definition.localImplementationKinds.filter((kind) =>
       localImplementations.has(kind),
     );
@@ -978,14 +987,6 @@ function collectConsumerCapabilityAuditFailures(
       consumer.collectionSurface?.semanticPresentation.explicitSurfaceContracts.some(
         (contract) => contract.state === capability,
       ) ?? false;
-    if (
-      !(
-        ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability]
-          .consumerBoundaries as readonly ConsumerCapabilityAuditBoundary[]
-      ).includes(consumer.boundary)
-    ) {
-      continue;
-    }
     if (
       decision.state === "adopted" &&
       !hasExecutableBinding
@@ -2702,6 +2703,24 @@ const transitiveFixtureGraph = consumerOwnershipGraph(
   transitiveFixtureOverrides,
 );
 
+// Reuse one override map across audits: a removed native control cannot leave stale findings.
+const mutableDescendantFile = "src/fixtures/governance/child.tsx";
+const originalDescendantSource = transitiveFixtureOverrides.get(mutableDescendantFile)!;
+const changedDescendantSource = originalDescendantSource.replace('<input type="date" />', '<input type="text" />');
+assert.notEqual(changedDescendantSource, originalDescendantSource);
+transitiveFixtureOverrides.set(mutableDescendantFile, changedDescendantSource);
+const changedDescendantFailures = collectConsumerCapabilityAuditFailures(
+  hiddenDescendantConsumer,
+  "source_proof",
+  transitiveFixtureOverrides,
+);
+transitiveFixtureOverrides.set(mutableDescendantFile, originalDescendantSource);
+const restoredDescendantFailures = collectConsumerCapabilityAuditFailures(
+  hiddenDescendantConsumer,
+  "source_proof",
+  transitiveFixtureOverrides,
+);
+
 const collectionPageFixtureRoot =
   "src/fixtures/governance/collection-page-consumer.tsx";
 const collectionPresentationFixtureRoot =
@@ -4219,6 +4238,15 @@ check(
   "not_applicable fails closed when a canonical capability is used by an indirect descendant instead of a registered root",
   hiddenDescendantFailures.includes("switch:hidden_adoption") &&
     hiddenDescendantFailures.includes("date_picker:local_implementation"),
+);
+check(
+  "whole consumer audit follows changed and restored native controls without losing independent hidden adoption",
+  changedDescendantFailures.includes("switch:hidden_adoption") &&
+    sameOrderedValues(
+      changedDescendantFailures,
+      hiddenDescendantFailures.filter((failure) => failure !== "date_picker:local_implementation"),
+    ) &&
+    sameOrderedValues(restoredDescendantFailures, hiddenDescendantFailures),
 );
 check(
   "Collection capability proof traverses both page and presentation roots and rejects a hidden or parallel owner in a page descendant",
