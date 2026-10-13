@@ -6,6 +6,7 @@ import Hero from '../../src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClie
 import Breadcrumb from '../../src/components/admin/page-blocks/editors/BreadcrumbManualItemsField';
 import MenuLink from '../../src/app/admin/pages-blocks/menus/MenuItemLinkSection';
 import Field from '../../src/components/admin/ui/AdminLinkField';
+import Action from '../../src/components/admin/ui/AdminActionButton';
 import Gallery from '../../src/components/admin/media/AdminMediaGalleryField';
 import ImageField from '../../src/components/admin/media/AdminMediaImageField';
 import { parseAdminLinkFromFormData } from '../../src/lib/admin/links/form-fields';
@@ -13,15 +14,23 @@ import Feedback from '../../src/components/admin/AdminFeedbackProvider';
 import { mediaContentSlot } from '../../src/lib/media-center/detail-page-config';
 const link = { link_kind: 'internal', linked_type: 'pages', linked_id: 42, href: '/about', anchor: 'team', target: '_self' };
 const initial = { button: { label: 'تعرف علينا', link, icon: 'arrow', alignment: 'right', iconPosition: 'left' }, images: { main: '/original.png', secondary: '/wide.png', mainAlt: 'الصورة الأولى', secondaryAlt: 'الصورة الثانية' } };
+const initialCta = { primaryLabel: 'الرئيسي', primaryLink: link, secondaryLabel: 'الثانوي', secondaryLink: { link_kind: 'external', href: 'https://example.com/long/' + 'destination-segment/'.repeat(18), target: '_blank' }, showDefault: true, alignmentDefault: 'right', boldDefault: false };
 function App() {
     const [story, setStory] = useState(() => JSON.parse(localStorage.getItem('story') || 'null') || initial);
     const [revision, setRevision] = useState(0);
     const [footer, setFooter] = useState(link);
+    const [cta, setCta] = useState(initialCta);
+    const [ctaRevision, setCtaRevision] = useState(0);
     function save(e) { e.preventDefault(); const d = new FormData(e.currentTarget); const config = { ...story, button: { ...story.button, label: d.get('button_label'), alignment: d.get('button_alignment'), icon: d.get('button_icon'), iconPosition: d.get('button_icon_position'), target: d.get('button_open_target'), link: parseAdminLinkFromFormData(d, 'button') }, images: { main: d.get('image_main'), secondary: d.get('image_secondary'), mainAlt: d.get('image_main_alt'), secondaryAlt: d.get('image_secondary_alt') } }; localStorage.setItem('story', JSON.stringify(config)); window.layoutSaved = Object.fromEntries(d); }
+    function saveCta(e) { e.preventDefault(); const data = new FormData(e.currentTarget); const config = { primaryLabel: data.get('primary_cta_label'), secondaryLabel: data.get('secondary_cta_label'), primaryLink: parseAdminLinkFromFormData(data, 'primary_cta'), secondaryLink: parseAdminLinkFromFormData(data, 'secondary_cta'), showDefault: data.get('show_cta') === 'true', alignmentDefault: data.get('cta_alignment'), boldDefault: data.get('cta_bold') === 'true' }; localStorage.setItem('hero-cta', JSON.stringify(config)); window.ctaSaved = { config, fields: Object.fromEntries(data) }; }
     return <main dir="rtl" className="mx-auto max-w-6xl space-y-8 bg-slate-950 p-4 text-white">
  <form data-family="story" key={revision} onSubmit={save}><Story editorMode="home-story" config={story}/><button type="submit">Save story</button><button type="button" onClick={() => { setStory(JSON.parse(localStorage.getItem('story'))); setRevision(x => x + 1); }}>Reload story</button></form>
  <section data-family="about"><Story config={initial} section="images"/></section>
- <form data-family="hero-cta"><HeroCta primaryLabel="الرئيسي" primaryLink={link} secondaryLabel="الثانوي" secondaryLink={{ link_kind: 'external', href: 'https://example.com/long/path', target: '_blank' }}/></form>
+ <form data-family="hero-cta" key={ctaRevision} onSubmit={saveCta}><HeroCta {...cta}/><button type="submit">Save CTA fixture</button><button type="button" onClick={() => { setCta(JSON.parse(localStorage.getItem('hero-cta'))); setCtaRevision(value => value + 1); }}>Reload CTA fixture</button></form>
+ <form data-family="hero-domain"><HeroCta linkSource="project-domain" primaryLabel="تفاصيل المشروع"/></form>
+ <section data-family="empty-link"><Field prefix="empty" label="رابط فارغ" showAnchor/></section>
+ <fieldset data-family="disabled-link" disabled><Field prefix="disabled" label="رابط معطل" defaultValue={link} showAnchor/></fieldset>
+ <section data-family="default-actions"><Action>إجراء نصي عادي</Action><Action disabled>إجراء نصي معطل</Action></section>
  <form data-family="breadcrumb"><Breadcrumb items={[{ label: 'من نحن', link }]}/></form>
  <form data-family="menu"><MenuLink item={{ item_type: 'link', link_kind: 'internal', linked_type: 'pages', linked_id: 42, href: '/about', target: '_self' }}/></form>
  <section data-family="footer"><Field prefix="footer" label="رابط Footer" controlledValue={footer} onControlledChange={setFooter} showAnchor/><output className="block break-all">{JSON.stringify(footer)}</output></section>

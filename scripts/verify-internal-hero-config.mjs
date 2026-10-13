@@ -370,6 +370,9 @@ assert(
     ) &&
     adminLinkFieldSource.includes('data-admin-link-field={presentation}') &&
     adminLinkFieldSource.includes('data-admin-link-destination=""') &&
+    heroCtaEditorSource.includes('aria-label="نص الزر الأساسي"') &&
+    heroCtaEditorSource.includes('aria-label="نص الزر الثانوي"') &&
+    !/<span[^>]*>نص الزر (?:الأساسي|الثانوي)<\/span>/.test(heroCtaEditorSource) &&
     heroCtaEditorSource.includes('<AdminFormGrid columns={1}>'),
   "Hero CTA text and shared link picker use two balanced cards with synchronized formatting inside each card",
 );

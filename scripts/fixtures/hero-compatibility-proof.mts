@@ -8,14 +8,21 @@ type Config = Record<string, unknown>;
 type Target = { id: number; slug: string };
 export const HERO_RICH_DESCRIPTION = '<p>وصف <strong>منسق محفوظ</strong> مع <a href="/contact">رابط التواصل</a>.</p><p>فقرة ثانية<br />وسطر محفوظ.</p>';
 export const HERO_EDITED_DESCRIPTION = 'وصف جديد مقصود';
+export const HERO_CTA_PROOF = {
+  primary: { label: "QA الزر الأساسي", title: "من نحن", href: "/about", routeKey: "about", anchor: "hero-primary" },
+  secondary: { label: "QA الزر الثانوي", title: "تواصل معنا", href: "/contact", routeKey: "contact", anchor: "hero-secondary" },
+} as const;
 export const HERO_CHECKPOINTS = [
   "home-baseline", "home-unsaved", "home-invalid", "home-preserved", "home-edited", "home-right",
   "internal-preserved", "detail-legacy-baseline", "detail-legacy-saved", "detail-partial-seed", "detail-partial-saved",
   "detail-snake-seed", "detail-snake-saved", "detail-modern-seed", "detail-modern-saved", "detail-right", "hub-preserved",
+  "home-cta-selected", "home-cta-primary-cleared", "home-cta-secondary-cleared", "home-cta-restored",
+  "internal-cta-selected", "internal-cta-primary-cleared", "internal-cta-secondary-cleared", "internal-cta-restored",
 ] as const;
 export type HeroProofFixtures = {
   home: Target; internal: Target; detail: Target; hub: Target; project: Target;
   richDescription: string; editedDescription: string; checkpoints: readonly string[];
+  cta: typeof HERO_CTA_PROOF;
 };
 
 /** Seed data only through the live canonical isolated lifecycle. No production input. */
@@ -46,7 +53,8 @@ export async function prepareHeroCompatibilityFixtures(handle: OwnedLocalHandle,
   const hubResult = await handle.query("update public.content_block_templates set status='unpublished',config=$1::jsonb where slug='projects-hub-hero' returning id,slug", [JSON.stringify(hubConfig)]);
   assert.equal(hubResult.rows.length, 1, "Canonical Projects Hub seed must exist.");
   return { home, internal, detail, hub: { id: Number(hubResult.rows[0].id), slug: String(hubResult.rows[0].slug) },
-    project, richDescription: HERO_RICH_DESCRIPTION, editedDescription: HERO_EDITED_DESCRIPTION, checkpoints: HERO_CHECKPOINTS };
+    project, richDescription: HERO_RICH_DESCRIPTION, editedDescription: HERO_EDITED_DESCRIPTION, checkpoints: HERO_CHECKPOINTS,
+    cta: HERO_CTA_PROOF };
 }
 
 /** Fixed private checkpoints: only the owning lifecycle may seed/read the synthetic rows. */
@@ -84,7 +92,26 @@ export async function runHeroCompatibilityCheckpoints<T>(handle: OwnedLocalHandl
       if (id === "home-unsaved" || id === "home-invalid") assert.deepEqual(row, homeBaseline, "Unsubmitted/rejected input must not change the native row.");
       if (id === "home-preserved" || id === "internal-preserved") assert.equal(config.description, HERO_RICH_DESCRIPTION);
       if (id === "home-edited" || id === "home-right") assert.equal(config.description, "<p>" + HERO_EDITED_DESCRIPTION + "</p>");
-      assert.equal(config.descriptionAlignment, id === "home-right" || id === "detail-right" ? "right" : "justify");
+      const ctaCheckpoint = id.includes("-cta-");
+      assert.equal(config.descriptionAlignment, id === "home-right" || id === "detail-right" || (kind === "home" && ctaCheckpoint) ? "right" : "justify");
+      if (ctaCheckpoint) {
+        assert.ok(kind === "home" || kind === "internal");
+        assert.equal(config.description, kind === "home" ? "<p>" + HERO_EDITED_DESCRIPTION + "</p>" : HERO_RICH_DESCRIPTION,
+          "CTA authoring must not change the existing rich-description compatibility result.");
+        const selected = id.endsWith("-selected") || id.endsWith("-restored");
+        for (const slot of ["primary", "secondary"] as const) {
+          const expectedLink = fixtures.cta[slot];
+          assert.equal(config[slot + "CtaLabel"], expectedLink.label);
+          const hasLink = selected || (slot === "secondary" && id.endsWith("-primary-cleared"));
+          assert.deepEqual(config[slot + "CtaLink"], hasLink ? {
+            link_kind: "static_route", linked_type: "static_routes", linked_id: null,
+            href: expectedLink.href, anchor: expectedLink.anchor, target: "_self", meta: { route_key: expectedLink.routeKey },
+          } : null, "Native CTA link must match the authored value or canonical clear result.");
+        }
+        assert.equal(config.showCta, selected);
+        assert.equal(config.ctaBold, selected);
+        assert.equal(config.ctaAlignment, selected ? "left" : "center");
+      }
       const expected = id === "detail-legacy-saved" ? [false, false, false] : id === "detail-partial-saved" ? [false, true, false]
         : id === "detail-snake-saved" ? [false, false, true] : id === "detail-modern-saved" || id === "detail-right" ? [true, false, true] : undefined;
       if (expected) {

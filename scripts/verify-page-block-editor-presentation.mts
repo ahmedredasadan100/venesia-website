@@ -1685,15 +1685,22 @@ check(
 );
 
 check(
-  "shared link presentation exposes resolved destination and stacked Anchor for every variant",
+  "shared link presentation exposes resolved destination beside accessible icon actions and stacked Anchor for every variant",
   (() => {
     const owner = read("src/components/admin/ui/AdminLinkField.tsx");
     return owner.includes('data-admin-link-field={presentation}') &&
       owner.includes('data-admin-link-destination=""') &&
       owner.includes('previewDisplay?.title') && owner.includes('previewDisplay?.publicPath') &&
       !owner.includes('if (presentation === "inline")') &&
-      owner.includes('className="min-w-0 flex-1"') &&
-      owner.includes('Anchor (اختياري)') && owner.includes('adminFormLabelClassName()');
+      owner.includes('data-admin-link-controls=""') &&
+      owner.includes('className="flex min-w-0 items-center gap-2"') &&
+      owner.includes('<AdminActionButton variant="gold" size="icon"') &&
+      owner.includes('<AdminActionButton variant="danger" size="icon"') &&
+      owner.includes('<span className="sr-only">{chooseLinkLabel}</span>') &&
+      owner.includes('<span className="sr-only">{clearLinkLabel}</span>') &&
+      owner.includes('onClick={() => setPickerOpen(true)}') &&
+      owner.includes('onClick={() => setLink(emptyAdminLink())}') &&
+      owner.includes('<span className="block">Anchor (اختياري)</span>') && owner.includes('adminFormLabelClassName()');
   })(),
 );
 check(
