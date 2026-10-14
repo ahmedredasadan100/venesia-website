@@ -32,10 +32,12 @@ try {
     ["src/lib/redirects/load-active-redirects.ts", "loadActiveRedirectForRuntime", ["/old"]],
   ]) {
     const read = () => loadVerificationOwner(path.join(root, file), root)[method](...args);
+    // Loading/transpiling the owner is fixture setup, before its fetch deadline starts.
+    const deadlineOwner = loadVerificationOwner(path.join(root, file), root);
     const started = performance.now();
-    const result = await read();
+    const result = await deadlineOwner[method](...args);
     const elapsed = Math.round(performance.now() - started);
-    assert.ok(elapsed < 600, `${file}: configured deadline must precede the 700ms response`);
+    assert.ok(elapsed < 600, `${file}: configured deadline must precede the 700ms response (${elapsed}ms)`);
     assert.equal(result, args.length ? null : false);
     delay = 0;
     assert.deepEqual(await read(), args.length
