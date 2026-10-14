@@ -210,7 +210,7 @@ function HomeProjectCard({
             className="home-project-card__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
           />
 
-          <div className="absolute inset-x-3 bottom-3 z-30 flex flex-col items-stretch gap-2 rounded-2xl border border-[#D8B87A]/25 bg-[#05070B]/75 p-3 text-right backdrop-blur-[6px] @xs/project-card:gap-3 @xs/project-card:p-4">
+          <div className="absolute inset-x-3 bottom-3 z-30 flex flex-col items-stretch gap-2 rounded-2xl border border-[#D8B87A]/25 bg-[#05070B]/75 p-3 text-right @xs/project-card:gap-3 @xs/project-card:p-4">
             <p className="break-words text-lg font-semibold tracking-[0.16em] text-[#D8B87A] @xs/project-card:text-xl">
               {project.englishName}
             </p>
