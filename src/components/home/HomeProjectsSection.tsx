@@ -107,10 +107,6 @@ function resolveProjectsLimit(limit?: number | string | null) {
 
 const CARDS_PER_PAGE = 3;
 
-// Keep a subtle text edge over the content-bound scrim.
-const CARD_TEXT_SHADOW_CLASS =
-  "[text-shadow:0_1px_2px_rgba(5,7,11,0.45)]";
-
 function useIntentPrefetch() {
   const [prefetchEnabled, setPrefetchEnabled] = useState(false);
 
@@ -200,7 +196,7 @@ function HomeProjectCard({
           <span className="home-project-card__edge home-project-card__edge--left absolute inset-y-8 left-0 w-[2px] origin-bottom scale-y-0 bg-gradient-to-t from-transparent via-[#D8B87A] to-transparent opacity-0 transition-all delay-200 duration-700 ease-out group-hover:scale-y-100 group-hover:opacity-100" />
         </div>
 
-        <div className="relative h-[360px] overflow-hidden">
+        <div className="relative h-[360px] overflow-hidden @container/project-card">
           <Image
             src={project.cardImage.src}
             alt={project.cardImage.alt}
@@ -214,24 +210,13 @@ function HomeProjectCard({
             className="home-project-card__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
           />
 
-          <div className="absolute inset-x-0 bottom-0 z-30 isolate p-6">
-            {/* Follow the content height; feather the scrim inside the caption padding. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 bottom-2 -z-10"
-              style={{
-                background:
-                  "radial-gradient(ellipse 100% 80% at 50% 55%, rgba(5,7,11,0.82) 35%, rgba(5,7,11,0.72) 70%, transparent 100%)",
-                maskImage:
-                  "linear-gradient(to bottom, transparent, black 32px, black calc(100% - 24px), transparent)",
-              }}
-            />
-            <p className={`mb-2 text-xl font-semibold tracking-[0.16em] text-[#D8B87A] ${CARD_TEXT_SHADOW_CLASS}`}>
+          <div className="absolute inset-x-3 bottom-3 z-30 flex flex-col items-stretch gap-2 rounded-2xl border border-[#D8B87A]/25 bg-[#05070B]/75 p-3 text-right backdrop-blur-[6px] @xs/project-card:gap-3 @xs/project-card:p-4">
+            <p className="break-words text-lg font-semibold tracking-[0.16em] text-[#D8B87A] @xs/project-card:text-xl">
               {project.englishName}
             </p>
 
             {locationLabel ? (
-              <span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+              <span className="inline-flex max-w-full self-start rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
                 {locationLabel}
               </span>
             ) : null}
@@ -239,14 +224,14 @@ function HomeProjectCard({
             <PlainTextContent
               value={project.shortDescription}
               as="p"
-              className={`mt-4 line-clamp-2 text-sm leading-7 text-white/72 ${CARD_TEXT_SHADOW_CLASS}`}
+              className="break-words text-xs leading-5 text-white/90 @xs/project-card:text-sm @xs/project-card:leading-6"
             />
 
             <div
-              className={`mt-6 flex ${CARD_CTA_ALIGN_CLASS[cardCtaAlignment]}`}
+              className={`flex ${CARD_CTA_ALIGN_CLASS[cardCtaAlignment]}`}
               dir="rtl"
             >
-              <div className={`home-project-card__cta inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A] transition-colors duration-300 ${CARD_TEXT_SHADOW_CLASS}`}>
+              <div className="home-project-card__cta inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A] transition-colors duration-300">
                 {cardCtaLabel}
                 <span className="home-project-card__arrow transition-transform duration-300 group-hover:-translate-x-1">
                   ←
