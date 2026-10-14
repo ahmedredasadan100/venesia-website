@@ -202,20 +202,15 @@ function HomeProjectCard({
             alt={project.cardImage.alt}
             fill
             sizes="(max-width: 768px) 100vw, 33vw"
-            className="home-project-card__image transform-gpu object-cover opacity-80 transition-transform duration-[1400ms] ease-out will-change-transform group-hover:scale-[1.035]"
-            style={{
-              filter: "brightness(0.92) contrast(1.08) saturate(0.94)",
-            }}
+            className="home-project-card__image transform-gpu object-cover transition-transform duration-[1400ms] ease-out will-change-transform group-hover:scale-[1.035]"
           />
-
-          <div className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/74 to-[#05070B]/18" />
 
           <div
             aria-hidden
             className="home-project-card__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
           />
 
-          <div className="absolute inset-x-0 bottom-0 z-30 p-6">
+          <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-[#05070B]/95 via-[#05070B]/75 via-85% to-transparent p-6">
             <p className="mb-2 text-xl font-semibold tracking-[0.16em] text-[#D8B87A]">
               {project.englishName}
             </p>
