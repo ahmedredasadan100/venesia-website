@@ -3761,13 +3761,26 @@ The Project Owner-approved workflow is:
 1. Identify the current owner, affected consumers, and contracts through focused discovery.
 2. Implement at that owner, retaining applicability and Source Proof for new or materially extended Admin consumers.
 3. Select targeted TypeScript, lint, guards, behavior, save/reload, and failure-path proof according to impact; shared-owner changes include affected adopters.
-4. Verify Desktop, Mobile, RTL, and relevant accessibility when UI changes.
+4. Select UI proof according to demonstrated impact on Desktop, Mobile, RTL, and relevant accessibility; retain valid evidence for unaffected behavior.
 5. Obtain Owner Visual Approval of appearance and function on Local, then make the authorized local commit after targeted checks pass.
 
 Local Product Review does not wait for remote CI. Vercel Preview is not required
 during development. A Full Quality Gate MUST NOT run automatically after each
 small change. A documentation-only local change uses targeted documentation
 checks and does not require UI approval or Browser QA.
+
+When the Owner reviews the already-running Local site, use the minimum targeted
+code verification required by the change. Do not automatically open Browser
+Automation. Do not create screenshots or visual reports unless requested. When
+behavior cannot be proved by code checks, run only the minimum necessary Browser
+Verification; an explicit request can also authorize it. Reuse the running
+Dev Server; do not restart it for routine verification. Do not repeat successful
+Browser QA without a change-related reason; evidence reuse follows Section 25.5
+and the QA release contract. Final visual approval belongs to the Owner on Local.
+The local handoff lists only changed files, targeted verification results, the
+local commit, and Git status; omit repeated localhost links and
+stop at the authorized boundary. These efficiency defaults do not waive required
+architecture, adoption, behavior, or release proof.
 
 **Batch Release Verification**, when the group of changes is complete:
 
@@ -3778,7 +3791,7 @@ checks and does not require UI approval or Browser QA.
 5. Proceed to separately authorized Ready and Standard Merge; the existing integration deploys Production automatically, with scoped Production proof before claiming Production closure.
 
 `docs/QA_RELEASE_CLOSURE.md` owns check selection, evidence validity, and reruns.
-This policy changes verification timing only. Build Once, Adopt Everywhere and
+This policy changes verification selection, timing, and Local review workflow only. Build Once, Adopt Everywhere and
 single ownership remain mandatory. Parallel implementation, second sources of
 truth, local workarounds, Contract Drift, and weakened/deleted assertions remain
 prohibited. New owners require the existing architecture approval path. Auth,
@@ -5042,7 +5055,8 @@ That contract is independent of Slugs, page names, Templates, Themes, CSS, and c
 **Status:** Accepted by the Project Owner on 2026-10-14.
 **Context:** Running a Full Quality Gate for every small Admin change delays iterative Local review without changing the architectural obligations.
 **Decision:** Section 25.4 separates targeted Development Verification, Owner Visual Approval, and local commits from one Batch Final Quality Gate, authorized Push/PR, required GitHub CI, separate Ready/Merge approvals, and automatic Production deployment. Local review requires no Vercel Preview. Section 25.5 and the existing QA release contract govern evidence validity after a HEAD change.
-**Architecture impact:** Verification and delivery timing only. Existing Systems, Runtimes, Capabilities, manifests, guards, ownership, and contracts remain authoritative. No new QA system or parallel owner is introduced; there is no migration or consumer-code adoption change. No CI, branch-protection, Vercel-setting, Auth, Permission, or Database change is authorized by this decision.
+**Architecture impact:** Verification selection, delivery timing, and Local review workflow only. Existing Systems, Runtimes, Capabilities, manifests, guards, ownership, and contracts remain authoritative. No new QA system or parallel owner is introduced; there is no migration or consumer-code adoption change. No CI, branch-protection, Vercel-setting, Auth, Permission, or Database change is authorized by this decision.
+**Local efficiency refinement (Owner-approved, 2026-10-14):** Section 25.4 defaults to targeted code checks; Browser Automation is limited to explicit requests or the minimum proof of behavior that code checks cannot establish. Screenshots and visual reports require a request. It reuses the running Dev Server and valid QA evidence, leaves final visual review to the Owner, and limits local handoffs to changed files, verification results, local commit, and Git status without repeated localhost links. Required architectural and release proof is unchanged.
 **Consequences:** Local approved work can accumulate safely in commits; targeted success cannot be presented as batch, CI, merge, or Production closure. Discovery and reruns stay proportional to demonstrated impact. Existing test assertions and release requirements are preserved.
 **Evidence:** Explicit Project Owner decision, “Fast Local Development Workflow — One-Shot Policy Update & Safe Handoff”; synchronized `AGENTS.md`, `docs/AI_WORKING_RULES.md`, and `docs/QA_RELEASE_CLOSURE.md` with targeted documentation consistency checks.
 **Supersedes:** Only the CI-before-Local-Product-Review timing in ADR-026 and the per-change final-gate sequence. ADR-025 authorization boundaries and all adoption proof obligations remain in force.

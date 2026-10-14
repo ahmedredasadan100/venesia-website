@@ -110,7 +110,7 @@ For each bounded change:
 1. Identify the current owner, affected consumers, contracts, and risks.
 2. Implement at that owner. New or materially extended Admin consumers retain the existing applicability preflight and post-implementation Source Proof; axes come from the Current Shared Capability Set.
 3. Run targeted TypeScript, lint, and guards according to impact. Use existing supported commands; do not invent a parallel QA system or narrow a check so that affected shared consumers escape coverage.
-4. Prove changed behavior, save/reload parity, and failure paths where relevant. For UI changes, review Desktop, Mobile, RTL, and relevant keyboard/focus behavior on Local.
+4. Prove changed behavior, save/reload parity, and failure paths where relevant. For UI changes, select proof by impact on Desktop, Mobile, RTL, and relevant keyboard/focus behavior; reuse valid unaffected evidence under Section 3.4.
 5. Correct actual defects and rerun only affected checks. Apply Section 3.1 where architecture is in scope.
 6. Obtain Owner Visual Approval of appearance and function on Local, then create the authorized local commit after targeted checks pass.
 
@@ -243,9 +243,19 @@ Relevant proof may include:
 
 ## 6. Browser QA rules
 
-Use one server and the expected authenticated session.
+During bounded Local development, default to targeted code checks according to
+impact. Do not automatically open
+Browser Automation. If code checks cannot prove the affected behavior, run only
+the minimum necessary Browser Verification; explicit requests also authorize it,
+as defined in Constitution Section 25.4 and ADR-028. Do not create screenshots
+or visual reports without a request.
+Reuse the running Dev Server without a routine restart or a duplicate instance,
+and use the expected authenticated session when required. Do not rerun successful
+Browser QA without a change-related reason; retain valid evidence under Section
+3.4. Final visual approval remains with the Owner reviewing Local directly.
+Required architectural, behavioral, and release checks remain mandatory.
 
-For changed UI, test:
+When Browser QA is needed, test the affected cases from:
 
 - Desktop;
 - approximately 390px;
@@ -395,6 +405,12 @@ Use only exact scoped claims:
 Global closure requires a complete in-scope inventory, adoption or approved exceptions, no undeclared duplicate owner, architecture guard, failure proof, and exact-head verification.
 
 ## 14. Mandatory report
+
+For a bounded Local-only handoff, list only changed files, targeted verification
+results, local commit SHA, and Git status, then stop at the authorized boundary.
+Do not repeat the localhost link. The detailed fields below apply to release or
+closure reports and explicit detailed-report requests. Retain required evidence
+without adding unnecessary report sections or rerunning QA merely to fill them.
 
 ### A. Proven Facts
 
