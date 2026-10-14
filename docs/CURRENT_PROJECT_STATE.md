@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-10-13
+**Updated:** 2026-10-14
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -9,24 +9,24 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
-The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
+The release baseline is GitHub `main`, resolved live when remote alignment is
+required for release. During an active local batch, continue from its preserved
+branch and actual HEAD; do not switch branches or rebuild saved work merely to
+restart discovery.
 
-```text
-6ae87bcd93abfcb177e569a521e633a3c5b99ec7
-```
+Verified locally for the policy update on 2026-10-14:
 
-Verified at the start of the Hero Compatibility & Technical Debt Closure phase, after PR #220 merged:
+| Surface | SHA / state |
+| ------- | ----------- |
+| Local `main` / cached `origin/main` | Both `dfef67ddaa4cc3b1f4d63a08ecf52013307498f0`, whose merge commit records PR #221. No fresh remote query was performed. |
+| Active branch / entering HEAD | `codex/hero-ui-01-cta-controls` at `7d8a890419caa2099f5da668e7574e023384ead1`. The policy commit appends to this history on the same branch. |
+| Entering working tree | Tracked/index and untracked status clean; ignored local QA evidence retained. |
+| GitHub / Vercel / Database | Not re-verified or changed by this local documentation task. Historical release and migration evidence below is not a current health claim. |
+| Delivery boundary | Documentation update and one local commit only; no Push, PR, Ready, Merge, deployment, migration, or Production mutation. |
 
-| Surface                       | SHA / state |
-| ----------------------------- | ----------- |
-| Verified canonical baseline   | PR #220 merge `6ae87bcd93abfcb177e569a521e633a3c5b99ec7`. |
-| Local `main` / `origin/main` / GitHub `main` | Equal to the canonical baseline at phase entry. |
-| Entering worktree / open PRs   | Tracked and untracked files clean; no open PRs at phase entry. |
-| Vercel Production             | Not re-verified in this phase; Git and historical release evidence do not establish current deployment health. |
-| Migration registry            | Last recorded readback: 122 migrations, verified on 2026-10-10; see the dated database reconciliation below. No fresh live-database claim. |
-| Delivery state                | PRs #184, #186 and #220 are merged. Current work is on `codex/hero-compatibility-debt-closure`; verification and one Draft PR are pending. |
-
-Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
+The previous `6ae87bcd93abfcb177e569a521e633a3c5b99ec7` baseline belonged to the
+PR #220 / Hero Compatibility phase and is historical. Re-resolve live Git facts
+at continuation; do not treat the entering HEAD above as a permanently fixed tip.
 
 ## Current delivery state
 
@@ -42,12 +42,15 @@ F05/F06's broader authenticated consumer/domain parity remains governed by the c
 
 ## Active phase
 
-- **Title:** Hero Compatibility & Technical Debt Closure.
-- **Entering baseline:** PR #220 merge `6ae87bcd93abfcb177e569a521e633a3c5b99ec7` on `main`.
-- **Delivery branch:** `codex/hero-compatibility-debt-closure`; implementation and affected verification in progress, followed by one Draft PR.
-- **Scope:** BUG-01 preserves unchanged rich Hero descriptions; BUG-02 preserves supported description alignment; BUG-03 restores legacy Project Detail CTA compatibility. DEBT-04 reconciles this state record; DEBT-05 updates the optional internal Hero verifier to current owners and behavior.
-- **Preserved boundaries:** current Product design, compact text controls, independent Project Detail actions, existing contracts and data owners. Retired Hero features and broader adoption work are outside this phase.
-- **Authorization boundary:** scoped changes, isolated verification, Commit, Push and one Draft PR. No Ready, merge, automatic merge, deployment, migration, Production mutation or Auth/Permission change. No completed verification, CI or release claim is made here for this branch.
+- **Title:** Fast Local Development Workflow — policy update and HERO-UI-01 safe handoff.
+- **Preserved branch:** `codex/hero-ui-01-cta-controls`; entering HEAD `7d8a890419caa2099f5da668e7574e023384ead1`.
+- **Saved work:** HERO-UI-01 product change `e33b2531de21a62f690151571a272d6fd1888a65`, followed by QA corrections `5a1b8df8571457a06abc8094997eeaf975e9ce75` and `7d8a890419caa2099f5da668e7574e023384ead1`. All remain in history; the QA corrections stay within the next batch release review.
+- **Owner approval:** HERO-UI-01 is visually approved by the Owner and saved locally. Do not reimplement it or create a parallel Hero implementation; the next Hero batch continues from this saved work after checking actual Git state.
+- **Retained targeted proof:** Existing applicability/Source Proof, typecheck/lint and affected guards, six-width RTL UI evidence, link picker/CTA roundtrip, and native Hero Save/Reload/Public rendering receipts remain under `.tmp-qa/hero-ui-01/` and `.tmp-qa/hero-ui-01-final-2026-10-14-r3/run/`. The stop handoff records 25/25 native Hero checkpoints on the entering HEAD. These are retained scoped results, not tests rerun by the policy update.
+- **Previous Final Quality Gate:** **Stopped by Owner — Not Passed**. R3 stopped during Admin Core Closure after 6/69 quality-prefix steps; Final Build/Public E2E and remote CI were not reached. The next completed batch still requires its release gate.
+- **Evidence and cleanup:** `.tmp-qa/hero-ui-01/owner-stop-handoff.md` and `.tmp-qa/hero-ui-01/owner-stop.json` preserve the stop decision and receipts. Prior cleanup reports 10 owned resources removed, zero remaining, and original resources unchanged; this is historical cleanup proof, not a new environment inspection.
+- **Current scope:** Existing governing documents and targeted documentation consistency checks only; one local policy commit on the same branch. No Product Code, QA-script, CI, branch-protection, Vercel-setting, Auth/Permission, Database, or Migration change.
+- **Next session:** Apply Constitution Section 25.4 / ADR-028 and `QA_RELEASE_CLOSURE.md`: targeted verification and Local Owner approval per change, local commits, then one batch release gate before authorized Push/PR and required CI. Ready and Merge retain separate authorization.
 
 ## Current architecture truth
 

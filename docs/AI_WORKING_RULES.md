@@ -28,6 +28,8 @@
 
 > لا تنفيذ قبل تثبيت الواقع.
 
+Discovery محدودة بالمالك والـConsumers والعقود المتأثرة. يُعاد استخدام الواقع المثبت والأدلة السارية، ولا تُعاد جولة استكشاف شاملة لكل تعديل. عند متابعة Batch محفوظة، يبدأ العمل من فرعها وHEAD الفعلية دون إعادة تنفيذ العمل أو تغيير الفرع تلقائيًا؛ إعادة تقييم الـBaseline تكون عند تغير ذي أثر أو متطلبات إصدار مثبتة.
+
 ---
 
 ## 2. يقرأ المراجع الملزمة
@@ -54,6 +56,7 @@
 
 - Audit Only
 - Plan Only
+- Documentation / Policy Update
 - UI/UX Consumer Change
 - Shared Component Correction
 - Runtime Adoption
@@ -192,7 +195,7 @@ Adoption غير مكتمل طالما المالك القديم ما زال فع
 - يعدّل الملفات الضرورية فقط.
 - لا ينفذ Refactor جانبيًا.
 - لا يضيف Library بلا حاجة مثبتة.
-- لا يغير Auth أو Permissions ضمن Cleanup.
+- لا يغير Auth أو Permissions أو Database أو Migrations دون تفويض مستقل.
 - لا يوسع المرحلة.
 - لا يلمس الملفات المحمية أو غير المرتبطة.
 - لا يصلح ملاحظات قديمة خارج النطاق.
@@ -258,25 +261,40 @@ Full Access لا يعني Merge أو Deployment أو توسعًا تلقائيً
 
 ---
 
-## 10. ترتيب الاختبارات
+## 10. Development Verification وBatch Release Verification
 
-الترتيب الافتراضي:
+وفق Section 25.4 وADR-028 من الدستور، نفصل تطوير كل تعديل عن إصدار المجموعة.
 
-1. Targeted tests
-2. Targeted TypeScript
-3. Targeted ESLint
-4. `git diff --check`
-5. Browser QA للمسارات المتغيرة فقط
-6. Failure paths
-7. Focused correction pass واحدة
-8. إعادة الاختبارات المستهدفة المتأثرة
-9. Final Quality Gate مرة واحدة على الـFinal HEAD
+### 10.1 Development Verification — لكل تعديل محدود
 
-لا يُعاد Full QA أو Gate ناجحة بلا تغيير جديد أو دليل جديد أو فشل Gate أو سبب محدد.
+1. تحديد الـOwner الحالي والـConsumers والعقود المتأثرة.
+2. التنفيذ الصحيح عند المالك الحالي؛ تظل Applicability وSource Proof إلزاميتين عند إنشاء أو توسيع Admin Consumer ماديًا، بمحاور مشتقة من Current Shared Capability Set.
+3. اختيار Targeted Typecheck / Lint / Guards حسب الأثر، مع تغطية المتبنين المتأثرين عند تغيير Shared Owner.
+4. إثبات السلوك والحفظ وإعادة القراءة والفشل حيث تتأثر هذه المسارات.
+5. مراجعة Desktop / Mobile / RTL وAccessibility ذات الصلة عند تعديل UI، على Local.
+6. Focused Correction Pass عند وجود عيب حقيقي، ثم إعادة الفحوص المستهدفة المتأثرة فقط.
+7. اعتماد المالك للشكل والوظيفة على Local (Owner Visual Approval / Local Product Review).
+8. Local Commit مصرح به بعد نجاح التحقق المستهدف ومراجعة الـDiff.
 
-Quality Gate على Commit قديم لا تثبت Commit أحدث.
+لا Full Quality Gate تلقائية بعد كل تعديل صغير. Local Product Review تأتي بعد Source Proof والتحقق المستهدف ولا تنتظر CI البعيد. لا نحتاج Vercel Preview أثناء التطوير. التعديل الوثائقي فقط يكتفي بفحوص اتساق وثائقية مستهدفة ولا يحتاج Browser QA أو اعتماد UI.
 
-بعد الـPass القوي الواحد، تُطبق Architecture Review Matrix الحاكمة في Sections 27.2 و29.4.1 من الدستور. إذا كانت Blocking Issues أكبر من صفر وكان الاتجاه المعماري صحيحًا، يُنفذ Focused Correction Pass واحد للنقاط الحاجبة فقط، ثم تُعاد الاختبارات المستهدفة المتأثرة وArchitecture Review نهائية. لا تُنقل المرحلة إلى البوابة التالية إلا عندما `Blocking Issues = 0` ومع وجود تصريح مستقل للبوابة التالية.
+تظل Architecture Review Matrix في Sections 27.2 و29.4.1 ملزمة للسلوك المتأثر؛ لا عبور للبوابة التالية مع Blocking Issues. نجاح التحقق المحلي أو الاعتماد البصري لا يعني نجاح الإصدار أو Global Closure.
+
+### 10.2 Batch Release Verification — عند اكتمال المجموعة
+
+1. تثبيت Final HEAD المجمعة بعد الـLocal Commits ومراجعة نطاق الإصدار كله، بما فيه أي إصلاحات QA مضمنة.
+2. Full Quality Gate مرة واحدة على النسخة المجمعة، مع Final Build وPublic E2E حسب عقد الإصدار الحالي دون تكرار خطوات يشملها الأمر نفسه.
+3. Cleanup وإثبات سلامة البيئة والموارد الأصلية مع الاحتفاظ بأدلة الاختبار.
+4. Push ثم PR عند التصريح، ثم Required GitHub CI على رأس الـPR الحالي.
+5. Ready وStandard Merge بتفويض مستقل لكل منهما، ثم Automatic Production عبر الربط الحالي.
+
+إذا تغير Final HEAD، يسجل الفرق ومدى صلاحية الأدلة ويعاد ما تأثر فقط وفق `docs/QA_RELEASE_CLOSURE.md` Section 3.4؛ يعاد Full Gate عندما يتعذر تغطية الأثر بالأدلة السارية والفحوص المتأثرة. لا تُنسب أدلة SHA قديمة إلى HEAD جديدة، ولا تعتبر البوابة المتوقفة Passed.
+
+### 10.3 كفاءة التنفيذ
+
+لا تكرار لاختبارات ناجحة دون أثر أو فشل أو دليل جديد، ولا Status Polling متكرر، ولا تحسينات QA جانبية. لا Full Audit إلا بطلب المالك أو متطلبات إصدار مثبتة. تكون تقارير العمل موجزة عند عائق حقيقي أو التسليم.
+
+للوكيل حرية اختيار أفضل Implementation Detail داخل الـOwners والعقود المعتمدة دون Micro-approvals. تبقى قرارات المنتج والمعمارية والأمان والبيانات غير المحسومة ضمن بواباتها الحالية.
 
 ---
 
@@ -350,8 +368,8 @@ Quality Gate على Commit قديم لا تثبت Commit أحدث.
 3. مراجعة Unstaged Diff
 4. التأكد أن الملفات المقصودة فقط تغيرت
 5. `git diff --check`
-6. تسجيل Commit SHA
-7. إثبات `Local HEAD = Remote Branch HEAD` بعد Push
+
+بعد Commit يسجل SHA. وعند Push المصرح به لاحقًا يثبت `Local HEAD = Remote Branch HEAD`؛ لا يشترط Push لحفظ Local Commit.
 
 ---
 
@@ -359,21 +377,19 @@ Quality Gate على Commit قديم لا تثبت Commit أحدث.
 
 التسلسل الرسمي:
 
-1. تنفيذ
-2. Targeted QA
-3. Focused Correction
-4. Final Quality Gate
-5. Commit وPush
-6. تقرير كامل
-7. مراجعة Project Owner
-8. Ready بتصريح
-9. مراجعة نهائية
-10. Merge بتصريح منفصل
-11. Vercel Production التلقائية
-12. Production Smoke آمن عند وجود جلسة موثوقة
-13. Formal Closure
+1. Local Implementation
+2. Impact-Based Targeted QA والتصحيح المحدود عند الحاجة
+3. Owner Visual Approval على Local
+4. Local Commits
+5. Batch Final Quality Gate وFinal Build/Public E2E حسب العقد ثم Cleanup
+6. Push ثم PR بتفويض يشملهما
+7. Required GitHub CI على الـPR HEAD الحالية وتقرير أدلة الإصدار
+8. Ready بتصريح مستقل بعد استيفاء عقد الإصدار
+9. مراجعة نهائية وStandard Merge بتصريح منفصل مع حماية Expected HEAD
+10. Automatic Production Deployment
+11. Production Smoke آمن عند وجود جلسة موثوقة، ثم Formal Closure بحسب الأدلة
 
-Ready لا تعني Merge. Preview لا تعني Production Closure.
+Ready لا تعني Merge، وLocal Visual Approval لا تعني Release Approval. Preview ليست شرطًا للتطوير المحلي. لا تغيير CI أو Branch Protection أو Vercel Settings بموجب تحديث السياسة، ولا Manual Production Deployment.
 
 إذا غابت جلسة Admin موثوقة، يُسجل Production Admin Smoke كـ`Skipped` بسبب غياب الجلسة، لا كفشل برمجي.
 
@@ -458,7 +474,7 @@ Ready لا تعني Merge. Preview لا تعني Production Closure.
 
 ما يلزم قبل Ready أو Merge أو Production Closure أو Global Closure أوسع.
 
-ثم Exact Closure Claim بلا مبالغة.
+ثم Exact Closure Claim بلا مبالغة. في تسليم Local فقط يكون التقرير متناسبًا مع النطاق؛ يُذكر أن CI وPush/PR والإصدار لم تُنفذ، دون فتح تلك البوابات أو إعادة QA لإكمال قالب التقرير.
 
 > Reference Consumer لا تعني Global Closure.
 > Preview Success لا تعني Production Closure.
@@ -468,21 +484,9 @@ Ready لا تعني Merge. Preview لا تعني Production Closure.
 
 ## 18. السلسلة الرسمية
 
-> Discover
-> → Consumer Capability Adoption Audit (Capability Applicability)
-> → Architecture
-> → Implementation
-> → Source Proof
-> → Verification
-> → CI
-> → Product Review
-> → Commit/Push
-> → Report
-> → Review
-> → Ready
-> → Merge
-> → Production Verification
-> → Closure
+التسلسل المحلي يبدأ بـDiscover المحدود → Consumer Capability Adoption Audit (Applicability عند انطباقها) → Architecture → Implementation → Source Proof → Development Verification → Owner Visual Approval → Local Commit.
+
+ثم، عند اكتمال المجموعة، يُتبع تسلسل Batch Release Verification والتسليم في Sections 10.2 و14. تبقى Required GitHub CI وReady وMerge وProduction Verification بوابات إصدار؛ لا تعاد قبل كل Local Commit.
 
 ---
 

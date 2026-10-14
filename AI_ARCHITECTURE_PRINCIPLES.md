@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.6.1
-> **Effective date:** 2026-09-06
+> **Version:** 3.7.0
+> **Effective date:** 2026-10-14
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
@@ -2819,8 +2819,8 @@ Only after this search may the agent propose a new owner.
 
 ## 19.2 Adoption Workflow
 
-Every new or materially extended Admin consumer MUST pass the following gates
-in this order:
+Every new or materially extended Admin consumer MUST pass the following local
+development gates in this order (ADR-028):
 
 ```text
 Discover
@@ -2828,14 +2828,16 @@ Discover
 -> Architecture
 -> Implementation
 -> Source Proof
--> Verification
--> CI
--> Product Review
+-> Impact-Based Targeted QA
+-> Owner Visual Approval (Local Product Review)
+-> Local Commit
 ```
 
 Capability Applicability classifies every current shared-capability axis before
-implementation; Source Proof verifies canonical ownership before Verification,
-CI, and Product Review.
+implementation; Source Proof verifies canonical ownership before targeted
+verification and Local Product Review. Batch Release Verification and required
+GitHub CI follow Section 25.4 before Ready and Merge. Local approval and a local
+commit do not claim release readiness or global adoption closure.
 
 Applicability and Source Proof MUST be executable contracts. Raw source-text
 search, proof tokens, regular-expression discovery, filenames, comments,
@@ -3006,7 +3008,7 @@ If review finds defects after the implementation pass:
 - perform one focused correction pass;
 - fix actual defects only;
 - rerun affected targeted checks;
-- run the final Quality Gate once on the corrected head;
+- run the final Quality Gate at batch completion under Section 25.4; after a tested Final HEAD changes, apply Section 25.5 evidence-validity rules;
 - do not repeat full discovery without new evidence.
 
 ---
@@ -3748,19 +3750,52 @@ npm run test:e2e:authenticated
 
 `package.json` is the executable authority for the exact current targeted script inventory; `docs/QA_RELEASE_CLOSURE.md` owns the human-readable command matrix. Removing a gate requires an explicit reason and equivalent proof.
 
-## 25.4 Targeted First, Final Gate Once
+## 25.4 Development Verification and Batch Release Verification
 
-During implementation:
+The Project Owner-approved workflow is:
 
-1. run targeted checks for the files/contracts being changed;
-2. fix discovered defects;
-3. rerun only affected targeted checks after each correction;
-4. run the final full Quality Gate once on the final exact head;
-5. do not modify code after the final gate without rerunning affected checks and, when material, the final gate.
+`Local Implementation -> Impact-Based Targeted QA -> Owner Visual Approval -> Local Commits -> Batch Final Quality Gate -> Push -> PR -> Required GitHub CI -> Ready -> Standard Merge -> Automatic Production`
+
+**Development Verification**, for each bounded change:
+
+1. Identify the current owner, affected consumers, and contracts through focused discovery.
+2. Implement at that owner, retaining applicability and Source Proof for new or materially extended Admin consumers.
+3. Select targeted TypeScript, lint, guards, behavior, save/reload, and failure-path proof according to impact; shared-owner changes include affected adopters.
+4. Verify Desktop, Mobile, RTL, and relevant accessibility when UI changes.
+5. Obtain Owner Visual Approval of appearance and function on Local, then make the authorized local commit after targeted checks pass.
+
+Local Product Review does not wait for remote CI. Vercel Preview is not required
+during development. A Full Quality Gate MUST NOT run automatically after each
+small change. A documentation-only local change uses targeted documentation
+checks and does not require UI approval or Browser QA.
+
+**Batch Release Verification**, when the group of changes is complete:
+
+1. Freeze the committed Final HEAD and combined scope.
+2. Run one Full Quality Gate on that state, including Final Build and Public E2E required by the existing release contract; do not run included steps twice.
+3. Prove fixture/process cleanup and environment integrity while preserving retained evidence.
+4. Perform authorized Push and PR, then require the existing GitHub CI on the current PR head.
+5. Proceed to separately authorized Ready and Standard Merge; the existing integration deploys Production automatically, with scoped Production proof before claiming Production closure.
+
+`docs/QA_RELEASE_CLOSURE.md` owns check selection, evidence validity, and reruns.
+This policy changes verification timing only. Build Once, Adopt Everywhere and
+single ownership remain mandatory. Parallel implementation, second sources of
+truth, local workarounds, Contract Drift, and weakened/deleted assertions remain
+prohibited. New owners require the existing architecture approval path. Auth,
+Permissions, Database changes, and Migrations require separate authorization.
+CI, branch protection, and Vercel settings are not changed by this policy.
 
 ## 25.5 Exact Head Rule
 
 A green gate on an earlier commit does not prove a later commit.
+
+If Final HEAD changes, record the old and new SHA, compare all relevant inputs,
+and rerun affected checks under `docs/QA_RELEASE_CLOSURE.md` Section 3.4. Reuse
+unaffected evidence only with an explicit validity record; never relabel an
+older run as executed on the new HEAD. Rerun the full gate only when its scope
+or material risk cannot be covered by affected checks and valid retained proof.
+Required GitHub CI still applies to the current PR head. A stopped gate is not
+a pass, and local targeted success is not a completed batch release gate.
 
 The closure report MUST identify:
 
@@ -3899,11 +3934,12 @@ Requires one owner, policy, adopter inventory, security/audit behavior, UI entry
 
 ## 26.7 PR Implementation Closure
 
-Implementation may be called complete when:
+PR implementation release closure (beyond local development completion under Section 25.4) requires:
 
 - scope is satisfied;
 - targeted tests pass;
-- final Quality Gate passes on exact head;
+- batch Final Quality Gate coverage is valid for Final HEAD under Section 25.5, with retained evidence and affected reruns explicitly recorded;
+- required GitHub CI passes on the current PR head;
 - Browser QA required by scope passes;
 - cleanup passes;
 - branch is pushed;
@@ -4117,7 +4153,7 @@ Copy it into the PR body and answer truthfully.
 - [ ] Browser QA passes on declared routes/viewports.
 - [ ] Console/page/request errors are zero or explicitly explained.
 - [ ] Fixtures, uploads, users, preferences, and audit residue are cleaned.
-- [ ] Final Quality Gate ran on the exact final head.
+- [ ] Batch Final Quality Gate coverage is valid for Final HEAD under Section 25.5; any retained evidence and affected reruns are explicit.
 
 ## Delivery State
 
@@ -4319,12 +4355,19 @@ The preferred workflow is:
 
 1. focused discovery;
 2. one coherent implementation pass;
-3. targeted verification;
-4. one focused correction pass if real defects are found;
-5. one final Quality Gate on the exact final head;
-6. commit/push/PR only when authorized.
+3. impact-based targeted verification;
+4. one focused correction pass if real defects are found, then affected reruns;
+5. Owner Visual Approval on Local and authorized local commits;
+6. at batch completion, one final Quality Gate under Section 25.4;
+7. Push/PR, required CI, and separate Ready/Merge authorizations.
 
 Do not waste usage by repeatedly asking another agent to “review again” without new code or evidence.
+
+Reuse established discovery and passing evidence until a relevant change or
+failure invalidates them. Do not perform repeated status polling, unrelated QA
+improvements, or a Full Audit without an Owner request or a demonstrated release
+requirement. Resolve engineering details freely inside approved owners and
+contracts; do not pause for routine micro-approvals already covered by scope.
 
 ## 28.8.1 Read-Only Investigation Gate
 
@@ -4606,7 +4649,12 @@ flowchart TD
     Audit[Audit anti-patterns and dependencies]
     Test[Run targeted tests + failure paths]
     Browser[Browser QA where required]
-    Gate[Final Quality Gate on exact head]
+    LocalReview[Owner Visual Approval on Local]
+    Commit[Authorized Local Commit]
+    Batch{Batch complete?}
+    Gate[Batch Final Quality Gate on Final HEAD]
+    CI[Authorized Push and PR, then required CI]
+    Delivery[Separate Ready and Standard Merge approvals]
     Claim[Make exact closure claim]
 
     Start --> Scope --> Classify --> Owner --> Decision
@@ -4617,7 +4665,9 @@ flowchart TD
     Adopt --> Audit
     Extend --> Audit
     ADR --> Audit
-    Audit --> Test --> Browser --> Gate --> Claim
+    Audit --> Test --> Browser --> LocalReview --> Commit --> Batch
+    Batch -- No --> Scope
+    Batch -- Yes --> Gate --> CI --> Delivery --> Claim
 ```
 
 ## 29.2 Change Tiers
@@ -4968,7 +5018,7 @@ The following ADRs are part of this constitution.
 
 **Status:** Accepted
 **Context:** New consumers repeatedly reached Product Review before adopting existing shared owners such as Visibility, Date Picker, Switch, Scrollbar, and Collection behavior. Capability-specific guards and a fixed audit list would repeat the same governance gap as the platform evolves.
-**Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. Applicability is declared through typed owner contracts; Source Proof resolves explicit executable bindings through the AST runtime import graph. Token lists, raw source matching, unused imports, filename discovery, and absence-based decisions are invalid proof. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Product Review.
+**Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. Applicability is declared through typed owner contracts; Source Proof resolves explicit executable bindings through the AST runtime import graph. Token lists, raw source matching, unused imports, filename discovery, and absence-based decisions are invalid proof. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Ready/Merge. ADR-028 supersedes only the earlier requirement to wait for CI before Local Product Review; targeted applicability, Source Proof, and affected verification remain required before that review.
 **Consequences:** Adding a shared capability automatically expands every inventoried consumer audit without a copied capability list or fixed count. Adding a consumer requires explicit decisions and executable registration, while a new compiled route must match the existing consumer and public-route registries bidirectionally. Product Review focuses on product and UX quality instead of discovering missing shared-owner adoption. No new Runtime, Capability, manifest, registry, engine, or source of truth is introduced.
 
 ## ADR-027 — Page Composition Owns Semantic Regions and Assignments; Theme Owns Outer Layout; Modules Own Presentation
@@ -4984,6 +5034,18 @@ The following ADRs are part of this constitution.
 That contract is independent of Slugs, page names, Templates, Themes, CSS, and current Layout. Themes MUST adopt rather than redefine or narrow the CMS contract. Product-fixed modules MAY constrain Position explicitly; flexible modules inherit the Page Composition Positions. Presentation remains derived from the module's Product contract and is not persisted by Page Assignment. Reusable adaptation to available space belongs to the existing Shared Module Presentation Contract and is driven by the module container, not by Display Position or viewport-specific template logic.
 **Consequences:** Replacing the Venisia interface with a new Theme requires a new Region renderer, not a new CMS Position contract. Moving a flexible module between Positions changes its available space, not its Presentation or design owner. Page Composition cannot infer Presentation from Position, and modules cannot impose a Position merely for implementation convenience. Modules rebalance proportionally and stack only when their own presentation contract requires it. `Wide`, `Editorial`, and `Stack` are reversible Presentation states: leaving one state cannot leak its float, clear, geometry, spacing, or alignment into another. Explicit module variants remain module-owned. No new Runtime, Capability, System, manifest, or source of truth is introduced. Assignment Presentation remains a separate future phase that requires a real Product variant and renderer before persistence is introduced.
 **Evidence:** `PageSlotLayout` exposes the shared slot container and page-region geometry; module presenters and shared styles own internal container-responsive behavior; `verify:route-slot-policy` rejects presentation ownership inside Page Composition and is part of the existing quality gate.
+
+---
+
+## ADR-028 — Local Development Verification and Batch Release Verification
+
+**Status:** Accepted by the Project Owner on 2026-10-14.
+**Context:** Running a Full Quality Gate for every small Admin change delays iterative Local review without changing the architectural obligations.
+**Decision:** Section 25.4 separates targeted Development Verification, Owner Visual Approval, and local commits from one Batch Final Quality Gate, authorized Push/PR, required GitHub CI, separate Ready/Merge approvals, and automatic Production deployment. Local review requires no Vercel Preview. Section 25.5 and the existing QA release contract govern evidence validity after a HEAD change.
+**Architecture impact:** Verification and delivery timing only. Existing Systems, Runtimes, Capabilities, manifests, guards, ownership, and contracts remain authoritative. No new QA system or parallel owner is introduced; there is no migration or consumer-code adoption change. No CI, branch-protection, Vercel-setting, Auth, Permission, or Database change is authorized by this decision.
+**Consequences:** Local approved work can accumulate safely in commits; targeted success cannot be presented as batch, CI, merge, or Production closure. Discovery and reruns stay proportional to demonstrated impact. Existing test assertions and release requirements are preserved.
+**Evidence:** Explicit Project Owner decision, “Fast Local Development Workflow — One-Shot Policy Update & Safe Handoff”; synchronized `AGENTS.md`, `docs/AI_WORKING_RULES.md`, and `docs/QA_RELEASE_CLOSURE.md` with targeted documentation consistency checks.
+**Supersedes:** Only the CI-before-Local-Product-Review timing in ADR-026 and the per-change final-gate sequence. ADR-025 authorization boundaries and all adoption proof obligations remain in force.
 
 ---
 
@@ -5200,7 +5262,7 @@ These rules are the fastest summary of the constitution.
 25. **No new Runtime without an ADR and approval.**
 26. **No permission change as incidental cleanup.**
 27. **Accessibility, RTL, mobile, and focus are contract requirements.**
-28. **Final Quality Gate runs on the exact final head.**
+28. **Final Quality Gate runs at batch completion on Final HEAD; later changes follow Section 25.5 evidence validity.**
 29. **Evidence before claims.**
 30. **If architecture is wrong, working code is still wrong.**
 31. **Audit findings do not authorize implementation.**
@@ -5611,6 +5673,11 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.7.0 — 2026-10-14
+
+- Added Owner-approved ADR-028: targeted Local verification and visual approval before local commits; one Full Quality Gate at batch completion before Push/PR and required CI.
+- Aligned adoption/review timing and evidence-validity rules while preserving shared ownership, assertions, release gates, and separate Ready/Merge authorization.
 
 ## 3.6.1 — 2026-09-06
 
