@@ -107,9 +107,9 @@ function resolveProjectsLimit(limit?: number | string | null) {
 
 const CARDS_PER_PAGE = 3;
 
-// Protect only the text strokes; leave caption padding and gaps over the image clear.
+// Keep a subtle text edge over the content-bound scrim.
 const CARD_TEXT_SHADOW_CLASS =
-  "[text-shadow:0_1px_2px_#05070B,0_0_3px_#05070B,0_0_6px_rgba(5,7,11,0.9)]";
+  "[text-shadow:0_1px_2px_rgba(5,7,11,0.45)]";
 
 function useIntentPrefetch() {
   const [prefetchEnabled, setPrefetchEnabled] = useState(false);
@@ -214,7 +214,18 @@ function HomeProjectCard({
             className="home-project-card__shine pointer-events-none absolute inset-0 z-20 -translate-x-[130%] bg-[linear-gradient(115deg,transparent_0%,rgba(216,184,122,0.00)_36%,rgba(216,184,122,0.22)_48%,rgba(255,255,255,0.16)_52%,rgba(216,184,122,0.06)_58%,transparent_72%)] opacity-0 transition-all duration-[1200ms] ease-out group-hover:translate-x-[130%] group-hover:opacity-100"
           />
 
-          <div className="absolute inset-x-0 bottom-0 z-30 p-6">
+          <div className="absolute inset-x-0 bottom-0 z-30 isolate p-6">
+            {/* Follow the content height; feather the scrim inside the caption padding. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 bottom-2 -z-10"
+              style={{
+                background:
+                  "radial-gradient(ellipse 100% 80% at 50% 55%, rgba(5,7,11,0.82) 35%, rgba(5,7,11,0.72) 70%, transparent 100%)",
+                maskImage:
+                  "linear-gradient(to bottom, transparent, black 32px, black calc(100% - 24px), transparent)",
+              }}
+            />
             <p className={`mb-2 text-xl font-semibold tracking-[0.16em] text-[#D8B87A] ${CARD_TEXT_SHADOW_CLASS}`}>
               {project.englishName}
             </p>
