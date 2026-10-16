@@ -88,6 +88,7 @@ export const trackingStageMetricsSchema = z.object({
 export type TrackingStageMetrics = z.infer<typeof trackingStageMetricsSchema>;
 
 export const trackingItemMetricsSchema = z.object({
+  targetStages: z.array(z.object({ id: positiveId, name: z.string() })).optional(),
   project: z.object({ id: positiveId, slug: z.string(), arabic_name: z.string() }),
   stage: trackingStageRowSchema.pick({ id: true, project_id: true, name: true, description: true, sort_order: true, start_date: true, planned_duration_value: true, planned_duration_unit: true, is_visible: true, created_at: true, updated_at: true }).extend({ item_count: z.number().int().nonnegative(), update_count: z.number().int().nonnegative(), derived_status: z.enum(["not_started", "in_progress", "completed"]) }),
 });
@@ -148,3 +149,28 @@ export const trackingUpdatesQueryContract: AdminEntityListQueryContract<Tracking
 export function trackingProjectPath(projectId: number) { return `/admin/projects/${projectId}/tracking`; }
 export function trackingStagePath(projectId: number, stageId: number) { return `${trackingProjectPath(projectId)}/stages/${stageId}`; }
 export function trackingItemPath(projectId: number, itemId: number) { return `${trackingProjectPath(projectId)}/items/${itemId}`; }
+
+export const trackingTransferInputSchema = z.object({
+  projectId: positiveId, sourceStageId: positiveId, targetStageId: positiveId,
+  operation: z.enum(["copy", "move"]),
+  ids: z.array(positiveId).min(1).max(100).refine(ids => new Set(ids).size === ids.length),
+}).refine(input => input.sourceStageId !== input.targetStageId);
+export type TrackingTransferInput = z.infer<typeof trackingTransferInputSchema>;
+export const trackingTransferSnapshotSchema = z.object({
+  revision: z.string().regex(/^[a-f0-9]{32}$/),
+  state: z.object({
+    source: z.object({ id: positiveId, name: z.string() }).nullable(),
+    target: z.object({ id: positiveId, name: z.string() }).nullable(),
+    items: z.array(z.object({ id: positiveId, updates: z.array(z.object({
+      id: positiveId, media: z.array(trackingMediaAdminSchema),
+    })) })),
+  }),
+});
+export const trackingTransferReceiptResultSchema = z.object({
+  ok: z.literal(true), commandId: z.string().uuid(), completion: z.literal("committed"),
+  operation: z.enum(["copy", "move"]), projectId: positiveId, projectSlug: z.string().min(1),
+  sourceStageId: positiveId, targetStageId: positiveId, changedIds: z.array(positiveId).min(1),
+  itemCount: positiveId, updateCount: z.number().int().nonnegative(), imageCount: z.number().int().nonnegative(),
+});
+export type TrackingTransferPreview = { ok: true; revision: string; sourceName: string; targetName: string; itemCount: number; updateCount: number; imageCount: number } | { ok: false; message: string };
+export type TrackingTransferActionResult = import("../admin-action-result").AdminActionResult & { targetStageId?: number; projectId?: number };

@@ -4,9 +4,12 @@ import {
   coordinateMediaReferenceDomainMutation,
   type CoordinatedMediaDomainMutationResult,
 } from "../media-catalog/domain-write-coordination";
-import { buildMediaReferenceWriteScope } from "../media-catalog/reference-providers";
+import { type DiscoveredMediaReference, getMediaReferenceProvider, MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION, buildMediaReferenceWriteScope } from "../media-catalog/reference-providers";
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../media-catalog/synchronization";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { getCatalogAssetIdentityMapForSynchronization } from "../media-catalog/catalog";
+import { getCanonicalMediaIdentityKey } from "../media-catalog/identity";
+import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import type { TrackingMediaAdminRow } from "./tracking-contract";
 
 export type IntendedTrackingMedia = Pick<
@@ -96,4 +99,31 @@ export async function cleanupDeletedTrackingUpdateMedia(
       entityIdentity: String(association.id),
     })),
   );
+}
+
+/** Read-only preparation. The Tracking RPC acquires/completes the existing
+ * Media lease and replaces references within its own database transaction. */
+export async function prepareTrackingTransferMedia(media: readonly TrackingMediaAdminRow[]) {
+  const provider = getMediaReferenceProvider("project_tracking_update_media");
+  if (!provider?.scanEntities) throw new Error("tracking_transfer_media_provider_unavailable");
+  const ids = media.map(row => String(row.id));
+  const discovered = ids.length ? await provider.scanEntities(ids) : new Map<string, DiscoveredMediaReference[]>();
+  const catalog = ids.length ? await getCatalogAssetIdentityMapForSynchronization() : new Map<string, { id: string }>();
+  const plan = media.map(row => ({
+    sourceId: row.id,
+    references: (discovered.get(String(row.id)) ?? []).map(reference => {
+      const asset = catalog.get(getCanonicalMediaIdentityKey(reference.identity));
+      if (!asset || reference.publicValue !== row[reference.fieldKey as "public_url" | "poster_url"])
+        throw new Error("tracking_transfer_media_unavailable");
+      return {
+        assetId: asset.id, ...reference.identity, publicValue: reference.publicValue,
+        entityLabel: reference.entityLabel, fieldKey: reference.fieldKey,
+        editHref: reference.editHref, publicHref: reference.publicHref,
+        referenceState: reference.referenceState, restorable: reference.restorable, metadata: {},
+      };
+    }),
+  }));
+  const context = resolveMediaStorageRuntimeContext();
+  return { plan, context: { provider: context.provider, environment: context.environment,
+    identity: context.identity, registryVersion: MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } };
 }

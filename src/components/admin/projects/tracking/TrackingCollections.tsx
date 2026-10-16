@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import AdminListboxSelect from "../../ui/AdminListboxSelect";
+import { useAdminFeedback } from "../../AdminFeedbackProvider";
+import { adminEntityListQueryKeys } from "../../../../lib/admin/entity-list/data-engine/query-keys";
+import type { TrackingTransferInput, TrackingTransferActionResult } from "../../../../lib/admin/projects/tracking-contract";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   AdminEntityList,
@@ -64,6 +69,7 @@ import {
 import { projectTrackingStatusLabel } from "../../../../lib/projects/tracking/contract";
 import { getProjectTrackHref } from "../../../../lib/projects/public-helpers";
 import {
+  previewTrackingTransferAction, transferTrackingItemsAction, recoverTrackingTransferAction,
   deleteTrackingItemAction,
   deleteTrackingStageAction,
   deleteTrackingUpdateAction,
@@ -879,6 +885,76 @@ export function TrackingItemsCollection({
   >(PROJECT_TRACKING_ENTITY_KEYS.items, controller.query);
   const [createOpen, setCreateOpen] = useState(false),
     [editing, setEditing] = useState<TrackingItemRow | null>(null);
+  const queryClient = useQueryClient();
+  const { publishFeedback, dismissFeedback, entries } = useAdminFeedback();
+  const [targetStage, setTargetStage] = useState("");
+  const unresolvedFeedback = useRef<{ title: string; message: string } | null>(null);
+  const preparedTransfer = useRef<{ input: TrackingTransferInput; revision: string } | null>(null);
+  const transferFeedback = (result: TrackingTransferActionResult) => mapAdminActionResultToFeedback(result,
+    result.ok && result.targetStageId && result.projectId ? { action: {
+      href: trackingStagePath(result.projectId, result.targetStageId), label: "فتح المرحلة المستهدفة",
+    } } : {});
+  async function settleTransferResult(result: TrackingTransferActionResult) {
+    if (result.ok) {
+      try {
+        await Promise.all([PROJECT_TRACKING_ENTITY_KEYS.stages, PROJECT_TRACKING_ENTITY_KEYS.updates].map(entity =>
+          queryClient.invalidateQueries({ queryKey: adminEntityListQueryKeys.entity(entity) })));
+      } catch { return { ...result, feedbackStatus: "warning" as const,
+        message: "حُفظت العملية كاملة، وتعذر تحديث إحدى القوائم. حدّث الصفحة دون تكرار العملية." }; }
+    }
+    return result;
+  }
+  async function transferConfirmation(action: string, selectedIds: number[]) {
+    preparedTransfer.current = null;
+    if ((action !== "copy" && action !== "move") || !targetStage) throw new Error("اختر المرحلة المستهدفة داخل المشروع.");
+    const input: TrackingTransferInput = { projectId, sourceStageId: stageId, targetStageId: Number(targetStage), operation: action, ids: selectedIds };
+    const preview = await previewTrackingTransferAction(input);
+    if (!preview.ok) throw new Error(preview.message);
+    preparedTransfer.current = { input, revision: preview.revision };
+    return { title: action === "copy" ? "تأكيد نسخ البنود" : "تأكيد نقل البنود",
+      description: `من «${preview.sourceName}» إلى «${preview.targetName}»: ${preview.itemCount} بند، ${preview.updateCount} تحديث، ${preview.imageCount} صورة. ` +
+        (action === "copy" ? "ستُضاف نسخ مستقلة في نهاية المرحلة مع الاحتفاظ بالأصل والتواريخ والحالات والصور المرتبطة."
+          : "ستنتقل البنود وتحديثاتها وصورها إلى نهاية المرحلة المستهدفة، مع الاحتفاظ بهوياتها وتواريخها وحالاتها."),
+      confirmLabel: action === "copy" ? "نسخ البنود" : "نقل البنود", cancelLabel: "إلغاء" };
+  }
+  async function executeTransfer(action: string, selectedIds: number[]): Promise<AdminActionResult> {
+    const prepared = preparedTransfer.current;
+    if (!prepared || prepared.input.operation !== action || JSON.stringify(prepared.input.ids) !== JSON.stringify(selectedIds))
+      return adminActionFailure("تعذر التنفيذ", "أعد معاينة البنود قبل التأكيد.");
+    let result: TrackingTransferActionResult | null = null;
+    try {
+    const settled = await instant.mutateAsync({
+      action, bulk: true, intentKey: JSON.stringify(prepared), optimistic: () => {},
+      execute: async ({ commandId }) => {
+        result = await settleTransferResult(await transferTrackingItemsAction(prepared.input, prepared.revision, commandId));
+        return result.ok ? { ...result, ok: true as const, completion: "committed" as const, feedbackStatus: result.feedbackStatus === "warning" ? "warning" as const : "success" as const } : { ...result, ok: false as const, code: result.code ?? "database_failure" };
+      },
+      recover: async ({ commandId }) => {
+        result = await settleTransferResult(await recoverTrackingTransferAction(commandId));
+        return result.ok ? { ...result, ok: true as const, completion: "committed" as const, feedbackStatus: result.feedbackStatus === "warning" ? "warning" as const : "success" as const } : { ...result, ok: false as const, code: result.code ?? "database_failure" };
+      },
+    });
+    return result ? withAdminActionSettledResult(result, settled) : adminActionFailure("تعذر تأكيد النتيجة", settled.message);
+    } catch {
+      if (result && (result as TrackingTransferActionResult).completion === "unknown") unresolvedFeedback.current = result;
+      return result ?? adminActionFailure("تعذر التنفيذ", "انتظر انتهاء العملية الحالية ثم استعد النتيجة.");
+    }
+  }
+  async function recoverTransfer() {
+    if (!instant.pendingCommand) return;
+    const settled = await instant.recoverPending(instant.pendingCommand.commandId).catch(() => null);
+    if (!settled) return;
+    const result = { ...settled, title: typeof settled.title === "string" ? settled.title : "استعادة نتيجة العملية" } as TrackingTransferActionResult;
+    if (result.ok && unresolvedFeedback.current) {
+      for (const entry of entries) {
+        if (entry.channel === "entity-list:project-tracking-items" &&
+            entry.feedback.title === unresolvedFeedback.current.title && entry.feedback.message === unresolvedFeedback.current.message)
+          dismissFeedback(entry.id);
+      }
+      unresolvedFeedback.current = null;
+    }
+    publishFeedback(transferFeedback(result), { channel: "entity-list:project-tracking-items", placement: "global", reveal: true });
+  }
   const toggleVisibility = useCallback(
     async (
       row: TrackingItemRow,
@@ -1267,9 +1343,22 @@ export function TrackingItemsCollection({
                 restoreProjectTrackingColumnPreferences("items")
               }
               enableColumnManagement
-              enableSelection={false}
+              enableSelection
+              selectionLabel="تحديد بنود الصفحة الحالية"
+              bulkOptions={[{ value: "copy", label: "نسخ إلى مرحلة" }, { value: "move", label: "نقل إلى مرحلة" }]}
+              bulkEntityLabel="بند"
+              getBulkConfirmation={transferConfirmation}
+              onBulkExecute={executeTransfer}
+              bulkInteraction={instant.bulkInteraction}
+              bulkAdditionalControls={({ pending, openLayerId, setOpenLayerId }) => (
+                <AdminListboxSelect id="tracking-transfer-target" ariaLabel="المرحلة المستهدفة"
+                  layerId="tracking-transfer-target" openLayerId={openLayerId} onOpenLayer={setOpenLayerId}
+                  value={targetStage} onChange={setTargetStage} disabled={pending}
+                  options={(controller.result.metrics?.targetStages ?? []).map(stage => ({ value: String(stage.id), label: stage.name }))}
+                  placeholder="اختر المرحلة المستهدفة" searchable emptyMessage="لا توجد مرحلة أخرى داخل المشروع" />
+              )}
               scrollLabel="جدول بنود المرحلة"
-              mapResultToFeedback={mapAdminActionResultToFeedback}
+              mapResultToFeedback={transferFeedback}
               sort={{
                 key: controller.query.sort.field,
                 direction: controller.query.sort.direction,
@@ -1293,6 +1382,7 @@ export function TrackingItemsCollection({
               }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{
+                recoveryAction: instant.pendingCommand ? { label: "استعادة نتيجة العملية", pending: instant.recoveryPending, onRecover: recoverTransfer } : undefined,
                 basePath,
                 preserveParams: ["project_id", "stage_id", "sort", "limit"],
                 search: {

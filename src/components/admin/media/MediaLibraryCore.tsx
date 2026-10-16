@@ -68,6 +68,7 @@ export type MediaLibraryCoreProps = {
   initialKind?: KindFilter;
   onConfirmSelection?: (paths: string[]) => void;
   onCancelSelection?: () => void;
+  excludedPaths?: readonly string[];
   className?: string;
 };
 
@@ -168,6 +169,7 @@ export default function MediaLibraryCore({
   initialKind = "all",
   onConfirmSelection,
   onCancelSelection,
+  excludedPaths = [],
   className = "",
 }: MediaLibraryCoreProps) {
   const searchParams = useSearchParams();
@@ -313,8 +315,10 @@ export default function MediaLibraryCore({
     [data?.assets, selectedIds],
   );
   const selectionCanBeConfirmed =
+    !loading && !error &&
     selectedAssets.length > 0 &&
     selectedAssets.every((asset) => asset.status === "active" && !asset.missingObject
+      && !excludedPaths.includes(asset.publicUrl)
       && (!pickerKind || asset.kind === (pickerKind === "pdf" ? "document" : "image")));
   const focusedAsset = selectedAssets.at(-1) ?? null;
   const selectedAssetsManaged =
@@ -405,6 +409,7 @@ export default function MediaLibraryCore({
   }
 
   function chooseAsset(asset: MediaCatalogAsset) {
+    if (mode !== "manage" && excludedPaths.includes(asset.publicUrl)) return;
     if (pickerKind && asset.kind !== (pickerKind === "pdf" ? "document" : "image")) return;
     if (mode !== "manage" && (asset.status !== "active" || asset.missingObject)) return;
     setSelectedIds((current) => {
@@ -891,14 +896,16 @@ export default function MediaLibraryCore({
             <div className={viewMode === "grid" ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-3" : "space-y-2"}>
               {data.assets.map((asset) => {
                 const selected = selectedIds.includes(asset.id);
-                const selectable = mode === "manage" || (asset.status === "active" && !asset.missingObject);
+                const alreadyAdded = mode !== "manage" && excludedPaths.includes(asset.publicUrl);
+                const selectable = mode === "manage" || (!alreadyAdded && asset.status === "active" && !asset.missingObject);
                 return viewMode === "grid" ? (
                   <article key={asset.id} className={`relative overflow-hidden rounded-2xl border bg-black/25 transition ${selected ? "border-[#D8B87A]/70 ring-1 ring-[#D8B87A]/25" : "border-white/10 hover:border-white/20"}`}>
-                    <button type="button" disabled={!selectable} onClick={() => chooseAsset(asset)} className="block w-full text-right disabled:cursor-not-allowed disabled:opacity-45" aria-pressed={selected} title={!selectable ? "هذا الملف غير متاح للاختيار أثناء مراجعة حالته." : undefined}>
-                      <span className="absolute end-3 top-3 z-10 grid h-6 w-6 place-items-center rounded-md border border-white/40 bg-black/55 text-xs text-white">{selected ? "✓" : ""}</span>
+                    <button type="button" disabled={!selectable} onClick={() => chooseAsset(asset)} className="block w-full text-right disabled:cursor-not-allowed disabled:opacity-45" aria-pressed={selected} title={alreadyAdded ? "هذه الصورة مضافة بالفعل." : !selectable ? "هذا الملف غير متاح للاختيار أثناء مراجعة حالته." : undefined}>
+                      <span aria-hidden="true" className="absolute end-3 top-3 z-10 grid h-6 w-6 place-items-center rounded-md border border-white/40 bg-black/55 text-xs text-white">{selected ? "✓" : ""}</span>
                       <div className="relative h-36"><AssetPreview asset={asset} /></div>
                       <div className="space-y-1 p-3">
                         <p className="truncate text-sm font-semibold text-white">{asset.displayName}</p>
+                        {alreadyAdded ? <p className="text-xs text-[#D8B87A]">مضافة بالفعل</p> : null}
                         <p className="flex justify-between gap-2 text-[11px] text-white/38"><span>{formatBytes(asset.sizeBytes)}</span><span>{referenceCountLabel(asset.referenceCount)}</span></p>
                         {!asset.catalogRegistered || asset.missingObject ? <p className={`text-[10px] ${asset.missingObject ? "text-amber-200" : "text-white/35"}`}>{assetManagementStatus(asset)}</p> : null}
                       </div>
@@ -906,7 +913,7 @@ export default function MediaLibraryCore({
                     <button type="button" onClick={() => void copyPublicUrl(asset)} className="absolute bottom-2 end-2 rounded-lg px-2 py-1 text-xs text-white/45 hover:bg-white/8 hover:text-white" aria-label={`نسخ رابط ${asset.displayName}`}>⧉</button>
                   </article>
                 ) : (
-                  <button key={asset.id} type="button" disabled={!selectable} onClick={() => chooseAsset(asset)} aria-pressed={selected} title={!selectable ? "هذا الملف غير متاح للاختيار أثناء مراجعة حالته." : undefined} className={`grid w-full grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-2 text-right disabled:cursor-not-allowed disabled:opacity-45 ${selected ? "border-[#D8B87A]/60 bg-[#D8B87A]/6" : "border-white/8 bg-black/20"}`}>
+                  <button key={asset.id} type="button" disabled={!selectable} onClick={() => chooseAsset(asset)} aria-pressed={selected} title={alreadyAdded ? "هذه الصورة مضافة بالفعل." : !selectable ? "هذا الملف غير متاح للاختيار أثناء مراجعة حالته." : undefined} className={`grid w-full grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-2 text-right disabled:cursor-not-allowed disabled:opacity-45 ${selected ? "border-[#D8B87A]/60 bg-[#D8B87A]/6" : "border-white/8 bg-black/20"}`}>
                     <span className="relative h-14 overflow-hidden rounded-xl"><AssetPreview asset={asset} compact /></span>
                     <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white">{asset.displayName}</span><span className="block truncate text-[11px] text-white/35" dir="ltr">{asset.objectKey}</span></span>
                     <span className="text-xs text-white/40">{formatBytes(asset.sizeBytes)}</span>
@@ -940,8 +947,8 @@ export default function MediaLibraryCore({
 
           {selectionMode ? (
             <div className="sticky bottom-0 mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-[#080B10]/95 pt-4 backdrop-blur">
-              <span className="text-sm text-white/50">تم تحديد {selectedAssets.length}</span>
-              <div className="flex gap-2"><button type="button" onClick={onCancelSelection} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60">إلغاء</button><button type="button" disabled={!selectionCanBeConfirmed} onClick={() => onConfirmSelection?.(selectedAssets.map((asset) => asset.publicUrl))} className="rounded-xl bg-[#D8B87A] px-5 py-2 text-sm font-bold text-[#05070B] disabled:opacity-40">تأكيد الاختيار</button></div>
+              <span role="status" aria-live="polite" aria-atomic="true" className="text-sm text-white/50">تم تحديد {selectedAssets.length}</span>
+              <div className="flex gap-2"><button type="button" onClick={onCancelSelection} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60">إلغاء</button><button type="button" disabled={!selectionCanBeConfirmed} onClick={() => onConfirmSelection?.(selectedAssets.map((asset) => asset.publicUrl))} className="rounded-xl bg-[#D8B87A] px-5 py-2 text-sm font-bold text-[#05070B] disabled:opacity-40">{mode === "select-many" && pickerKind === "image" ? "إضافة الصور المحددة" : "تأكيد الاختيار"}</button></div>
             </div>
           ) : null}
         </section>

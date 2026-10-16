@@ -1941,7 +1941,20 @@ function verifyRetainedPublicControlEligibility(source: string) {
   assert.ok(handler.indexOf("applicationLease.renewIfDue") < handler.indexOf("await publicContext.assertOwned()"));
   assert.ok(handler.indexOf("await publicContext.assertOwned()") < handler.indexOf('query("select 1 as owned_public_job_heartbeat")'));
   assert.ok(handler.includes("}, 20_000)")); cases.push("existing serialized ownership and20second heartbeat order remains intact");
-  assert.ok(handler.includes('if (request.selection === "admin-interactions" || request.selection === "admin-adoption") publicJob = undefined;'));
+  const markerResets: ts.IfStatement[] = [];
+  const collectMarkerResets = (node: ts.Node) => {
+    if (ts.isIfStatement(node) && node.thenStatement.getText(parsed) === "publicJob = undefined;") markerResets.push(node);
+    ts.forEachChild(node, collectMarkerResets);
+  };
+  collectMarkerResets(handlers[0]);
+  assert.equal(markerResets.length, 1, "Only the existing public-job completion boundary may clear its marker.");
+  const clearsMarker = new Function("request", "return (" + markerResets[0].expression.getText(parsed) + ");") as (request: Record<string, unknown>) => boolean;
+  for (const selection of ["admin-interactions", "admin-adoption", "media-upload-limit", "hero-compatibility"]) {
+    assert.equal(clearsMarker({ selection }), true, selection);
+  }
+  for (const request of [valid, { selection: "build-contracts" }, { additionalSourceFiles: [] }, { selection: "foreign" }]) {
+    assert.equal(clearsMarker(request), false, "One-shot Public/retained Quality must keep its completed job marker.");
+  }
   cases.push("retained Quality does not clear the one-shot public job marker");
 }
 
@@ -1993,7 +2006,15 @@ function verifyRetainedPublicControlEligibility(source: string) {
       .replace(oldMetadata, newMetadata) + '\nasync function verifyRetainedFinalQualityWorkerControls() { return; }';
     const priorLifecycle = 'export function healthyLease() { return "existing contract"; }\n';
     const nextLifecycle = 'export function healthyLease() { return "reviewed exact retained eligibility"; }\n';
-    const nextCliPulse = readSource(q), priorCliPulse = undo(nextCliPulse);
+    // This finite fixture exercises the earlier exact CRLF correction. Reconstruct
+    // its reviewed comparison shape without changing the current CLI proof owner.
+    const currentCliPulse = readSource(q).replace(/\r\n/gu, "\n");
+    const normalizationImport = 'import { normalizeVerificationText } from "./lib/verification-text.mjs";\n';
+    assert.equal(currentCliPulse.split(normalizationImport).length, 2);
+    assert.equal(currentCliPulse.split("normalizeVerificationText(source)").length, 2);
+    const nextCliPulse = currentCliPulse.replace(normalizationImport, "")
+      .replace("normalizeVerificationText(source)", "source.replace(/\\r\\n/gu,'\\n')");
+    const priorCliPulse = undo(nextCliPulse);
     assert.notEqual(nextCliPulse, priorCliPulse);
     const currentNavigation = readSource(n);
     // Recover only the controlled old lifecycle seed; the current round still reads actual navigation bytes.
@@ -2012,6 +2033,10 @@ function verifyRetainedPublicControlEligibility(source: string) {
       }
     ];
     let nextNavigation = currentNavigation.replace(/\r\n/gu, "\n");
+    assert.equal(nextNavigation.split(normalizationImport).length, 2);
+    assert.equal(nextNavigation.split("normalizeVerificationText(sourceBytes.toString('utf8'))").length, 2);
+    nextNavigation = nextNavigation.replace(normalizationImport, "")
+      .replace("normalizeVerificationText(sourceBytes.toString('utf8'))", "sourceBytes.toString('utf8').replace(/\\r\\n/gu,'\\n')");
     for (const change of [...navigationReconciliationTransforms].reverse()) {
       assert.equal(nextNavigation.split(change.after).length, 2);
       nextNavigation = nextNavigation.replace(change.after, change.before);

@@ -2,16 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { prepareTrackingTransferMedia } from "../../../lib/admin/projects/tracking-media-coordination";
+import { trackingTransferInputSchema, trackingTransferSnapshotSchema, trackingTransferReceiptResultSchema,
+  type TrackingTransferInput, type TrackingTransferPreview, type TrackingTransferActionResult,
+} from "../../../lib/admin/projects/tracking-contract";
 
 import { adminActionFailure, adminActionSuccess, adminActionWarning, type AdminActionResult } from "../../../lib/admin/admin-action-result";
 import { buildCmsAuditAction } from "../../../lib/admin/audit/cms-audit-actions";
 import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
 import { recordCmsAdminAudit } from "../../../lib/admin/audit-log";
 import type { AdminFormActionState } from "../../../lib/admin/form-runtime";
-import { revalidatePublicCacheTags, runBoundedPublicCacheRevalidation } from "../../../lib/cache/revalidate-public-cache-tags";
+import { expirePublicCacheTags, runBoundedPublicCacheRevalidation } from "../../../lib/cache/revalidate-public-cache-tags";
 import type { Json } from "../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { trackingSavedIdentitySchema, trackingSavedProfileIdentitySchema, trackingSavedUpdateSchema } from "../../../lib/admin/projects/tracking-contract";
+import { getMediaReferenceWriteLeaseUserMessage, MediaReferenceWriteLeaseError } from "../../../lib/admin/media-catalog/write-lease";
 import { MediaDomainMutationError } from "../../../lib/admin/media-catalog/domain-write-coordination";
 import {
   cleanupDeletedTrackingUpdateMedia,
@@ -81,6 +86,12 @@ function failure(mode: "create" | "edit", revision: number, title: string, messa
   return { status: "error", mode, revision, title, message, ...(errors ? { fieldErrors: errors } : {}), ...(focusTarget ? { focusTarget } : {}) };
 }
 function errorMessage(error: unknown) {
+  if (error instanceof MediaReferenceWriteLeaseError) return getMediaReferenceWriteLeaseUserMessage(error.code);
+  if (error && typeof error === "object" && "code" in error && error.code === "23503" && "message" in error) {
+    if (error.message === "A Tracking Stage with Items cannot be deleted.") return "لا يمكن حذف المرحلة لأنها تحتوي على بنود.";
+    if (error.message === "A Tracking Item with historical Updates cannot be deleted.") return "لا يمكن حذف البند لأنه يحتوي على تحديثات إنشائية محفوظة.";
+  }
+
   return error instanceof Error ? error.message : "تعذر إكمال العملية.";
 }
 async function projectSlug(projectId: number) {
@@ -90,11 +101,11 @@ async function projectSlug(projectId: number) {
   return data;
 }
 function revalidateTracking(projectId: number, slug: string) {
-  return runBoundedPublicCacheRevalidation(() => {
+  return runBoundedPublicCacheRevalidation(async () => {
+    await expirePublicCacheTags(["project-tracking", `project-tracking:${slug}`]);
     revalidatePath(`/admin/projects/${projectId}/tracking`, "layout");
     revalidatePath("/admin/projects/construction-updates");
     revalidatePath(`/track-your-project/${slug}`);
-    revalidatePublicCacheTags(["project-tracking", `project-tracking:${slug}`]);
   });
 }
 async function audit(actor: Awaited<ReturnType<typeof requireAdminSession>>, verb: "create" | "update" | "delete" | "reorder", entityType: string, entityId: number, label: string, metadata: Record<string, unknown> = {}) {
@@ -466,3 +477,115 @@ async function reorder(kind: "stages" | "items", projectId: number, parentId: nu
 }
 export async function reorderTrackingStagesAction(projectId: number, ids: number[]) { return reorder("stages", projectId, null, ids); }
 export async function reorderTrackingItemsAction(projectId: number, stageId: number, ids: number[]) { return reorder("items", projectId, stageId, ids); }
+
+function transferFailure(message: string, commandId?: string): TrackingTransferActionResult {
+  return { ok: false, title: "لم تُنفذ العملية", message, completion: "not_committed", commandId, code: "invalid_input" };
+}
+function transferUnknown(commandId: string): TrackingTransferActionResult {
+  return { ok: false, title: "نتيجة العملية غير مؤكدة", message: "استعد نتيجة الأمر قبل بدء عملية أخرى؛ لن تُعاد الكتابة أثناء الاسترداد.",
+    commandId, completion: "unknown", feedbackStatus: "warning", code: "completion_unknown" };
+}
+function transferErrorMessage(error: unknown) {
+  const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+  const media = message.match(/media_(?:write_lease|reference|catalog)[a-z0-9_]*/i)?.[0];
+  if (media) return getMediaReferenceWriteLeaseUserMessage(media);
+  if (message.includes("command_conflict")) return "استُخدمت هوية الأمر لعملية مختلفة. لم تُنفذ عملية جديدة.";
+  if (message.includes("revision_conflict") || message.includes("scope_changed")) return "تغيرت البنود أو المراحل بعد المعاينة. حدّث القائمة ثم راجع التأكيد من جديد.";
+  if (message.includes("media_")) return "تعذر إثبات سلامة مراجع الصور. لم تُنسخ أو تُنقل أي بيانات.";
+  return "تعذر التحقق من العملية. حدّث القائمة وراجع المرحلة المستهدفة.";
+}
+async function transferSnapshot(input: TrackingTransferInput) {
+  const { data, error } = await getSupabaseAdmin().rpc("read_project_tracking_transfer_snapshot", {
+    p_project_id: input.projectId, p_source_stage_id: input.sourceStageId,
+    p_target_stage_id: input.targetStageId, p_item_ids: input.ids,
+  });
+  if (error) throw error;
+  const snapshot = trackingTransferSnapshotSchema.parse(data);
+  if (!snapshot.state.source || !snapshot.state.target || snapshot.state.items.length !== input.ids.length)
+    throw new Error("tracking_transfer_scope_changed");
+  return snapshot;
+}
+export async function previewTrackingTransferAction(raw: TrackingTransferInput): Promise<TrackingTransferPreview> {
+  await requireAdminSession();
+  const parsed = trackingTransferInputSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, message: "اختر بنودًا ومرحلة أخرى داخل المشروع." };
+  try {
+    const snapshot = await transferSnapshot(parsed.data);
+    const updates = snapshot.state.items.flatMap(item => item.updates);
+    return { ok: true, revision: snapshot.revision, sourceName: snapshot.state.source!.name,
+      targetName: snapshot.state.target!.name, itemCount: snapshot.state.items.length,
+      updateCount: updates.length, imageCount: updates.flatMap(update => update.media).filter(media => media.media_kind === "image").length };
+  } catch (error) { return { ok: false, message: transferErrorMessage(error) }; }
+}
+async function readTrackingTransferReceipt(actorId: number, commandId: string) {
+  const { data, error } = await getSupabaseAdmin().from("admin_audit_logs").select("metadata")
+    .eq("actor_admin_user_id", actorId).contains("metadata", { command: { id: commandId } }).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return z.object({ command: z.object({ id: z.literal(commandId),
+    intent: z.object({ domain: z.literal("project_tracking"), action: z.enum(["copy", "move"]), projectId: idSchema,
+      sourceStageId: idSchema, targetStageId: idSchema, ids: z.array(idSchema), revision: z.string() }),
+    result: trackingTransferReceiptResultSchema.refine(result => result.commandId === commandId),
+  }) }).parse(data.metadata).command;
+}
+async function settleTrackingTransfer(result: z.infer<typeof trackingTransferReceiptResultSchema>): Promise<TrackingTransferActionResult> {
+  const cache = await revalidateTracking(result.projectId, result.projectSlug);
+  return { ok: true, completion: "committed", commandId: result.commandId,
+    title: result.operation === "copy" ? "تم نسخ البنود" : "تم نقل البنود",
+    message: cache.ok ? `اكتملت العملية: ${result.itemCount} بند، ${result.updateCount} تحديث، ${result.imageCount} صورة.`
+      : "حُفظت العملية كاملة، لكن تعذر تحديث العرض فورًا. حدّث الصفحة للتحقق ولا تكرر النسخ أو النقل.",
+    feedbackStatus: cache.ok ? "success" : "warning", code: cache.ok ? "saved" : "committed_cache_revalidation_pending",
+    projectId: result.projectId, targetStageId: result.targetStageId };
+}
+export async function recoverTrackingTransferAction(commandId: string): Promise<TrackingTransferActionResult> {
+  const actor = await requireAdminSession();
+  commandId = commandId.toLowerCase();
+  if (!z.string().uuid().safeParse(commandId).success) return transferFailure("هوية الأمر غير صالحة.");
+  try { const receipt = await readTrackingTransferReceipt(actor.id, commandId);
+    return receipt ? await settleTrackingTransfer(receipt.result) : transferUnknown(commandId);
+  } catch { return transferUnknown(commandId); }
+}
+export async function transferTrackingItemsAction(raw: TrackingTransferInput, revision: string, commandId: string): Promise<TrackingTransferActionResult> {
+  const actor = await requireAdminSession();
+  commandId = commandId.toLowerCase();
+  const parsed = trackingTransferInputSchema.safeParse(raw);
+  if (!parsed.success || !z.string().uuid().safeParse(commandId).success || !/^[a-f0-9]{32}$/.test(revision))
+    return transferFailure("راجع البنود والمرحلة المستهدفة.");
+  const input = parsed.data;
+  let attempted = false;
+  try {
+    const previous = await readTrackingTransferReceipt(actor.id, commandId);
+    if (previous) {
+      const intent = previous.intent;
+      if (intent.action !== input.operation || intent.projectId !== input.projectId || intent.sourceStageId !== input.sourceStageId ||
+          intent.targetStageId !== input.targetStageId || intent.revision !== revision ||
+          JSON.stringify(intent.ids) !== JSON.stringify([...input.ids].sort((a,b) => a-b)))
+        return { ...transferFailure(transferErrorMessage(new Error("command_conflict")), commandId), code: "command_conflict" };
+      return await settleTrackingTransfer(previous.result);
+    }
+    const snapshot = await transferSnapshot(input);
+    if (snapshot.revision !== revision) return transferFailure(transferErrorMessage(new Error("revision_conflict")), commandId);
+    const media = await prepareTrackingTransferMedia(snapshot.state.items.flatMap(item => item.updates.flatMap(update => update.media)));
+    attempted = true;
+    const { data, error } = await getSupabaseAdmin().rpc("transfer_project_tracking_items", {
+      p_actor_id: actor.id, p_command_id: commandId, p_operation: input.operation,
+      p_project_id: input.projectId, p_source_stage_id: input.sourceStageId, p_target_stage_id: input.targetStageId,
+      p_item_ids: input.ids, p_expected_revision: revision, p_media_plan: media.plan as Json, p_media_context: media.context as Json,
+    });
+    if (error) {
+      // Explicit SQL/PostgREST statement rejection proves rollback. Transport
+      // errors and ambiguous completion require the canonical receipt instead.
+      if (/^(?:22|23|25|28|3D|3F|42|44)[0-9A-Z]{3}$/.test(error.code) ||
+          ["0A000","40001","40P01","55P03","57014","P0001","P0002","P0003"].includes(error.code) || /^PGRST[012][0-9]{2}$/.test(error.code))
+        return transferFailure(transferErrorMessage(error), commandId);
+      throw error;
+    }
+    const result = trackingTransferReceiptResultSchema.parse(data);
+    if (result.commandId !== commandId || result.projectId !== input.projectId || result.targetStageId !== input.targetStageId)
+      throw new Error("tracking_transfer_receipt_mismatch");
+    return await settleTrackingTransfer(result);
+  } catch (error) {
+    if (!attempted) return transferFailure(transferErrorMessage(error), commandId);
+    return recoverTrackingTransferAction(commandId);
+  }
+}

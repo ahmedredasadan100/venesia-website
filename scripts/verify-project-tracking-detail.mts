@@ -354,6 +354,29 @@ check(
 );
 const trackingDateTree = ts.createSourceFile("TrackingForms.tsx", adminForms, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 check(
+  "Tracking image addition adopts the shared Gallery multiple-selection contract",
+  (() => {
+    const updateForm = trackingDateTree.statements.find((node) =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdateFormModal");
+    if (!updateForm) return false;
+    let galleryCount = 0;
+    let configuredCount = 0;
+    function visit(node: ts.Node) {
+      if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(trackingDateTree) === "AdminMediaGalleryField") {
+        galleryCount++;
+        const attrs = new Map(node.attributes.properties.filter(ts.isJsxAttribute)
+          .map(attr => [attr.name.getText(trackingDateTree), attr.initializer]));
+        const mode = attrs.get("selectionMode"), name = attrs.get("name");
+        if (mode && ts.isStringLiteral(mode) && mode.text === "multiple" &&
+            name && ts.isStringLiteral(name) && name.text === "image_urls") configuredCount++;
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(updateForm);
+    return galleryCount === 1 && configuredCount === 1;
+  })(),
+);
+check(
   "Tracking modal saves settle their active canonical list before Close without a duplicate invalidation callback",
   (() => {
     const expected = new Map([

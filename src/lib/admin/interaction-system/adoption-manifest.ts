@@ -2766,11 +2766,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             {
               visibility: {
                 state: "adopted",
-                rationale: "Item visibility adopts Shared Admin Row Actions.",
+                rationale: "Item visibility adopts Shared Admin Row Actions. Copy/Move adopts AdminEntityList page selection, shared bulk confirmation/Listbox, and Instant Mutation command recovery.",
               },
             },
           ),
-          contracts: ADMIN_TRACKING_CONSUMER_CONTRACTS,
+          contracts: { ...ADMIN_TRACKING_CONSUMER_CONTRACTS, bulk: "adopted", selection: "adopted" },
           executableBindings: [
             {
               sourceFile:

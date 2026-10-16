@@ -355,7 +355,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         media: {
           state: "adopted",
           rationale:
-            "Tracking Updates use the existing Admin Media picker and gallery owner.",
+            "Tracking Updates adopt multiple image addition and duplicate exclusion through AdminMediaGalleryField and the existing Media picker; replacement remains single selection.",
         },
       },
       {},
@@ -820,6 +820,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     label: "List, bulk, row, and one-shot actions",
     classification: "explicit_exception",
     sourceFiles: [
+      "src/components/admin/projects/tracking/TrackingCollections.tsx",
       "src/components/admin/ui/AdminBulkActionBar.tsx",
       "src/components/admin/ui/AdminDataGridRowActions.tsx",
       "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
