@@ -15,6 +15,40 @@ const recipes = {
  'content-categories': {entity:'categories',table:'topic_categories',audit:'topic_category',source:'src/app/admin/content/categories/CategoriesListClient.tsx',route:'/admin/content/categories',active:[],trash:['restore','permanent_delete'],steps:['restore','permanent_delete']},
  pages: {entity:'pages',table:'pages',audit:'page',source:'src/app/admin/pages-blocks/pages/PagesTableClient.tsx',route:'/admin/pages-blocks/pages',active:['delete'],trash:[],steps:['delete']},
 };
+// Grouped consumers retain their own executable proof. This recipe uses the
+// existing mounted Tracking/Collection/Instant Mutation verifier, not a second UI.
+const groupedRecipes = [{
+ surface:'project-construction-tracking',consumer:'project-tracking-items',
+ source:'src/components/admin/projects/tracking/TrackingCollections.tsx',
+ exportedName:'TrackingItemsCollection',actions:['copy','move'],
+ verificationScript:'scripts/verify-project-tracking-transfer-ui.mjs',
+}];
+export function buildCoreGroupedBulkVerificationPlan({claims,surfaces,sources}){
+ assert.ok(Array.isArray(surfaces));
+ const groups=surfaces.filter(surface=>surface.consumerAdoptionEvidence.length>0 && claims.some(claim=>claim.surfaceId===surface.id));
+ const required=[];
+ for(const group of groups){
+  const claim=claims.find(row=>row.surfaceId===group.id);
+  const children=group.consumerAdoptionEvidence;
+  assert.ok(children.every(child=>['adopted','not_required'].includes(child.contracts.bulk)));
+  const adopted=children.filter(child=>child.contracts.bulk==='adopted');
+  assert.equal(claim.contracts.bulk,adopted.length?'adopted':'not_required','Aggregate Bulk must derive from the actual child contracts.');
+  for(const child of adopted)required.push({group,child});
+ }
+ assert.deepEqual(required.map(row=>row.child.id).sort(),groupedRecipes.map(row=>row.consumer).sort(),'Every grouped Bulk consumer needs an executable verification recipe.');
+ return required.map(({group,child})=>{
+  const recipe=groupedRecipes.find(row=>row.consumer===child.id);
+  assert.equal(group.id,recipe.surface);assert.equal(child.presentationOwner,recipe.source);
+  assert.equal(child.contracts.selection,'adopted');
+  assert.ok(child.executableBindings.some(binding=>binding.sourceFile===recipe.source && binding.exportNames.includes(recipe.exportedName)));
+  const source=sources[child.id];assert.equal(typeof source,'string');
+  const ast=ts.createSourceFile('consumer.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  const declaration=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text===recipe.exportedName);
+  assert.ok(declaration,'The recipe must inspect this child export, not a sibling.');
+  assert.deepEqual(inspectCoreBulkOptions(declaration.getText(ast),'pages'),{active:recipe.actions,trash:[]});
+  return {...recipe};
+ });
+}
 function positive(value){assert.ok(Number.isSafeInteger(value)&&value>0);return value;}
 function literalValues(array,ast){
  while(array&&(ts.isAsExpression(array)||ts.isParenthesizedExpression(array)))array=array.expression;
@@ -34,13 +68,14 @@ export function inspectCoreBulkOptions(source,entity){
  const active=entity==='categories'?literalValues(binding.whenFalse,ast):(assert.equal(binding.whenFalse.getText(ast),'BULK_OPTIONS'),arrays.get('BULK_OPTIONS'));
  return {active,trash:arrays.get('TRASH_BULK_OPTIONS')};
 }
-export function buildCoreDomainBulkPlan({claims,fixtures,sources}){
+export function buildCoreDomainBulkPlan({claims,surfaces,fixtures,sources}){
  assert.ok(Array.isArray(claims));const selected=claims.filter(row=>row.contracts.bulk==='adopted');
  assert.equal(new Set(claims.map(row=>row.surfaceId)).size,claims.length);
- assert.deepEqual(selected.map(row=>row.surfaceId).sort(),Object.keys(recipes).sort(),'Changed applicable claims require an explicit executable recipe.');
+ const grouped=buildCoreGroupedBulkVerificationPlan({claims,surfaces,sources});
+ assert.deepEqual(selected.map(row=>row.surfaceId).sort(),[...Object.keys(recipes),...new Set(grouped.map(row=>row.surface))].sort(),'Changed applicable claims require an explicit executable recipe.');
  const fixture=fixtures.bulkClosure;assert.ok(fixture&&/^qa-b2-[a-f0-9]{8}$/.test(fixture.namespace));positive(fixture.actorId);
  const destination=fixture.destination;positive(destination.id);assert.equal(destination.label,fixture.namespace+' destination');
- return selected.map(claim=>{
+ return selected.filter(claim=>Object.hasOwn(recipes,claim.surfaceId)).map(claim=>{
   const recipe=recipes[claim.surfaceId],observed=inspectCoreBulkOptions(sources[claim.surfaceId],recipe.entity);
   assert.deepEqual(observed,{active:recipe.active,trash:recipe.trash},'Option drift must not silently reduce executed operations.');
   const targets=fixture[recipe.entity];assert.ok(Array.isArray(targets)&&targets.length===2);const ids=targets.map(row=>positive(row.id)).sort((a,b)=>a-b);assert.notEqual(ids[0],ids[1]);
@@ -53,8 +88,9 @@ export function buildCoreDomainBulkPlan({claims,fixtures,sources}){
 }
 export async function loadCoreDomainBulkPlan(fixtures){
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),manifest=await jiti.import('../../src/lib/admin/interaction-system/adoption-manifest.ts');
- const sources=Object.fromEntries(Object.entries(recipes).map(([key,row])=>[key,readFileSync(new URL('../../'+row.source,import.meta.url),'utf8')]));
- return {plan:buildCoreDomainBulkPlan({claims:manifest.ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,fixtures,sources}),
+ const sources=Object.fromEntries([...Object.entries(recipes),...groupedRecipes.map(row=>[row.consumer,row])].map(([key,row])=>[key,readFileSync(new URL('../../'+row.source,import.meta.url),'utf8')]));
+ const input={claims:manifest.ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,surfaces:manifest.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,fixtures,sources};
+ return {plan:buildCoreDomainBulkPlan(input),groupedVerification:buildCoreGroupedBulkVerificationPlan(input),
   sourceOnlyNotApplicable:manifest.ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS.filter(row=>row.contracts.bulk==='not_required').map(row=>({surface:row.surfaceId,proof:'Current manifest no-bulk contract only; no Browser behavior claim.'}))};
 }
 export function coreDomainBulkStep(recipe,action,ordinal){
@@ -114,7 +150,7 @@ export async function assertCoreBulkTarget(page,target,{visible=true,timeout=60_
 /** Actual bulk UI on independent targets. Global Empty Trash is never invoked. */
 export async function runCoreDomainBulkJourneys(ctx){
  const {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,databaseReadback,requiredCases}=ctx;
- assert.equal(new URL(origin).hostname,'127.0.0.1');const {plan,sourceOnlyNotApplicable}=await loadCoreDomainBulkPlan(fixtures);
+ assert.equal(new URL(origin).hostname,'127.0.0.1');const {plan,groupedVerification,sourceOnlyNotApplicable}=await loadCoreDomainBulkPlan(fixtures);
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),{ADMIN_BULK_ACTION_LABELS:labels}=await jiti.import('../../src/lib/admin/entity-list/bulk-action-labels.ts');
  const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import('../../src/lib/admin/form-system/adoption-manifest.ts');
  let renderedAdoption=[],renderedConfirmed=false;
@@ -228,7 +264,7 @@ export async function runCoreDomainBulkJourneys(ctx){
   }
   const result={renderedAdoption,entity:recipe.entity,consumer:recipe.consumer,targetIds:recipe.ids,actualCommands:actual,preparationNativeIds:preparations,rejection,pendingDuplicateBlocked:true,selectionRetainedOnFailure:true,selectionClearedAfterSuccess:true};outcomes.push(result);return result;
  });
- return {status:outcomes.length===plan.length?'pass':'incomplete',outcomes,expectedConsumers:plan.length,sourceOnlyNotApplicable,automaticCoverage:[],globalClosed:false,
+ return {status:outcomes.length===plan.length?'pass':'incomplete',outcomes,expectedConsumers:plan.length,sourceOnlyNotApplicable,additionalRequiredVerification:groupedVerification,automaticCoverage:[],globalClosed:false,
   boundary:'Only named current bulk commands on disposable rows; no global Empty Trash, permission outage, persistence fault, mixed protected-page batch, or complete capability-axis claim.'};
 }
 

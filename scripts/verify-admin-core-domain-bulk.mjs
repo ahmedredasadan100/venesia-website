@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 import { PGlite } from '@electric-sql/pglite';
@@ -14,9 +15,10 @@ async function test(name,work){await work();checks.push(name);}
 const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),manifest=await jiti.import('../src/lib/admin/interaction-system/adoption-manifest.ts');
 const namespace='qa-b2-1234abcd',fixture={topic:{id:1},category:{id:1},series:{id:1},pages:{pageId:1},bulkClosure:{namespace,actorId:7,destination:{id:99,label:namespace+' destination',slug:namespace+'-destination'}}};
 for(const entity of ['topics','categories','series','pages'])fixture.bulkClosure[entity]=[0,1].map(index=>({id:index+10,label:namespace+' '+entity+' '+index,slug:namespace+'-'+entity+'-'+index}));
-const {plan}=await helper.loadCoreDomainBulkPlan(fixture),sources=Object.fromEntries(plan.map(row=>[row.consumer,readFileSync(row.source,'utf8')]));
-const input={claims:manifest.ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,fixtures:fixture,sources};
-await test('Current claims and real JSX options derive four exact recipes, including trash-only Category bulk',()=>{
+const {plan,groupedVerification}=await helper.loadCoreDomainBulkPlan(fixture),sources=Object.fromEntries([...plan,...groupedVerification].map(row=>[row.consumer,readFileSync(row.source,'utf8')]));
+const input={claims:manifest.ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,surfaces:manifest.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,fixtures:fixture,sources};
+await test('Current claims and real JSX options derive four direct recipes plus independent grouped verification',()=>{
+ assert.deepEqual(groupedVerification.map(row=>[row.consumer,row.actions,row.verificationScript]),[['project-tracking-items',['copy','move'],'scripts/verify-project-tracking-transfer-ui.mjs']]);
  assert.equal(plan.length,4);assert.equal(plan.reduce((count,row)=>count+row.steps.length,0),18);assert.deepEqual(plan.find(row=>row.entity==='categories').active,[]);
  assert.deepEqual(plan.find(row=>row.entity==='topics').active,['publish','unpublish','move_to_trash','move_category','feature','unfeature']);
 });
@@ -33,6 +35,10 @@ for(const [name,change]of [
  ['missing-claim',x=>x.claims.pop()&&x.claims.shift()],
  ['duplicate-claim',x=>x.claims.push(x.claims[0])],
  ['unreviewed-capability',x=>x.claims.find(row=>row.contracts.bulk==='not_required').contracts.bulk='adopted'],
+ ['grouped-false-not-required',x=>x.surfaces.find(row=>row.id==='project-construction-tracking').consumerAdoptionEvidence.find(row=>row.id==='project-tracking-items').contracts.bulk='not_required'],
+ ['grouped-missing-binding',x=>x.surfaces.find(row=>row.id==='project-construction-tracking').consumerAdoptionEvidence.find(row=>row.id==='project-tracking-items').executableBindings=[]],
+ ['grouped-unreviewed-consumer',x=>x.surfaces.find(row=>row.id==='project-construction-tracking').consumerAdoptionEvidence.find(row=>row.id==='project-tracking-stages').contracts.bulk='adopted'],
+ ['grouped-option-drift',x=>x.sources['project-tracking-items']=x.sources['project-tracking-items'].replace('value: "copy"','value: "unknown"')],
  ['missing-fixture',x=>delete x.fixtures.bulkClosure],
  ['foreign-namespace',x=>x.fixtures.bulkClosure.namespace='production'],
  ['duplicate-target',x=>x.fixtures.bulkClosure.topics[1].id=10],
@@ -173,6 +179,12 @@ try{
 
  await test('Expired owned handle fails completion before proof publication',async()=>{active=false;await assert.rejects(completion.verifyCoreDomainBulkCompletion(handle,browser,fixture,broker));active=true;});
  assert.equal(scopes,0);
- console.log(JSON.stringify({status:'pass',checks:checks.length,cases:checks,candidateReadback:candidate,boundary:'Current source/manifest, actual exported guards and PGlite SQL attribution. Full native PostgreSQL and authenticated Browser bulk execution remain pending.'},null,2));
+ // Each grouped recipe executes its existing proof owner. Inventory alone is
+ // never promoted to Browser or native-database coverage.
+ const {cleanChildEnvironment}=await jiti.import('./lib/isolated-supabase.mts');
+ for(const recipe of groupedVerification)await test(recipe.consumer+' existing mounted Bulk verifier',()=>{
+  execFileSync(process.execPath,[recipe.verificationScript],{cwd:process.cwd(),env:cleanChildEnvironment(),stdio:'inherit',windowsHide:true});
+ });
+ console.log(JSON.stringify({status:'pass',groupedVerificationExecuted:groupedVerification,checks:checks.length,cases:checks,candidateReadback:candidate,boundary:'Current source/manifest, actual exported guards and PGlite SQL attribution. Full native PostgreSQL and authenticated Browser bulk execution remain pending.'},null,2));
 }finally{await db.close();}
 

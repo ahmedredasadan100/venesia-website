@@ -35,6 +35,7 @@ import {
   ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
   adminSharedCapabilityKeys,
   deriveAdminCollectionClosureBlockers,
+  deriveAdminCollectionBulkContract,
   deriveAdminGovernanceClosure,
   type AdminCollectionFullAdoptionClaim,
   type AdminCollectionSemanticPresentationContract,
@@ -5447,6 +5448,53 @@ function hasExactFullAdoptionClaimCoverage(
   );
 }
 
+function provesFullAdoptionBulkContract(
+  state: AdminCollectionFullAdoptionClaim["contracts"]["bulk"],
+  source: string,
+  sourceGraph: ReadonlyMap<string, string>,
+) {
+  const presentationGraph = new Map([["consumer.tsx", source]]);
+  const hasBulkAttribute = (name: string) =>
+    evidenceGraphHasJsxAttribute(presentationGraph, "AdminEntityList", name);
+  if (state === "adopted") {
+    if (
+      !hasBulkAttribute("bulkOptions") ||
+      !hasBulkAttribute("onBulkExecute") ||
+      !hasBulkAttribute("getBulkConfirmation") ||
+      source.includes("enableSelection={false}") ||
+      !evidenceGraphHasJsxAttribute(
+        sourceGraph,
+        "AdminEntityList",
+        "bulkInteraction",
+      ) ||
+      !evidenceGraphCallsCanonicalImport(
+        sourceGraph,
+        "useAdminEntityInstantMutation",
+        CANONICAL_DATA_RUNTIME_OWNER,
+      ) ||
+      !evidenceGraphUsesBulkMutationLifecycle(sourceGraph) ||
+      evidenceGraphHasLocalBulkLifecycleOwner(sourceGraph)
+    ) {
+      return false;
+    }
+  } else if (
+    state !== "not_required" ||
+    !source.includes("enableSelection={false}") ||
+    hasBulkAttribute("bulkOptions") ||
+    hasBulkAttribute("onBulkExecute") ||
+    hasBulkAttribute("getBulkConfirmation") ||
+    evidenceGraphHasJsxAttribute(
+      sourceGraph,
+      "AdminEntityList",
+      "bulkInteraction",
+    )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function collectFullAdoptionContractFailures(
   surface: AdminCollectionSurfaceInventoryEntry,
   claim: AdminCollectionFullAdoptionClaim,
@@ -5576,40 +5624,56 @@ function collectFullAdoptionContractFailures(
     failures.push("row_actions");
   }
 
-  if (claim.contracts.bulk === "adopted") {
+  if (surface.consumerAdoptionEvidence.length === 0) {
+    if (!provesFullAdoptionBulkContract(claim.contracts.bulk, source, sourceGraph)) {
+      failures.push("bulk");
+    }
+  } else {
+    const consumers = surface.consumerAdoptionEvidence;
+    const validStates = consumers.every((consumer) =>
+      ["adopted", "not_required"].includes(consumer.contracts.bulk),
+    );
     if (
-      !source.includes("bulkOptions=") ||
-      !source.includes("onBulkExecute=") ||
-      !source.includes("getBulkConfirmation=") ||
-      source.includes("enableSelection={false}") ||
-      !evidenceGraphHasJsxAttribute(
-        sourceGraph,
-        "AdminEntityList",
-        "bulkInteraction",
+      !validStates ||
+      !sameValueSet(consumers.map((consumer) => consumer.route), surface.routes) ||
+      !sameValueSet(consumers.map((consumer) => consumer.pageSourceFile), surface.pageSourceFiles) ||
+      new Set(consumers.map((consumer) => consumer.id)).size !== consumers.length ||
+      !sameValueSet(
+        [...new Set(consumers.map((consumer) => consumer.presentationOwner))],
+        surface.presentationSourceFiles,
       ) ||
-      !evidenceGraphCallsCanonicalImport(
-        sourceGraph,
-        "useAdminEntityInstantMutation",
-        CANONICAL_DATA_RUNTIME_OWNER,
-      ) ||
-      !evidenceGraphUsesBulkMutationLifecycle(sourceGraph) ||
-      evidenceGraphHasLocalBulkLifecycleOwner(sourceGraph)
+      (validStates && claim.contracts.bulk !== deriveAdminCollectionBulkContract(consumers))
     ) {
       failures.push("bulk");
     }
-  } else if (
-    claim.contracts.bulk !== "not_required" ||
-    !source.includes("enableSelection={false}") ||
-    source.includes("bulkOptions=") ||
-    source.includes("onBulkExecute=") ||
-    source.includes("getBulkConfirmation=") ||
-    evidenceGraphHasJsxAttribute(
-      sourceGraph,
-      "AdminEntityList",
-      "bulkInteraction",
-    )
-  ) {
-    failures.push("bulk");
+    for (const consumer of consumers) {
+      // Start at this consumer's page: sibling exports in a shared module cannot
+      // supply adoption evidence or invalidate a legitimate not_required child.
+      const graph = collectExecutableSourceGraph({
+        root: ROOT,
+        entrySourceFiles: [consumer.pageSourceFile],
+        sourceOverrides: options.sourceOverrides,
+        symbolAware: true,
+      });
+      const bindings = consumer.executableBindings.filter(
+        (binding) => binding.sourceFile === consumer.presentationOwner,
+      );
+      const consumerGraph = new Map(
+        [...graph].map(([file, parsed]) => [file, parsed.getFullText()]),
+      );
+      if (
+        bindings.length === 0 ||
+        !graphUsesExecutableBinding({ root: ROOT, graph, bindings, sourceOverrides: options.sourceOverrides }) ||
+        consumer.contracts.selection !== consumer.contracts.bulk ||
+        !provesFullAdoptionBulkContract(
+          consumer.contracts.bulk,
+          consumerGraph.get(consumer.presentationOwner) ?? "",
+          consumerGraph,
+        )
+      ) {
+        failures.push("bulk", `bulk:${consumer.id}`);
+      }
+    }
   }
 
   if (
@@ -5838,6 +5902,106 @@ check(
     { sourceOverrides: directBulkBypassOverrides },
   ).includes("bulk"),
 );
+
+// Exercise the real mixed group without changing any product source or adoption flag.
+const mixedBulkSurface = fullAdoptionSurfaces.find((surface) =>
+  surface.consumerAdoptionEvidence.some((consumer) => consumer.contracts.bulk === "adopted") &&
+  surface.consumerAdoptionEvidence.some((consumer) => consumer.contracts.bulk === "not_required"),
+);
+const mixedBulkClaim = fullAdoptionClaims.find((claim) => claim.surfaceId === mixedBulkSurface?.id);
+assert.ok(mixedBulkSurface && mixedBulkClaim);
+const mixedBulkConsumer = mixedBulkSurface.consumerAdoptionEvidence.find(
+  (consumer) => consumer.contracts.bulk === "adopted",
+)!;
+const noBulkConsumer = mixedBulkSurface.consumerAdoptionEvidence.find(
+  (consumer) => consumer.contracts.bulk === "not_required",
+)!;
+const mixedBulkFile = mixedBulkConsumer.presentationOwner;
+const mixedBulkSource = read(mixedBulkFile);
+const mixedBulkExport = mixedBulkConsumer.executableBindings.find(
+  (binding) => binding.sourceFile === mixedBulkFile,
+)!.exportNames[0];
+const mixedBulkParsed = parseEvidenceSource(mixedBulkFile, mixedBulkSource);
+const mixedBulkDeclaration = mixedBulkParsed.statements.find(
+  (statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === mixedBulkExport,
+);
+assert.ok(mixedBulkDeclaration);
+const mixedBulkBody = mixedBulkDeclaration.getText(mixedBulkParsed);
+function mixedBulkMutation(transform: (source: string) => string) {
+  const mutated = transform(mixedBulkBody);
+  assert.notEqual(mutated, mixedBulkBody, "Bulk rejection fixture must alter its intended consumer.");
+  return new Map([[mixedBulkFile, mixedBulkSource.replace(mixedBulkBody, mutated)]]);
+}
+function mixedBulkFailures(
+  surface: AdminCollectionSurfaceInventoryEntry = mixedBulkSurface!,
+  sourceOverrides?: CollectionSourceOverrides,
+) {
+  return collectFullAdoptionContractFailures(surface, mixedBulkClaim!, { sourceOverrides });
+}
+check("Full Adoption Bulk derives a mixed summary and proves every child independently",
+  deriveAdminCollectionBulkContract(mixedBulkSurface.consumerAdoptionEvidence) === "adopted" &&
+  mixedBulkFailures().length === 0);
+check("Full Adoption Bulk derives not_required only when every child declares it",
+  deriveAdminCollectionBulkContract([noBulkConsumer]) === "not_required");
+assert.throws(() => deriveAdminCollectionBulkContract([]), /complete consumer contracts/u);
+check("Full Adoption Bulk rejects a stale aggregate not_required claim",
+  collectFullAdoptionContractFailures(mixedBulkSurface, {
+    ...mixedBulkClaim, contracts: { ...mixedBulkClaim.contracts, bulk: "not_required" },
+  }).includes("bulk"));
+for (const attribute of ["bulkOptions", "onBulkExecute", "getBulkConfirmation", "bulkInteraction"]) {
+  check(`Full Adoption Bulk rejects missing ${attribute} in the adopted consumer`,
+    mixedBulkFailures(mixedBulkSurface, mixedBulkMutation(
+      (source) => source.replace(`${attribute}=`, `missing_${attribute}=`),
+    )).includes(`bulk:${mixedBulkConsumer.id}`));
+}
+check("Full Adoption Bulk rejects disabled selection in the adopted consumer",
+  mixedBulkFailures(mixedBulkSurface, mixedBulkMutation(
+    (source) => source.replace(/enableSelection(?=\s)/u, "enableSelection={false}"),
+  )).includes(`bulk:${mixedBulkConsumer.id}`));
+check("Full Adoption Bulk rejects a consumer-local lifecycle owner",
+  mixedBulkFailures(mixedBulkSurface, mixedBulkMutation(
+    (source) => source.replace("const instant =", "const [bulkPending] = useState(false); void bulkPending; const instant ="),
+  )).includes(`bulk:${mixedBulkConsumer.id}`));
+check("Full Adoption Bulk rejects a direct lifecycle bypass inside the adopted consumer",
+  mixedBulkFailures(mixedBulkSurface, mixedBulkMutation(
+    (source) => source.replaceAll("bulk: true", "bulk: false"),
+  )).includes(`bulk:${mixedBulkConsumer.id}`));
+check("Full Adoption Bulk rejects a missing canonical Data Runtime binding",
+  mixedBulkFailures(mixedBulkSurface, mixedBulkMutation(
+    (source) => source.replaceAll("useAdminEntityInstantMutation", "useLocalInstantMutation"),
+  )).includes(`bulk:${mixedBulkConsumer.id}`));
+for (const state of ["not_required", "adopted"] as const) {
+  const changedConsumer = state === "not_required" ? mixedBulkConsumer : noBulkConsumer;
+  check(`Full Adoption Bulk rejects a false ${state} child without inheriting sibling proof`,
+    mixedBulkFailures({
+      ...mixedBulkSurface,
+      consumerAdoptionEvidence: mixedBulkSurface.consumerAdoptionEvidence.map((consumer) =>
+        consumer.id === changedConsumer.id
+          ? { ...consumer, contracts: { ...consumer.contracts, bulk: state, selection: state } }
+          : consumer),
+    }).includes(`bulk:${changedConsumer.id}`));
+}
+check("Full Adoption Bulk rejects omitted child coverage",
+  mixedBulkFailures({ ...mixedBulkSurface,
+    consumerAdoptionEvidence: mixedBulkSurface.consumerAdoptionEvidence.filter(
+      (consumer) => consumer.id !== mixedBulkConsumer.id),
+  }).includes("bulk"));
+check("Full Adoption Bulk rejects a missing presentation binding",
+  mixedBulkFailures({ ...mixedBulkSurface,
+    consumerAdoptionEvidence: mixedBulkSurface.consumerAdoptionEvidence.map((consumer) =>
+      consumer.id === mixedBulkConsumer.id ? { ...consumer, executableBindings: [] } : consumer),
+  }).includes(`bulk:${mixedBulkConsumer.id}`));
+check("Full Adoption Bulk rejects borrowing another child's page",
+  mixedBulkFailures({ ...mixedBulkSurface,
+    consumerAdoptionEvidence: mixedBulkSurface.consumerAdoptionEvidence.map((consumer) =>
+      consumer.id === mixedBulkConsumer.id
+        ? { ...consumer, pageSourceFile: noBulkConsumer.pageSourceFile }
+        : consumer),
+  }).includes(`bulk:${mixedBulkConsumer.id}`));
+check("Full Adoption Bulk rejects enabling selection on a not_required child",
+  mixedBulkFailures(mixedBulkSurface, new Map([[mixedBulkFile,
+    mixedBulkSource.replaceAll("enableSelection={false}", "enableSelection"),
+  ]])).includes(`bulk:${noBulkConsumer.id}`));
 
 const columnPreferenceSourceGraph = collectCollectionSourceGraph(
   fullAdoptionFailureFixture,
