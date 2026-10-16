@@ -877,6 +877,9 @@ try {
   );
 
   }
+  if (browserIssues.length || webpackWarnings.length) {
+    console.error(JSON.stringify({ browserIssues, webpackWarnings }, null, 2));
+  }
   check(
     "the isolated browser run has no console, page, request, or webpack errors",
     browserIssues.length === 0 && webpackWarnings.length === 0,
