@@ -820,7 +820,6 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     label: "List, bulk, row, and one-shot actions",
     classification: "explicit_exception",
     sourceFiles: [
-      "src/components/admin/projects/tracking/TrackingCollections.tsx",
       "src/components/admin/ui/AdminBulkActionBar.tsx",
       "src/components/admin/ui/AdminDataGridRowActions.tsx",
       "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
