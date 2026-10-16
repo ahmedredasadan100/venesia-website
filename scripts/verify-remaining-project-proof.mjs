@@ -47,7 +47,7 @@ function loader(ports) {
   return load;
 }
 function portsFor(rpc, from) {
-  const state = { attempts: 0, failures: 0, rpcCalls: 0, generationCalls: 0, generationFailures: 0, generationValue: "1", audits: 0, mediaWarning: false, committedLeaseFailures: [], uncertaintyCalls: 0 };
+  const state = { attempts: 0, failures: 0, rpcCalls: 0, generationCalls: 0, generationFailures: 0, generationValue: "1", audits: 0, mediaWarning: false, rejectMediaLease: false, committedLeaseFailures: [], uncertaintyCalls: 0 };
   const cache = () => { state.attempts++; if (state.failures-- > 0) throw new Error("injected cache outage"); };
   const synchronization = () => ({ status: state.mediaWarning ? "saved_with_media_sync_warning" : "synced", failureReason: state.mediaWarning ? "injected media warning" : null });
   const ports = {
@@ -72,13 +72,27 @@ function portsFor(rpc, from) {
       return rpc(name, args);
     }, from }) },
     "/tracking-media-coordination": {
-      coordinateTrackingUpdateSave: async ({ mutate }) => ({ value: await mutate(), mediaSynchronization: synchronization() }),
+      coordinateTrackingUpdateSave: async ({ mutate }) => {
+        if (state.rejectMediaLease) throw new ports["/write-lease"].MediaReferenceWriteLeaseError("media_write_lease_conflict");
+        return { value: await mutate(), mediaSynchronization: synchronization() };
+      },
       cleanupDeletedTrackingUpdateMedia: async () => synchronization(),
     },
     "/project-entry-media-coordination": { coordinateProjectEntrySave: async ({ mutate }) => ({ value: await mutate(), mediaSynchronization: synchronization() }) },
     "/synchronization": { synchronizeMediaReferenceWriteScopesAfterDomainMutation: async () => synchronization(), markMediaCatalogRuntimeUncertain: async () => { state.uncertaintyCalls++; } },
     "/write-lease": { acquireMediaReferenceWriteLease: async () => ({ token: "isolated-lease" }), failMediaReferenceWriteLease: async (input) => { state.committedLeaseFailures.push(input.domainWriteCommitted); }, completeMediaReferenceWriteLease: async () => {} },
   };
+  // Keep the actual error identity/translation while all Media transport stays
+  // isolated. A transport-only mock must not erase exports used by the Actions.
+  const leaseOwner = loader({
+    ...ports,
+    "/deleted-reference-state": {}, "/identity": {}, "/upload-cms-asset": {},
+    "/media-storage-adapter": {}, "/reference-providers": {},
+  })("src/lib/admin/media-catalog/write-lease.ts");
+  Object.assign(ports["/write-lease"], {
+    MediaReferenceWriteLeaseError: leaseOwner.MediaReferenceWriteLeaseError,
+    getMediaReferenceWriteLeaseUserMessage: leaseOwner.getMediaReferenceWriteLeaseUserMessage,
+  });
   return { state, ports };
 }
 function queryPort(db) {
@@ -156,6 +170,13 @@ try {
     ["update edit", () => actions.updateTrackingUpdateAction(initial("edit"), form({ ...updateInput, update_id: update.entityId, body: "saved update edit" }))],
     ["update publication", () => actions.setTrackingUpdatePublicationVisibilityAction(1, item.entityId, update.entityId, true, "proof update")],
   ]) { setup.state.failures = 2; const result = await operation(); check(`Tracking ${name} retains committed warning`, result.status ?? result.feedbackStatus, "warning"); }
+  const beforeLeaseConflict = setup.state.rpcCalls;
+  setup.state.rejectMediaLease = true;
+  const leaseRejected = await actions.createTrackingUpdateAction(initial(), form(updateInput));
+  check("Tracking actual lease error retains canonical translation", [leaseRejected.status, leaseRejected.message],
+    ["error", setup.ports["/write-lease"].getMediaReferenceWriteLeaseUserMessage("media_write_lease_conflict")]);
+  check("Tracking lease conflict sends no domain RPC", setup.state.rpcCalls, beforeLeaseConflict);
+  setup.state.rejectMediaLease = false;
   const rejected = await actions.deleteTrackingStageAction(1, stage.entityId, "proof stage");
   check("Tracking precommit child protection remains an error", rejected.ok, false);
   check("Tracking failed delete preserves root", (await tracking.query("select count(*)::int as n from project_tracking_stages")).rows[0].n, 1);

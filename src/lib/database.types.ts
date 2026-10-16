@@ -3631,6 +3631,14 @@ export type Database = {
         Args: { p_seo_score_version: number }
         Returns: Json
       }
+      read_project_tracking_transfer_snapshot: {
+        Args: { p_project_id: number; p_source_stage_id: number; p_target_stage_id: number; p_item_ids: number[] }
+        Returns: Json
+      }
+      transfer_project_tracking_items: {
+        Args: { p_actor_id: number; p_command_id: string; p_operation: string; p_project_id: number; p_source_stage_id: number; p_target_stage_id: number; p_item_ids: number[]; p_expected_revision: string; p_media_plan: Json; p_media_context: Json }
+        Returns: Json
+      }
       mutate_project_tracking_item: {
         Args: { p_action: string; p_actor_id: number; p_item_id?: number | null; p_payload?: Json; p_project_id: number; p_stage_id: number }
         Returns: Json

@@ -3,11 +3,12 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { expect } from 'playwright/test';
 const require = createRequire(import.meta.url), root = process.cwd(), out = path.join(root, '.tmp-qa/admin-form-layout/browser');
 await mkdir(out, { recursive: true });
 await writeFile(path.join(out, 'loader.cjs'), `module.exports=s=>require('typescript').transpileModule(s,{compilerOptions:{jsx:4,target:9,module:99}}).outputText;`);
 await writeFile(path.join(out, 'navigation.js'), `export {unstable_rethrow} from 'next/dist/client/components/unstable-rethrow.browser';export const useRouter=()=>({push(){},replace(){},refresh(){},prefetch(){}});const params=new URLSearchParams();export const useSearchParams=()=>params;export const usePathname=()=>'/admin/fixture';`);
-await writeFile(path.join(out, 'actions.js'), `const row={id:'pages:42',resourceId:42,resourceType:'pages',title:'من نحن',slug:'about',publicPath:'/about'};export const browseAdminLinksAjax=async()=>({ok:true,results:[row]});export const browseTopicCategoriesPickerAjax=async()=>({ok:true,items:[]});export const browseMenusPickerAjax=async()=>({ok:true,menus:[]});export const browseMenuItemsPickerAjax=async()=>({ok:true,items:[]});export const resolveAdminLinkAjax=async v=>({ok:true,display:{kind:v.link_kind,kindLabel:'صفحة',title:v.link_kind==='external'?'External':'من نحن',publicPath:(v.href||'/about')+(v.anchor?'#'+v.anchor:''),target:v.target||'_self'}});export const updateHeroTemplateDetails=async()=>{throw Error('No persistence transport permitted')};`);
+await writeFile(path.join(out, 'actions.js'), `const row={id:'pages:42',resourceId:42,resourceType:'pages',title:'من نحن',slug:'about',publicPath:'/about'};export const browseAdminLinksAjax=async()=>({ok:true,results:[row]});export const browseTopicCategoriesPickerAjax=async()=>({ok:true,items:[]});export const browseMenusPickerAjax=async()=>({ok:true,menus:[]});export const browseMenuItemsPickerAjax=async()=>({ok:true,items:[]});export const resolveAdminLinkAjax=async v=>({ok:true,display:{kind:v.link_kind,kindLabel:v.link_kind==='external'?'خارجي':'صفحة',title:v.link_kind==='external'?v.href:'من نحن',publicPath:(v.href||'/about')+(v.anchor?'#'+v.anchor:''),target:v.target||'_self'}});export const updateHeroTemplateDetails=async()=>{throw Error('No persistence transport permitted')};`);
 await writeFile(path.join(out, 'picker.js'), `import React from 'react';export default function Picker({open,onSelect,onClose}){return open?<button type="button" onClick={()=>{onSelect('/wide.png');onClose()}}>Select fixture media</button>:null;}`);
 const css = (await require('postcss')([require('@tailwindcss/postcss')({ base: root })]).process('@import "tailwindcss";\n@source "' + root.replaceAll('\\', '/') + '/src";\n@source "' + root.replaceAll('\\', '/') + '/scripts/fixtures/admin-form-layout-browser.jsx";', { from: path.join(root, 'src/app/globals.css') })).css;
 const webpack = require('next/dist/compiled/webpack/webpack').webpack;
@@ -35,7 +36,26 @@ try {
     await page.locator('[data-hero-rendered-area-state="ready"]').waitFor();
     for (const width of [1440, 1024, 768, 430, 390, 375]) {
         await page.setViewportSize({ width, height: 1000 });
-        const result = await page.evaluate(() => { const rect = e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; }; return { overflow: document.documentElement.scrollWidth > innerWidth, families: [...document.querySelectorAll('[data-family]')].map(e => ({ family: e.dataset.family, overflow: e.scrollWidth > e.clientWidth + 1 })), panels: [...document.querySelector('[data-hero-image-composition] [data-admin-form-grid]').children].map(rect), controls: [...document.querySelector('[data-family="story"] [data-admin-form-grid="control-cards"]').children].filter(e => e.tagName !== 'INPUT').map(rect), gallery: [...document.querySelectorAll('[data-family="gallery"] [data-admin-media-gallery-card="image"]')].map(rect), images: [...document.querySelectorAll('[data-admin-media-image-card="selected"]')].map(e => ({ preview: rect(e), parent: rect(e.parentElement), fit: getComputedStyle(e.querySelector('img')).objectFit })), links: [...document.querySelectorAll('[data-admin-link-field]')].filter(e => e.getBoundingClientRect().width > 0).map(e => ({ field: rect(e), choose: rect(e.querySelector('button')), anchor: e.querySelector('label input') ? { input: rect(e.querySelector('label input')), label: rect(e.querySelector('label span')) } : null })) }; });
+        const result = await page.evaluate(() => {
+            const rect = e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+            return {
+                overflow: document.documentElement.scrollWidth > innerWidth,
+                families: [...document.querySelectorAll('[data-family]')].map(e => ({ family: e.dataset.family, overflow: e.scrollWidth > e.clientWidth + 1 })),
+                panels: [...document.querySelector('[data-hero-image-composition] [data-admin-form-grid]').children].map(rect),
+                controls: [...document.querySelector('[data-family="story"] [data-admin-form-grid="control-cards"]').children].filter(e => e.tagName !== 'INPUT').map(rect),
+                ctaCards: [...document.querySelectorAll('[data-family="hero-cta"] [data-module-editor-cta-card]')].map(e => ({ kind: e.dataset.moduleEditorCtaCard, ...rect(e) })),
+                gallery: [...document.querySelectorAll('[data-family="gallery"] [data-admin-media-gallery-card="image"]')].map(rect),
+                images: [...document.querySelectorAll('[data-admin-media-image-card="selected"]')].map(e => ({ preview: rect(e), parent: rect(e.parentElement), fit: getComputedStyle(e.querySelector('img')).objectFit })),
+                links: [...document.querySelectorAll('[data-admin-link-field]')].filter(e => e.getBoundingClientRect().width > 0).map(e => {
+                    const row = e.querySelector('[data-admin-link-controls]');
+                    const destination = e.querySelector('[data-admin-link-destination]');
+                    return { field: rect(e), row: rect(row), destination: rect(destination),
+                        actions: [...row.querySelectorAll(':scope > button')].map(button => ({ ...rect(button), icon: rect(button.querySelector('svg')) })),
+                        pathDirection: destination.querySelector('[dir="ltr"]')?.dir ?? null,
+                        anchor: e.querySelector('label input') ? { input: rect(e.querySelector('label input')), label: rect(e.querySelector('label span')) } : null };
+                }),
+            };
+        });
         assert(!result.overflow, JSON.stringify({ width, ...result }));
         assert(result.families.every(x => !x.overflow), JSON.stringify({ width, families: result.families }));
         assert(Math.abs(result.panels[0].w - result.panels[1].w) < 2);
@@ -50,12 +70,131 @@ try {
         if (width < 768)
             assert(result.controls.every((x, i) => !i || x.y > result.controls[i - 1].y));
         assert(result.images.every(x => Math.abs(x.preview.w - x.parent.w) < 3 && x.fit === 'cover'));
-        assert(result.links.every(x => x.choose.w > x.field.w / 2 && (!x.anchor || x.anchor.input.y >= x.anchor.label.y + x.anchor.label.h)), JSON.stringify({ width, links: result.links }));
+        assert.equal(result.ctaCards.length, 2);
+        const [primary, secondary] = result.ctaCards;
+        assert.equal(primary.kind, 'primary'); assert.equal(secondary.kind, 'secondary');
+        assert(width >= 1024 ? primary.x > secondary.x && Math.abs(primary.y - secondary.y) < 2 : secondary.y > primary.y, JSON.stringify({ width, cards: result.ctaCards }));
+        assert(Math.abs(primary.w - secondary.w) < 2);
+        for (const link of result.links) {
+            assert(link.destination.w > 0 && link.actions.length >= 1 && link.actions.length <= 2);
+            assert(link.destination.x >= link.row.x - 1 && link.destination.x + link.destination.w <= link.row.x + link.row.w + 1);
+            assert(link.actions.every(action => action.w === 44 && action.h === 44 && action.icon.w === 20 && action.icon.h === 20), JSON.stringify({ width, link }));
+            assert(link.actions.every(action => Math.abs((action.y + action.h / 2) - (link.destination.y + link.destination.h / 2)) < 2));
+            assert(link.actions.every(action => action.x >= link.row.x - 1 && action.x + action.w <= link.row.x + link.row.w + 1));
+            assert(link.actions[0].x + link.actions[0].w <= link.destination.x, 'RTL destination and actions must remain separate');
+            if (link.actions.length === 2) assert(link.actions[1].x + link.actions[1].w <= link.actions[0].x);
+            assert(link.pathDirection === null || link.pathDirection === 'ltr');
+            assert(!link.anchor || link.anchor.input.y >= link.anchor.label.y + link.anchor.label.h + 4, 'Anchor label and input require visible spacing');
+        }
         geometry.push({ width, ...result });
         if ([1440, 390].includes(width))
             for (const family of ['story', 'hero-cta', 'gallery', 'hero', 'footer', 'menu', 'breadcrumb'])
-                await page.locator(`[data-family="${family}"]`).screenshot({ path: path.join(out, `${family}-${width}.png`) });
+                await page.locator(`[data-family="${family}"]${family === 'hero-cta' ? ' [data-module-editor-cta-grid]' : ''}`).screenshot({ path: path.join(out, `${family}-${width}.png`) });
     }
+    const cta = page.locator('[data-family="hero-cta"]');
+    for (const [kind, label] of [['primary', 'نص الزر الأساسي'], ['secondary', 'نص الزر الثانوي']]) {
+        const card = cta.locator(`[data-module-editor-cta-card="${kind}"]`);
+        await expect(card.getByRole('textbox', { name: label, exact: true })).toBeVisible();
+        assert.equal(await card.getByRole('textbox', { name: label, exact: true }).locator('..').innerText(), '', 'Redundant visible CTA text label is removed while aria-label remains');
+        await expect(card.getByRole('button', { name: 'اختيار الرابط', exact: true })).toBeVisible();
+        await expect(card.getByRole('button', { name: 'مسح', exact: true })).toBeVisible();
+    }
+    const primaryCard = cta.locator('[data-module-editor-cta-card="primary"]');
+    const secondaryCard = cta.locator('[data-module-editor-cta-card="secondary"]');
+    await expect(primaryCard.locator('[data-admin-link-destination]').getByText('من نحن', { exact: true })).toBeVisible();
+    await expect(secondaryCard.locator('[data-admin-link-destination]').getByText('خارجي', { exact: true })).toBeVisible();
+    const longPath = secondaryCard.locator('[data-admin-link-destination] [dir="ltr"]');
+    assert((await longPath.textContent()).length > 300);
+    assert.equal(await longPath.getAttribute('title'), await longPath.textContent(), 'Full destination remains inspectable despite visual truncation');
+    await expect(page.locator('[data-family="hero-domain"]').getByRole('textbox', { name: 'نص زر فتح تفاصيل المشروع', exact: true })).toHaveValue('تفاصيل المشروع');
+    await expect(page.locator('[data-family="hero-domain"] [data-admin-link-field]')).toHaveCount(0);
+    const ordinaryAction = page.getByRole('button', { name: 'إجراء نصي عادي', exact: true });
+    await expect(ordinaryAction).toBeEnabled();
+    const ordinaryBox = await ordinaryAction.boundingBox();
+    assert(ordinaryBox.width > 44 && ordinaryBox.height >= 44, 'Existing text buttons retain natural width and target height');
+    await expect(page.getByRole('button', { name: 'إجراء نصي معطل', exact: true })).toBeDisabled();
+    const disabled = page.locator('[data-family="disabled-link"]');
+    for (const control of await disabled.locator('button, label input').all()) await expect(control).toBeDisabled();
+    const empty = page.locator('[data-family="empty-link"]');
+    await expect(empty.getByText('لم يتم اختيار رابط بعد.', { exact: true })).toBeVisible();
+    await expect(empty.getByRole('button')).toHaveCount(1);
+    await expect(empty.locator('label input')).toHaveCount(0);
+    const choosePrimary = primaryCard.getByRole('button', { name: 'اختيار الرابط', exact: true });
+    await choosePrimary.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    await dialog.getByRole('button', { name: 'إغلاق', exact: true }).focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(dialog.getByRole('button', { name: 'اعتماد الرابط', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'إغلاق', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible(); // Picker preserves the shared explicit-close policy.
+    await dialog.getByRole('button', { name: 'إغلاق', exact: true }).press('Enter');
+    await expect(dialog).toBeHidden();
+    await expect(choosePrimary).toBeFocused();
+    await expect(choosePrimary).toHaveCSS('outline-style', 'solid');
+    await expect(choosePrimary).toHaveCSS('outline-width', '2px');
+    await choosePrimary.press('Tab');
+    await expect(primaryCard.getByRole('button', { name: 'مسح', exact: true })).toBeFocused();
+    async function choosePage(card) {
+        await card.getByRole('button', { name: 'اختيار الرابط', exact: true }).press('Enter');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole('textbox', { name: 'ابحث داخل Pages...', exact: true })).toBeVisible();
+        await dialog.getByRole('button', { name: /من نحن/ }).click();
+        await dialog.getByRole('button', { name: 'اعتماد الرابط', exact: true }).click();
+        await expect(dialog).toBeHidden();
+        await expect(card.locator('[data-admin-link-destination]').getByText('من نحن', { exact: true })).toBeVisible();
+    }
+    for (const [card, prefix, anchor] of [[primaryCard, 'primary', 'primary-section'], [secondaryCard, 'secondary', 'secondary-section']]) {
+        await card.getByRole('button', { name: 'مسح', exact: true }).press('Enter');
+        await expect(card.getByText('لم يتم اختيار رابط بعد.', { exact: true })).toBeVisible();
+        await expect(card.getByRole('button', { name: 'مسح', exact: true })).toHaveCount(0);
+        await expect(cta.locator(`[name="${prefix}_cta_link_kind"]`)).toHaveValue('none');
+        await choosePage(card);
+        await card.locator('[data-admin-link-field] label input').fill('#' + anchor);
+        await expect(cta.locator(`[name="${prefix}_cta_link_anchor"]`)).toHaveValue(anchor);
+        await expect(card.locator('[data-admin-link-destination]').getByText('/about#' + anchor, { exact: true })).toBeVisible();
+    }
+    await cta.getByRole('textbox', { name: 'نص الزر الأساسي', exact: true }).fill('زر أساسي محفوظ');
+    await cta.getByRole('textbox', { name: 'نص الزر الثانوي', exact: true }).fill('زر ثانوي محفوظ');
+    await expect(primaryCard.getByRole('switch')).toBeChecked();
+    await primaryCard.getByRole('switch').press('Space');
+    await primaryCard.getByRole('button', { name: 'محاذاة للوسط', exact: true }).click();
+    await primaryCard.getByRole('button', { name: 'تنسيق عريض', exact: true }).click();
+    for (const card of [primaryCard, secondaryCard]) {
+        await expect(card.getByRole('switch')).not.toBeChecked();
+        await expect(card.getByRole('button', { name: 'محاذاة للوسط', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        await expect(card.getByRole('button', { name: 'تنسيق عريض', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    }
+    await cta.getByRole('button', { name: 'Save CTA fixture', exact: true }).click();
+    const savedCta = await page.evaluate(() => window.ctaSaved);
+    assert.equal(savedCta.config.primaryLabel, 'زر أساسي محفوظ');
+    assert.equal(savedCta.config.secondaryLabel, 'زر ثانوي محفوظ');
+    assert.equal(savedCta.config.primaryLink.linked_id, 42);
+    assert.equal(savedCta.config.secondaryLink.linked_id, 42);
+    assert.equal(savedCta.config.primaryLink.anchor, 'primary-section');
+    assert.equal(savedCta.config.secondaryLink.anchor, 'secondary-section');
+    assert.equal(savedCta.config.showDefault, false);
+    assert.equal(savedCta.config.alignmentDefault, 'center');
+    assert.equal(savedCta.config.boldDefault, true);
+    await cta.getByRole('button', { name: 'Reload CTA fixture', exact: true }).click();
+    await expect(cta.locator('[name="primary_cta_label"]')).toHaveValue('زر أساسي محفوظ');
+    await expect(cta.locator('[name="secondary_cta_label"]')).toHaveValue('زر ثانوي محفوظ');
+    await expect(cta.locator('[name="primary_cta_link_anchor"]')).toHaveValue('primary-section');
+    await expect(cta.locator('[name="secondary_cta_link_anchor"]')).toHaveValue('secondary-section');
+    await expect(cta.locator('[name="show_cta"]')).toHaveValue('false');
+    await expect(cta.locator('[name="cta_alignment"]')).toHaveValue('center');
+    await expect(cta.locator('[name="cta_bold"]')).toHaveValue('true');
+    await secondaryCard.getByRole('button', { name: 'مسح', exact: true }).press('Enter');
+    await cta.getByRole('button', { name: 'Save CTA fixture', exact: true }).click();
+    await cta.getByRole('button', { name: 'Reload CTA fixture', exact: true }).click();
+    await expect(cta.locator('[name="secondary_cta_link_kind"]')).toHaveValue('none');
+    await expect(cta.locator('[name="secondary_cta_link_anchor"]')).toHaveValue('');
+    await expect(cta.locator('[name="primary_cta_link_anchor"]')).toHaveValue('primary-section');
+    await expect(cta.locator('[name="secondary_cta_label"]')).toHaveValue('زر ثانوي محفوظ');
     const story = page.locator('[data-family="story"]');
     await story.locator('[name="button_label"]').fill('زر محفوظ');
     await story.locator('[name="image_main_alt"]').fill('وصف محفوظ');
@@ -78,8 +217,8 @@ try {
     await page.getByRole('dialog').waitFor();
     await page.screenshot({ path: path.join(out, 'picker-mobile.png') });
     assert.deepEqual(errors, []);
-    await writeFile(path.join(out, 'receipt.json'), JSON.stringify({ status: 'PASS', geometry, errors, scope: 'Actual components and CSS, controlled transport only; form serialization/remount and controlled Footer callback verified; no DB/storage writes' }, null, 2));
-    console.log('PASS Admin form layout: representative families, desktop/mobile geometry, no overflow, current destination/anchor, controls, gallery, original dimensions and save/reload');
+    await writeFile(path.join(out, 'receipt.json'), JSON.stringify({ status: 'PASS', geometry, errors, ctaSaved: savedCta, scope: 'Actual components and CSS, controlled transport only; six RTL viewport geometries, accessible icon controls, keyboard picker focus/return, CTA select/clear and canonical FormData/remount, synchronized formatting, controlled Footer callback and inherited disabled state; no native DB/storage proof or writes' }, null, 2));
+    console.log('PASS Admin form layout: six RTL widths; CTA cards, shared icon links, long paths, keyboard picker focus/return, select/clear, formatting, serialization/remount, disabled state and representative consumers');
 }
 finally {
     await browser.close();

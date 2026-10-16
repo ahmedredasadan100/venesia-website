@@ -88,6 +88,15 @@ for (const absolute of files(path.join(root, "src"))) {
           ? actionNode.text
           : "dynamic",
       text = callback.getText(sf);
+    let transferSettlement = "";
+    if (names.at(-1) === "executeTransfer") {
+      assert.equal(file, "src/components/admin/projects/tracking/TrackingCollections.tsx");
+      const owner = sf.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "TrackingItemsCollection");
+      assert.ok(owner?.body);
+      const helpers = owner.body.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === "settleTransferResult");
+      assert.equal(helpers.length, 1);
+      transferSettlement = helpers[0].getText(sf);
+    }
     inventory.push({
       file,
       kind,
@@ -111,7 +120,7 @@ for (const absolute of files(path.join(root, "src"))) {
             ].includes(n.name?.text),
         )
         .map((n) => n.getText(sf))
-        .join("\n"),
+        .join("\n") + "\n" + transferSettlement,
     });
   }
 }
@@ -176,9 +185,16 @@ const actionNames = [
   "reorderTrackingItemsAction",
 ];
 const bindings = active.map((entry, index) => {
-  let args = "[row]";
+  let args = "[row]", transferPorts = "";
   const name = entry.names.at(-1);
-  if (name === "executeBulkMutation") args = "['delete',[1],'']";
+  if (name === "executeTransfer") {
+    assert.deepEqual(entry.params, ["action", "selectedIds"]);
+    args = "['copy',[1]]";
+    // Prepared input is a fixture port; the current callback and settlement helper
+    // execute against the mounted real QueryClient and Instant Mutation owner.
+    transferPorts = "const preparedTransfer={current:{input:{projectId:1,sourceStageId:1,targetStageId:2,operation:'copy',ids:[1]},revision:'fixture'}},unresolvedFeedback={current:null};const transferTrackingItemsAction=async(_input:any,_revision:any,commandId:string)=>{const result=await execute();return{...result,commandId,completion:result.ok?'committed':'not_committed'};};const recoverTrackingTransferAction=recover;\n";
+  }
+  else if (name === "executeBulkMutation") args = "['delete',[1],'']";
   else if (name === "emptyTrash") args = "[1]";
   else if (name === "bulkDelete") args = "[[1]]";
   else if (name === "runLifecycleMutation") args = "[row,'delete',execute]";
@@ -205,9 +221,9 @@ const bindings = active.map((entry, index) => {
   return (
     "function adapter" +
     index +
-    "(instant:any,execute:any,row:any,recover:any){\n" +
+    "(instant:any,execute:any,row:any,recover:any,queryClient:any){\n" +
     entry.helpers +
-    "\n" +
+    "\n" + transferPorts +
     "const controller={query:{filters:{status:'all',visibility:'all',publication:'all',featured:'all'}}};const projectId=1,stageId=1,itemId=1,level='city',pages=[row];const getPageDeleteBlockReason=()=>null;const adminUserEntityListRowSchema={safeParse:(data:any)=>({success:true,data})};\n" +
     "const " +
     actionNames.map((n) => n + "=execute").join(",") +
@@ -225,7 +241,7 @@ const bindings = active.map((entry, index) => {
 });
 writeFileSync(
   path.join(out, "adapters.ts"),
-  "import{adminActionFailure,adminActionSuccess,withAdminActionSettledResult}from'@src/lib/admin/admin-action-result';\n" +
+  "import{adminActionFailure,adminActionSuccess,withAdminActionSettledResult}from'@src/lib/admin/admin-action-result';import{PROJECT_TRACKING_ENTITY_KEYS}from'@src/lib/admin/projects/tracking-contract';import{adminEntityListQueryKeys}from'@src/lib/admin/entity-list/data-engine/query-keys';\n" +
     bindings.join("\n") +
     "\nexport const factories=[" +
     active.map((_, i) => "adapter" + i).join(",") +
@@ -263,7 +279,7 @@ function Fixture(){
 useQuery({queryKey:key,initialData:initial,staleTime:Infinity,retry:false,queryFn:async()=>{const response=await fetch('/read');if(!response.ok)throw Error('Readback HTTP 503');return response.json();}});
 const instant=useAdminEntityInstantMutation('settled-adoption',query);const execute=async(...args:any[])=>{window.calls++;const form=args.find(value=>value instanceof FormData);const data=form?Object.fromEntries(form):{};return(await fetch('/mutate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)})).json();};
 const recover=async(commandId:string)=>(await fetch('/recover',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({commandId})})).json();
-window.run=async(index:number,opposite=false)=>{const controlled={...instant,mutateAsync:(request:any)=>instant.mutateAsync({...request,optimistic:(cache:any)=>{request.optimistic(cache);window.optimisticSnapshot=structuredClone(client.getQueryData(key));}})};const adapter=factories[index](controlled,execute,opposite?{...row,is_featured:true}:row,recover);const result=await adapter.run();return{result,feedback:mapAdminActionResultToFeedback(result),preservesDomain:adapter.preservesDomain,snapshot:client.getQueryData(key),optimisticSnapshot:window.optimisticSnapshot};};
+window.run=async(index:number,opposite=false)=>{const controlled={...instant,mutateAsync:(request:any)=>instant.mutateAsync({...request,optimistic:(cache:any)=>{request.optimistic(cache);window.optimisticSnapshot=structuredClone(client.getQueryData(key));}})};const adapter=factories[index](controlled,execute,opposite?{...row,is_featured:true}:row,recover,client);const result=await adapter.run();return{result,feedback:mapAdminActionResultToFeedback(result),preservesDomain:adapter.preservesDomain,snapshot:client.getQueryData(key),optimisticSnapshot:window.optimisticSnapshot};};
 window.retryRead=()=>client.refetchQueries({queryKey:key,type:'active'},{throwOnError:true}).catch(()=>undefined);
 return <output id="ready">{epoch}</output>;}
 window.mount=()=>{window.calls=0;window.optimisticSnapshot=null;window.lastRecoveryResult=null;epoch++;client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});root.render(<QueryClientProvider key={epoch} client={client}><Fixture/></QueryClientProvider>);return epoch;};

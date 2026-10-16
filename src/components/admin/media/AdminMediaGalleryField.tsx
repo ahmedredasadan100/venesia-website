@@ -34,6 +34,7 @@ type AdminMediaGalleryFieldBaseProps = {
   showReferenceLabel?: boolean;
   browseFolder?: string;
   density?: "default" | "compact";
+  selectionMode?: "single" | "multiple";
 };
 
 type AdminMediaGalleryPathsProps = AdminMediaGalleryFieldBaseProps & {
@@ -114,6 +115,7 @@ export default function AdminMediaGalleryField(
     showReferenceLabel = false,
     browseFolder = "images",
     density = "default",
+    selectionMode = "single",
   } = props;
   const itemsMode = props.valueMode === "items";
   const defaultKey = getDefaultKey(props);
@@ -177,6 +179,8 @@ export default function AdminMediaGalleryField(
   }
 
   function handleSelect(path: string) {
+    if (selectionMode === "multiple" && items.some((item, index) =>
+      index !== replaceIndex && item.url === path)) return;
     const addedKey =
       replaceIndex === null
         ? `gallery-item-added-${nextItemKeyRef.current}`
@@ -194,6 +198,22 @@ export default function AdminMediaGalleryField(
         index === replaceIndex ? { ...item, url: path } : item,
       );
     });
+  }
+
+  function handleSelectMany(paths: string[]) {
+    const additions = [...new Set(paths)]
+      .filter((url) => !items.some((item) => item.url === url))
+      .map((url) => ({
+        key: `gallery-item-added-${nextItemKeyRef.current++}`,
+        url,
+        alt: "",
+        caption: "",
+      }));
+    if (!additions.length) return;
+    commitItems((current) => [
+      ...current,
+      ...additions.filter((added) => !current.some((item) => item.url === added.url)),
+    ]);
   }
 
   function removeAt(index: number) {
@@ -464,6 +484,11 @@ export default function AdminMediaGalleryField(
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onSelect={handleSelect}
+        multiple={selectionMode === "multiple" && replaceIndex === null}
+        onSelectMany={handleSelectMany}
+        excludedPaths={selectionMode === "multiple"
+          ? items.filter((_, index) => index !== replaceIndex).map((item) => item.url)
+          : undefined}
         initialFolder={browseFolder}
       />
     </div>

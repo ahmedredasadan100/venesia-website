@@ -6,6 +6,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { deriveProjectTrackingStageStatus } from "../src/lib/projects/tracking/contract.ts";
 
+import { verifyTrackingWriteConsistency } from "./fixtures/tracking-write-consistency.mjs";
+
 const migration = readFileSync(
   resolve(process.cwd(), "sql/migrations/20260817170332_project_construction_tracking_detail.sql"),
   "utf8",
@@ -200,5 +202,9 @@ const acl = await db.query<{ anonymous_execute: boolean; service_execute: boolea
 `);
 check("write RPC ACL is service_role only", acl.rows[0]?.anonymous_execute === false && acl.rows[0]?.service_execute === true);
 
-await db.close();
+try {
+  await verifyTrackingWriteConsistency(db);
+} finally {
+  await db.close();
+}
 console.log(`verify-project-tracking-detail-postgres OK (${passed} assertions)`);

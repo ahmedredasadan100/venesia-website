@@ -99,6 +99,132 @@ async function chooseRight() {
   await row.locator('[data-admin-text-alignment="right"]').click();
   await expect(page.locator('[name="description_alignment"]')).toHaveValue("right");
 }
+const ctaCard = slot => page.locator('[data-module-editor-cta-card="' + slot + '"]');
+const ctaField = slot => ctaCard(slot).locator("[data-admin-link-field]");
+async function openCtaEditor(kind) {
+  await page.goto(origin + route(kind));
+  await page.locator('[data-admin-tab-id="buttons"]').click();
+  await expect(ctaCard("primary")).toBeVisible();
+  await expect(ctaCard("secondary")).toBeVisible();
+}
+async function selectCtaLink(slot) {
+  const fixture = fixtures.cta[slot];
+  const field = ctaField(slot);
+  const trigger = field.getByRole("button", { name: "اختيار الرابط", exact: true });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "اختيار رابط", exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Static Routes", exact: true }).click();
+  await dialog.getByPlaceholder("ابحث داخل Static Routes...").fill(fixture.href);
+  const result = dialog.getByRole("button").filter({ has: page.getByText(fixture.title, { exact: true }) });
+  await expect(result).toHaveCount(1);
+  await result.click();
+  await dialog.getByRole("button", { name: "اعتماد الرابط", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await field.getByLabel("Anchor (اختياري)", { exact: true }).fill("#" + fixture.anchor);
+  await expect(field.locator('[name="' + slot + '_cta_link_anchor"]')).toHaveValue(fixture.anchor);
+}
+async function expectCtaFields({ primary = true, secondary = true, shown = true, bold = true, alignment = "left" } = {}) {
+  for (const [slot, hasLink] of [["primary", primary], ["secondary", secondary]]) {
+    const fixture = fixtures.cta[slot];
+    const card = ctaCard(slot);
+    const field = ctaField(slot);
+    await expect(card.locator('[name="' + slot + '_cta_label"]')).toHaveValue(fixture.label);
+    const fields = {
+      link_kind: hasLink ? "static_route" : "none", linked_type: hasLink ? "static_routes" : "", linked_id: "",
+      link_href: hasLink ? fixture.href : "", link_anchor: hasLink ? fixture.anchor : "", link_target: "_self",
+      link_route_key: hasLink ? fixture.routeKey : "",
+    };
+    for (const [suffix, value] of Object.entries(fields)) {
+      const input = field.locator('[name="' + slot + '_cta_' + suffix + '"]');
+      await expect(input).toHaveCount(1);
+      await expect(input).toHaveValue(value);
+    }
+    if (hasLink) {
+      await expect(field.locator("[data-admin-link-destination]")).toContainText(fixture.title);
+      await expect(field.locator('[data-admin-link-destination] [dir="ltr"]')).toHaveText(fixture.href + "#" + fixture.anchor);
+      await expect(field.getByLabel("Anchor (اختياري)", { exact: true })).toHaveValue(fixture.anchor);
+      await expect(field.getByRole("button", { name: "مسح", exact: true })).toBeEnabled();
+    } else {
+      await expect(field.locator("[data-admin-link-destination]")).toHaveText("لم يتم اختيار رابط بعد.");
+      await expect(field.getByLabel("Anchor (اختياري)", { exact: true })).toHaveCount(0);
+      await expect(field.getByRole("button", { name: "مسح", exact: true })).toHaveCount(0);
+    }
+    await expect(card.getByRole("switch")).toBeChecked({ checked: shown });
+    await expect(card.locator('[data-admin-text-alignment="' + alignment + '"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(card.locator("[data-admin-text-format-bold]")).toHaveAttribute("aria-pressed", String(bold));
+  }
+  for (const [name, value] of Object.entries({ show_cta: String(shown), cta_alignment: alignment, cta_bold: String(bold) })) {
+    await expect(page.locator('[name="' + name + '"]')).toHaveCount(1);
+    await expect(page.locator('[name="' + name + '"]')).toHaveValue(value);
+  }
+}
+async function setCtaFormat(slot, enabled) {
+  const card = ctaCard(slot);
+  const visible = card.getByRole("switch");
+  if (await visible.isChecked() !== enabled) await visible.locator("xpath=ancestor::label").click();
+  await card.locator('[data-admin-text-alignment="' + (enabled ? "left" : "center") + '"]').click();
+  const bold = card.locator("[data-admin-text-format-bold]");
+  if ((await bold.getAttribute("aria-pressed") === "true") !== enabled) await bold.click();
+}
+async function ctaPublic(kind, { primary = true, secondary = true, shown = true, bold = true, alignment = "left" } = {}) {
+  const config = await preview(kind, kind === "home"
+    ? { description: fixtures.editedDescription, alignment: "right" } : { rich: true });
+  assert.equal(config.showCta, shown); assert.equal(config.ctaBold, bold); assert.equal(config.ctaAlignment, alignment);
+  const root = page.locator('[data-qa-hero-kind="' + kind + '"]');
+  for (const [slot, hasLink] of [["primary", primary], ["secondary", secondary]]) {
+    const fixture = fixtures.cta[slot];
+    const link = root.locator("a").filter({ hasText: fixture.label });
+    assert.equal(config[slot + "CtaLabel"], fixture.label);
+    if (hasLink) assert.equal(config[slot + "CtaHref"], fixture.href + "#" + fixture.anchor);
+    else assert.equal(config[slot + "CtaLink"], null);
+    if (hasLink && shown) {
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("href", fixture.href + "#" + fixture.anchor);
+      await expect(link).toHaveCSS("font-weight", bold ? "700" : "500");
+      await expect(link.locator("xpath=..")).toHaveCSS("justify-content", alignment === "left" ? "flex-end" : "center");
+    } else await expect(link).not.toBeVisible();
+  }
+}
+async function saveCtaCheckpoint(kind, stage, expected) {
+  await submit(kind);
+  await page.locator('[data-admin-tab-id="buttons"]').click();
+  await expectCtaFields(expected);
+  await checkpoint(kind + "-cta-" + stage);
+  await ctaPublic(kind, expected);
+}
+async function ctaPersistence(kind) {
+  await openCtaEditor(kind);
+  for (const slot of ["primary", "secondary"]) {
+    await ctaCard(slot).locator('[name="' + slot + '_cta_label"]').fill(fixtures.cta[slot].label);
+    await selectCtaLink(slot);
+  }
+  await setCtaFormat("primary", true);
+  await expectCtaFields();
+  await saveCtaCheckpoint(kind, "selected", {});
+
+  await openCtaEditor(kind);
+  await ctaField("primary").getByRole("button", { name: "مسح", exact: true }).click();
+  await setCtaFormat("secondary", false);
+  const primaryCleared = { primary: false, shown: false, bold: false, alignment: "center" };
+  await expectCtaFields(primaryCleared);
+  await saveCtaCheckpoint(kind, "primary-cleared", primaryCleared);
+
+  await openCtaEditor(kind);
+  await ctaField("secondary").getByRole("button", { name: "مسح", exact: true }).click();
+  const bothCleared = { ...primaryCleared, secondary: false };
+  await expectCtaFields(bothCleared);
+  await saveCtaCheckpoint(kind, "secondary-cleared", bothCleared);
+
+  await openCtaEditor(kind);
+  for (const slot of ["primary", "secondary"]) await selectCtaLink(slot);
+  await setCtaFormat("secondary", true);
+  await saveCtaCheckpoint(kind, "restored", {});
+  evidence.push({ kind, ctaPickerSelectClearRestore: true, ctaTextLinkAnchorSaveReload: true,
+    ctaVisibilityAlignmentBold: true, exactNativeReadback: true, actualPublicRenderer: true, keyboardPickerAndFocusReturn: true });
+}
 try {
   await page.goto(origin + "/admin/login");
   await page.locator('[name="username"]').fill(process.env.QA_ADMIN_USERNAME);
@@ -147,6 +273,8 @@ try {
   await preview("detail", { actions: ["reservation", "download"], alignment: "right" });
   await editor("hub"); await saveOtherField("hub", "preserved"); await checkpoint("hub-preserved");
   await views("hub", {});
+  await ctaPersistence("home");
+  await ctaPersistence("internal");
   assert.deepEqual(errors, []);
   writeFileSync(path.join(output, "hero-compatibility-browser-proof.json"), JSON.stringify({ status: "pass", sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256,
     evidence, pageErrors: errors, failurePaths: ["unsaved-draft-unchanged", "invalid-save-unchanged", "successful-retry"],

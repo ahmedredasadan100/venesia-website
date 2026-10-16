@@ -95,7 +95,7 @@ export type AdminEntityListProps<
   getBulkConfirmation?: (
     action: string,
     ids: TId[],
-  ) => AdminEntityListBulkConfirmation | null;
+  ) => AdminEntityListBulkConfirmation | null | Promise<AdminEntityListBulkConfirmation | null>;
   bulkAdditionalControls?: (ctx: {
     bulkAction: string;
     setBulkAction: (value: string) => void;
@@ -320,6 +320,10 @@ function AdminEntityListInner<
     ),
   );
   const [bulkAction, setBulkAction] = useState(bulkOptions[0]?.value ?? "");
+  const [preparingBulk, setPreparingBulk] = useState(false);
+  const bulkPreparationRef = useRef(false);
+  const bulkPreparationGeneration = useRef(0);
+  useEffect(() => () => { bulkPreparationGeneration.current += 1; }, []);
   const initialFeedbackSignature = useMemo(
     () =>
       initialFeedback
@@ -417,14 +421,28 @@ function AdminEntityListInner<
     }
   }
 
-  function requestBulkExecution({
+  async function requestBulkExecution({
     action,
     ids,
     confirmation: fallbackConfirmation,
     returnFocusRef,
   }: AdminBulkActionRequest<TId>) {
-    const confirmation =
-      getBulkConfirmation?.(action, ids) ?? fallbackConfirmation;
+    if (bulkPreparationRef.current || bulkInteraction?.isBlocked) return;
+    bulkPreparationRef.current = true;
+    const generation = bulkPreparationGeneration.current;
+    setPreparingBulk(true);
+    let confirmation: AdminEntityListBulkConfirmation | null | undefined;
+    try {
+      confirmation = (await getBulkConfirmation?.(action, ids)) ?? fallbackConfirmation;
+    } catch (error) {
+      if (generation === bulkPreparationGeneration.current) showFeedback({ ok: false,
+        title: "تعذر تجهيز التأكيد", message: error instanceof Error ? error.message : "تعذر التحقق من العملية. حاول مرة أخرى." }, { bulk: true });
+      return;
+    } finally {
+      bulkPreparationRef.current = false;
+      if (generation === bulkPreparationGeneration.current) setPreparingBulk(false);
+    }
+    if (generation !== bulkPreparationGeneration.current) return;
     if (!confirmation) {
       void executeBulk(action, ids);
       return;
@@ -469,7 +487,7 @@ function AdminEntityListInner<
         options={[...bulkOptions]}
         onClearSelection={selection.clearSelection}
         onRequestExecution={requestBulkExecution}
-        isBusy={bulkInteraction.isBlocked}
+        isBusy={bulkInteraction.isBlocked || preparingBulk}
         actionValue={bulkAction}
         actionControl={
           <AdminListboxSelect
@@ -479,7 +497,7 @@ function AdminEntityListInner<
             onOpenLayer={setOpenLayerId}
             value={bulkAction}
             onChange={setBulkAction}
-            disabled={bulkInteraction.isBlocked}
+            disabled={bulkInteraction.isBlocked || preparingBulk}
             options={bulkOptions}
             className="w-[180px]"
           />
@@ -487,7 +505,7 @@ function AdminEntityListInner<
         additionalControls={bulkAdditionalControls?.({
           bulkAction,
           setBulkAction,
-          pending: bulkInteraction.isBlocked,
+          pending: bulkInteraction.isBlocked || preparingBulk,
           openLayerId,
           setOpenLayerId,
         })}

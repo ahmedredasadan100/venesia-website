@@ -12,6 +12,7 @@ type AdminMediaPickerModalProps = {
   initialFolder?: string;
   mode?: "image" | "pdf";
   multiple?: boolean;
+  excludedPaths?: readonly string[];
   /** Kept for source compatibility. Picker replacement selects a new asset; it never overwrites this path. */
   replacePath?: string | null;
 };
@@ -24,6 +25,7 @@ export default function AdminMediaPickerModal({
   initialFolder,
   mode = "image",
   multiple = false,
+  excludedPaths,
 }: AdminMediaPickerModalProps) {
   if (!open) return null;
 
@@ -34,7 +36,7 @@ export default function AdminMediaPickerModal({
         title={
           mode === "pdf"
             ? "اختيار مستند من المكتبة"
-            : "اختيار صورة من المكتبة"
+            : multiple ? "اختيار صور من المكتبة" : "اختيار صورة من المكتبة"
         }
         size="xl"
         closeOnEscape
@@ -47,6 +49,7 @@ export default function AdminMediaPickerModal({
         >
           <MediaLibraryCore
             mode={multiple ? "select-many" : "select-one"}
+            excludedPaths={excludedPaths}
             initialFolder={initialFolder || (mode === "pdf" ? "files" : "images")}
             initialKind={mode === "pdf" ? "document" : "image"}
             onCancelSelection={onClose}

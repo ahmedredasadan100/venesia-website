@@ -434,7 +434,8 @@ export function TrackingUpdateFormModal({
             </AdminFormField>
             <AdminMediaGalleryField
               mediaSlot={TRACKING_MEDIA_SLOT}
-name="image_urls"
+              name="image_urls"
+              selectionMode="multiple"
               label="صور التحديث"
               defaultPaths={
                 update?.media

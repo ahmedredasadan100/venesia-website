@@ -355,7 +355,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         media: {
           state: "adopted",
           rationale:
-            "Tracking Updates use the existing Admin Media picker and gallery owner.",
+            "Tracking Updates adopt multiple image addition and duplicate exclusion through AdminMediaGalleryField and the existing Media picker; replacement remains single selection.",
         },
       },
       {},

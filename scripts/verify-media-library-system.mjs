@@ -629,6 +629,9 @@ function catalogRow(asset, overrides = {}) {
 let observedRegistrationRow = catalogRow(postUploadCatalogAsset, {
   original_filename: "post-upload-reconciliation-name.png",
 });
+let registrationCatalogRows = [catalogRow(catalogAsset)];
+let registrationAcceptInsert = false;
+let registrationInsertPayload;
 let registrationInventory = managedInventory;
 let registrationRuntimeState = completeRuntimeState;
 let registrationContext = runtimeContext;
@@ -669,15 +672,20 @@ const registrationRaceSupabase = {
         neq() { return this; },
         order() { return this; },
         eq() { return this; },
-        async range() { return { data: [catalogRow(catalogAsset)], error: null }; },
+        async range() { return { data: registrationCatalogRows, error: null }; },
         async maybeSingle() { return { data: observedRegistrationRow, error: null }; },
       };
     }
     if (table === "media_assets") {
       return {
-        insert() { registrationInsertAttempts += 1; return this; },
+        insert(payload) { registrationInsertPayload = payload; registrationInsertAttempts += 1; return this; },
         select() { return this; },
         async single() {
+          if (registrationAcceptInsert) {
+            const row = { ...catalogRow(catalogAsset), ...registrationInsertPayload, id: "batch-" + registrationInsertAttempts };
+            registrationCatalogRows.push(row);
+            return { data: row, error: null };
+          }
           if (registrationInsertThrows) throw new Error("response lost after insert");
           return { data: null, error: { code: "23505", message: "duplicate identity" } };
         },
@@ -804,6 +812,39 @@ assert.equal(registrationInsertAttempts, insertsBeforeUnprovenDataset);
 registrationRuntimeState = completeRuntimeState;
 check("upload registration read-back accepts a reconciled canonical identity and fails closed on conflicting data", true);
 check("every managed upload requires a synchronized baseline proof before Storage and Catalog mutation", true);
+
+// Exercise the actual prepare/register chain across nine sequential uploads.
+registrationCatalogRows = [catalogRow(catalogAsset)];
+registrationInventory = structuredClone(managedInventory);
+registrationAcceptInsert = true;
+for (let index = 0; index < 9; index++) {
+  const proof = await registrationRaceCatalogModule.prepareCatalogUploadRegistration(7);
+  const objectKey = "images/batch-" + index + ".png";
+  const path = "https://demo.supabase.co/batch-" + index + ".png";
+  registrationInventory.items.push({ ...managedInventory.items[0], path, storagePath: objectKey });
+  await registrationRaceCatalogModule.registerCatalogUpload(
+    { ...registrationRaceResult, path, objectKey }, registrationRaceFile, 7, proof,
+  );
+}
+assert.equal(registrationCatalogRows.length, 10);
+await registrationRaceCatalogModule.prepareCatalogUploadRegistration(7);
+check("actual Catalog prepare/register accepts nine sequential proven uploads without reconciliation", true);
+const insertsBeforeBlockedBatch = registrationInsertAttempts;
+registrationRuntimeState = { ...completeRuntimeState, state: "uncertain", warnings: ["media_reference_sync_failed"] };
+for (let index = 0; index < 9; index++) {
+  await assert.rejects(() => registrationRaceCatalogModule.prepareCatalogUploadRegistration(7),
+    error => error?.code === "media_catalog_upload_readiness_proof_unavailable");
+}
+assert.equal(registrationInsertAttempts, insertsBeforeBlockedBatch);
+registrationRuntimeState = completeRuntimeState;
+registrationInventory.items.push({ ...managedInventory.items[0], path: "https://demo.supabase.co/pending.png", storagePath: "images/pending.png" });
+await assert.rejects(() => registrationRaceCatalogModule.prepareCatalogUploadRegistration(7),
+  error => error?.code === "media_catalog_upload_readiness_proof_unavailable");
+assert.equal(registrationInsertAttempts, insertsBeforeBlockedBatch);
+check("uncertain reconciliation and an unfinished foreign upload fail closed before all batch registrations", true);
+registrationCatalogRows = [catalogRow(catalogAsset)];
+registrationInventory = managedInventory;
+registrationAcceptInsert = false;
 
 const countNeutralReplacementInventory = {
   ...managedInventory,

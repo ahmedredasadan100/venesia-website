@@ -76,7 +76,6 @@ export default function HeroCtaFields({
         <div data-hero-cta-row="primary">
           <AdminFormGrid columns={1}>
             <label className="block min-w-0 space-y-2">
-              <span className="block text-xs font-semibold text-white/55">نص الزر الأساسي</span>
               <input
                 name="primary_cta_label"
                 defaultValue={primaryLabel}
@@ -100,7 +99,6 @@ export default function HeroCtaFields({
         <div data-hero-cta-row="secondary">
           <AdminFormGrid columns={1}>
             <label className="block min-w-0 space-y-2">
-              <span className="block text-xs font-semibold text-white/55">نص الزر الثانوي</span>
               <input
                 name="secondary_cta_label"
                 defaultValue={secondaryLabel}

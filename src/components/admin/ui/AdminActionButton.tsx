@@ -10,7 +10,8 @@ type AdminActionButtonProps = {
   children: ReactNode;
   href?: string;
   disabled?: boolean;
-  variant?: "gold" | "primary" | "dark" | "ghost";
+  variant?: "gold" | "primary" | "dark" | "ghost" | "danger";
+  size?: "default" | "icon";
   className?: string;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   type?: ButtonHTMLAttributes<HTMLButtonElement>["type"];
@@ -23,6 +24,7 @@ const variants: Record<NonNullable<AdminActionButtonProps["variant"]>, string> =
   primary: "border-[#D8B87A]/30 bg-[#D8B87A] text-[#06101C] hover:bg-[#e5c98d]",
   dark: "border-white/10 bg-[#080B10]/70 text-white/72 hover:border-white/18 hover:bg-white/[0.05]",
   ghost: "border-transparent bg-transparent text-white/50 hover:text-white/80",
+  danger: "border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/15 hover:text-red-300",
 };
 
 export default function AdminActionButton({
@@ -30,13 +32,14 @@ export default function AdminActionButton({
   href,
   disabled = false,
   variant = "dark",
+  size = "default",
   className = "",
   onClick,
   type = "button",
   form,
   buttonRef,
 }: AdminActionButtonProps) {
-  const classes = `inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${variants[variant]} ${
+  const classes = `inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl border text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${size === "icon" ? "size-11 shrink-0 p-0" : "px-4 py-2.5"} ${variants[variant]} ${
     disabled ? "cursor-not-allowed opacity-45" : ""
   } ${className}`;
 

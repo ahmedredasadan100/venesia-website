@@ -2766,11 +2766,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             {
               visibility: {
                 state: "adopted",
-                rationale: "Item visibility adopts Shared Admin Row Actions.",
+                rationale: "Item visibility adopts Shared Admin Row Actions. Copy/Move adopts AdminEntityList page selection, shared bulk confirmation/Listbox, and Instant Mutation command recovery.",
               },
             },
           ),
-          contracts: ADMIN_TRACKING_CONSUMER_CONTRACTS,
+          contracts: { ...ADMIN_TRACKING_CONSUMER_CONTRACTS, bulk: "adopted", selection: "adopted" },
           executableBindings: [
             {
               sourceFile:
@@ -3864,6 +3864,23 @@ export type AdminCollectionFullAdoptionContract =
 export type AdminCollectionFullAdoptionContractState =
   "adopted" | "not_required";
 
+/** Group summaries describe child requirements; they never replace child proof. */
+export function deriveAdminCollectionBulkContract(
+  consumers: readonly AdminCollectionConsumerAdoptionEvidence[],
+): AdminCollectionFullAdoptionContractState {
+  if (
+    consumers.length === 0 ||
+    consumers.some((consumer) =>
+      !["adopted", "not_required"].includes(consumer.contracts.bulk),
+    )
+  ) {
+    throw new Error("Bulk aggregation requires complete consumer contracts.");
+  }
+  return consumers.some((consumer) => consumer.contracts.bulk === "adopted")
+    ? "adopted"
+    : "not_required";
+}
+
 export type AdminCollectionFullAdoptionClaim = {
   surfaceId: string;
   contracts: Readonly<
@@ -3892,7 +3909,7 @@ const ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS = {
   >
 >;
 
-export const ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS = [
+export const ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS = ([
   {
     surfaceId: "content-topics",
     contracts: {
@@ -3958,7 +3975,23 @@ export const ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS = [
     surfaceId: "topics-without-image-report",
     contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
   },
-] as const satisfies readonly AdminCollectionFullAdoptionClaim[];
+] as const satisfies readonly AdminCollectionFullAdoptionClaim[]).map(
+  (claim): AdminCollectionFullAdoptionClaim => {
+    const surface = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.find(
+      (candidate) => candidate.id === claim.surfaceId,
+    );
+    if (!surface) throw new Error(`Missing Full Adoption surface: ${claim.surfaceId}`);
+    return {
+      ...claim,
+      contracts: {
+        ...claim.contracts,
+        bulk: surface.consumerAdoptionEvidence.length > 0
+          ? deriveAdminCollectionBulkContract(surface.consumerAdoptionEvidence)
+          : claim.contracts.bulk,
+      },
+    };
+  },
+);
 
 export type AdminInteractionCollectionRuntimeGap = {
   id: string;

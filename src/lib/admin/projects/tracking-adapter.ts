@@ -153,13 +153,25 @@ async function stageSummary(projectId: number, stageId: number) {
   });
 }
 
+async function trackingTargetStages(projectId: number, sourceStageId: number) {
+  const stages: Array<{ id: number; name: string }> = [];
+  for (let offset = 0; ; offset += 200) {
+    const { data, error } = await getSupabaseAdmin().from("project_tracking_stages").select("id,name")
+      .eq("project_id", projectId).neq("id", sourceStageId).order("sort_order").order("id").range(offset, offset + 199);
+    if (error) fail(error, "تعذر تحميل المراحل المستهدفة.");
+    stages.push(...(data ?? []));
+    if ((data ?? []).length < 200) return stages;
+  }
+}
+
 export async function loadTrackingItemsResult(query: AdminEntityListQuery<TrackingItemFilters, TrackingItemSort>) {
-  const [loaded, project, stage] = await Promise.all([
+  const [loaded, project, stage, targetStages] = await Promise.all([
     loadNormalizedAdminEntityListPage({ requestedPage: query.page, pageSize: query.pageSize, loadPage: (page) => loadItemPage(query, page) }),
     projectSummary(query.filters.projectId),
     stageSummary(query.filters.projectId, query.filters.stageId),
+    trackingTargetStages(query.filters.projectId, query.filters.stageId),
   ]);
-  return trackingItemsResultSchema.parse({ rows: loaded.rows, pagination: { page: loaded.page, pageSize: query.pageSize, totalRows: loaded.totalRows, totalPages: loaded.totalPages }, metrics: { project, stage }, meta: resultMeta(query) });
+  return trackingItemsResultSchema.parse({ rows: loaded.rows, pagination: { page: loaded.page, pageSize: query.pageSize, totalRows: loaded.totalRows, totalPages: loaded.totalPages }, metrics: { project, stage, targetStages }, meta: resultMeta(query) });
 }
 
 async function loadUpdatePage(query: AdminEntityListQuery<TrackingUpdateFilters, TrackingUpdateSort>, page: number) {

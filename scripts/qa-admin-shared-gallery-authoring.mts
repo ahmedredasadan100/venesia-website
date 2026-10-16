@@ -14,6 +14,8 @@ import {
 } from "../src/lib/admin/media-topic-payload.ts";
 import type { Json } from "../src/lib/database.types.ts";
 
+import { trackingSelectionEntry, trackingActionTransport, runTrackingSelection } from "./fixtures/tracking-media-selection.mjs";
+const trackingSelection = process.argv.includes("--tracking-selection");
 const require = createRequire(import.meta.url);
 const TEMP_PREFIX = "venesia-shared-gallery-authoring-";
 
@@ -278,6 +280,8 @@ qa.mountPaths = (sourceMode) => {
 
 const navigationMockSource = String.raw`
 export { unstable_rethrow } from "next/dist/client/components/unstable-rethrow.browser";
+export function useSearchParams() { return new URLSearchParams(); }
+export function usePathname() { return "/harness"; }
 export function useRouter() {
   return {
     push() {},
@@ -336,6 +340,7 @@ export default AdminMediaPickerModal;
 async function compileHarness(rootDir: string, tempDir: string) {
   const navigationMockPath = path.join(tempDir, "next-navigation.mock.js");
   const imageMockPath = path.join(tempDir, "next-image.mock.js");
+  const trackingActionsPath = path.join(tempDir, "tracking-actions.fixture.js");
   const mediaPickerMockPath = path.join(
     tempDir,
     "admin-media-picker-modal.mock.js",
@@ -343,6 +348,7 @@ async function compileHarness(rootDir: string, tempDir: string) {
   await Promise.all([
     writeFile(navigationMockPath, navigationMockSource, "utf8"),
     writeFile(imageMockPath, imageMockSource, "utf8"),
+    writeFile(trackingActionsPath, trackingActionTransport, "utf8"),
     writeFile(mediaPickerMockPath, mediaPickerMockSource, "utf8"),
   ]);
 
@@ -358,11 +364,17 @@ async function compileHarness(rootDir: string, tempDir: string) {
       };
     }
   ).webpack;
+  const ts = require("typescript") as typeof import("typescript");
+  const harnessEntry = trackingSelection
+    ? ts.transpileModule(trackingSelectionEntry, {
+        compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      }).outputText
+    : entrySource;
   const compiler = webpack({
     mode: "development",
     target: "web",
     context: rootDir,
-    entry: `data:text/javascript;charset=utf-8,${encodeURIComponent(entrySource)}`,
+    entry: `data:text/javascript;base64,${Buffer.from(harnessEntry, "utf8").toString("base64")}`,
     output: {
       path: tempDir,
       filename: "shared-gallery-authoring.bundle.js",
@@ -390,9 +402,12 @@ async function compileHarness(rootDir: string, tempDir: string) {
           rootDir,
           "src/components/admin/media/AdminMediaGalleryField.tsx",
         ),
+        "@admin-media-image-field": path.join(rootDir, "src/components/admin/media/AdminMediaImageField.tsx"),
+        "@tracking-forms": path.join(rootDir, "src/components/admin/projects/tracking/TrackingForms.tsx"),
+        ...(trackingSelection ? { "../../../../app/admin/projects/tracking-actions$": trackingActionsPath, "../../../lib/admin/links/actions$": trackingActionsPath } : {}),
         "next/navigation": navigationMockPath,
         "next/image": imageMockPath,
-        "./AdminMediaPickerModal$": mediaPickerMockPath,
+        ...(!trackingSelection ? { "./AdminMediaPickerModal$": mediaPickerMockPath } : {}),
       },
     },
     module: {
@@ -663,7 +678,7 @@ let page: Page | null = null;
 let server: Server | null = null;
 
 try {
-  await runPGliteRoundTrip();
+  if (!trackingSelection) await runPGliteRoundTrip();
 
   const webpackWarnings = await compileHarness(rootDir, tempDir);
   const harness = await startHarnessServer(
@@ -675,6 +690,9 @@ try {
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage();
   observeBrowserIssues(page, browserIssues);
+  if (trackingSelection) {
+    await runTrackingSelection(page, harness.baseUrl, check);
+  } else {
   await page.goto(`${harness.baseUrl}/harness`, { waitUntil: "load" });
   await page.waitForFunction(() =>
     Boolean(
@@ -858,6 +876,10 @@ try {
       legacyFinalValue,
   );
 
+  }
+  if (browserIssues.length || webpackWarnings.length) {
+    console.error(JSON.stringify({ browserIssues, webpackWarnings }, null, 2));
+  }
   check(
     "the isolated browser run has no console, page, request, or webpack errors",
     browserIssues.length === 0 && webpackWarnings.length === 0,
