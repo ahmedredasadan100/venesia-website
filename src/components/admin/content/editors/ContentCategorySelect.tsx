@@ -40,7 +40,7 @@ export default function ContentCategorySelect({
         options={options}
         required
         placeholder="اختر التصنيف"
-        sizing="medium"
+        sizing="full"
         className="max-w-full"
       />
       <AdminFormError name="category_id" />

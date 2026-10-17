@@ -6,6 +6,7 @@ import TopicImageField from "./article/TopicImageField";
 import TopicSeriesFields from "./article/TopicSeriesFields";
 import TopicSlugInput from "./article/TopicSlugInput";
 import { AdminFormLayout, AdminFormSection } from "../../ui/AdminForm";
+import { AdminFormGrid } from "../../ui/AdminFormRuntime";
 import ContentCategorySelect, {
   type ContentEditorCategoryOption,
 } from "./ContentCategorySelect";
@@ -82,7 +83,7 @@ export default function ContentBasicDataPanel({
       >
         <AdminFormSection className="h-full min-w-0">
           <div className="space-y-7">
-            <div className="grid gap-5 lg:grid-cols-2 lg:items-end">
+            <AdminFormGrid columns={2} presentation="aligned-fields">
               <TopicCharacterField
                 id="content-title"
                 name="title"
@@ -100,7 +101,7 @@ export default function ContentBasicDataPanel({
                 titleValue={controlledValues?.title}
                 contentType={contentType}
               />
-            </div>
+            </AdminFormGrid>
 
             <TopicCharacterField
               id="content-excerpt"
@@ -116,7 +117,7 @@ export default function ContentBasicDataPanel({
               placeholder="اكتب مقتطفًا مختصرًا للمحتوى"
             />
 
-            <div className="grid gap-5 lg:grid-cols-[max-content_minmax(15rem,1fr)_minmax(16rem,1.08fr)] lg:items-end">
+            <AdminFormGrid columns={3} presentation="aligned-fields">
               <TopicContentTypeControl
                 value={contentType}
                 mode={mode}
@@ -140,7 +141,7 @@ export default function ContentBasicDataPanel({
                 defaultSeries={values?.series}
                 defaultSeriesSlug={values?.seriesSlug}
               />
-            </div>
+            </AdminFormGrid>
           </div>
         </AdminFormSection>
       </AdminFormLayout>

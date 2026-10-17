@@ -13,7 +13,6 @@ import AdminFormRuntime, {
   AdminFormActions,
   AdminFormError,
   AdminFormGrid,
-  AdminFormGridItem,
 } from "../../../../components/admin/ui/AdminFormRuntime";
 import AdminFormSwitch from "../../../../components/admin/ui/AdminFormSwitch";
 import type {
@@ -72,56 +71,52 @@ export default function CategoryForm({
             title="بيانات التصنيف"
             description="الاسم والرابط الودّي والعلاقة الهرمية هي مصدر بيانات التصنيف داخل نظام المحتوى."
           >
-            <AdminFormGrid columns={12}>
-              <AdminFormGridItem span={isEdit ? 5 : 3}>
-                <AdminFormField label="اسم التصنيف" required>
-                  <input
-                    name="name"
-                    required
-                    disabled={pending}
-                    defaultValue={category?.name ?? ""}
-                    placeholder="مثال: نصائح عقارية"
-                    aria-invalid={Boolean(fieldErrors.name?.length)}
-                    aria-describedby={
-                      fieldErrors.name?.length ? "name-error" : undefined
-                    }
-                    className={adminFormFieldClassName(
-                      fieldErrors.name?.length ? "border-red-400/40" : "",
-                    )}
-                  />
-                  <AdminFormError name="name" />
-                </AdminFormField>
-              </AdminFormGridItem>
-
-              <AdminFormGridItem span={isEdit ? 4 : 3}>
-                <AdminFormListboxSelect
-                  name="parent_id"
-                  focusTargetId="parent_id"
-                  label="التصنيف الأب"
-                  options={options}
-                  defaultValue={
-                    category?.parent_id ? String(category.parent_id) : ""
-                  }
-                  placeholder="بدون تصنيف أب"
-                  searchPlaceholder="ابحث في التصنيفات"
-                  searchable={parentOptions.length > 7}
+            <AdminFormGrid columns={isEdit ? 3 : 4} presentation="aligned-fields">
+              <AdminFormField label="اسم التصنيف" required>
+                <input
+                  name="name"
+                  required
                   disabled={pending}
-                  error={fieldErrors.parent_id?.[0] ?? null}
-                  emptyMessage="لا توجد تصنيفات متاحة للاختيار."
-                  hint="اختياري — اتركه فارغًا لإنشاء تصنيف رئيسي."
+                  defaultValue={category?.name ?? ""}
+                  placeholder="مثال: نصائح عقارية"
+                  aria-invalid={Boolean(fieldErrors.name?.length)}
+                  aria-describedby={
+                    fieldErrors.name?.length ? "name-error" : undefined
+                  }
+                  className={adminFormFieldClassName(
+                    fieldErrors.name?.length ? "border-red-400/40" : "",
+                  )}
                 />
-              </AdminFormGridItem>
+                <AdminFormError name="name" />
+              </AdminFormField>
+
+              <AdminFormListboxSelect
+                name="parent_id"
+                focusTargetId="parent_id"
+                label="التصنيف الأب"
+                options={options}
+                defaultValue={
+                  category?.parent_id ? String(category.parent_id) : ""
+                }
+                placeholder="بدون تصنيف أب"
+                searchPlaceholder="ابحث في التصنيفات"
+                searchable={parentOptions.length > 7}
+                disabled={pending}
+                sizing="full"
+                error={fieldErrors.parent_id?.[0] ?? null}
+                emptyMessage="لا توجد تصنيفات متاحة للاختيار."
+                hint="اختياري — اتركه فارغًا لإنشاء تصنيف رئيسي."
+              />
 
               {!isEdit ? (
-                <AdminFormGridItem span={3}>
-                  <AdminSlugField
-                    sourceInputName="name"
-                    error={fieldErrors.slug?.[0] ?? null}
-                  />
-                </AdminFormGridItem>
+                <AdminSlugField
+                  sourceInputName="name"
+                  error={fieldErrors.slug?.[0] ?? null}
+                />
               ) : null}
 
-              <AdminFormGridItem span={3} className="space-y-3 xl:pt-8">
+              <div>
+                <span className="text-sm font-medium text-white/70">حالة النشر</span>
                 <AdminFormSwitch
                   name="is_published"
                   label="منشور"
@@ -130,7 +125,7 @@ export default function CategoryForm({
                   surface
                 />
                 <AdminFormError name="is_published" />
-              </AdminFormGridItem>
+              </div>
             </AdminFormGrid>
 
             <div className="mt-6 space-y-5">

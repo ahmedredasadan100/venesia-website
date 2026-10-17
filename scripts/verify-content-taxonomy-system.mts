@@ -300,11 +300,10 @@ check(
 check(
   "category-parity",
   "CategoryForm uses the shared grid owner for one responsive primary row",
-  categoryForm.includes("<AdminFormGrid columns={12}>") &&
-    categoryForm.includes("AdminFormGridItem") &&
-    categoryForm.includes("<AdminFormGridItem span={isEdit ? 5 : 3}>") &&
-    categoryForm.includes("<AdminFormGridItem span={isEdit ? 4 : 3}>") &&
-    occurrenceCount(categoryForm, /<AdminFormGridItem span=\{3\}/g) === 2 &&
+  categoryForm.includes('<AdminFormGrid columns={isEdit ? 3 : 4} presentation="aligned-fields">') &&
+    !categoryForm.includes("AdminFormGridItem") &&
+    categoryForm.includes('sizing="full"') &&
+    !categoryForm.includes("xl:pt-8") &&
     categoryForm.includes("AdminFormSwitch") &&
     categoryForm.includes("AdminFormListboxSelect") &&
     categoryForm.includes("AdminFormActions") &&
@@ -358,8 +357,10 @@ check(
 check(
   "series-parity",
   "SeriesForm uses the shared grid owner for one responsive primary row",
-  seriesForm.includes("<AdminFormGrid columns={12}>") &&
-    seriesForm.includes("AdminFormGridItem") &&
+  seriesForm.includes('<AdminFormGrid columns={isEdit ? 3 : 4} presentation="aligned-fields">') &&
+    !seriesForm.includes("AdminFormGridItem") &&
+    seriesForm.includes('sizing="full"') &&
+    !seriesForm.includes("xl:pt-8") &&
     seriesForm.indexOf("<AdminFormSwitch") <
       seriesForm.indexOf("</AdminFormGrid>"),
 );

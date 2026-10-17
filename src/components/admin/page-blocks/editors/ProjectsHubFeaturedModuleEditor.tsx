@@ -13,6 +13,7 @@ import {
   AdminFormListboxSelect,
   AdminFormSwitch,
 } from "../../ui";
+import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
 import {
@@ -170,7 +171,7 @@ export default function ProjectsHubFeaturedModuleEditor({
           إعدادات عرض المشروعات المميزة
         </ModuleEditorSectionHeading>
 
-        <AdminFormGrid columns={3} className="mt-4">
+        <AdminFormGrid columns={3} presentation="aligned-fields" className="mt-4">
           <AdminFormListboxSelect
             name="selection_mode"
             label="قاعدة الاختيار"
@@ -179,7 +180,7 @@ export default function ProjectsHubFeaturedModuleEditor({
             hint="الاختيار يعتمد على حقل featured في سجلات المشروعات — وليس اختياراً يدوياً من هذا المحرر."
           />
 
-          <label className="block space-y-2">
+          <label className={ADMIN_FORM.labelStack}>
             <span className="text-xs font-semibold text-white/55">
               الحد الأقصى (اختياري)
             </span>
@@ -191,11 +192,11 @@ export default function ProjectsHubFeaturedModuleEditor({
               defaultValue={config.limit ?? ""}
               placeholder="فارغ = بدون حد"
               dir="ltr"
-              className={fieldClassName()}
+              className={fieldClassName("h-11")}
             />
           </label>
 
-          <label className="block space-y-2">
+          <label className={ADMIN_FORM.labelStack}>
             <span className="text-xs font-semibold text-white/55">
               التشغيل التلقائي (مللي ثانية)
             </span>
@@ -207,7 +208,7 @@ export default function ProjectsHubFeaturedModuleEditor({
               step={500}
               defaultValue={config.autoplayMs}
               dir="ltr"
-              className={fieldClassName()}
+              className={fieldClassName("h-11")}
             />
           </label>
         </AdminFormGrid>

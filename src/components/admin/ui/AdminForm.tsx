@@ -101,6 +101,38 @@ export function AdminFormSection({
   );
 }
 
+type AdminFormControlHeaderProps = {
+  title: ReactNode;
+  description?: ReactNode;
+  icon?: ReactNode;
+};
+
+/** Label-safe presentation; the field owner supplies the accessible association. */
+export function AdminFormControlHeader({
+  title,
+  description,
+  icon,
+}: AdminFormControlHeaderProps) {
+  return (
+    <span data-admin-form-control-header="" className="flex min-w-0 items-start justify-between gap-3">
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm font-semibold text-white">{title}</span>
+        {description ? (
+          <span className="text-xs leading-5 text-white/55">{description}</span>
+        ) : null}
+      </span>
+      {icon ? (
+        <span
+          aria-hidden="true"
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.045] text-white/85 [&>svg]:size-5"
+        >
+          {icon}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 type AdminFormFieldProps = {
   label: ReactNode;
   hint?: ReactNode;

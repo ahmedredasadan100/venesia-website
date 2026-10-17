@@ -1085,7 +1085,7 @@ check(
     [
       "ModuleEditorVisibilityAlignRow",
       'controlMode="visibility-only"',
-      "md:grid-cols-3",
+      '<AdminFormGrid columns={1} className="mt-4">',
     ].every((token) =>
       read(
         "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",

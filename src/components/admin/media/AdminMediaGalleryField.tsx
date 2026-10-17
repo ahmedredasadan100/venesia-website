@@ -1,4 +1,5 @@
 "use client";
+import { ADMIN_FORM } from "../../../lib/admin/admin-ui-styles";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
 import { adminMediaPresentationState, AdminMediaOriginalDimensions, useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel } from "./AdminDeletedMediaNotice";
@@ -397,7 +398,7 @@ export default function AdminMediaGalleryField(
 
               {itemsMode ? (
                 <div className="space-y-3 pt-1">
-                  <label className="block space-y-1.5">
+                  <label className={ADMIN_FORM.labelStack}>
                     <span className="text-xs font-semibold text-white/60">
                       النص البديل (alt)
                     </span>
@@ -425,7 +426,7 @@ export default function AdminMediaGalleryField(
                     />
                   </label>
 
-                  <label className="block space-y-1.5">
+                  <label className={ADMIN_FORM.labelStack}>
                     <span className="text-xs font-semibold text-white/60">
                       التعليق (caption)
                     </span>

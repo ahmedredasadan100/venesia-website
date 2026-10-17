@@ -117,6 +117,8 @@ function resolveModule(
   sourceOverrides?: SourceOverrides,
 ) {
   if (!moduleSpecifier.startsWith(".")) return null;
+  // Stylesheets are build assets, not executable TypeScript owner bindings.
+  if (extname(moduleSpecifier) === ".css") return null;
   const cacheKey = sourceOverrides
     ? null
     : `${resolve(root)}:${normalizeSourcePath(importer)}:${moduleSpecifier}`;

@@ -15,7 +15,11 @@ import { PUBLIC_PAGE_ROUTE_REGISTRY } from "../src/lib/admin/links/static-routes
 import { CONTENT_EDITOR_ADOPTION_MANIFEST } from "../src/lib/admin/content/content-editor-adoption-manifest.ts";
 import { GLOBAL_SEO_PUBLIC_CONSUMERS } from "../src/lib/admin/seo/global-seo-adoption-manifest.ts";
 import { PAGE_COMPOSITION_COLUMN_PREFERENCES } from "../src/lib/page-blocks/admin-collection-columns.ts";
-import { parseTypeScriptSource } from "./lib/typescript-executable-graph.mts";
+import {
+  collectExecutableSourceGraph,
+  graphUsesExecutableBinding,
+  parseTypeScriptSource,
+} from "./lib/typescript-executable-graph.mts";
 import { currentArchitectureBoundaryFiles, evaluateArchitectureBoundaries } from "./lib/architecture-boundary-guard.mts";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -209,6 +213,57 @@ function collectTextualSourceInference(parsed: ts.SourceFile) {
   visit(parsed);
   return failures;
 }
+
+function verifyStylesheetAssetBoundary() {
+  const entry = "src/fixtures/governance/stylesheet-consumer.tsx";
+  const owner = "src/fixtures/governance/asset-owner.tsx";
+  const cssModule = "src/fixtures/governance/asset.module.css";
+  const stylesheet = "src/fixtures/governance/asset.css";
+  const overrides = new Map<string, string>([
+    [entry, 'import styles from "./asset.module.css"; import "./asset.css"; import { Owner } from "./asset-owner.tsx"; export function Consumer() { return <section className={styles.grid}><Owner /></section>; } export async function loadStyle() { return import("./asset.css"); }'],
+    [owner, "export function Owner() { return <button>Owner</button>; }"],
+    [cssModule, ".grid { display: grid; grid-template-columns: 1fr 2fr; }"],
+    [stylesheet, "@media (width < 40rem) { body { margin: 0; } }"],
+  ]);
+
+  for (const symbolAware of [false, true]) {
+    const graph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: [entry],
+      sourceOverrides: overrides,
+      symbolAware,
+    });
+    assert.deepEqual([...graph.keys()].sort(), [entry, owner].sort(),
+      "CSS modules and side-effect/dynamic stylesheets are non-executable assets.");
+    assert.ok(graphUsesExecutableBinding({
+      root: ROOT, graph, sourceOverrides: overrides,
+      bindings: [{ sourceFile: owner, exportNames: ["Owner"] }],
+    }), "Stylesheets cannot hide the real executable owner binding.");
+    assert.equal(graphUsesExecutableBinding({
+      root: ROOT, graph, sourceOverrides: overrides,
+      bindings: [{ sourceFile: cssModule, exportNames: ["default"] }],
+    }), false, "A stylesheet cannot satisfy executable owner proof.");
+
+    const missingOwner = "src/fixtures/governance/missing-asset-owner.tsx";
+    const missingOverrides = new Map(overrides);
+    missingOverrides.set(entry, 'import styles from "./asset.module.css"; import { Owner } from "./missing-asset-owner.tsx"; export function Consumer() { return <section className={styles.grid}><Owner /></section>; }');
+    const missingGraph = collectExecutableSourceGraph({
+      root: ROOT, entrySourceFiles: [entry], sourceOverrides: missingOverrides, symbolAware,
+    });
+    assert.equal(graphUsesExecutableBinding({
+      root: ROOT, graph: missingGraph, sourceOverrides: missingOverrides,
+      bindings: [{ sourceFile: missingOwner, exportNames: ["Owner"] }],
+    }), false, "Missing executable imports must not produce owner proof.");
+
+    const malformedOverrides = new Map(overrides);
+    malformedOverrides.set(owner, "export function Owner( {");
+    assert.throws(() => collectExecutableSourceGraph({
+      root: ROOT, entrySourceFiles: [entry], sourceOverrides: malformedOverrides, symbolAware,
+    }), /asset-owner\.tsx:/, "Malformed executable imports must still fail closed.");
+  }
+}
+
+verifyStylesheetAssetBoundary();
 
 const parsedGovernanceSources = GOVERNANCE_SOURCES.map(parse);
 const forbiddenProofProperties = parsedGovernanceSources.flatMap(

@@ -31,7 +31,7 @@ export default function TopicContentTypeControl({
         value={value}
         options={CONTENT_TYPE_OPTIONS}
         disabled={mode === "edit"}
-        sizing="content-relaxed"
+        sizing="full"
         ariaLabel="نوع المحتوى"
         ariaInvalid={hasError}
         ariaDescribedBy={hasError ? "content_type-error" : undefined}

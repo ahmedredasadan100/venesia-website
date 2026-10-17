@@ -103,7 +103,7 @@ export default function TopicSeriesFields({
         showPlaceholderForEmptyValue
         allowEmptySelection
         disabled={!categoryId}
-        sizing="wide"
+        sizing="full"
         className="max-w-full"
       />
       <AdminFormError name="series_id" />

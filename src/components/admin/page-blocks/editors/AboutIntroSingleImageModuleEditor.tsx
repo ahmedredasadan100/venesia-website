@@ -15,6 +15,8 @@ import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
+import { AdminFormGrid } from "../../ui";
+import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   resolvePageBlockTextFormat,
@@ -82,45 +84,47 @@ export default function AboutIntroSingleImageModuleEditor({
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <AdminMediaImageField
-                  mediaSlot={contentModuleMediaSlot("about-intro-single-image")}
-name="image_main"
-          label="الصورة"
-          defaultValue={mainSrc}
-          altName="image_main_alt"
-          defaultAlt={mainAlt}
-          browseFolder="images/about"
-        />
-        <div className="space-y-2">
-          <span className="text-xs font-semibold text-white/55">موضع الصورة (سطح المكتب)</span>
-          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="موضع الصورة">
-            {(
-              [
-                { value: "right" as const, label: "الصورة يمين" },
-                { value: "left" as const, label: "الصورة شمال" },
-              ] as const
-            ).map((option) => {
-              const active = imagePosition === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setImagePosition(option.value)}
-                  className={[
-                    "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                    active
-                      ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
-                      : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
-                  ].join(" ")}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+        <AdminFormGrid columns={2} presentation="control-cards">
+          <AdminMediaImageField
+            mediaSlot={contentModuleMediaSlot("about-intro-single-image")}
+            name="image_main"
+            label="الصورة"
+            defaultValue={mainSrc}
+            altName="image_main_alt"
+            defaultAlt={mainAlt}
+            browseFolder="images/about"
+          />
+          <div className={ADMIN_FORM.labelStack}>
+            <span className="text-xs font-semibold text-white/55">موضع الصورة (سطح المكتب)</span>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="موضع الصورة">
+              {(
+                [
+                  { value: "right" as const, label: "الصورة يمين" },
+                  { value: "left" as const, label: "الصورة شمال" },
+                ] as const
+              ).map((option) => {
+                const active = imagePosition === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setImagePosition(option.value)}
+                    className={[
+                      "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
+                      active
+                        ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
+                        : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
+                    ].join(" ")}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </AdminFormGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
@@ -128,7 +132,7 @@ name="image_main"
         <ModuleEditorRepeaterGrid>
           {beats.map((beat, index) => (
             <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>
-              <label className="block space-y-1.5">
+              <label className={ADMIN_FORM.labelStack}>
                 <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                 <input
                   name={`beat_${index}_num`}
@@ -137,7 +141,7 @@ name="image_main"
                   className={fieldClassName("h-11")}
                 />
               </label>
-              <label className="block space-y-1.5">
+              <label className={ADMIN_FORM.labelStack}>
                 <span className="text-xs font-semibold text-white/55">العنوان</span>
                 <input
                   name={`beat_${index}_title`}
@@ -145,7 +149,7 @@ name="image_main"
                   className={fieldClassName("h-11")}
                 />
               </label>
-              <label className="block space-y-1.5">
+              <label className={ADMIN_FORM.labelStack}>
                 <span className="text-xs font-semibold text-white/55">الوصف</span>
                 <textarea
                   name={`beat_${index}_text`}
