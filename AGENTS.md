@@ -28,6 +28,13 @@ must resolve to their canonical owner, and local or parallel rendering fails
 the guard. Local Product Review follows Source Proof and targeted verification;
 it does not wait for remote CI or require a Vercel Preview.
 
+For every shared UI change, follow the mandatory visual regression protection in
+`docs/QA_RELEASE_CLOSURE.md` Section 3.2.1: identify the existing owner and direct/
+indirect consumers before editing, then provide targeted Desktop/Mobile/RTL
+visual proof and exact live routes needing manual review. Code/source guards
+alone are not visual proof. Preserve behavior and reuse valid unaffected evidence;
+this requirement does not add a Full Quality Gate or expand the feature scope.
+
 At batch completion: freeze Final HEAD, run one Full Quality Gate including the
 required Final Build/Public E2E and cleanup, then authorized Push/PR, required
 GitHub CI, separately authorized Ready and Standard Merge, and automatic
