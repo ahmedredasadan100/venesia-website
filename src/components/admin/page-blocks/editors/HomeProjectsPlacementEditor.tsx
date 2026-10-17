@@ -20,6 +20,7 @@ import {
 } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
+import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import {
   resolvePageBlockTextFormat,
   type HomeProjectsModuleConfig,
@@ -62,7 +63,7 @@ function AlignmentChoice({
 }) {
   const [alignment, setAlignment] = useState<ButtonAlignment>(defaultValue);
   return (
-    <div className="space-y-2">
+    <div className={ADMIN_FORM.labelStack}>
       <span className="text-xs font-semibold text-white/55">{label}</span>
       <input type="hidden" name={name} value={alignment} />
       <AdminTextFormatControls
@@ -104,7 +105,7 @@ export default function HomeProjectsPlacementEditor({
         </ModuleEditorSectionHeading>
         <ModuleEditorFieldGrid className="mt-4">
           <ModuleEditorField nature="technical" span={4}>
-            <label className="block space-y-2">
+            <label className={ADMIN_FORM.labelStack}>
               <span className="text-xs font-semibold text-white/55">
                 عدد المشاريع المعروضة
               </span>
@@ -120,7 +121,7 @@ export default function HomeProjectsPlacementEditor({
             </label>
           </ModuleEditorField>
           <ModuleEditorField nature="short-text" span={4}>
-            <label className="block space-y-2">
+            <label className={ADMIN_FORM.labelStack}>
               <span className="text-xs font-semibold text-white/55">
                 نص زر الكارت
               </span>
@@ -224,7 +225,7 @@ export default function HomeProjectsPlacementEditor({
           زر أسفل السكشن
         </ModuleEditorSectionHeading>
 
-        <label className="block space-y-2">
+        <label className={ADMIN_FORM.labelStack}>
           <span className="text-xs font-semibold text-white/55">نص الزر</span>
           <input
             name="footer_cta_label"

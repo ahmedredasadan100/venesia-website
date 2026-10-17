@@ -1,5 +1,6 @@
 "use client";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
+import { ADMIN_FORM } from "../../../lib/admin/admin-ui-styles";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
 import { useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel, AdminMediaOriginalDimensions, adminMediaPresentationState } from "./AdminDeletedMediaNotice";
 
@@ -7,6 +8,7 @@ import Image from "next/image";
 import { useId, useRef, useState } from "react";
 
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
+import VenesiaModal from "../VenesiaModal";
 
 
 
@@ -64,6 +66,7 @@ export default function AdminMediaImageField({
   const [altValue, setAltValue] = useState(defaultAlt);
   const [prevDefaultAlt, setPrevDefaultAlt] = useState(defaultAlt);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const referenceState = useAdminMediaReferenceState([value]);
   const presentation = adminMediaPresentationState(value, referenceState);
   const valueInputRef = useRef<HTMLInputElement>(null);
@@ -170,7 +173,7 @@ export default function AdminMediaImageField({
         <AdminMediaOriginalDimensions value={value} state={referenceState} />
 
         {altName ? (
-          <label className="block space-y-2">
+          <label className={ADMIN_FORM.labelStack}>
             <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{altLabel}</span>
             <input
               ref={altInputRef}
@@ -214,11 +217,23 @@ export default function AdminMediaImageField({
 
       {value ? (
         <div
-          className={`relative w-full overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
+          className={`relative w-full max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
           data-admin-media-image-card="selected"
         >
-          <div className="relative aspect-[4/3]">
-            <AdminMediaPreview value={value} state={referenceState} controlsOverlay><Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="(max-width: 768px) 100vw, 50vw" /></AdminMediaPreview>
+          <div className="relative h-44">
+            <AdminMediaPreview value={value} state={referenceState} controlsOverlay>
+              <button
+                type="button"
+                aria-label={`معاينة ${label} بالحجم الكبير`}
+                aria-haspopup="dialog"
+                aria-expanded={previewOpen}
+                onClick={() => setPreviewOpen(true)}
+                className="absolute inset-0 cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-[#D8B87A]"
+                data-admin-media-image-preview-trigger
+              >
+                <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="(max-width: 416px) 100vw, 384px" />
+              </button>
+            </AdminMediaPreview>
             <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
               <button
                 id={triggerId}
@@ -255,7 +270,7 @@ export default function AdminMediaImageField({
           aria-describedby={ariaDescribedBy}
           onClick={() => setPickerOpen(true)}
           data-admin-media-image-card="add"
-          className={`flex h-44 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"}`}
+          className={`flex h-44 w-full max-w-sm cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"}`}
         >
           <span aria-hidden="true" className="text-2xl leading-none">+</span>
           <span>اختيار صورة</span>
@@ -265,7 +280,7 @@ export default function AdminMediaImageField({
       <AdminMediaOriginalDimensions value={value} state={referenceState} />
 
       {altName ? (
-        <label className="block w-full space-y-2" data-admin-media-image-alt-field={altName}>
+        <label className={ADMIN_FORM.labelStack} data-admin-media-image-alt-field={altName}>
           <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{altLabel}</span>
           <input
             ref={altInputRef}
@@ -279,6 +294,17 @@ export default function AdminMediaImageField({
           />
         </label>
       ) : null}
+
+      <VenesiaModal
+        open={previewOpen && presentation === "active"}
+        onClose={() => setPreviewOpen(false)}
+        title={`معاينة ${label}`}
+        size="lg"
+      >
+        <div className="relative h-[min(70vh,720px)] w-full" data-admin-media-image-expanded>
+          {value ? <Image src={value} alt={altValue || label} fill className="object-contain" sizes="(max-width: 920px) 100vw, 920px" /> : null}
+        </div>
+      </VenesiaModal>
 
       <AdminMediaPickerModal
         open={pickerOpen}

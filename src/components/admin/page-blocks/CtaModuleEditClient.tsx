@@ -2,7 +2,7 @@
 
 import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
-import { AdminFormListboxSelect, AdminLinkField } from "../ui";
+import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
 import {
   ModuleEditorFeedback,
   ModuleEditorHeader,
@@ -180,7 +180,7 @@ export default function CtaModuleEditClient({
                       presentation="plain"
                     >
                       <div>
-                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-0">
+                        <AdminFormGrid columns={1}>
                           <label className="min-w-0">
                             <span className="sr-only">نص زر الإجراء الأساسي</span>
                             <input
@@ -188,7 +188,7 @@ export default function CtaModuleEditClient({
                               defaultValue={config.primaryCta?.label ?? ""}
                               aria-label="نص زر الإجراء الأساسي"
                               placeholder="نص الزر الأساسي"
-                              className={fieldClassName("relative z-0 h-11 min-w-0 rounded-e-none focus:z-10")}
+                              className={fieldClassName("h-11 min-w-0")}
                             />
                           </label>
                           <AdminLinkField
@@ -199,10 +199,10 @@ export default function CtaModuleEditClient({
                             presentation="inline"
                             clearLinkLabel="مسح"
                           />
-                        </div>
+                        </AdminFormGrid>
                       </div>
                       <div>
-                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-0">
+                        <AdminFormGrid columns={1}>
                           <label className="min-w-0">
                             <span className="sr-only">نص زر الإجراء الثانوي</span>
                             <input
@@ -210,7 +210,7 @@ export default function CtaModuleEditClient({
                               defaultValue={config.secondaryCta?.label ?? ""}
                               aria-label="نص زر الإجراء الثانوي"
                               placeholder="نص الزر الثانوي"
-                              className={fieldClassName("relative z-0 h-11 min-w-0 rounded-e-none focus:z-10")}
+                              className={fieldClassName("h-11 min-w-0")}
                             />
                           </label>
                           <AdminLinkField
@@ -221,7 +221,7 @@ export default function CtaModuleEditClient({
                             presentation="inline"
                             clearLinkLabel="مسح"
                           />
-                        </div>
+                        </AdminFormGrid>
                       </div>
                     </ModuleEditorVisibilityAlignRow>
                     </div>

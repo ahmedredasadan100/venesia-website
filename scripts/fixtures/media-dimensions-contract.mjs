@@ -71,7 +71,13 @@ export async function verifyMediaDimensionsContract({ authoringOnly = false } = 
   assert.match(mobile.display.description, /100vh/);
   assert.notDeepEqual(desktop, mobile);
   const fixture = { owner: "fixture/new-template", slot: "portrait", evidence: ["fixture"], display: { kind: "ratio", ratio: [2, 3] }, fit: "contain" };
+  const adminStyles = load("src/lib/admin/admin-ui-styles.ts", {
+    "../../components/venesia-scrollbar-styles": load("src/components/venesia-scrollbar-styles.ts"),
+  });
   const Field = load("src/components/admin/media/AdminMediaImageField.tsx", {
+    "../../../lib/admin/admin-ui-styles": adminStyles,
+    // This static dimensions fixture only renders the initially closed preview.
+    "../VenesiaModal": { default: ({ open }) => { assert.equal(open, false); return null; } },
     "next/image": { default: () => null },
     "./AdminMediaSlotGuidance": { default: Component },
     "./AdminDeletedMediaNotice": load("src/components/admin/media/AdminDeletedMediaNotice.tsx"),

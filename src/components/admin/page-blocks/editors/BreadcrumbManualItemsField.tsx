@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
+import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import type { BreadcrumbBlockItem } from "../../../../lib/page-blocks/configs";
 import { AdminLinkField } from "../../ui";
 import {
@@ -80,7 +81,7 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
                 </>
               )}
             >
-              <label className="block space-y-2">
+              <label className={ADMIN_FORM.labelStack}>
                 <span className="text-xs font-semibold text-white/55">التسمية</span>
                 <input name={`manual_item_${index}_label`} value={item.label ?? ""} onChange={(event) => updateLabel(index, event.target.value)} className={fieldClassName()} />
               </label>

@@ -11,13 +11,14 @@ import {
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
+import { AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
+import { ADMIN_FORM, adminChoiceButtonClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import {
   resolvePageBlockTextFormat,
   type AboutIntroBeatConfig,
@@ -48,24 +49,45 @@ type HomeStoryButtonAlignment = "right" | "center" | "left";
 type HomeStoryButtonIcon = "none" | "arrow";
 type HomeStoryButtonIconPosition = "right" | "left";
 
+// The composition selects glyphs; their scale and frame belong to AdminFormControlHeader.
+function StoryControlIcon({ icon }: { icon: "link" | "alignment" | "image" | "pointer" }) {
+  const glyph: ReactNode = icon === "link" ? (
+    <path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7" />
+  ) : icon === "alignment" ? (
+    <path d="M3 5h18M7 10h14M3 15h18M7 20h14" />
+  ) : icon === "image" ? (
+    <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9" r="1.5" /><path d="m4.5 17 4.25-4.25 3.25 3.25 2.5-2.5 5 5" /></>
+  ) : (
+    <path d="m5 3 14 12-7 1-3 6Z" />
+  );
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" focusable="false">{glyph}</svg>
+  );
+}
+
 function SegmentedChoice<T extends string>({
   label,
+  description,
+  illustration,
   name,
   value,
   options,
   onChange,
 }: {
   label: string;
+  description: string;
+  illustration: "alignment" | "image" | "pointer";
   name: string;
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (next: T) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <span className="text-xs font-semibold text-white/55">{label}</span>
+    <div data-home-story-button-card={name} className="min-w-0 h-full">
+      <AdminCard presentation="premium" className="flex h-full flex-col gap-2 p-3">
+      <AdminFormControlHeader title={label} description={description} icon={<StoryControlIcon icon={illustration} />} />
       <input type="hidden" name={name} value={value} />
-      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+      <div role="radiogroup" aria-label={label} className={ADMIN_FORM.choiceGroup}>
         {options.map((option) => {
           const active = option.value === value;
           return (
@@ -77,18 +99,14 @@ function SegmentedChoice<T extends string>({
               title={option.label}
               aria-label={option.label}
               onClick={() => onChange(option.value)}
-              className={[
-                "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                active
-                  ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
-                  : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
-              ].join(" ")}
+              className={adminChoiceButtonClassName(active)}
             >
               {option.label}
             </button>
           );
         })}
       </div>
+      </AdminCard>
     </div>
   );
 }
@@ -107,9 +125,11 @@ function HomeStoryButtonPresentationFields({
   const [iconPosition, setIconPosition] = useState<HomeStoryButtonIconPosition>(initialIconPosition);
 
   return (
-    <AdminFormGrid columns={3} presentation="control-cards">
+    <>
       <SegmentedChoice
         label="محاذاة الزر"
+        description="اختر محاذاة الزر في الصفحة."
+        illustration="alignment"
         name="button_alignment"
         value={alignment}
         onChange={setAlignment}
@@ -121,6 +141,8 @@ function HomeStoryButtonPresentationFields({
       />
       <SegmentedChoice
         label="أيقونة الزر"
+        description="اختر الأيقونة التي تظهر داخل الزر."
+        illustration="image"
         name="button_icon"
         value={icon}
         onChange={setIcon}
@@ -132,6 +154,8 @@ function HomeStoryButtonPresentationFields({
       {icon === "arrow" ? (
         <SegmentedChoice
           label="موضع الأيقونة"
+          description="اختر موضع الأيقونة بالنسبة للنص."
+          illustration="pointer"
           name="button_icon_position"
           value={iconPosition}
           onChange={setIconPosition}
@@ -143,7 +167,7 @@ function HomeStoryButtonPresentationFields({
       ) : (
         <input type="hidden" name="button_icon_position" value={iconPosition} />
       )}
-    </AdminFormGrid>
+    </>
   );
 }
 
@@ -367,38 +391,71 @@ name="image_accent"
       ) : null}
 
       {showCta ? (
-      <ModuleEditorSection>
+        <div className="space-y-4">
           {section === "all" ? <ModuleEditorSectionHeading intent="cta">زر CTA</ModuleEditorSectionHeading> : null}
-          <div className="space-y-4">
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
-              <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
-            </label>
-            <AdminLinkField
-              prefix="button"
-              label={fieldLabels.buttonLink}
-              chooseLinkLabel={fieldLabels.chooseLink}
-              clearLinkLabel={fieldLabels.clearLink}
-              defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
-              showAnchor
-            />
-            <AdminFormListboxSelect
-              name="button_open_target"
-              sizing="full"
-              label="فتح الرابط"
-              defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
-              options={[
-                { value: "_self", label: "نفس النافذة" },
-                { value: "_blank", label: "نافذة جديدة" },
-              ]}
-            />
-            <HomeStoryButtonPresentationFields
-              alignment={config.button?.alignment === "center" || config.button?.alignment === "left" ? config.button.alignment : "right"}
-              icon={config.button?.icon === "arrow" ? "arrow" : "none"}
-              iconPosition={config.button?.iconPosition === "left" ? "left" : "right"}
-            />
-          </div>
-      </ModuleEditorSection>
+          <ModuleEditorFieldGrid className="items-stretch">
+            <ModuleEditorField nature="link" span={4}>
+              <div data-home-story-button-panel="data" className="h-full">
+                <AdminCard presentation="premium" className="flex h-full flex-col gap-3 p-4">
+                  <header className="min-w-0 space-y-1">
+                    <ModuleEditorSectionHeading intent="cta">بيانات الزر</ModuleEditorSectionHeading>
+                    <p className="text-xs leading-5 text-white/45">أدخل نص الزر ورابطه.</p>
+                  </header>
+                  <AdminFormGrid columns={1}>
+                    <AdminCard presentation="premium" className="p-3">
+                      <label className={adminFormLabelClassName()}>
+                        <span>{fieldLabels.buttonLabel}</span>
+                        <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName("h-11")} />
+                      </label>
+                    </AdminCard>
+                    <AdminCard presentation="premium" className="p-3">
+                      <AdminLinkField
+                        prefix="button"
+                        presentation="inline"
+                        label={fieldLabels.buttonLink}
+                        chooseLinkLabel={fieldLabels.chooseLink}
+                        clearLinkLabel={fieldLabels.clearLink}
+                        defaultValue={linkDefaultFromContainer(config.button as Record<string, unknown>)}
+                        showAnchor
+                      />
+                    </AdminCard>
+                  </AdminFormGrid>
+                </AdminCard>
+              </div>
+            </ModuleEditorField>
+            <ModuleEditorField nature="standard" span={8}>
+              <div data-home-story-button-panel="appearance" className="h-full">
+                <AdminCard presentation="premium" className="flex h-full flex-col gap-3 p-4">
+                  <header className="min-w-0 space-y-1">
+                    <ModuleEditorSectionHeading intent="cta">مظهر وسلوك الزر</ModuleEditorSectionHeading>
+                    <p className="text-xs leading-5 text-white/45">خصص كيفية ظهور الزر وسلوكه في الصفحة.</p>
+                  </header>
+                  <AdminFormGrid columns={2} className="flex-1 items-stretch md:auto-rows-fr">
+                    <div data-home-story-button-card="target" className="min-w-0 h-full">
+                      <AdminCard presentation="premium" className="flex h-full flex-col gap-2 p-3">
+                        <AdminFormListboxSelect
+                          name="button_open_target"
+                          sizing="full"
+                          label={<AdminFormControlHeader title="فتح الرابط" description="حدد كيف يتم فتح الرابط." icon={<StoryControlIcon icon="link" />} />}
+                          defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
+                          options={[
+                            { value: "_self", label: "نفس النافذة" },
+                            { value: "_blank", label: "نافذة جديدة" },
+                          ]}
+                        />
+                      </AdminCard>
+                    </div>
+                    <HomeStoryButtonPresentationFields
+                      alignment={config.button?.alignment === "center" || config.button?.alignment === "left" ? config.button.alignment : "right"}
+                      icon={config.button?.icon === "arrow" ? "arrow" : "none"}
+                      iconPosition={config.button?.iconPosition === "left" ? "left" : "right"}
+                    />
+                  </AdminFormGrid>
+                </AdminCard>
+              </div>
+            </ModuleEditorField>
+          </ModuleEditorFieldGrid>
+        </div>
       ) : null}
 
       {showBeats ? (
@@ -407,7 +464,7 @@ name="image_accent"
           <ModuleEditorRepeaterGrid>
             {beats.map((beat, index) => (
               <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>
-                <label className="block space-y-1.5">
+                <label className={ADMIN_FORM.labelStack}>
                   <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                   <input
                     name={`beat_${index}_num`}
@@ -416,11 +473,11 @@ name="image_accent"
                     className={fieldClassName("h-11")}
                   />
                 </label>
-                <label className="block space-y-1.5">
+                <label className={ADMIN_FORM.labelStack}>
                   <span className="text-xs font-semibold text-white/55">العنوان</span>
                   <input name={`beat_${index}_title`} defaultValue={beat.title ?? ""} className={fieldClassName("h-11")} />
                 </label>
-                <label className="block space-y-1.5">
+                <label className={ADMIN_FORM.labelStack}>
                   <span className="text-xs font-semibold text-white/55">الوصف</span>
                   <textarea
                     name={`beat_${index}_text`}

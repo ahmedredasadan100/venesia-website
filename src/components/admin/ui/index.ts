@@ -153,6 +153,7 @@ export type {
 export {
   AdminFormLayout,
   AdminFormSection,
+  AdminFormControlHeader,
   AdminFormField,
   AdminStickyFormBar,
   ADMIN_FORM_STACK_CLASS_NAME,

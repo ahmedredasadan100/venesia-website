@@ -68,7 +68,11 @@ export async function runTrackingSelection(page, baseUrl, check) {
       if(url.pathname==='/api/admin/media-library'){
         if(request.method()==='GET' && libraryFails)return route.fulfill({contentType:'application/json',body:'{'});
         if(request.method()==='GET')return json({assets,folders:[],page:1,pageSize:20,total:assets.length,totalPages:1,catalogState:'available',warning:null,summary:{assetCount:4,folderCount:0,imageCount:4,documentCount:0,totalBytes:272,catalogRegisteredCount:4,unreconciledAssetCount:0,usageUnknownCount:0,missingObjectCount:0},readiness:{safeDeleteReady:false,usageResultsAuthoritative:true,reasons:[],warnings:[]}});
-        if(request.method()==='POST' && request.postDataJSON().operation==='reference_state')return json({deleted:[],missing:[],originals:[]});
+        if(request.method()==='POST' && request.postDataJSON().operation==='reference_state'){
+          // Keep read completion observably separate from input and selection changes.
+          await new Promise(resolve=>setTimeout(resolve,150));
+          return json({deleted:[],missing:[],originals:[]});
+        }
       }
       if(url.pathname==='/api/admin/media-usage' && request.method()==='GET')return json({hits:[],scanComplete:true,unusedAuthoritative:true});
       if(url.pathname==='/qa/tracking/save' && request.method()==='POST'){
@@ -90,7 +94,11 @@ export async function runTrackingSelection(page, baseUrl, check) {
     const choice=id=>picker().getByRole('button',{name:new RegExp('^Image '+id.toUpperCase())});
     const confirm=()=>picker().getByRole('button',{name:'إضافة الصور المحددة',exact:true});
     const value=()=>page.locator('input[name="image_urls"]');
-    const paths=async expected=>expect(value()).toHaveValue(expected.map(id=>`/images/${id}.png`).join('\n'));
+    const paths=async expected=>{
+      await expect(value()).toHaveValue(expected.map(id=>`/images/${id}.png`).join('\n'));
+      // Gallery previews appear only after the actual Catalog reference read settles.
+      await expect(form().locator('[data-admin-media-gallery-index] img')).toHaveCount(expected.length);
+    };
     const add=()=>form().locator('[data-admin-media-gallery-action="add"]');
     const openForm=async()=>{await page.getByRole('button',{name:'تعديل تحديث التنفيذ',exact:true}).click();await expect(form()).toBeVisible();};
     const open=async()=>{await add().click();await expect(choice('a')).toBeVisible();};
@@ -105,7 +113,10 @@ export async function runTrackingSelection(page, baseUrl, check) {
       await expect(picker().getByRole('status')).toHaveText('تم تحديد '+(index+1));
       // Let a real library refresh settle between clicks; do not hide reset races with fast clicks.
       const refreshed=page.waitForResponse(r=>r.url().includes('/api/admin/media-library?'));
-      await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await refreshed;
+      const referencesRefreshed=page.waitForResponse(r=>r.url()===baseUrl+'/api/admin/media-library' && r.request().method()==='POST');
+      await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+      const responses=await Promise.all([refreshed,referencesRefreshed]);
+      await Promise.all(responses.map(response=>response.finished()));
       await expect(choice(id)).toHaveAttribute('aria-pressed','true');
     }
     await choice('c').focus();await page.keyboard.press('Space');
@@ -143,6 +154,8 @@ export async function runTrackingSelection(page, baseUrl, check) {
     await expect(choice('a')).toHaveAttribute('aria-pressed','false');await expect(choice('b')).toHaveAttribute('aria-pressed','true');
     await picker().getByRole('button',{name:'تأكيد الاختيار',exact:true}).click();
     await expect(page.locator('input[name="single_image"]')).toHaveValue('/images/b.png');
+    // A selected value precedes Catalog readiness; do not unmount its in-flight read.
+    await expect(page.locator('[data-admin-media-image-preview-trigger]')).toBeVisible();
     check('Actual AdminMediaImageField retains single selection and its original confirmation behavior',true);
     libraryFails=true;
     await page.evaluate(()=>window.mountTrackingSelection([]));await openForm();await add().click();

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 import ts from "typescript";
 import { getModuleEditorSectionMetadata } from "../src/lib/page-composition/module-registry-metadata.ts";
-import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
+import { collectExecutableSourceGraph, graphUsesExecutableBinding } from "./lib/typescript-executable-graph.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) =>
@@ -1704,21 +1704,135 @@ check(
   })(),
 );
 check(
-  "shared form grid owns compact control cards and Hero paired panels without identity-specific styles",
+  "Content button composition adopts shared grid, cards, headings and choices while Header/Footer retain their defaults",
   adminFormGridOwner.includes('presentation?: "plain" | "control-cards"') &&
-    read("src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx").includes('columns={3} presentation="control-cards"') &&
+    (() => {
+      const introPath = "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx";
+      const intro = read(introPath);
+      const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [introPath] });
+      const bindings = [
+        { sourceFile: "src/components/admin/ui/AdminCard.tsx", exportNames: ["default"] },
+        { sourceFile: "src/components/admin/ui/AdminForm.tsx", exportNames: ["AdminFormControlHeader"] },
+        { sourceFile: "src/components/admin/ui/AdminFormRuntime.tsx", exportNames: ["AdminFormGrid"] },
+        { sourceFile: "src/components/admin/ui/AdminFormListboxSelect.tsx", exportNames: ["default"] },
+        { sourceFile: "src/components/admin/ui/AdminLinkField.tsx", exportNames: ["default"] },
+        { sourceFile: "src/lib/admin/admin-ui-styles.ts", exportNames: ["adminChoiceButtonClassName"] },
+      ];
+      const parsed = [intro, contentEditClient].map((text, index) =>
+        ts.createSourceFile("content-presentation-" + index + ".tsx", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX));
+      const hasStylesheetImport = parsed.some((tree) => tree.statements.some((node) =>
+        ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.endsWith(".css")));
+      let saveAreaOverridesDefault = false;
+      const inspectSaveArea = (node: ts.Node) => {
+        if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+          ts.isIdentifier(node.tagName) && node.tagName.text === "ModuleEditorSaveArea") {
+          saveAreaOverridesDefault ||= node.attributes.properties.some((attribute) =>
+            ts.isJsxAttribute(attribute) && attribute.name.getText(parsed[1]) === "className");
+        }
+        ts.forEachChild(node, inspectSaveArea);
+      };
+      inspectSaveArea(parsed[1]);
+      return bindings.every((binding) => graphUsesExecutableBinding({ root: ROOT, graph, bindings: [binding] })) &&
+        intro.includes('<ModuleEditorField nature="link" span={4}>') &&
+        intro.includes('<ModuleEditorField nature="standard" span={8}>') &&
+        intro.includes('<AdminFormGrid columns={2}') &&
+        intro.includes('data-home-story-button-panel="data"') &&
+        intro.includes('data-home-story-button-panel="appearance"') &&
+        intro.includes('data-home-story-button-card="target"') &&
+        intro.includes('data-home-story-button-card={name}') &&
+        intro.includes('<AdminCard presentation="premium"') &&
+        intro.includes('<AdminFormControlHeader') &&
+        intro.includes('className={ADMIN_FORM.choiceGroup}') &&
+        intro.includes('className={adminChoiceButtonClassName(active)}') &&
+        intro.includes('<ModuleEditorSectionHeading intent="cta">') &&
+        intro.includes('icon === "arrow" ? (') &&
+        intro.includes('<input type="hidden" name="button_icon_position" value={iconPosition} />') &&
+        intro.includes('name="button_open_target"') &&
+        intro.includes('defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}') &&
+        !hasStylesheetImport && !saveAreaOverridesDefault &&
+        !contentEditClient.includes('sectionHeaderClassName:');
+    })() &&
     heroCtaEditor.includes('<AdminFormGrid columns={1}>') &&
     heroEditor.includes('<AdminFormGrid columns={2}') &&
     heroEditor.includes('<HeroRenderedAreaCard previewPath={previewPath} />'),
 );
 check(
-  "shared media cards fill their parent and stack on mobile while preserving explicit compact desktop density",
-  !mediaOwner.includes('max-w-sm') && mediaOwner.includes('aspect-[4/3]') &&
+  "shared premium presentation is opt-in and shared control chrome preserves the standard field scale",
+  (() => {
+    const card = read("src/components/admin/ui/AdminCard.tsx");
+    const defaultCard = card.slice(card.lastIndexOf("\n  return ("));
+    const form = read("src/components/admin/ui/AdminForm.tsx");
+    const styles = read("src/lib/admin/admin-ui-styles.ts");
+    return card.includes('presentation?: "default" | "premium"') &&
+      card.includes('presentation = "default"') &&
+      card.includes('if (presentation === "premium")') &&
+      card.includes('interactive = false') &&
+      defaultCard.includes('relative overflow-hidden rounded-[28px] border border-white/10 bg-[#080B10]/78 shadow-[0_18px_70px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl') &&
+      defaultCard.includes('hover:-translate-y-0.5 hover:border-[#D8B87A]/28 hover:bg-[#10131A]/82') &&
+      defaultCard.includes('pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#D8B87A]/38 to-transparent') &&
+      !defaultCard.includes('ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME') &&
+      form.includes('data-admin-form-control-header=""') &&
+      form.includes('className="text-sm font-semibold text-white"') &&
+      form.includes('className="text-xs leading-5 text-white/55"') &&
+      form.includes('size-10 shrink-0') && form.includes('[&>svg]:size-5') &&
+      styles.includes('export function adminChoiceButtonClassName(active: boolean, extra = "")') &&
+      styles.includes('choiceGroup: "flex min-w-0 flex-wrap gap-2"');
+  })(),
+);
+check(
+  "single-image previews stay bounded and open in the shared modal while compact and gallery densities remain explicit",
+  (mediaOwner.match(/max-w-sm/g)?.length === 2) &&
+    mediaOwner.includes('className="relative h-44"') &&
+    mediaOwner.includes('flex h-44 w-full max-w-sm') &&
+    mediaOwner.includes('data-admin-media-image-preview-trigger') &&
+    mediaOwner.includes('<VenesiaModal') &&
+    mediaOwner.includes('open={previewOpen && presentation === "active"}') &&
+    mediaOwner.includes('aria-haspopup="dialog"') &&
+    mediaOwner.includes('className="object-contain"') &&
+    mediaOwner.includes('compactAspectClassName = "aspect-[4/3]"') &&
+    !mediaOwner.split('if (variant === "compact")')[1].split('\n  return (')[0].includes('max-w-sm') &&
     (() => { const gallery = read("src/components/admin/media/AdminMediaGalleryField.tsx");
       return gallery.includes('grid-cols-1 md:grid-cols-2') &&
         gallery.includes('grid-cols-1 md:grid-cols-3 xl:grid-cols-4') &&
         gallery.includes('aspect-[4/3]') && gallery.includes('AdminMediaOriginalDimensions');
     })(),
+);
+
+check(
+  "CTA module uses the shared one-column form grid inside each CTA card without joined text/link columns",
+  (() => { const cta = read("src/components/admin/page-blocks/CtaModuleEditClient.tsx"); return (cta.split('<AdminFormGrid columns={1}>').length === 3) && !cta.includes("grid-cols-[minmax(0,1fr)_auto]") && !cta.includes("rounded-e-none"); })(),
+);
+
+check(
+  "image position, Gallery metadata and affected Intro textarea labels adopt current shared layout owners",
+  (() => {
+    const single = read("src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx");
+    const intro = read("src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx");
+    const gallery = read("src/components/admin/media/AdminMediaGalleryField.tsx");
+    return single.includes('<AdminFormGrid columns={2} presentation="control-cards">') &&
+      single.includes('name="image_position" value={imagePosition}') &&
+      single.includes("ADMIN_FORM.labelStack") &&
+      !single.includes('className="block space-y-1.5"') &&
+      !intro.includes('className="block space-y-1.5"') &&
+      (gallery.match(/<label className={ADMIN_FORM.labelStack}>/g)?.length === 2) &&
+      gallery.includes('name={props.altName}') && gallery.includes('name={props.captionName}');
+  })(),
+);
+check(
+  "aligned field rows remain opt-in at AdminFormGrid and Featured preserves its existing inputs",
+  (() => {
+    const grid = read("src/components/admin/ui/AdminFormRuntime.tsx");
+    const featured = read("src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx");
+    return grid.includes('presentation = "plain"') &&
+      grid.includes('presentation === "aligned-fields"') &&
+      grid.includes('[&>*]:grid-rows-subgrid') &&
+      grid.includes('[&>*]:space-y-0') &&
+      featured.includes('<AdminFormGrid columns={3} presentation="aligned-fields"') &&
+      featured.includes('name="selection_mode"') &&
+      featured.includes('name="limit"') && featured.includes('max={48}') &&
+      featured.includes('name="autoplay_ms"') && featured.includes('step={500}') &&
+      featured.includes('defaultValue={config.autoplayMs}');
+  })(),
 );
 
 console.log(

@@ -120,6 +120,38 @@ do not claim Ready, batch release, or Production closure. Documentation-only
 local changes use Section 15's applicable consistency checks, without Browser
 QA, UI approval, or a Full Quality Gate.
 
+## 3.2.1 Shared UI visual regression protection
+
+This standing Owner requirement applies to every current and future change to a
+shared UI owner or its presentation contract. It uses Development Verification
+and the existing QA commands/fixtures; it does not create a parallel runner,
+manifest, approval system, or an additional Full Quality Gate.
+
+Before editing, identify the canonical owner, its direct and indirect consumers,
+and the exact screens/routes whose appearance can change. Record the intended
+visual delta and preserve product behavior, controls, values, serialization,
+permissions, and data/media ownership. An opt-in presentation change must also
+identify consumers that retain the default contract.
+
+After editing, run impact-based Targeted Visual Regression for the affected
+consumers on Desktop, Mobile, and RTL, plus related keyboard/focus, save/reload,
+and failure paths where relevant. Compare Before/After when evidence exists.
+TypeScript, source/architecture guards, and functional success alone are never
+proof of visual correctness. Correct a proven related defect at its existing
+owner and rerun the affected checks only.
+
+Use actual consumer components in isolated fixtures when a live screen cannot
+be tested. Record fixture scope and transport substitutions, the exact live
+screen/route requiring Owner review, and the visual/functional/manual status of
+each affected consumer. Never label an unobserved screen visually verified or
+change another consumer's appearance without documenting the impact.
+
+Shared UI changes therefore require this bounded visual proof even when other
+Local changes can use code-only checks under Section 6. Reuse valid unaffected
+evidence under Section 3.4; do not repeat Full QA or broaden work to unrelated
+modules. Final visual approval remains with the Owner, and local proof does not
+authorize commits, release actions, or data mutations.
+
 ## 3.3 Batch Release Verification
 
 At completion of the group of changes:
@@ -244,11 +276,13 @@ Relevant proof may include:
 ## 6. Browser QA rules
 
 During bounded Local development, default to targeted code checks according to
-impact. Do not automatically open
-Browser Automation. If code checks cannot prove the affected behavior, run only
-the minimum necessary Browser Verification; explicit requests also authorize it,
-as defined in Constitution Section 25.4 and ADR-028. Do not create screenshots
-or visual reports without a request.
+impact. Shared UI changes must additionally satisfy the targeted visual proof
+in Section 3.2.1; the code-only default below does not waive that requirement.
+For other changes, do not automatically open Browser Automation. If code checks
+cannot prove the affected behavior, run only the minimum necessary Browser
+Verification; explicit requests also authorize it, as defined in Constitution
+Section 25.4 and ADR-028. Outside Section 3.2.1, do not create screenshots or visual
+reports without a request.
 Reuse the running Dev Server without a routine restart or a duplicate instance,
 and use the expected authenticated session when required. Do not rerun successful
 Browser QA without a change-related reason; retain valid evidence under Section

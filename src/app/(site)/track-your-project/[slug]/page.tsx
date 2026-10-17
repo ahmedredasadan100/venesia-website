@@ -7,7 +7,10 @@ import ProjectTrackingExperience, {
 import { loadProjectTrackingDetail } from "../../../../lib/projects/tracking/public-read";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
-import type { ProjectTrackingReadInput } from "../../../../lib/projects/tracking/contract";
+import {
+  projectTrackingReadInputSchema,
+  type ProjectTrackingReadInput,
+} from "../../../../lib/projects/tracking/contract";
 import { getPublicPageRoute } from "../../../../lib/admin/links/static-routes";
 import { getProjectTrackHref } from "../../../../lib/projects/public-helpers";
 
@@ -28,12 +31,19 @@ function trackingReadInput(
     const candidate = searchParams[key];
     return typeof candidate === "string" ? candidate : undefined;
   };
+  // Recover invalid URL pagination through the existing defaults; reads stay strict.
+  const page = (
+    key: "stagePage" | "itemPage" | "updatePage" | "mediaPage" | "historyPage",
+  ) => {
+    const parsed = projectTrackingReadInputSchema.shape[key].safeParse(value(key));
+    return parsed.success ? parsed.data : undefined;
+  };
   return {
-    stagePage: value("stagePage"),
-    itemPage: value("itemPage"),
-    updatePage: value("updatePage"),
-    mediaPage: value("mediaPage"),
-    historyPage: value("historyPage"),
+    stagePage: page("stagePage"),
+    itemPage: page("itemPage"),
+    updatePage: page("updatePage"),
+    mediaPage: page("mediaPage"),
+    historyPage: page("historyPage"),
     stageId: value("stage"),
     itemId: value("item"),
     updateId: value("update"),

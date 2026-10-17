@@ -738,10 +738,12 @@ export function ModuleEditorSaveArea({
   title = "حفظ الموديول",
   description = "تُحدّث التغييرات بعد اكتمال الحفظ.",
   saveLabel = "حفظ الموديول",
+  className = "",
 }: {
   title?: ReactNode;
   description?: ReactNode;
   saveLabel?: ReactNode;
+  className?: string;
 }) {
   const { pending } = useFormStatus();
   const searchParams = useSearchParams();
@@ -766,7 +768,7 @@ export function ModuleEditorSaveArea({
         </>
       ) : null}
       <AdminStickyFormBar
-        className="mt-8"
+        className={`mt-8 ${className}`.trim()}
         title={title}
         description={description}
       >

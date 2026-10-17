@@ -825,11 +825,13 @@ export function AdminFormGrid({
 }: {
   children: ReactNode;
   columns?: 1 | 2 | 3 | 4 | 5 | 12;
-  presentation?: "plain" | "control-cards";
+  presentation?: "plain" | "control-cards" | "aligned-fields";
   className?: string;
 }) {
   const columnsClassName =
-    columns === 1
+    columns === 3 && presentation === "aligned-fields"
+      ? "grid-cols-1 md:grid-cols-3"
+      : columns === 1
       ? "grid-cols-1"
       : columns === 12
         ? "grid-cols-1 xl:grid-cols-12"
@@ -840,8 +842,14 @@ export function AdminFormGrid({
             : columns === 3
               ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
               : "grid-cols-1 md:grid-cols-2";
+  // Opt-in rows align labels, controls and supporting copy without changing typography.
+  const presentationClassName = presentation === "control-cards"
+    ? "items-stretch [&>*]:rounded-2xl [&>*]:border [&>*]:border-white/10 [&>*]:bg-[#05070B] [&>*]:p-3"
+    : presentation === "aligned-fields"
+      ? "items-start [&>*]:row-span-3 [&>*]:grid [&>*]:grid-rows-subgrid [&>*]:items-start [&>*]:gap-2 [&>*]:space-y-0 [&>*>*]:mt-0"
+      : "";
   return (
-    <div data-admin-form-grid={presentation} className={`grid min-w-0 gap-4 [&>*]:min-w-0 ${columnsClassName} ${presentation === "control-cards" ? "items-stretch [&>*]:rounded-2xl [&>*]:border [&>*]:border-white/10 [&>*]:bg-[#05070B] [&>*]:p-3" : ""} ${className}`.trim()}>
+    <div data-admin-form-grid={presentation} className={`grid min-w-0 gap-4 [&>*]:min-w-0 ${columnsClassName} ${presentationClassName} ${className}`.trim()}>
       {children}
     </div>
   );

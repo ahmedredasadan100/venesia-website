@@ -276,7 +276,7 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
       cta: {
         navigationLabelAr: "الزر والرابط",
         sectionHeadingAr: "زر قسم القصة",
-        sectionDescriptionAr: "أدر نص زر الإجراء ووجهته.",
+        sectionDescriptionAr: "أدر نص زر الإجراء ومظهره.",
         icon: "section",
       },
       pages: HOME_PAGES_SECTION,

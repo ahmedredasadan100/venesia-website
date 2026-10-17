@@ -12,7 +12,6 @@ import AdminFormRuntime, {
   AdminFormActions,
   AdminFormError,
   AdminFormGrid,
-  AdminFormGridItem,
 } from "../../../../components/admin/ui/AdminFormRuntime";
 import AdminFormSwitch from "../../../../components/admin/ui/AdminFormSwitch";
 import type {
@@ -65,57 +64,53 @@ export default function SeriesForm({
             title="بيانات السلسلة"
             description="أنشئ علاقة واضحة بين السلسلة وتصنيفها، مع الحفاظ على رابط ثابت بعد أول حفظ."
           >
-            <AdminFormGrid columns={12}>
-              <AdminFormGridItem span={isEdit ? 5 : 3}>
-                <AdminFormField label="اسم السلسلة" required>
-                  <input
-                    name="name"
-                    required
-                    disabled={pending}
-                    defaultValue={series?.name ?? ""}
-                    placeholder="مثال: اعرف السوق"
-                    aria-invalid={Boolean(fieldErrors.name?.length)}
-                    aria-describedby={
-                      fieldErrors.name?.length ? "name-error" : undefined
-                    }
-                    className={adminFormFieldClassName(
-                      fieldErrors.name?.length ? "border-red-400/40" : "",
-                    )}
-                  />
-                  <AdminFormError name="name" />
-                </AdminFormField>
-              </AdminFormGridItem>
-
-              {!isEdit ? (
-                <AdminFormGridItem span={3}>
-                  <AdminSlugField
-                    sourceInputName="name"
-                    error={fieldErrors.slug?.[0] ?? null}
-                  />
-                </AdminFormGridItem>
-              ) : null}
-
-              <AdminFormGridItem span={isEdit ? 4 : 3}>
-                <AdminFormListboxSelect
-                  name="category_id"
-                  focusTargetId="category_id"
-                  label="التصنيف"
-                  options={categoryOptions}
-                  defaultValue={
-                    series?.category_id ? String(series.category_id) : ""
-                  }
-                  placeholder="اختر التصنيف"
-                  searchPlaceholder="ابحث في التصنيفات"
-                  searchable={categoryOptions.length > 7}
+            <AdminFormGrid columns={isEdit ? 3 : 4} presentation="aligned-fields">
+              <AdminFormField label="اسم السلسلة" required>
+                <input
+                  name="name"
                   required
                   disabled={pending}
-                  error={fieldErrors.category_id?.[0] ?? null}
-                  emptyMessage="لا توجد تصنيفات منشورة متاحة."
-                  hint="يظهر في الاختيار التصنيف الحالي حتى لو أصبح غير منشور."
+                  defaultValue={series?.name ?? ""}
+                  placeholder="مثال: اعرف السوق"
+                  aria-invalid={Boolean(fieldErrors.name?.length)}
+                  aria-describedby={
+                    fieldErrors.name?.length ? "name-error" : undefined
+                  }
+                  className={adminFormFieldClassName(
+                    fieldErrors.name?.length ? "border-red-400/40" : "",
+                  )}
                 />
-              </AdminFormGridItem>
+                <AdminFormError name="name" />
+              </AdminFormField>
 
-              <AdminFormGridItem span={3} className="space-y-3 xl:pt-8">
+              {!isEdit ? (
+                <AdminSlugField
+                  sourceInputName="name"
+                  error={fieldErrors.slug?.[0] ?? null}
+                />
+              ) : null}
+
+              <AdminFormListboxSelect
+                name="category_id"
+                focusTargetId="category_id"
+                label="التصنيف"
+                options={categoryOptions}
+                defaultValue={
+                  series?.category_id ? String(series.category_id) : ""
+                }
+                placeholder="اختر التصنيف"
+                searchPlaceholder="ابحث في التصنيفات"
+                searchable={categoryOptions.length > 7}
+                required
+                disabled={pending}
+                sizing="full"
+                error={fieldErrors.category_id?.[0] ?? null}
+                emptyMessage="لا توجد تصنيفات منشورة متاحة."
+                hint="يظهر في الاختيار التصنيف الحالي حتى لو أصبح غير منشور."
+              />
+
+              <div>
+                <span className="text-sm font-medium text-white/70">حالة النشر</span>
                 <AdminFormSwitch
                   name="is_published"
                   label="منشور"
@@ -126,7 +121,7 @@ export default function SeriesForm({
                   surface
                 />
                 <AdminFormError name="is_published" />
-              </AdminFormGridItem>
+              </div>
             </AdminFormGrid>
           </AdminFormSection>
 

@@ -30,12 +30,32 @@ export const ADMIN_MODAL_SIZES = {
   xl: "max-w-[1500px]",
 } as const;
 
+/** Opt-in surface only; each composition retains its shared layout and control scale. */
+export const ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME =
+  "rounded-2xl border border-white/14 bg-[linear-gradient(125deg,#080b10_0%,#0e151a_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.02),0_12px_30px_rgba(0,0,0,0.12)]";
+
 export const ADMIN_FORM = {
+  // Column gaps work for inline labels and ignore hidden form inputs.
+  labelStack: "flex min-w-0 flex-col gap-2",
   grid: "grid gap-4",
   gridTwoCol: "grid gap-4 md:grid-cols-2",
+  choiceGroup: "flex min-w-0 flex-wrap gap-2",
   checkboxRow:
     "flex items-center justify-end gap-3 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm text-white/70",
 } as const;
+
+/** Presentation only; the consuming control owns its state and selection semantics. */
+export function adminChoiceButtonClassName(active: boolean, extra = "") {
+  return [
+    "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-2xl border px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45",
+    active
+      ? "border-[#D8B87A] bg-[linear-gradient(135deg,rgba(216,184,122,0.17),rgba(216,184,122,0.08))] text-[#F2D99B] shadow-[inset_0_1px_0_rgba(216,184,122,0.08)]"
+      : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
+    extra,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /** Shared list/table layout — reuse for all Admin listing pages (Pages, Menus, Topics, Projects). */
 export const ADMIN_LIST_PAGE = {
@@ -56,7 +76,7 @@ export function adminFormFieldClassName(extra = "") {
 }
 
 export function adminFormLabelClassName() {
-  return "block space-y-2 text-right text-xs font-medium text-white/48";
+  return `${ADMIN_FORM.labelStack} text-right text-xs font-medium text-white/48`;
 }
 
 export function adminFormHintClassName() {

@@ -279,6 +279,7 @@ const expectedConsumers = [
   "src/app/admin/seo/redirects/RedirectFormModal.tsx",
   "src/app/admin/users-roles/AdminUserFormModal.tsx",
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+  "src/components/admin/media/AdminMediaImageField.tsx",
   "src/components/admin/media/AdminMediaPickerModal.tsx",
   "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
   "src/components/admin/projects/tracking/TrackingForms.tsx",

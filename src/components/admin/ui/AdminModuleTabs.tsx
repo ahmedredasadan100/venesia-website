@@ -22,6 +22,8 @@ export type AdminModuleTab = AdminModuleTabNavigationLabel & {
   /** Full descriptive heading rendered inside the active panel. */
   sectionHeading?: ReactNode;
   sectionDescription?: ReactNode;
+  /** Optional composition styling for this panel header only. */
+  sectionHeaderClassName?: string;
   /** Optional compact context rendered opposite the active section title. */
   sectionSummary?: ReactNode;
   /** Semantic icon rendered by the shared owner. */
@@ -314,7 +316,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
         >
           {tab.sectionHeading ? (
             <header
-              className="mb-4 flex min-h-[76px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5"
+              className={`mb-4 flex min-h-[76px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5 ${tab.sectionHeaderClassName ?? ""}`.trim()}
               data-admin-tab-section-heading={tab.id}
             >
               <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">

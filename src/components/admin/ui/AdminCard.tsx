@@ -1,16 +1,33 @@
 import type { ReactNode } from "react";
+import { ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME } from "../../../lib/admin/admin-ui-styles";
 
 type AdminCardProps = {
   children: ReactNode;
   className?: string;
   interactive?: boolean;
+  presentation?: "default" | "premium";
 };
 
 export default function AdminCard({
   children,
   className = "",
   interactive = false,
+  presentation = "default",
 }: AdminCardProps) {
+  if (presentation === "premium") {
+    return (
+      <section
+        className={`relative ${ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME} ${
+          interactive
+            ? "transition duration-300 hover:-translate-y-0.5 hover:border-[#D8B87A]/28 hover:bg-[#10131A]/82 hover:shadow-[0_24px_90px_rgba(0,0,0,0.3)]"
+            : ""
+        } ${className}`}
+      >
+        {children}
+      </section>
+    );
+  }
+
   return (
     <section
       className={`relative overflow-hidden rounded-[28px] border border-white/10 bg-[#080B10]/78 shadow-[0_18px_70px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl ${

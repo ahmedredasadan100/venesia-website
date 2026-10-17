@@ -960,7 +960,7 @@ check(
     'alignmentName="display_excerpt_alignment"',
     'boldName="display_date_bold"',
     'alignmentName="display_date_alignment"',
-    'className="mt-4 grid items-start gap-4 md:grid-cols-3"',
+    '<AdminFormGrid columns={1} className="mt-4">',
     "<ModuleEditorVisibilityAlignRow",
     'name="eyebrow"',
     'name="title"',

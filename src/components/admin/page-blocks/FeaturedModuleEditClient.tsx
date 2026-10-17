@@ -597,7 +597,7 @@ export default function FeaturedModuleEditClient({
                       <ModuleEditorSectionHeading intent="settings">
                         عنوان الموديول
                       </ModuleEditorSectionHeading>
-                      <div className="mt-4 grid items-start gap-4 md:grid-cols-3">
+                      <AdminFormGrid columns={1} className="mt-4">
                         <ModuleEditorVisibilityAlignRow
                           label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
                           showName="show_eyebrow"
@@ -648,7 +648,7 @@ export default function FeaturedModuleEditClient({
                             className={fieldClassName("h-10")}
                           />
                         </ModuleEditorVisibilityAlignRow>
-                      </div>
+                      </AdminFormGrid>
                     </ModuleEditorSection>
 
                     <ModuleEditorSection>

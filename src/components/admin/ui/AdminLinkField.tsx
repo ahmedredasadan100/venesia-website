@@ -13,6 +13,8 @@ import AdminLinkPicker from "./AdminLinkPicker";
 
 type AdminLinkFieldProps = {
   prefix: string;
+  /** Opt-in composition styling; field behavior and default surface stay shared. */
+  className?: string;
   label: string;
   defaultValue?: AdminLinkValue;
   helperText?: string;
@@ -43,6 +45,7 @@ function supportsPageAnchor(link: AdminLinkValue) {
 
 export default function AdminLinkField({
   prefix,
+  className = "",
   label,
   defaultValue,
   helperText,
@@ -137,7 +140,7 @@ export default function AdminLinkField({
   );
 
   return (
-    <div data-admin-link-field={presentation} className={`min-w-0 w-full space-y-3 ${presentation === "card" ? "rounded-2xl border border-white/10 bg-[#05070B] p-3" : ""}`}>
+    <div data-admin-link-field={presentation} className={`min-w-0 w-full space-y-3 ${presentation === "card" ? "rounded-2xl border border-white/10 bg-[#05070B] p-3" : ""} ${className}`.trim()}>
       <div className="min-w-0 space-y-2">
         <p className="text-xs font-semibold text-white/55">{label}</p>
         {helperText ? <p className="text-xs text-white/40">{helperText}</p> : null}
