@@ -49,6 +49,7 @@ export async function runTrackingSelection(page, baseUrl, check) {
   const unexpected=[];
   let saveFails=true;
   let libraryFails=false;
+  let delayReferenceRead=false;
   let updateId=null;
   const image=(id)=>({id,provider:'supabase',bucket:'cms-images',objectKey:`images/${id}.png`,publicUrl:`/images/${id}.png`,displayName:`Image ${id.toUpperCase()}`,originalFilename:`${id}.png`,kind:'image',mimeType:'image/png',extension:'png',sizeBytes:68,width:1,height:1,folderPath:'images',status:'active',missingObject:false,catalogRegistered:true,source:'catalog_storage',reconciliationState:'synced',referenceCount:0,createdAt:'2026-10-15T00:00:00Z',updatedAt:'2026-10-15T00:00:00Z'});
   const assets=['a','b','c','d'].map(image);
@@ -68,7 +69,10 @@ export async function runTrackingSelection(page, baseUrl, check) {
       if(url.pathname==='/api/admin/media-library'){
         if(request.method()==='GET' && libraryFails)return route.fulfill({contentType:'application/json',body:'{'});
         if(request.method()==='GET')return json({assets,folders:[],page:1,pageSize:20,total:assets.length,totalPages:1,catalogState:'available',warning:null,summary:{assetCount:4,folderCount:0,imageCount:4,documentCount:0,totalBytes:272,catalogRegisteredCount:4,unreconciledAssetCount:0,usageUnknownCount:0,missingObjectCount:0},readiness:{safeDeleteReady:false,usageResultsAuthoritative:true,reasons:[],warnings:[]}});
-        if(request.method()==='POST' && request.postDataJSON().operation==='reference_state')return json({deleted:[],missing:[],originals:[]});
+        if(request.method()==='POST' && request.postDataJSON().operation==='reference_state'){
+          if(delayReferenceRead)await new Promise(resolve=>setTimeout(resolve,150));
+          return json({deleted:[],missing:[],originals:[]});
+        }
       }
       if(url.pathname==='/api/admin/media-usage' && request.method()==='GET')return json({hits:[],scanComplete:true,unusedAuthoritative:true});
       if(url.pathname==='/qa/tracking/save' && request.method()==='POST'){
@@ -136,6 +140,8 @@ export async function runTrackingSelection(page, baseUrl, check) {
     await expect(choice('b')).toBeDisabled();await choice('d').click();
     await picker().getByRole('button',{name:'تأكيد الاختيار',exact:true}).click();await paths(['d','b','c']);
     check('Tracking reorder/remove and single replacement remain intact without duplicates',true);
+    // Exercise a reference read that completes after the hidden image value updates.
+    delayReferenceRead=true;
     await page.evaluate(()=>window.mountTrackingSelection([],true));
     await page.getByRole('button',{name:'اختيار صورة',exact:true}).click();
     await expect(picker().locator('[data-media-library-mode]')).toHaveAttribute('data-media-library-mode','select-one');
@@ -143,6 +149,8 @@ export async function runTrackingSelection(page, baseUrl, check) {
     await expect(choice('a')).toHaveAttribute('aria-pressed','false');await expect(choice('b')).toHaveAttribute('aria-pressed','true');
     await picker().getByRole('button',{name:'تأكيد الاختيار',exact:true}).click();
     await expect(page.locator('input[name="single_image"]')).toHaveValue('/images/b.png');
+    // A selected value precedes Catalog readiness; do not unmount its in-flight read.
+    await expect(page.locator('[data-admin-media-image-preview-trigger]')).toBeVisible();
     check('Actual AdminMediaImageField retains single selection and its original confirmation behavior',true);
     libraryFails=true;
     await page.evaluate(()=>window.mountTrackingSelection([]));await openForm();await add().click();
