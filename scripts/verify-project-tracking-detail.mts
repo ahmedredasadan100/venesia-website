@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 
+import { projectTrackingReadInputSchema, type ProjectTrackingReadInput } from "../src/lib/projects/tracking/contract.ts";
+
 import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } from "../src/lib/admin/form-system/adoption-manifest.ts";
 import { ADMIN_COLLECTION_SURFACE_ADOPTION, ADMIN_CURRENT_SHARED_CAPABILITY_SET } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
@@ -101,6 +103,81 @@ const publicPaginationModel = read("src/components/pagination-model.ts");
 const registry = read("src/lib/admin/entity-list/data-engine/registry.ts");
 const actions = read("src/app/admin/projects/tracking-actions.ts");
 
+// Execute the actual Page search-parameter adapter against the unchanged strict read contract.
+const trackingRouteAst = parseTsx("src/app/(site)/track-your-project/[slug]/page.tsx");
+const trackingInputAdapter = trackingRouteAst.statements.find(
+  (node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "trackingReadInput",
+);
+assert.ok(trackingInputAdapter, "Tracking Page must retain its actual URL adapter");
+const executeTrackingReadInput = new Function(
+  "projectTrackingReadInputSchema",
+  ts.transpileModule(trackingInputAdapter.getText(trackingRouteAst), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText + "; return trackingReadInput;",
+)(projectTrackingReadInputSchema) as (
+  params: Record<string, string | string[] | undefined>,
+) => ProjectTrackingReadInput;
+const trackingPageComponent = trackingRouteAst.statements.find(
+  (node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "ProjectTrackPage",
+);
+assert.ok(trackingPageComponent, "Tracking Page component must exist");
+let trackingPageUsesAdapter = false;
+const findTrackingAdapterCall = (node: ts.Node) => {
+  if (
+    ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+    node.expression.text === "loadProjectTrackingDetail"
+  ) {
+    const input = node.arguments[1];
+    if (input && ts.isCallExpression(input) && ts.isIdentifier(input.expression) &&
+      input.expression.text === "trackingReadInput") trackingPageUsesAdapter = true;
+  }
+  ts.forEachChild(node, findTrackingAdapterCall);
+};
+findTrackingAdapterCall(trackingPageComponent);
+check("actual Tracking Page passes URL input through the executed adapter", trackingPageUsesAdapter);
+
+const trackingPageKeys = ["stagePage", "itemPage", "updatePage", "mediaPage", "historyPage"] as const;
+for (const raw of [undefined, "", " ", "0", "-1", "1.5", "abc", "NaN", "Infinity", "10001", "999999999999999999999", ["2", "3"]]) {
+  const result = projectTrackingReadInputSchema.safeParse(executeTrackingReadInput({ mediaPage: raw }));
+  check(
+    "actual Tracking Page defaults malformed mediaPage " + JSON.stringify(raw) + " without a strict-reader error",
+    result.success && result.data.mediaPage === 1,
+  );
+}
+for (const raw of ["1", "2", "10000"]) {
+  const result = projectTrackingReadInputSchema.parse(executeTrackingReadInput({ mediaPage: raw }));
+  check(
+    "actual Tracking Page preserves valid mediaPage boundary " + raw,
+    result.mediaPage === Number(raw),
+  );
+}
+for (const key of trackingPageKeys) {
+  const raw = Object.fromEntries(trackingPageKeys.map((name) => [name, "2"]));
+  const adapted = executeTrackingReadInput({ ...raw, [key]: "10001", stage: "7", item: "8", update: "9" });
+  const result = projectTrackingReadInputSchema.safeParse(adapted);
+  check(
+    "actual Tracking Page normalizes only malformed " + key + " and preserves selections",
+    result.success && result.data[key] === 1 &&
+      trackingPageKeys.filter((name) => name !== key).every((name) => result.data[name] === 2) &&
+      adapted.stageId === "7" && adapted.itemId === "8" && adapted.updateId === "9" &&
+      result.data.stageId === 7 && result.data.itemId === 8 && result.data.updateId === 9,
+  );
+  for (const invalid of [0, -1, 10001, 1.5]) {
+    check(
+      "strict Tracking read contract still rejects " + key + "=" + invalid,
+      !projectTrackingReadInputSchema.safeParse({ [key]: invalid }).success,
+    );
+  }
+}
+check(
+  "Tracking URL selection IDs retain existing scalar and array behavior",
+  executeTrackingReadInput({ stage: "invalid", item: ["8", "9"], update: "9" }).stageId === "invalid" &&
+    executeTrackingReadInput({ stage: "invalid", item: ["8", "9"], update: "9" }).itemId === undefined &&
+    executeTrackingReadInput({ stage: "invalid", item: ["8", "9"], update: "9" }).updateId === "9",
+);
+
 check(
   "Tracking remains an independent graph and never mutates the Project aggregate schema",
   !/alter\s+table\s+(?:public\.)?projects\b/i.test(foundationMigration) &&
@@ -150,7 +227,7 @@ check(
   "public Item selection preserves the normalized item page",
   /activeStage\.items\.map[\s\S]{0,900}itemPage: detail\.pagination\.items\.page/u.test(
     publicView,
-  ) && publicRoute.includes('itemPage: value("itemPage")'),
+  ) && projectTrackingReadInputSchema.parse(executeTrackingReadInput({ itemPage: "2" })).itemPage === 2,
 );
 check(
   "public child ranges use normalized pages before bounded reads",
