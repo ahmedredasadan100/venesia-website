@@ -89,6 +89,47 @@ function categoryMutationCarriesPublishedAt(source: string): boolean {
   });
 }
 
+// The published column delegates presentation to the canonical grid owner;
+// only the stored timestamp may cross that boundary, without a date fallback.
+function categoryPublicationUsesSharedDateCell(source: string): boolean {
+  const file = ts.createSourceFile("categories-columns.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const imports = file.statements.filter(ts.isImportDeclaration).filter(node =>
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../../components/admin/ui/AdminDataGrid" && !node.importClause?.isTypeOnly);
+  const bindings = imports.flatMap(node => node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+    ? node.importClause.namedBindings.elements.filter(item => !item.isTypeOnly && (item.propertyName ?? item.name).text === "AdminDataGridDateTimeCell") : []);
+  if (bindings.length !== 1) return false;
+  const binding = bindings[0].name.text;
+  let columns = 0, valid = false;
+  const visit = (node: ts.Node) => {
+    if (ts.isObjectLiteralExpression(node)) {
+      const property = (name: string) => node.properties.find((item): item is ts.PropertyAssignment =>
+        ts.isPropertyAssignment(item) && (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === name)?.initializer;
+      const key = property("key"), render = property("renderCell");
+      if (key && ts.isStringLiteral(key) && key.text === "published_at") {
+        columns += 1;
+        const parameter = render && ts.isArrowFunction(render) && render.parameters.length === 1 ? render.parameters[0].name : undefined;
+        const rowBinding = parameter && ts.isObjectBindingPattern(parameter) && parameter.elements.length === 1 &&
+          ts.isIdentifier(parameter.elements[0].name) && parameter.elements[0].name.text === "row" &&
+          !parameter.elements[0].propertyName && !parameter.elements[0].initializer && !parameter.elements[0].dotDotDotToken;
+        let body = rowBinding && render && ts.isArrowFunction(render) ? render.body : undefined;
+        while (body && ts.isParenthesizedExpression(body)) body = body.expression;
+        if (body && ts.isJsxSelfClosingElement(body) && ts.isIdentifier(body.tagName) && body.tagName.text === binding) {
+          const attributes = body.attributes.properties;
+          const values = attributes.filter((item): item is ts.JsxAttribute => ts.isJsxAttribute(item) && item.name.getText(file) === "value");
+          const value = values.length === 1 && values[0].initializer;
+          const fallback = attributes.find(item => ts.isJsxAttribute(item) && item.name.getText(file) === "fallback");
+          valid = !attributes.some(ts.isJsxSpreadAttribute) && !fallback && Boolean(value && ts.isJsxExpression(value) && value.expression &&
+            ts.isPropertyAccessExpression(value.expression) && ts.isIdentifier(value.expression.expression) &&
+            value.expression.expression.text === "row" && value.expression.name.text === "published_at");
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return columns === 1 && valid;
+}
+
 const paths = {
   runtimeCore: "src/lib/admin/form-runtime.ts",
   runtime: "src/components/admin/ui/AdminFormRuntime.tsx",
@@ -214,10 +255,34 @@ check(
     taxonomyFormActions.includes("mutation.category.published_at") &&
     categoryActions.includes('.select("id, is_active, status, published_at, updated_at")') &&
     categoryMutationCarriesPublishedAt(categoryClient) &&
-    categoryColumns.includes("formatAdminDateTime(row.published_at)") &&
+    categoryPublicationUsesSharedDateCell(categoryColumns) &&
     !categoryColumns.includes("formatAdminDateTime(row.created_at ??") &&
     firstPublishMigration.includes("filtered.published_at"),
 );
+
+const publicationColumnFixture = `
+import { AdminDataGridDateTimeCell } from "../../../../components/admin/ui/AdminDataGrid";
+const columns = [{ key: "published_at", renderCell: ({ row }) => (
+  <AdminDataGridDateTimeCell value={row.published_at} fallbackTitle="—" />
+) }];`;
+check("category-first-publish", "the canonical date-cell binding accepts harmless import aliases",
+  categoryPublicationUsesSharedDateCell(publicationColumnFixture) && categoryPublicationUsesSharedDateCell(publicationColumnFixture
+    .replace("{ AdminDataGridDateTimeCell }", "{ AdminDataGridDateTimeCell as PublishedDate }")
+    .replace("<AdminDataGridDateTimeCell", "<PublishedDate")));
+for (const [label, changed] of [
+  ["created timestamp", publicationColumnFixture.replace("value={row.published_at}", "value={row.created_at}")],
+  ["updated timestamp fallback", publicationColumnFixture.replace("value={row.published_at}", "value={row.published_at ?? row.updated_at}")],
+  ["fallback override", publicationColumnFixture.replace('fallbackTitle="—"', "fallback={row.created_at}")],
+  ["prop spread", publicationColumnFixture.replace('fallbackTitle="—"', "{...override}")],
+  ["unbound row", publicationColumnFixture.replace("({ row })", "({ category })")],
+  ["unrelated column", publicationColumnFixture.replace('key: "published_at"', 'key: "created_at"')],
+  ["duplicate published column", publicationColumnFixture + '\nconst duplicate = { key: "published_at", renderCell: () => null };'],
+  ["parallel date owner", publicationColumnFixture.replace("components/admin/ui/AdminDataGrid", "components/admin/ui/ParallelDateGrid")],
+  ["comment-only reference", "/* " + publicationColumnFixture + " */"],
+] as const) {
+  check("category-first-publish", label + " cannot satisfy the stored publication date-cell contract",
+    changed !== publicationColumnFixture && !categoryPublicationUsesSharedDateCell(changed));
+}
 
 const publicationAdapterFixture = `
 const toggleStatus = useCallback(async (category) => {
