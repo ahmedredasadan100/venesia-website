@@ -7,6 +7,21 @@ import { registerCorePageRoute } from './admin-core-form-permission-context.mjs'
 export function buildCoreAuthEntryPlan(manifest){const rows=manifest.filter(row=>row.id==='authentication-login');assert.equal(rows.length,1);assert.equal(rows[0].classification,'explicit_exception');assert.deepEqual(rows[0].surfaces,['admin-login','maintenance-login']);return {consumer:rows[0].id,surfaces:[{id:'admin-login',path:'/admin/login',endpoint:'/api/admin/auth/login'},{id:'maintenance-login',path:'/maintenance',endpoint:'/api/maintenance/login'}],automaticCoverage:[]};}
 export function assertCoreAuthCookieMetadata(cookie,origin,ttl,before,after){assert.ok(cookie);assert.equal(cookie.name,'venesia_admin_session');assert.equal(cookie.domain,new URL(origin).hostname);assert.equal(cookie.path,'/');assert.equal(cookie.httpOnly,true);assert.equal(cookie.sameSite,'Lax');assert.equal(cookie.secure,false);assert.ok(cookie.expires>=before+ttl-2&&cookie.expires<=after+ttl+2,'Only the current owner TTL is accepted.');}
 export function coreAuthEntryBrowserOptions(surfaceId){assert.ok(['admin-login','maintenance-login'].includes(surfaceId));return surfaceId==='maintenance-login'?{serviceWorkers:'block'}:{};}
+export async function assertCoreDashboardEntry(page,{timeout=60_000}={}){
+ const main=page.locator('main');
+ await expect(main.getByRole('heading',{name:'لوحة التحكم',exact:true,level:1})).toBeVisible({timeout});
+ const summary=main.locator('[data-dashboard-readiness-summary]');
+ await expect(summary).toHaveCount(1,{timeout});await expect(summary).toBeVisible({timeout});await expect(summary).toHaveAttribute('role','status',{timeout});
+ const state=await summary.getAttribute('data-dashboard-readiness-summary');
+ assert.ok(['ready','partial','unavailable'].includes(state),'Dashboard readiness must come from the current source-reading summary.');
+ const expected={ready:{label:'قراءة المصادر ناجحة',receipt:'Dashboard جاهزة'},partial:{label:'قراءة جزئية',receipt:'Dashboard جزئية'},unavailable:{label:'القراءة غير متاحة',receipt:'Dashboard غير متاحة'}}[state];
+ await expect(summary).toHaveText(expected.label,{timeout});
+ const banner=main.locator('[data-dashboard-state-banner]');
+ if(state==='ready')await expect(banner).toHaveCount(0,{timeout});
+ else{await expect(banner).toHaveCount(1,{timeout});await expect(banner).toHaveAttribute('data-dashboard-state-banner',state,{timeout});await expect(banner.getByRole('heading',{name:expected.receipt,exact:true,level:2})).toBeVisible({timeout});}
+ // Preserve the existing evidence-state contract; the page title no longer owns readiness.
+ return expected.receipt;
+}
 export async function runCoreAuthEntryJourneys(ctx){
  const {browser,origin,login,run,observe,nativeCheckpoint,ownedNetworkOnly}=ctx;assert.equal(new URL(origin).hostname,'127.0.0.1');assert.ok(login.username&&login.password);
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import('../../src/lib/admin/form-system/adoption-manifest.ts');const session=await jiti.import('../../src/lib/admin/auth/session.ts');const plan=buildCoreAuthEntryPlan(manifest);const checkpoints=[];
@@ -37,7 +52,7 @@ export async function runCoreAuthEntryJourneys(ctx){
    const before=Date.now()/1000,ack=received(200);ack.catch(()=>{});await submit().click();
    try{await Promise.race([held,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Bounded login request hold not reached.')),20_000);})]);await expect(submit()).toBeDisabled();await submit().evaluate(node=>node.click());assert.equal(requests,1);release();await ack;await page.waitForURL(url=>url.pathname==='/admin',{timeout:60_000});assert.equal(requests,1);}finally{clearTimeout(timer);release();await removeHold();}
    const after=Date.now()/1000,cookie=(await context.cookies(origin)).find(row=>row.name===session.ADMIN_SESSION_COOKIE);assertCoreAuthCookieMetadata(cookie,origin,session.ADMIN_SESSION_TTL_SEC,before,after);await native(prefix+'-normal');
-   await page.reload({waitUntil:'domcontentloaded'});await expect(page.getByRole('heading',{name:/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u,level:1})).toBeVisible();await native(prefix+'-reload');
+   await page.reload({waitUntil:'domcontentloaded'});await assertCoreDashboardEntry(page);await native(prefix+'-reload');
    if(prefix==='admin'){
     const remembered=await browser.newContext();await remembered.route('**/*',ownedNetworkOnly);const rememberPage=await remembered.newPage();
     try{await rememberPage.goto(origin+'/admin/login',{waitUntil:'domcontentloaded'});await fillCorePrivateField(rememberPage.locator('input[name="username"]'),login.username);await fillCorePrivateField(rememberPage.locator('input[name="password"]'),login.password);const checkbox=rememberPage.getByRole('checkbox',{name:'تذكرني',exact:true});await checkbox.check();await expect(checkbox).toBeChecked();const beforeRemember=Date.now()/1000;await Promise.all([rememberPage.waitForURL(url=>url.pathname==='/admin',{timeout:60_000}),rememberPage.locator('button[type="submit"]').click()]);const rememberCookie=(await remembered.cookies(origin)).find(row=>row.name===session.ADMIN_SESSION_COOKIE);assertCoreAuthCookieMetadata(rememberCookie,origin,session.ADMIN_SESSION_REMEMBER_TTL_SEC,beforeRemember,Date.now()/1000);await native('admin-remember');}finally{await remembered.close();}
