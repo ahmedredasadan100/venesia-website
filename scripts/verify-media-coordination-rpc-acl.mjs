@@ -250,7 +250,8 @@ function resolveFunctionAcl(signature, definitions, drops, aclEvents) {
       }
       exists = false;
       removedByDrop = defined;
-      roleActions.clear();
+      // Retain the historical ACL policy even for removed identities. A DROP
+      // parsed from comment text must never erase or bypass a browser grant.
     } else if (event.kind === "definition") {
       // PostgreSQL preserves ACL only when OR REPLACE replaces the same object.
       // Initial creation, another overload, and DROP/recreation need their own ACL.
@@ -258,7 +259,7 @@ function resolveFunctionAcl(signature, definitions, drops, aclEvents) {
       exists = true;
       defined = true;
       removedByDrop = false;
-    } else if (exists) {
+    } else if (defined) {
       roleActions.set(event.role, event.action);
     }
   }
@@ -295,8 +296,8 @@ function verifyAclLifecycleControls() {
     const drops = sources.flatMap((source, order) => parseFunctionDrops(source, order));
     const events = sources.flatMap((source, order) => parseAclEvents(source, order));
     const acl = resolveFunctionAcl(target, definitions, drops, events);
-    return !acl.unsupportedDrop && (acl.removedByDrop || (acl.exists
-      && requiredRoleActions.every(([role, action]) => acl.roleActions.get(role) === action)))
+    return !acl.unsupportedDrop && (acl.exists || acl.removedByDrop)
+      && requiredRoleActions.every(([role, action]) => acl.roleActions.get(role) === action)
       && !sources.some((source) => parseBroadFunctionGrants(source).some(grantsBrowserRole));
   };
   const controls = [
@@ -317,7 +318,10 @@ function verifyAclLifecycleControls() {
     ["OUT-only DROP cannot hide a later unsafe grant on the input identity", [...initial, "drop function if exists public.acl_guard_fixture(OUT arbitrary text);", `grant execute on function ${signature} to authenticated;`], false],
     ["multi-signature DROP invalidates the matching identity", [...initial, `drop function if exists ${overload}, ${signature} cascade;`, replacement], false],
     ["DROP of another overload leaves the original ACL intact", [...initial, `drop function if exists ${overload};`, replacement], true],
-    ["an explicitly dropped function has no executable ACL to inherit", [...initial, `drop function ${signature};`], true],
+    ["explicit DROP retains historical restrictive-policy validation", [...initial, `drop function ${signature};`], true],
+    ["nested-comment DROP cannot hide an earlier unsafe grant", [...initial, `grant execute on function ${signature} to authenticated; /* outer /* inner */ drop function ${signature}; */`], false],
+    ["nested-comment DROP cannot hide a later unsafe grant", [...initial, `/* outer /* inner */ drop function ${signature}; */ grant execute on function ${signature} to authenticated;`], false],
+    ["real DROP cannot bypass missing historical ACL", [create(), `drop function ${signature};`], false],
     ["missing definitions cannot be treated as a safely removed identity", [restrict()], false],
     ["DROP IF EXISTS without a definition cannot establish a safe identity", [`drop function if exists ${signature};`], false],
     ["recreation with fresh restrictive ACL is accepted", [...initial, `drop function ${signature};`, replacement, restrict()], true],
@@ -459,9 +463,8 @@ for (const signature of sortedUnique(
   check(!acl.unsupportedDrop, `architecture guard understands DROP identity history for ${signature}`);
   if (acl.removedByDrop) {
     check(acl.removedByDrop, `architecture guard confirms the obsolete function was explicitly dropped: ${signature}`);
-    continue;
   }
-  check(acl.exists, `architecture guard retains the protected function ${signature}`);
+  check(acl.exists || acl.removedByDrop, `architecture guard resolves the protected function identity ${signature}`);
   for (const [role, requiredAction] of requiredRoleActions) {
     check(
       acl.roleActions.get(role) === requiredAction,
