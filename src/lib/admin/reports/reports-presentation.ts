@@ -1,5 +1,5 @@
 import type { AnalyticsMetric } from "./analytics-contract";
-import { formatAdminDateTime } from "../../content-dates";
+import { formatAdminDateTime, serializeAdminDateTimeDisplay } from "../../content-dates";
 import {
   getAdminReportDefinition,
   type AdminReportId,
@@ -614,7 +614,7 @@ export function buildAdminReportExportRows(presentation: AdminReportPresentation
       section: group.title,
       item: item.title,
       value: item.status ?? "record",
-      context: item.meta,
+      context: serializeAdminDateTimeDisplay(item.meta),
     }))),
   ];
 }

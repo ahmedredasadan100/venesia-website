@@ -8,10 +8,13 @@ import {
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 import {
+  AdminCard,
+  AdminFormControlHeader,
   AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormSwitch,
 } from "../../ui";
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
@@ -35,13 +38,16 @@ function VisibilityToggle({
   defaultChecked: boolean;
 }) {
   return (
+    <AdminCard presentation="premium" className="self-start p-3">
     <AdminFormSwitch
       name={name}
-      label={label}
+      label={<AdminFormControlHeader title={label} presentation="compact-inline" icon={<AdminModuleTabIcon name="publish" />} />}
       value="true"
       defaultChecked={defaultChecked}
-      surface
+      embedded
+      embeddedLayout="inline"
     />
+    </AdminCard>
   );
 }
 
@@ -61,7 +67,7 @@ export default function ProjectsHubListingModuleEditor({
         value={config.sort || "homepage_order"}
       />
 
-      <ModuleEditorSection>
+      <>
         <p className="text-xs leading-6 text-white/45">
           يتحكّم في عنوان قسم القائمة فقط، وليس في بيانات المشروعات.
         </p>
@@ -70,6 +76,8 @@ export default function ProjectsHubListingModuleEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="النص التمهيدي"
+              presentation="premium"
+              icon={<AdminModuleTabIcon name="content" />}
               showName="show_eyebrow"
               boldName="eyebrow_bold"
               alignmentName="eyebrow_alignment"
@@ -91,6 +99,8 @@ export default function ProjectsHubListingModuleEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="عنوان القسم"
+              presentation="premium"
+              icon={<AdminModuleTabIcon name="content" />}
               showName="show_title"
               boldName="title_bold"
               alignmentName="title_alignment"
@@ -107,7 +117,7 @@ export default function ProjectsHubListingModuleEditor({
             </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
-      </ModuleEditorSection>
+      </>
 
       <ModuleEditorSection>
         <ModuleEditorSectionHeading
@@ -125,9 +135,10 @@ export default function ProjectsHubListingModuleEditor({
 
         <ModuleEditorFieldGrid className="mt-4">
           <ModuleEditorField nature="standard" span={4}>
+            <AdminCard presentation="premium" className="self-start p-3">
             <AdminFormListboxSelect
               name="default_filter"
-              label="الفلتر الافتراضي"
+              label={<AdminFormControlHeader title="الفلتر الافتراضي" presentation="compact-inline" icon={<AdminModuleTabIcon name="section" />} />}
               defaultValue={config.defaultFilter}
               options={PROJECTS_HUB_FILTER_IDS.map((filter) => ({
                 value: filter,
@@ -139,26 +150,30 @@ export default function ProjectsHubListingModuleEditor({
                       : "تجاري",
               }))}
             />
+            </AdminCard>
           </ModuleEditorField>
           <ModuleEditorField nature="standard" span={8}>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <AdminFormGrid columns={3}>
               {PROJECTS_HUB_FILTER_IDS.map((filter) => (
+                <AdminCard key={filter} presentation="premium" className="self-start p-3">
                 <AdminFormSwitch
                   key={filter}
                   name="visible_filters"
-                  label={
+                  label={<AdminFormControlHeader presentation="compact-inline" icon={<AdminModuleTabIcon name="section" />} title={
                     filter === "all"
                       ? "كل المشروعات"
                       : filter === "residential"
                         ? "سكني"
                         : "تجاري"
-                  }
+                  } />}
                   value={filter}
                   defaultChecked={config.visibleFilters.includes(filter)}
-                  surface
+                  embedded
+                  embeddedLayout="inline"
                 />
+                </AdminCard>
               ))}
-            </div>
+            </AdminFormGrid>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
@@ -172,7 +187,7 @@ export default function ProjectsHubListingModuleEditor({
           المشروع في قاعدة البيانات.
         </p>
 
-        <AdminFormGrid columns={4}>
+        <AdminFormGrid columns={3}>
           <VisibilityToggle
             name="show_project_image"
             label="إظهار صورة المشروع"
@@ -216,11 +231,10 @@ export default function ProjectsHubListingModuleEditor({
           إعدادات عرض القائمة
         </ModuleEditorSectionHeading>
 
-        <AdminFormGrid columns={5} className="mt-4">
+        <AdminFormGrid columns={3} className="mt-4">
+          <AdminCard presentation="premium" className="self-start p-3">
           <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">
-              عدد المشروعات في الصفحة
-            </span>
+            <AdminFormControlHeader title="عدد المشروعات في الصفحة" presentation="compact-inline" icon={<AdminModuleTabIcon name="overview" />} />
             <input
               name="page_size"
               type="number"
@@ -231,16 +245,19 @@ export default function ProjectsHubListingModuleEditor({
               className={fieldClassName()}
             />
           </label>
+          </AdminCard>
 
+          <AdminCard presentation="premium" className="self-start p-3">
           <AdminFormListboxSelect
             name="default_view"
-            label="وضع العرض الافتراضي"
+            label={<AdminFormControlHeader title="وضع العرض الافتراضي" presentation="compact-inline" icon={<AdminModuleTabIcon name="settings" />} />}
             defaultValue={config.defaultView}
             options={PROJECTS_HUB_VIEW_MODES.map((mode) => ({
               value: mode,
               label: mode === "list" ? "قائمة" : "بطاقات",
             }))}
           />
+          </AdminCard>
           <VisibilityToggle
             name="show_view_toggle"
             label="إظهار زر تغيير طريقة العرض"

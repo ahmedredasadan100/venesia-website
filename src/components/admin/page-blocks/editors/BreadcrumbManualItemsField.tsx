@@ -6,7 +6,8 @@ import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defau
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import type { BreadcrumbBlockItem } from "../../../../lib/page-blocks/configs";
-import { AdminLinkField } from "../../ui";
+import { TrashIcon } from "../../AdminRowActions";
+import { AdminActionButton, AdminFormControlHeader, AdminLinkField } from "../../ui";
 import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
@@ -56,28 +57,33 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <button
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <AdminFormControlHeader
+          title={<span role="heading" aria-level={3}>عناصر المسار اليدوية</span>}
+          description="تُستخدم هذه العناصر عند اختيار المصدر اليدوي."
+        />
+        <AdminActionButton
           type="button"
+          variant="gold"
           onClick={addItem}
           disabled={rows.length >= maxItems}
-          className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
           إضافة عنصر مسار
-        </button>
+        </AdminActionButton>
       </div>
 
       {rows.length ? (
-        <ModuleEditorRepeaterGrid>
+        <ModuleEditorRepeaterGrid presentation="premium">
           {rows.map((item, index) => (
             <ModuleEditorRepeaterCard
               key={item.clientKey}
               title={`عنصر ${index + 1}`}
+              presentation="premium"
               actions={(
                 <>
-                  <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك عنصر المسار ${index + 1} لأعلى`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↑</button>
-                  <button type="button" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك عنصر المسار ${index + 1} لأسفل`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↓</button>
-                  <button type="button" onClick={() => removeItem(index)} aria-label={`حذف عنصر المسار ${index + 1}`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5">حذف</button>
+                  <AdminActionButton type="button" size="icon" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك عنصر المسار ${index + 1} لأعلى`}>↑</AdminActionButton>
+                  <AdminActionButton type="button" size="icon" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك عنصر المسار ${index + 1} لأسفل`}>↓</AdminActionButton>
+                  <AdminActionButton type="button" size="icon" variant="danger" onClick={() => removeItem(index)} aria-label={`حذف عنصر المسار ${index + 1}`}><TrashIcon className="size-5" /></AdminActionButton>
                 </>
               )}
             >
@@ -90,6 +96,8 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
                 label="الرابط"
                 defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
                 showAnchor
+                presentation="inline"
+                actionPresentation="bare"
               />
             </ModuleEditorRepeaterCard>
           ))}

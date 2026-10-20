@@ -12,6 +12,8 @@ import type {
   AdminEntitySearchSuggestion,
 } from "../../../lib/admin/entity-list";
 import type { AdminEntityListFiltersProps } from "../entity-list/AdminEntityListFilters";
+import { AdminDataGridActionIcon } from "../ui/AdminDataGrid";
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 
 type SeriesOption = {
   id: number;
@@ -32,6 +34,30 @@ export type UnifiedContentFilterState = {
 };
 
 const BASE_PATH = "/admin/content/topics";
+
+const TOPICS_FILTER_PANEL_PRESENTATION: NonNullable<AdminEntityListFiltersProps["filterPanelPresentation"]> = {
+  variant: "premium",
+  fullWidthFilterIds: ["content-type", "featured"],
+  fieldIcons: {
+    "content-type": <AdminModuleTabIcon name="content" />,
+    category: <AdminModuleTabIcon name="plans" />,
+    series: <AdminModuleTabIcon name="specifications" />,
+    status: <AdminModuleTabIcon name="overview" />,
+    image: <AdminModuleTabIcon name="media" />,
+    featured: <AdminDataGridActionIcon action="feature" active size="md" />,
+  },
+  optionIcons: {
+    "content-type": {
+      all: <AdminModuleTabIcon name="plans" />,
+      article: <AdminModuleTabIcon name="content" />,
+      news: <AdminModuleTabIcon name="content" />,
+      press: <AdminModuleTabIcon name="content" />,
+      site_update: <AdminModuleTabIcon name="settings" />,
+      video: <AdminModuleTabIcon name="media" />,
+      gallery: <AdminModuleTabIcon name="media" />,
+    },
+  },
+};
 
 /**
  * Thin Topics adapter for the shared Collection toolbar owner. It declares
@@ -169,6 +195,7 @@ export function useUnifiedContentToolbar({
       suggestions,
     },
     filters,
+    filterPanelPresentation: TOPICS_FILTER_PANEL_PRESENTATION,
     values: {
       content_type: values.contentType,
       category: values.category,

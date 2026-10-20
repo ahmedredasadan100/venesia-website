@@ -2443,7 +2443,14 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "dashboard-recent-content",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        {
+          ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+          media: {
+            state: "not_applicable",
+            rationale:
+              "Dashboard thumbnails are read-only projections through the existing Media Catalog and PublicMediaImage renderer; this consumer does not expose the Media selection/upload capability.",
+          },
+        },
         {},
       ),
       feedbackOwner: "not_applicable",
@@ -2473,7 +2480,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       exceptionRationale:
         "The Dashboard view exposes bounded edit navigation but is not a standalone collection lifecycle.",
       rationale:
-        "Recent content and projects are bounded read-model snapshots; the recent-content table and edit/information actions adopt the shared Data Grid and Row Actions presentation owners.",
+        "Recent content and projects are bounded read-model snapshots; the recent-content table and edit/information actions adopt the shared Data Grid and Row Actions presentation owners. This Dashboard snapshot explicitly groups type, category, publication label, and update time below its wrapping title and uses the shared two-action width calculation. Optional topics.image/projects.image references use the existing Media Catalog availability projection and shared PublicMediaImage renderer, with a reserved decorative fallback and no per-row reads. Four-item content/activity excerpts link to the existing full lists; query limits and collection lifecycles remain unchanged.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,

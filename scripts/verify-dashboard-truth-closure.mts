@@ -216,8 +216,18 @@ assert.match(
 );
 assert.match(
   liveProof,
-  /update\(canonicalizeMigrationSql\(String\(registry\[0\]\?\.statement/,
-  "live registry SQL must be canonicalized before provenance hashing",
+  /import \{ assertWholeFileMigrationProvenance \} from "\.\/lib\/migration-provenance\.mjs"/,
+  "live proof must reuse the canonical exact migration provenance owner",
+);
+assert.match(
+  liveProof,
+  /assertWholeFileMigrationProvenance\(\s*\{ version: registry\[0\]\?\.version, name: registry\[0\]\?\.name, statements: registry\[0\]\?\.statements \}/,
+  "live registry identity and original statement receipt must reach the canonical provenance owner",
+);
+assert.doesNotMatch(
+  liveProof,
+  /canonicalizeMigrationSql\(String\(registry\[0\]/,
+  "registry receipt bytes must remain exact; only repository checkout line endings are normalized",
 );
 
 const dashboardSources = `${page}\n${loader}\n${contract}\n${view}`;

@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 
-import { AdminCheckbox, AdminFormSwitch } from "../ui";
+import { AdminCard, AdminCheckbox, AdminFormControlHeader, AdminFormGrid, AdminFormSwitch } from "../ui";
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
+import { adminChoiceButtonClassName } from "../../../lib/admin/admin-ui-styles";
 import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
 
@@ -78,20 +80,11 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
   }
 
   return (
-    <section
-      aria-labelledby="feed-content-scope-title"
-      data-feed-content-scope=""
-      className="space-y-5 rounded-3xl border border-white/10 bg-[#05070B]/72 p-5 md:p-6"
-    >
-      <h3 id="feed-content-scope-title" className="text-lg font-semibold text-[#E5C98F]">
-        نطاق المحتوى
-      </h3>
+    <div data-feed-content-scope="" className="space-y-4">
 
-      <div className="space-y-4 rounded-2xl border border-white/10 bg-black/15 p-4 md:p-5">
-        <h4 className="border-r-2 border-[#D5A640] pr-3 text-sm font-semibold text-white">
-          التصنيفات
-        </h4>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <AdminCard presentation="premium" className="space-y-4 p-4">
+        <AdminFormControlHeader title={<span role="heading" aria-level={3}>التصنيفات</span>} icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+        <AdminFormGrid columns={4}>
           {filterOptions.categories.map((category) => (
             <AdminFormSwitch
               key={category.id}
@@ -103,23 +96,17 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
               surface
             />
           ))}
-        </div>
+        </AdminFormGrid>
         {!filterOptions.categories.length ? (
           <p className="text-xs text-white/45">لا توجد تصنيفات منشورة متاحة.</p>
         ) : null}
-      </div>
+      </AdminCard>
 
-      <div className="space-y-4 rounded-2xl border border-white/10 bg-black/15 p-4 md:p-5">
-        <h4 className="border-r-2 border-[#D5A640] pr-3 text-sm font-semibold text-white">
-          السلاسل
-        </h4>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <AdminCard presentation="premium" className="space-y-4 p-4">
+        <AdminFormControlHeader title={<span role="heading" aria-level={3}>السلاسل</span>} icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+        <AdminFormGrid columns={4}>
           <label
-            className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition focus-within:ring-2 focus-within:ring-[#E2B84F] ${
-              seriesSlugs.length === 0
-                ? "border-[#D5A640] bg-[#D5A640]/15 text-[#F1D49A]"
-                : "border-white/15 bg-white/[0.025] text-white/70 hover:border-white/25 hover:text-white"
-            }`}
+            className={adminChoiceButtonClassName(seriesSlugs.length === 0, "gap-2 focus-within:ring-2 focus-within:ring-[#D8B87A]/70")}
           >
             <AdminCheckbox
               label="كل السلاسل"
@@ -139,11 +126,7 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
             return (
               <label
                 key={series.id}
-                className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition focus-within:ring-2 focus-within:ring-[#E2B84F] ${
-                  selected
-                    ? "border-[#D5A640] bg-[#D5A640]/15 text-[#F1D49A]"
-                    : "border-white/15 bg-white/[0.025] text-white/70 hover:border-white/25 hover:text-white"
-                }`}
+                className={adminChoiceButtonClassName(selected, "gap-2 focus-within:ring-2 focus-within:ring-[#D8B87A]/70")}
               >
                 <AdminCheckbox
                   label={series.name}
@@ -160,8 +143,8 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
               </label>
             );
           })}
-        </div>
-      </div>
-    </section>
+        </AdminFormGrid>
+      </AdminCard>
+    </div>
   );
 }

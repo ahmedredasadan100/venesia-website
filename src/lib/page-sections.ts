@@ -9,6 +9,7 @@ import {
   resolveHeroContentControlsForVariant,
   resolveHeroImageCompositionPreset,
 } from "./hero/hero-content-controls";
+import type { AdminLinkTarget } from "./admin/links/types";
 
 /** Hero owns presentation; domain-backed content is supplied only through typed adapters. */
 export type HeroSourceType = "manual" | "domain-backed";
@@ -83,10 +84,22 @@ export type {
   HeroTextAlignment,
 };
 
+/** Only an explicitly authored target changes legacy Hero navigation. */
+export function readHeroLinkTarget(value: unknown): AdminLinkTarget | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const link = value as Record<string, unknown>;
+  if (link.link_kind === "none") return undefined;
+  return link.target === "_blank" || link.target === "_self" ? link.target : undefined;
+}
+
 export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
   const raw = (hero?.config ?? {}) as Record<string, unknown>;
 
   const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readLink = (value: unknown): Record<string, unknown> | undefined =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined;
   const readBool = (value: unknown) => {
     if (typeof value === "boolean") return value;
     if (value === "true" || value === 1) return true;
@@ -120,8 +133,10 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
     mobileImages: mobileImages.length ? mobileImages : undefined,
     primaryCtaLabel: readText(raw.primaryCtaLabel) || readText(raw.primary_cta_label) || undefined,
     primaryCtaHref: readText(raw.primaryCtaHref) || readText(raw.primary_cta_href) || undefined,
+    primaryCtaLink: readLink(raw.primaryCtaLink),
     secondaryCtaLabel: readText(raw.secondaryCtaLabel) || readText(raw.secondary_cta_label) || undefined,
     secondaryCtaHref: readText(raw.secondaryCtaHref) || readText(raw.secondary_cta_href) || undefined,
+    secondaryCtaLink: readLink(raw.secondaryCtaLink),
     imageComposition: resolveHeroImageCompositionPreset(
       readText(raw.imageComposition) ||
         readText(raw.image_composition) ||

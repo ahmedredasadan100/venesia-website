@@ -9,7 +9,8 @@ export async function verifyMediaGuidanceBrowser({authoringOnly=false}={}){
  const loader=path.join(out,'loader.cjs'),picker=path.join(out,'picker.js');
  await writeFile(loader,`module.exports=function(source){return require('typescript').transpileModule(source,{compilerOptions:{jsx:4,target:9,module:99}}).outputText;};`);
  await writeFile(picker,`import React from 'react'; export default function Picker({open,onSelect,onClose}) { return open ? React.createElement('button',{type:'button',onClick:()=>{onSelect('/original.png');onClose();}},'Select fixture asset') : null; }`);
- const css=(await require('postcss')([require('@tailwindcss/postcss')({base:root})]).process('@import "tailwindcss";\n@source "'+path.join(root,'src').replaceAll('\\','/')+'";\n',{from:path.join(root,'src/app/globals.css')})).css;
+ const cssPath=path.join(root,'src/app/globals.css');
+ const css=(await require('postcss')([require('@tailwindcss/postcss')({base:root})]).process(await readFile(cssPath,'utf8')+'\n@source "'+path.join(root,'src').replaceAll('\\','/')+'";\n',{from:cssPath})).css;
  const webpack=require('next/dist/compiled/webpack/webpack').webpack;
  const compiler=webpack({mode:'development',target:'web',entry:path.join(root,'scripts/fixtures/media-guidance-browser.jsx'),output:{path:out,filename:'bundle.js'},resolve:{extensions:['.tsx','.ts','.jsx','.js'],alias:{'server-only':false}},plugins:[new webpack.ProvidePlugin({process:require.resolve("next/dist/build/polyfills/process")}),new webpack.NormalModuleReplacementPlugin(/AdminMediaPickerModal$/,picker)],module:{rules:[{test:/\.[jt]sx?$/,exclude:/node_modules/,use:loader}]},devtool:false});
  await new Promise((resolve,reject)=>compiler.run((error,stats)=>compiler.close(e=>error||e||stats.hasErrors()?reject(error||e||Error(stats.toString({all:false,errors:true}))):resolve())));

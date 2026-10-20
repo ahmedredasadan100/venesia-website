@@ -51,6 +51,220 @@ const rows:Record<string,Record<string,unknown>>={
  cta:{config:cta(form({...title,background_style:"gradient",primary_cta_label:v.primaryLabel,...link("primary_cta",CORE_DOWNLOAD_MEDIA_HREF,"_blank"),primary_cta_link_kind:"download",secondary_cta_label:"",secondary_cta_link_kind:"none"}))},
 };
 for(const kind of ["cards","breadcrumb","cta"])test("Actual "+kind+" Action config builder matches exact authored projection",()=>assertTemplateControlsProjection(kind,JSON.parse(JSON.stringify(rows[kind])),fixtures));
+// CTA family adoption keeps the existing Action builder and public link resolver.
+// These are isolated owner round trips, not database writes or Browser-save evidence.
+const ctaLinkResolver=await jiti.import<typeof import("../src/lib/admin/links/block-config-links.ts")>(resolve(root,"src/lib/admin/links/block-config-links.ts"));
+for(const backgroundImage of ["/images/about/who-we-are.png","/images/111.png","/images/venesia-1.png",""]){
+ test("CTA existing background image survives Action config and read round trip: "+(backgroundImage||"empty"),()=>{
+  const built=cta(form({background_image:backgroundImage,background_style:"gradient"}));
+  const reloaded=configs.asCtaConfig(JSON.parse(JSON.stringify(built)));
+  assert.equal(built.backgroundImage,backgroundImage);
+  assert.equal(reloaded.backgroundImage,backgroundImage);
+  assert.equal(reloaded.backgroundStyle,"gradient");
+ });
+}
+test("CTA all four plain-text fields retain literal copy and existing visibility, weight and alignment",()=>{
+ const fields=["eyebrow","title","description","highlight"] as const;
+ const authored:Record<string,unknown>={};
+ for(const[index,field]of fields.entries())Object.assign(authored,{[field]:field+" *حرفي* <tag> & ١٢٣",["show_"+field]:index%2===0,[field+"_bold"]:index%2!==0,[field+"_alignment"]:["left","center","right","left"][index]});
+ const reloaded=configs.asCtaConfig(JSON.parse(JSON.stringify(cta(form(authored)))));
+ for(const[index,field]of fields.entries()){
+  assert.equal(reloaded[field],authored[field]);
+  assert.deepEqual(configs.resolvePageBlockTextFormat(reloaded,field),{visible:index%2===0,bold:index%2!==0,alignment:authored[field+"_alignment"]});
+ }
+});
+test("CTA group visibility, alignment and explicit Bold round trip through the existing formatter",()=>{
+ for(const show of [false,true])for(const alignment of ["right","center","left"])for(const bold of [false,true]){
+  const built=cta(form({show_cta:show,cta_alignment:alignment,cta_bold:bold}));
+  assert.equal(built.showCta,show);
+  assert.equal(built.ctaAlignment,alignment);
+  assert.equal(built.ctaBold,bold);
+  const reloaded=configs.asCtaConfig(JSON.parse(JSON.stringify(built)));
+  assert.deepEqual(configs.resolvePageBlockTextFormat(reloaded,"cta"),{visible:show,bold,alignment});
+ }
+});
+test("CTA legacy absent Bold remains unset through unchanged Action save and config read",()=>{
+ const built=cta(form({show_cta:true,cta_alignment:"right"}));
+ assert.equal(Object.hasOwn(built,"ctaBold"),false);
+ const reloaded=configs.asCtaConfig(JSON.parse(JSON.stringify(built)));
+ assert.equal(reloaded.ctaBold,undefined);
+ for(const raw of [{},{ctaBold:undefined},{ctaBold:null},{cta_bold:null}])assert.equal(configs.asCtaConfig(raw).ctaBold,undefined);
+ for(const bold of [false,true]){
+  assert.equal(configs.asCtaConfig({ctaBold:bold}).ctaBold,bold);
+  assert.equal(configs.asCtaConfig({cta_bold:bold}).ctaBold,bold);
+ }
+});
+const ctaAuthoredLinks=configs.asCtaConfig(JSON.parse(JSON.stringify(cta(form({
+ primary_cta_label:"مشروعاتنا",primary_cta_link_kind:"static_route",primary_cta_link_route_key:"about",primary_cta_link_href:"/about",primary_cta_link_anchor:"team",primary_cta_link_target:"_blank",
+ secondary_cta_label:"تواصل معنا",...link("secondary_cta","https://example.com/contact","_self"),
+})))));
+const ctaResolvedLinks=await ctaLinkResolver.resolveCtaBlockConfigLinks(ctaAuthoredLinks);
+test("CTA canonical save/read/public resolver preserves both fixed links, target and internal Anchor",()=>{
+ assert.equal(ctaAuthoredLinks.primaryCta?.href,undefined);
+ assert.equal(ctaAuthoredLinks.primaryCta?.link?.link_kind,"static_route");
+ assert.equal(ctaAuthoredLinks.primaryCta?.link?.anchor,"team");
+ assert.equal(ctaResolvedLinks.primaryCta?.href,"/about#team");
+ assert.equal(ctaResolvedLinks.primaryCta?.target,"_blank");
+ assert.equal(ctaResolvedLinks.primaryCta?.label,"مشروعاتنا");
+ assert.equal(ctaResolvedLinks.secondaryCta?.href,"https://example.com/contact");
+ assert.equal(ctaResolvedLinks.secondaryCta?.target,"_self");
+ assert.equal(ctaResolvedLinks.secondaryCta?.label,"تواصل معنا");
+ assert.deepEqual(ctaAuthoredLinks.primaryCta?.link,ctaResolvedLinks.primaryCta?.link);
+});
+const ctaClearedLinks=await ctaLinkResolver.resolveCtaBlockConfigLinks(configs.asCtaConfig(JSON.parse(JSON.stringify(cta(form({primary_cta_label:"",primary_cta_link_kind:"none",secondary_cta_label:"",secondary_cta_link_kind:"none"}))))));
+test("CTA cleared links stay absent through actual config read and public resolution",()=>{
+ assert.equal(ctaClearedLinks.primaryCta,undefined);
+ assert.equal(ctaClearedLinks.secondaryCta,undefined);
+});
+const ctaLegacyLinks=await ctaLinkResolver.resolveCtaBlockConfigLinks(configs.asCtaConfig({primaryCta:{label:"رابط قديم",href:"/projects"},secondaryCta:{label:"خارجي قديم",href:"https://example.com/legacy"}}));
+test("CTA legacy href-only data still resolves through the existing shared link owner",()=>{
+ assert.equal(ctaLegacyLinks.primaryCta?.href,"/projects");
+ assert.equal(ctaLegacyLinks.primaryCta?.label,"رابط قديم");
+ assert.equal(ctaLegacyLinks.secondaryCta?.href,"https://example.com/legacy");
+ assert.equal(ctaLegacyLinks.secondaryCta?.label,"خارجي قديم");
+});
+
+const aboutCtaMapper=await jiti.import<typeof import("../src/components/modules/about-cta-mappers.ts")>(resolve(root,"src/components/modules/about-cta-mappers.ts"));
+const topicsCtaMapper=await jiti.import<typeof import("../src/components/topics/topics-cms-mappers.ts")>(resolve(root,"src/components/topics/topics-cms-mappers.ts"));
+const contactCtaMapper=await jiti.import<typeof import("../src/components/contact/contact-cms-mappers.ts")>(resolve(root,"src/components/contact/contact-cms-mappers.ts"));
+const ctaPublicBlock=(config: import("../src/lib/page-blocks/configs.ts").CtaBlockConfig,slug: string): import("../src/lib/page-blocks/types.ts").ResolvedPageBlock=>({
+ assignmentId:1,blockType:"cta",templateId:1,slot:"bottom",sortOrder:0,isVisible:true,
+ template:{id:1,name:"CTA isolated fixture",slug,description:null,variant:"band",style_preset:"premium-dark",status:"published",sort_order:0,config},
+});
+test("CTA public weight owner preserves existing per-renderer weights while honoring both explicit states",()=>{
+ for(const legacy of ["font-medium","font-semibold"] as const){
+  assert.equal(configs.pageBlockCtaFontWeightClass(undefined,legacy),legacy);
+  assert.equal(configs.pageBlockCtaFontWeightClass(true,legacy),"font-bold");
+  assert.equal(configs.pageBlockCtaFontWeightClass(false,legacy),"font-normal");
+ }
+});
+for(const bold of [undefined,false,true])test("CTA actual public mappers retain copy, links and images with optional Bold: "+String(bold),()=>{
+ const config={...ctaResolvedLinks,eyebrow:"تمهيد",title:"عنوان",description:"نص حرفي *كما هو*",backgroundImage:"/images/111.png",...(bold===undefined?{}:{ctaBold:bold})};
+ const about=aboutCtaMapper.mapLegacyProjectsCtaBlock(ctaPublicBlock(config,"about-projects-cta"));
+ const topics=topicsCtaMapper.mapTopicsInsightCtaBlock(ctaPublicBlock(config,"topics-insight-cta"));
+ const contact=contactCtaMapper.mapContactCtaBlock(ctaPublicBlock(config,"contact-cta"));
+ for(const mapped of [about,topics,contact]){
+  assert.equal(mapped.ctaBold,bold);
+  assert.equal(mapped.title,config.title);
+ }
+ assert.equal(about.description,config.description);
+ assert.equal(topics.description,config.description);
+ assert.equal(contact.text,config.description);
+ assert.equal(about.button.href,"/about#team");
+ assert.equal(topics.buttonHref,"/about#team");
+ assert.equal(contact.primaryHref,"/about#team");
+ assert.equal(contact.secondaryHref,"https://example.com/contact");
+ assert.equal(about.image,config.backgroundImage);
+ assert.equal(contact.image,config.backgroundImage);
+ for(const slug of ["contact-cta","track-contact-cta"])assert.equal(contactCtaMapper.isContactStyleCtaBlock(ctaPublicBlock(config,slug)),true);
+ for(const slug of ["about-projects-cta","topics-insight-cta"])assert.equal(contactCtaMapper.isContactStyleCtaBlock(ctaPublicBlock(config,slug)),false);
+});
+test("Non-CTA About and home-contact mapper does not adopt CTA family weight configuration",()=>{
+ const block=ctaPublicBlock({title:"عنوان",ctaBold:true},"home-contact");
+ const contentBlock={...block,blockType:"content" as const,template:{...block.template,config:{title:"عنوان",button:{label:"زر",href:"/contact"}}}};
+ const result=aboutCtaMapper.mapAboutCtaBlock(contentBlock);
+ assert.equal(Object.hasOwn(result,"ctaBold"),false);
+ assert.equal(result.button.href,"/contact");
+ assert.equal(result.title,"عنوان");
+});
+
+// Cards adoption retains the existing structured writer, legacy link normalization and specialized projections.
+const cardsLinkDefaults=await jiti.import<typeof import("../src/lib/admin/links/link-defaults.ts")>(resolve(root,"src/lib/admin/links/link-defaults.ts"));
+const principlesCardsMapper=await jiti.import<typeof import("../src/components/modules/about-principles-mappers.ts")>(resolve(root,"src/components/modules/about-principles-mappers.ts"));
+function cardsFixtureForm(items: import("../src/lib/page-blocks/configs.ts").CardsBlockItem[], fields:Record<string,unknown>={}){
+ const values:Record<string,unknown>={...fields};
+ items.forEach((item,index)=>{
+  const prefix="item_"+index,selected=cardsLinkDefaults.linkDefaultFromContainer(item as Record<string,unknown>);
+  Object.assign(values,{[prefix+"_title"]:item.title??"",[prefix+"_body"]:item.body??"",[prefix+"_icon"]:item.icon??"",
+   [prefix+"_link_kind"]:selected.link_kind,[prefix+"_linked_type"]:selected.linked_type??"",[prefix+"_linked_id"]:selected.linked_id??"",
+   [prefix+"_link_href"]:selected.href??"",[prefix+"_link_anchor"]:selected.anchor??"",[prefix+"_link_target"]:selected.target??"_self",[prefix+"_link_route_key"]:selected.meta?.route_key??""});
+ });
+ return form(values);
+}
+for(const count of [1,12])test("Cards structured writer preserves exact supported count and order: "+count,()=>{
+ const items=Array.from({length:count},(_,index)=>({title:"بطاقة "+index,body:"وصف *حرفي* <tag>\nفقرة "+index,icon:String(index)}));
+ const loaded=configs.asCardsConfig(JSON.parse(JSON.stringify(cards(cardsFixtureForm(items)))));
+ assert.equal(loaded.items?.length,count);
+ assert.deepEqual(loaded.items?.map(item=>[item.title,item.body,item.icon]),items.map(item=>[item.title,item.body,item.icon]));
+});
+for(const [label,item]of [
+ ["missing title",{body:"وصف"}],["missing body",{title:"عنوان"}],
+ ["blank title",{title:"   ",body:"وصف"}],["blank body",{title:"عنوان",body:"\n "}],
+ ["icon only",{icon:"phone"}],["link only",{href:"/about"}],
+] as const)test("Cards actual validation rejects "+label,()=>assert.throws(()=>cards(cardsFixtureForm([item])),/تحتاج عنوانًا ووصفًا مختصرًا/));
+test("Cards public columns retain2/3/4 and existing fallback without changing card quantity",()=>{
+ for(const [input,expected]of [[undefined,3],[2,2],[3,3],[4,4],[0,3],[1,3],[5,3],["invalid",3]] as const){
+  const fields=input===undefined?{}:{columns:input};
+  const loaded=configs.asCardsConfig(JSON.parse(JSON.stringify(cards(cardsFixtureForm([{title:"عنوان",body:"وصف"}],fields)))));
+  assert.equal(loaded.columns,expected);
+  assert.equal(loaded.items?.length,1);
+ }
+});
+test("Cards section copy and formatting preserve literal text and paragraph breaks",()=>{
+ const authored:Record<string,unknown>={};
+ const fields=["eyebrow","title","description"] as const;
+ fields.forEach((field,index)=>Object.assign(authored,{[field]:field+" *حرفي* <tag> &\nفقرة ثانية",["show_"+field]:index%2===0,[field+"_bold"]:index%2!==0,[field+"_alignment"]:["left","center","right"][index]}));
+ const loaded=configs.asCardsConfig(JSON.parse(JSON.stringify(cards(cardsFixtureForm([{title:"بطاقة",body:"وصف"}],authored)))));
+ fields.forEach((field,index)=>{
+  assert.equal(loaded[field],authored[field]);
+  assert.deepEqual(configs.resolvePageBlockTextFormat(loaded,field),{visible:index%2===0,bold:index%2!==0,alignment:authored[field+"_alignment"]});
+ });
+});
+test("Cards legacy items_json contract stays intact and malformed JSON still falls back to structured fields",()=>{
+ const legacy=Array.from({length:13},(_,index)=>({title:"قديم "+index,body:"وصف "+index,href:"/images/111.png",icon:"land"}));
+ assert.deepEqual(cards(form({items_json:JSON.stringify(legacy)})).items,legacy);
+ const fallback=cards(cardsFixtureForm([{title:"منظم",body:"وصف منظم"}],{items_json:"{invalid"}));
+ assert.equal((fallback.items as {title:string}[])[0].title,"منظم");
+ assert.throws(()=>cards(form({items_json:"[]"})),/أضف بطاقة واحدة/);
+ assert.throws(()=>cards(form({items_json:JSON.stringify([{title:"بدون وصف"}])})),/تحتاج عنوانًا ووصفًا مختصرًا/);
+});
+for(const href of ["/images/111.png","/about#team","tel:+201234567890","mailto:cards@example.com","https://example.com/cards",""]){
+ const built=configs.asCardsConfig(JSON.parse(JSON.stringify(cards(cardsFixtureForm([{title:"رابط قديم",body:"وصف",href}])))));
+ const resolved=await ctaLinkResolver.resolveCardsBlockConfigLinks(built);
+ test("Cards legacy href normalizes through actual editor default, writer and public resolver: "+(href||"empty"),()=>{
+  assert.equal(built.items?.[0].href,undefined);
+  assert.equal(resolved.items?.[0].href,href||undefined);
+  assert.equal(resolved.items?.[0].title,"رابط قديم");
+  if(href)assert.ok(built.items?.[0].link);
+  else assert.equal(built.items?.[0].link,undefined);
+ });
+}
+const cardsTargetResolved=await ctaLinkResolver.resolveCardsBlockConfigLinks(configs.asCardsConfig(JSON.parse(JSON.stringify(cards(cardsFixtureForm([
+ {title:"داخلي",body:"وصف",link:{link_kind:"static_route",href:"/about",anchor:"team",meta:{route_key:"about"},target:"_blank"}},
+ {title:"خارجي",body:"وصف",link:{link_kind:"external",href:"https://example.com/cards",target:"_self"}},
+]))))));
+test("Cards canonical links preserve explicit targets and Anchor in saved and resolved configuration",()=>{
+ assert.deepEqual(cardsTargetResolved.items?.map(item=>[item.href,item.target]),[["/about#team","_blank"],["https://example.com/cards","_self"]]);
+});
+for(const spec of [
+ {slug:"about-documentary-beats",count:3,columns:3},{slug:"about-principles",count:3,columns:3},
+ {slug:"contact-trust-cards",count:4,columns:4},{slug:"contact-reasons",count:3,columns:3},
+ {slug:"contact-departments",count:3,columns:3},{slug:"contact-faq",count:6,columns:2},
+]){
+ const items=Array.from({length:spec.count},(_,index)=>({title:"عنوان "+index,body:"قيمة "+index+"\nوصف *حرفي* <tag>",icon:["phone","whatsapp","mail","location"][index%4],href:spec.slug==="contact-departments"?"/images/111.png":"/about#team"}));
+ const loaded=await ctaLinkResolver.resolveCardsBlockConfigLinks(configs.asCardsConfig(JSON.parse(JSON.stringify(cards(cardsFixtureForm(items,{eyebrow:"تمهيد",title:"عنوان القسم",description:"وصف القسم",columns:spec.columns}))))));
+ const block:import("../src/lib/page-blocks/types.ts").ResolvedPageBlock={assignmentId:1,blockType:"cards",templateId:1,slot:"main",sortOrder:0,isVisible:true,template:{id:1,name:"Cards isolated fixture",slug:spec.slug,description:null,variant:"glass",style_preset:"premium-dark",status:"published",sort_order:0,config:loaded}};
+ test("Cards observed family shape round trip preserves specialized meaning: "+spec.slug,()=>{
+  assert.equal(loaded.columns,spec.columns);
+  assert.equal(loaded.items?.length,spec.count);
+  assert.deepEqual(loaded.items?.map(item=>[item.title,item.body,item.icon,item.href]),items.map(item=>[item.title,item.body,item.icon,item.href]));
+  if(spec.slug==="about-principles"){
+   const mapped=principlesCardsMapper.mapLegacyPrinciplesCardsBlock(block);
+   assert.equal(mapped.description,"");
+   assert.deepEqual(mapped.items,items.map(item=>({icon:item.icon,title:item.title,description:item.body})));
+  }else if(spec.slug==="contact-trust-cards"){
+   assert.deepEqual(contactCtaMapper.mapContactTrustCardsBlock(block),items.map((item,index)=>({type:item.icon,label:item.title,value:"قيمة "+index,description:"وصف *حرفي* <tag>",href:item.href})));
+  }else if(spec.slug==="contact-reasons"){
+   assert.deepEqual(contactCtaMapper.mapContactReasonsBlock(block),{title:"عنوان القسم",items:items.map(item=>({title:item.title,text:item.body}))});
+  }else if(spec.slug==="contact-departments"){
+   assert.deepEqual(contactCtaMapper.mapContactDepartmentsBlock(block),{title:"عنوان القسم",items:items.map(item=>({title:item.title,text:item.body,image:item.href}))});
+   assert.equal(adminUtils.isPageModulePubliclyVisible(false,"published"),false);
+  }else if(spec.slug==="contact-faq"){
+   assert.deepEqual(contactCtaMapper.mapContactFaqBlock(block),{title:"عنوان القسم",items:items.map(item=>({question:item.title,answer:item.body}))});
+  }
+ });
+}
+
 test("Cards empty aggregate rejected by actual builder",()=>assert.throws(()=>cards(new FormData())));
 test("Cards half-authored row rejected by actual builder",()=>assert.throws(()=>cards(form({item_0_title:"missing description"}))));
 test("Breadcrumb href without label rejected by actual builder",()=>assert.throws(()=>breadcrumb(form(link("manual_item_0",v.hrefs[0],"_blank")))));

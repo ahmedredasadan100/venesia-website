@@ -191,9 +191,15 @@ check(
     topicsPage.includes("المحذوفات") &&
     !metricItems.includes("المحذوفات"),
 );
-check(
-  "The core seven Topic metrics stay in one non-wrapping row",
-  [
+const topicMetricAst = ts.createSourceFile("TopicsListClient.tsx", listClient, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let topicMetricRows: ts.ArrayLiteralExpression | undefined;
+const findMetricRows = (node: ts.Node) => {
+  if (ts.isVariableDeclaration(node) && node.name.getText(topicMetricAst) === "metricItems" && node.initializer && ts.isArrayLiteralExpression(node.initializer)) topicMetricRows = node.initializer;
+  ts.forEachChild(node, findMetricRows);
+};
+findMetricRows(topicMetricAst);
+assert.ok(topicMetricRows);
+const expectedMetricLabels = [
     "إجمالي الموضوعات",
     "منشور",
     "غير منشور",
@@ -201,8 +207,35 @@ check(
     "مرتبطة بسلسلة",
     "مميزة",
     "متوسط SEO",
-  ].every((label) => metricItems.includes(label)) &&
-    listClient.includes('className="min-w-[1146px]"'),
+];
+const metricProperty = (node: ts.Expression, name: string) => {
+  assert.ok(ts.isObjectLiteralExpression(node));
+  return node.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && property.name.getText(topicMetricAst) === name)?.initializer;
+};
+const actualMetricLabels = topicMetricRows.elements.map(node => {
+  const label = metricProperty(node, "label");
+  assert.ok(label && ts.isStringLiteral(label));
+  return label.text;
+});
+check(
+  "The core seven Topic metrics retain their exact order while layout can wrap responsively",
+  JSON.stringify(actualMetricLabels) === JSON.stringify(expectedMetricLabels) &&
+    !listClient.includes('className="min-w-[1146px]"'),
+);
+const metricCommands: unknown[][] = [];
+const metricController = { setFilter: (...args: unknown[]) => metricCommands.push(args) };
+for (const item of topicMetricRows.elements) {
+  const onClick = metricProperty(item, "onClick");
+  if (!onClick) continue;
+  const compiled = ts.transpileModule(`const callback = ${onClick.getText(topicMetricAst)}; callback();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  new Function("controller", "resetToView", compiled)(metricController, (view: string) => metricCommands.push(["view", view]));
+}
+check(
+  "Responsive Topic metrics execute their original six query commands and leave SEO non-interactive",
+  JSON.stringify(metricCommands) === JSON.stringify([
+    ["view", "active"], ["status", "published"], ["status", "unpublished"],
+    ["image", "without"], ["seriesId", "any"], ["featured", "yes"],
+  ]) && !metricProperty(topicMetricRows.elements[6], "onClick"),
 );
 check(
   "Trash bulk selection exposes the formal restore and permanent-delete labels",

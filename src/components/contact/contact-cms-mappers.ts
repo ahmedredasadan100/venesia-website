@@ -60,6 +60,7 @@ export type ContactFaqContent = {
 };
 
 export type ContactCtaContent = {
+  ctaBold?: boolean;
   title: string;
   text: string;
   primaryLabel: string;
@@ -192,6 +193,7 @@ export function mapContactCtaBlock(block: ResolvedPageBlock): ContactCtaContent 
   const config = block.template.config as CtaBlockConfig;
 
   return {
+    ...(config.ctaBold === undefined ? {} : { ctaBold: config.ctaBold }),
     title: config.title ?? "",
     text: config.description ?? "",
     primaryLabel: config.primaryCta?.label ?? "",

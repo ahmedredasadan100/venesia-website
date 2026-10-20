@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { AdminFormControlHeader } from "./AdminForm";
 import type { ModuleEditorIconToken } from "../../../lib/page-composition/slot-module-registry";
 
-export type AdminModuleTabIconName = ModuleEditorIconToken;
+export type AdminModuleTabIconName = ModuleEditorIconToken | "database" | "statistics";
 
 type AdminModuleTabNavigationLabel =
   | {
@@ -24,6 +25,8 @@ export type AdminModuleTab = AdminModuleTabNavigationLabel & {
   sectionDescription?: ReactNode;
   /** Optional composition styling for this panel header only. */
   sectionHeaderClassName?: string;
+  /** Opt into the shared control-header scale; existing section headers stay unchanged. */
+  sectionHeaderPresentation?: "default" | "control";
   /** Optional compact context rendered opposite the active section title. */
   sectionSummary?: ReactNode;
   /** Semantic icon rendered by the shared owner. */
@@ -52,7 +55,7 @@ export type AdminModuleTabsProps = {
 };
 
 const ADMIN_EDITOR_TAB_CONTAINER_CLASS_NAME =
-  "flex w-full min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-white/10 bg-[#090D12]/88 p-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "flex w-full min-w-0 flex-nowrap items-center justify-start gap-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-white/10 bg-[#090D12]/88 p-1";
 const ADMIN_EDITOR_TAB_CLASS_NAME =
   "relative inline-flex h-14 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-xl border border-transparent ps-6 pe-6 text-[15px] font-semibold leading-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70";
 const ADMIN_EDITOR_TAB_CONTENT_CLASS_NAME =
@@ -64,9 +67,21 @@ const ADMIN_EDITOR_TAB_INDICATOR_CLASS_NAME =
 const ADMIN_EDITOR_TAB_ACTIVE_INDICATOR_CLASS_NAME =
   "pointer-events-none absolute bottom-0 start-6 end-6 h-0.5 rounded-t-full bg-[#D8B87A]";
 
-function AdminModuleTabIcon({ name }: { name: AdminModuleTabIconName }) {
+export function AdminModuleTabIcon({ name }: { name: AdminModuleTabIconName }) {
   const glyph =
-    name === "content" ? (
+    name === "database" ? (
+      <>
+        <ellipse cx="12" cy="5" rx="8" ry="3" />
+        <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+      </>
+    ) : name === "statistics" ? (
+      <>
+        <path d="M3 21h18" />
+        <rect x="4" y="12" width="4" height="9" rx=".5" />
+        <rect x="10" y="7" width="4" height="14" rx=".5" />
+        <rect x="16" y="3" width="4" height="18" rx=".5" />
+      </>
+    ) : name === "content" ? (
       <>
         <path d="M14 2.75H6.75a2 2 0 0 0-2 2v14.5a2 2 0 0 0 2 2h10.5a2 2 0 0 0 2-2V8Z" />
         <path d="M14 2.75V8h5.25M8 12h8M8 16h6" />
@@ -230,7 +245,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
             : variant === "underline"
               ? "flex border-b border-white/10 bg-[#080B10]/92 px-2"
             : "flex gap-2 border-b border-white/10 pb-3",
-          variant !== "segmented" && variant !== "editor" && nowrap ? "flex-nowrap overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "",
+          variant !== "segmented" && variant !== "editor" && nowrap ? "flex-nowrap overflow-x-auto overscroll-x-contain" : "",
           variant !== "segmented" && variant !== "editor" && !nowrap ? "flex-wrap" : "",
         ].join(" ")}
         role="tablist"
@@ -319,24 +334,37 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
               className={`mb-4 flex min-h-[76px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5 ${tab.sectionHeaderClassName ?? ""}`.trim()}
               data-admin-tab-section-heading={tab.id}
             >
-              <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">
-                <AdminModuleTabIcon name={tab.icon ?? "section"} />
-              </span>
-              <span
-                aria-hidden="true"
-                className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent sm:h-9"
-                data-admin-tab-section-accent
-              />
-              <span className="min-w-0 flex-1">
-                <h2 className="text-lg font-semibold leading-6 text-white sm:text-xl sm:leading-7">
-                  {tab.sectionHeading}
-                </h2>
-                {tab.sectionDescription ? (
-                  <span className="mt-1 block max-w-3xl text-sm leading-5 text-white/45 sm:leading-6">
-                    {tab.sectionDescription}
+              {tab.sectionHeaderPresentation === "control" ? (
+                <div className="min-w-0 flex-1">
+                  <AdminFormControlHeader
+                    presentation="leading-icon"
+                    title={<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}
+                    description={tab.sectionDescription}
+                    icon={<AdminModuleTabIcon name={tab.icon ?? "section"} />}
+                  />
+                </div>
+              ) : (
+                <>
+                  <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">
+                    <AdminModuleTabIcon name={tab.icon ?? "section"} />
                   </span>
-                ) : null}
-              </span>
+                  <span
+                    aria-hidden="true"
+                    className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent sm:h-9"
+                    data-admin-tab-section-accent
+                  />
+                  <span className="min-w-0 flex-1">
+                    <h2 className="text-lg font-semibold leading-6 text-white sm:text-xl sm:leading-7">
+                      {tab.sectionHeading}
+                    </h2>
+                    {tab.sectionDescription ? (
+                      <span className="mt-1 block max-w-3xl text-sm leading-5 text-white/45 sm:leading-6">
+                        {tab.sectionDescription}
+                      </span>
+                    ) : null}
+                  </span>
+                </>
+              )}
               {tab.sectionSummary ? (
                 <div
                   className="flex w-full min-w-0 flex-wrap items-center gap-2 border-t border-white/8 pt-3 sm:ms-auto sm:w-auto sm:max-w-[46%] sm:border-s sm:border-t-0 sm:ps-4 sm:pt-0"

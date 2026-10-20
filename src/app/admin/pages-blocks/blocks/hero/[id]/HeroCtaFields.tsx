@@ -1,6 +1,12 @@
 "use client";
 
-import { AdminFormGrid, AdminLinkField } from "../../../../../../components/admin/ui";
+import {
+  AdminCard,
+  AdminFormControlHeader,
+  AdminFormGrid,
+  AdminLinkField,
+} from "../../../../../../components/admin/ui";
+import { AdminModuleTabIcon } from "../../../../../../components/admin/ui/AdminModuleTabs";
 import type { AdminLinkValue } from "../../../../../../lib/admin/links/types";
 import type { HeroTextAlignment } from "../../../../../../lib/hero/hero-content-controls";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
@@ -63,6 +69,7 @@ export default function HeroCtaFields({
   return (
     <HeroVisibilityAlignRow
       label="تنسيق الأزرار"
+      icon={<AdminModuleTabIcon name="section" />}
       alignmentName="cta_alignment"
       showName="show_cta"
       boldName="cta_bold"
@@ -70,55 +77,64 @@ export default function HeroCtaFields({
       boldDefault={boldDefault}
       enableAlignment={enableAlignment}
       showDefault={showDefault}
-      controlsPlacement="cards"
-      presentation="plain"
+      presentation="premium"
     >
+      <AdminFormGrid columns={2}>
         <div data-hero-cta-row="primary">
-          <AdminFormGrid columns={1}>
-            <label className="block min-w-0 space-y-2">
-              <input
-                name="primary_cta_label"
-                defaultValue={primaryLabel}
-                maxLength={100}
-                aria-label="نص الزر الأساسي"
-                placeholder="نص الزر الأساسي"
-                className={fieldClassName("h-11 min-w-0")}
+          <AdminCard presentation="premium" className="h-full space-y-3 p-3">
+            <AdminFormControlHeader title="الزر الأساسي" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+            <AdminFormGrid columns={1}>
+              <label className="block min-w-0 space-y-2">
+                <input
+                  name="primary_cta_label"
+                  defaultValue={primaryLabel}
+                  maxLength={100}
+                  aria-label="نص الزر الأساسي"
+                  placeholder="نص الزر الأساسي"
+                  className={fieldClassName("h-11 min-w-0")}
+                />
+              </label>
+              <AdminLinkField
+                prefix="primary_cta"
+                label="رابط الزر الأساسي"
+                defaultValue={primaryLink}
+                showAnchor
+                presentation="inline"
+                actionPresentation="bare"
+                chooseLinkLabel="اختيار الرابط"
+                clearLinkLabel="مسح"
               />
-            </label>
-            <AdminLinkField
-              prefix="primary_cta"
-              label="رابط الزر الأساسي"
-              defaultValue={primaryLink}
-              showAnchor
-              presentation="inline"
-              chooseLinkLabel="اختيار الرابط"
-              clearLinkLabel="مسح"
-            />
-          </AdminFormGrid>
+            </AdminFormGrid>
+          </AdminCard>
         </div>
         <div data-hero-cta-row="secondary">
-          <AdminFormGrid columns={1}>
-            <label className="block min-w-0 space-y-2">
-              <input
-                name="secondary_cta_label"
-                defaultValue={secondaryLabel}
-                maxLength={100}
-                aria-label="نص الزر الثانوي"
-                placeholder="نص الزر الثانوي"
-                className={fieldClassName("h-11 min-w-0")}
+          <AdminCard presentation="premium" className="h-full space-y-3 p-3">
+            <AdminFormControlHeader title="الزر الثانوي" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+            <AdminFormGrid columns={1}>
+              <label className="block min-w-0 space-y-2">
+                <input
+                  name="secondary_cta_label"
+                  defaultValue={secondaryLabel}
+                  maxLength={100}
+                  aria-label="نص الزر الثانوي"
+                  placeholder="نص الزر الثانوي"
+                  className={fieldClassName("h-11 min-w-0")}
+                />
+              </label>
+              <AdminLinkField
+                prefix="secondary_cta"
+                label="رابط الزر الثانوي"
+                defaultValue={secondaryLink}
+                showAnchor
+                presentation="inline"
+                actionPresentation="bare"
+                chooseLinkLabel="اختيار الرابط"
+                clearLinkLabel="مسح"
               />
-            </label>
-            <AdminLinkField
-              prefix="secondary_cta"
-              label="رابط الزر الثانوي"
-              defaultValue={secondaryLink}
-              showAnchor
-              presentation="inline"
-              chooseLinkLabel="اختيار الرابط"
-              clearLinkLabel="مسح"
-            />
-          </AdminFormGrid>
+            </AdminFormGrid>
+          </AdminCard>
         </div>
+      </AdminFormGrid>
     </HeroVisibilityAlignRow>
   );
 }

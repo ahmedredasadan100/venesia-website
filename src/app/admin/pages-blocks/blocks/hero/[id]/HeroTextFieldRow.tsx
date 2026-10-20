@@ -5,6 +5,7 @@ import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import type { HeroDescriptionAlignment } from "../../../../../../lib/hero/hero-content-controls";
 import { stripHtml } from "../../../../../../lib/rich-text/html-utils";
 import HeroVisibilityAlignRow from "./HeroVisibilityAlignRow";
+import { AdminModuleTabIcon } from "../../../../../../components/admin/ui/AdminModuleTabs";
 
 type HeroTextFieldRowProps = {
   label: string;
@@ -45,6 +46,8 @@ export default function HeroTextFieldRow({
   return (
     <HeroVisibilityAlignRow
       label={label}
+      icon={<AdminModuleTabIcon name="content" />}
+      presentation="premium"
       alignmentName={alignmentName}
       showName={showName}
       boldName={boldName}
@@ -63,6 +66,7 @@ export default function HeroTextFieldRow({
       ) : null}
       <input
         name={preserveRichText ? `${name}_editor` : name}
+        aria-label={label}
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder={placeholder}

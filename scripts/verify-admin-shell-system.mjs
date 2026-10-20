@@ -1,10 +1,32 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+import React from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
+import ts from "typescript";
+import { createHash } from "node:crypto";
+import postcss from "postcss";
+import { compile } from "@tailwindcss/node";
+import sharp from "sharp";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 const checks = [];
+
+function containsCompanyLiteral(source) {
+  const ast = ts.createSourceFile("shared-core.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let found = false;
+  function visit(node) {
+    const literal = ts.isStringLiteralLike(node) || ts.isJsxText(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node);
+    const modulePath = node.parent && (ts.isImportDeclaration(node.parent) || ts.isExportDeclaration(node.parent)) && node.parent.moduleSpecifier === node;
+    if (literal && !modulePath && /venesia/iu.test(node.text)) found = true;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  return found;
+}
 
 function check(name, condition, detail = "") {
   checks.push({ name, ok: Boolean(condition), detail });
@@ -131,8 +153,8 @@ check(
     !existsSync(resolve(root, "src/components/admin/AdminStatusBadge.tsx")),
 );
 check(
-  "Shell owns the canonical 28px transition without a local header margin",
-  ["flex", "min-w-0", "flex-1", "flex-col", "gap-7", "px-4", "py-4", "sm:px-6", "lg:px-7"].every(
+  "Shell owns the canonical 24px transition without a local header margin",
+  ["flex", "min-w-0", "flex-1", "flex-col", "gap-6", "px-4", "py-4", "sm:px-6", "lg:px-7"].every(
     (token) => /<main className="([^"]+)"/.exec(shell)?.[1].split(" ").includes(token),
   ) && !shell.includes("admin-premium-card mb-5"),
 );
@@ -259,7 +281,7 @@ check(
 check(
   "Company default is isolated in company config",
   company.includes("ADMIN_COMPANY_DEFAULT") &&
-    !shell.toLowerCase().includes("venesia"),
+    !containsCompanyLiteral(shell),
 );
 check(
   "Company identity is editable through existing media management",
@@ -287,13 +309,14 @@ const sharedCoreFiles = [
   "src/components/admin/ui/AdminPageExperience.tsx",
 ];
 const sharedHardcoding = sharedCoreFiles.filter((path) =>
-  /venesia/i.test(read(path)),
+  containsCompanyLiteral(read(path)),
 );
 check(
   "Shared Core contains no company-name hardcoding",
   sharedHardcoding.length === 0,
   sharedHardcoding.join(", "),
 );
+check("Company guard accepts canonical owner imports and rejects literal branding", !containsCompanyLiteral('import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";') && containsCompanyLiteral('<p>Venesia</p>') && containsCompanyLiteral('const name = "Venesia";'));
 
 function collectPages(directory, result = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -438,6 +461,423 @@ check(
     menuItemsGrid.includes("AdminColumnVisibilityMenu") &&
     menuItemsGrid.includes("savePageCompositionColumnPreferences"),
 );
+
+function loadHeader(source) {
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const commonJsModule = { exports: {} };
+  Function("exports", "module", "require", compiled)(commonJsModule.exports, commonJsModule, specifier => {
+    assert.equal(specifier, "react/jsx-runtime");
+    return jsxRuntime;
+  });
+  return commonJsModule.exports.default;
+}
+function verifyHeaderSemantics(source) {
+  const Header = loadHeader(source);
+  const elements = node => {
+    if (Array.isArray(node)) return node.flatMap(elements);
+    return React.isValidElement(node) ? [node, ...elements(node.props.children)] : [];
+  };
+  let cases = 0;
+  for (const variant of ["default", "minimal"]) for (const status of ["ready", "loading", "error", "empty", "under-construction"]) {
+    const action = React.createElement("button", { type: "button", "data-header-action": "", onClick: () => {} }, "إجراء");
+    const tree = Header({ variant, status, title: "العنوان", eyebrow: "السياق", description: "الوصف", badge: "الحالة", breadcrumb: "المسار", meta: "بيانات", actions: action });
+    assert.equal(tree.type, "section");
+    assert.equal(tree.props.dir, "rtl");
+    assert.ok("data-admin-page-header" in tree.props);
+    assert.equal(tree.props["data-admin-page-header-status"], status);
+    assert.equal(tree.props["data-admin-page-header-variant"], variant);
+    const all = elements(tree);
+    assert.equal(all.filter(node => node.type === "h1").length, 1);
+    assert.equal(all.find(node => node.type === "h1").props.children, "العنوان");
+    assert.equal(all.filter(node => node === action).length, 1);
+    assert.equal(all.find(node => node === action).props.type, "button");
+    const text = renderToStaticMarkup(tree).replace(/<[^>]+>/gu, "");
+    assert.ok(text.indexOf("السياق") < text.indexOf("العنوان") && text.indexOf("العنوان") < text.indexOf("الوصف"));
+    for (const slot of ["الحالة", "المسار", "بيانات", "إجراء"]) assert.equal(text.split(slot).length - 1, 1);
+    cases += 1;
+  }
+  const bare = renderToStaticMarkup(React.createElement(Header, { title: "مفرد" }));
+  assert.equal((bare.match(/<h1\b/gu) ?? []).length, 1);
+  assert.ok(!bare.includes("<button") && !bare.includes("<a "));
+  for (const optional of [{ meta: "بيانات فقط" }, { actions: React.createElement("a", { href: "/admin/content/topics" }, "رابط فقط") }]) {
+    const html = renderToStaticMarkup(React.createElement(Header, { title: "مفرد", ...optional }));
+    assert.ok(html.includes(optional.meta ?? "رابط فقط"));
+    assert.equal((html.match(/<h1\b/gu) ?? []).length, 1);
+    cases += 1;
+  }
+  return cases + 1;
+}
+check("Actual shared Header preserves RTL, status, hierarchy and every optional action/context slot", verifyHeaderSemantics(pageHeader) === 13);
+const headerMutants = [
+  pageHeader.replace('dir="rtl"', 'dir="ltr"'),
+  pageHeader.replace("{actions}", "{null}"),
+  pageHeader.replace("data-admin-page-header-status={status}", 'data-admin-page-header-status="ready"'),
+  pageHeader.replaceAll("h1", "h2"),
+];
+check("Header semantic negatives reject wrong direction, dropped actions, fixed status and lost heading", headerMutants.every(source => {
+  if (source === pageHeader) return false;
+  try { verifyHeaderSemantics(source); return false; } catch { return true; }
+}));
+
+// Narrow compiled-property checks complement (and never claim) Browser geometry.
+const layoutCompiler = await compile('@import "tailwindcss" source(none);', { base: root, onDependency() {} });
+function layoutProperties(className, width) {
+  const candidates = new Set(className.split(/\s+/u).filter(Boolean));
+  const properties = {};
+  const important = {};
+  const unescape = selector => selector.replace(/\\([\da-f]{1,6}\s?|.)/giu, (_, escaped) => /^[\da-f]/iu.test(escaped) ? String.fromCodePoint(parseInt(escaped.trim(), 16)) : escaped);
+  postcss.parse(layoutCompiler.build([...candidates])).walkDecls(decl => {
+    const ancestors = [];
+    for (let parent = decl.parent; parent; parent = parent.parent) ancestors.push(parent);
+    const rules = ancestors.filter(parent => parent.type === "rule");
+    if (rules.length !== 1 || !candidates.has(unescape(rules[0].selector).slice(1))) return;
+    if (!ancestors.some(parent => parent.type === "atrule" && parent.name === "layer" && parent.params === "utilities")) return;
+    for (const media of ancestors.filter(parent => parent.type === "atrule" && parent.name === "media")) {
+      const minimum = /^\(width >= ([\d.]+)(rem|px)\)$/u.exec(media.params);
+      assert.ok(minimum, `Unexpected media in these layout probes: ${media.params}`);
+      if (width < Number(minimum[1]) * (minimum[2] === "rem" ? 16 : 1)) return;
+    }
+    for (const property of decl.prop === "overflow" ? ["overflow", "overflow-x", "overflow-y"] : [decl.prop]) {
+      if (important[property] && !decl.important) continue;
+      properties[property] = decl.value;
+      important[property] = Boolean(decl.important);
+    }
+  });
+  return properties;
+}
+function sidebarLayout(source) {
+  const ast = ts.createSourceFile("AdminShell.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let sidebar;
+  const mounts = new Map();
+  const className = node => {
+    const attribute = node.openingElement.attributes.properties.find(property => ts.isJsxAttribute(property) && property.name.getText(ast) === "className");
+    assert.ok(attribute?.initializer && ts.isStringLiteral(attribute.initializer));
+    return attribute.initializer.text;
+  };
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "renderSidebar") sidebar = node;
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === "renderSidebar") {
+      assert.ok(node.arguments.length === 0 || (node.arguments.length === 1 && node.arguments[0].kind === ts.SyntaxKind.TrueKeyword));
+      const mode = node.arguments.length ? "mobile" : "desktop";
+      assert.ok(!mounts.has(mode));
+      let wrapper = node.parent;
+      while (wrapper && !ts.isJsxElement(wrapper)) wrapper = wrapper.parent;
+      assert.ok(wrapper);
+      let dialog = wrapper.parent;
+      while (dialog && !(ts.isJsxElement(dialog) && dialog.openingElement.attributes.properties.some(property => ts.isJsxAttribute(property) && property.name.getText(ast) === "role" && property.initializer && ts.isStringLiteral(property.initializer) && property.initializer.text === "dialog"))) dialog = dialog.parent;
+      if (mode === "mobile") assert.ok(dialog);
+      mounts.set(mode, { wrapper: className(wrapper), dialog: mode === "mobile" ? className(dialog) : null });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(sidebar && mounts.size === 2);
+  const bindings = { collapsed: false, company: { name: "اختبار", cmsLabel: "ADMIN", publicWebsiteUrl: "/" }, navigation: [], activeGroupIds: new Set(), openGroupId: null, pathname: "/admin/content/topics", onNavigateStart() {}, toggleCollapsed() {}, setGroupOverride() {}, CompanyMark: () => null, Link: () => null, AdminNavLink: () => null, VENESIA_SCROLLBAR_VISUAL_CLASSES: "venesia-scrollbar" };
+  const code = ts.transpileModule(sidebar.getText(ast), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const render = Function("require", "exports", ...Object.keys(bindings), code + ";return renderSidebar;")(() => jsxRuntime, {}, ...Object.values(bindings));
+  const result = {};
+  for (const [mode, mount] of mounts) {
+    const tree = render(mode === "mobile");
+    const nav = React.Children.toArray(tree.props.children).find(node => React.isValidElement(node) && node.type === "nav");
+    assert.ok(nav);
+    const width = mode === "desktop" ? 1536 : 390;
+    result[mode] = { wrapper: layoutProperties(mount.wrapper, width), aside: layoutProperties(tree.props.className, width), nav: layoutProperties(nav.props.className, width), ...(mount.dialog ? { dialog: layoutProperties(mount.dialog, width) } : {}) };
+  }
+  const { desktop, mobile } = result;
+  assert.equal(desktop.wrapper.display, "block");
+  for (const node of [desktop.wrapper, desktop.aside]) {
+    assert.ok(!["fixed", "sticky", "absolute"].includes(node.position), "Desktop navigation must participate in normal document flow");
+    assert.ok(!node.height || node.height === "auto");
+    assert.ok(!node["max-height"] || node["max-height"] === "none");
+  }
+  assert.equal(desktop.aside["min-height"], "100vh");
+  assert.ok(!desktop.nav["overflow-y"] || desktop.nav["overflow-y"] === "visible");
+  assert.equal(mobile.dialog.position, "fixed");
+  assert.equal(mobile.wrapper.height, "100%");
+  assert.equal(mobile.aside.height, "100%");
+  assert.equal(mobile.nav["overflow-y"], "auto");
+  return result;
+}
+function dockLayout(source) {
+  const Header = loadHeader(source);
+  const action = React.createElement("button", { type: "button" }, "إجراء");
+  function pathTo(node, target, path = []) {
+    if (Array.isArray(node)) return node.map(child => pathTo(child, target, path)).find(Boolean);
+    if (!React.isValidElement(node)) return null;
+    const next = [...path, node];
+    return node === target ? next : pathTo(node.props.children, target, next);
+  }
+  const path = pathTo(Header({ title: "العنوان", actions: action }), action);
+  assert.ok(path && path.length >= 3);
+  const inner = layoutProperties(path.at(-2).props.className, 1536);
+  const outer = layoutProperties(path.at(-3).props.className, 1536);
+  assert.equal(inner.width, "fit-content", "Default action dock must use content width");
+  assert.equal(inner["max-width"], "100%");
+  assert.equal(inner["margin-inline-start"], "auto", "Default action dock must align externally left in RTL");
+  assert.equal(inner["flex-wrap"], "wrap");
+  assert.equal(inner.gap, "calc(var(--spacing) * 2)");
+  assert.equal(inner.padding, "calc(var(--spacing) * 2)");
+  assert.equal(outer.flex, "0 1 34rem");
+  assert.equal(outer["margin-inline-start"], "auto", "Wrapped default outer dock must align externally left in RTL");
+  return { inner, outer };
+}
+check("Compiled actual desktop Sidebar grows with the document while the mobile drawer retains bounded native scroll", Boolean(sidebarLayout(shell)));
+const sidebarMutants = [
+  shell.replace('className="hidden shrink-0 bg-transparent lg:block"', 'className="hidden shrink-0 bg-transparent lg:block [position:sticky] [height:100vh]"'),
+  shell.replace('forceExpanded ? "h-full" : "min-h-screen"', 'forceExpanded ? "h-full" : "[height:100vh] min-h-screen"'),
+  shell.replace('forceExpanded ? "overflow-y-auto " : ""', 'forceExpanded ? "overflow-y-auto " : "[overflow-y:auto] "'),
+  shell.replace('forceExpanded ? "overflow-y-auto " : ""', 'forceExpanded ? "[overflow-y:visible] " : ""'),
+];
+check("Equivalent-property negatives reject desktop sticky/viewport/nav scrolling and loss of mobile native scroll", sidebarMutants.every(source => {
+  if (source === shell) return false;
+  try { sidebarLayout(source); return false; } catch { return true; }
+}));
+check("Compiled actual default action dock fits its contents without changing outer basis, padding or gap", Boolean(dockLayout(pageHeader)));
+const dockMutants = [
+  pageHeader.replace("flex w-fit min-w-0", "flex min-w-0"),
+  pageHeader.replace("flex w-fit min-w-0", "flex [width:100%] min-w-0"),
+  pageHeader.replace("flex w-fit min-w-0", "flex w-fit [width:100%]! min-w-0"),
+  pageHeader.replace("isolate ms-auto flex", "isolate [margin-inline-start:0] flex"),
+  pageHeader.replace("isolate ms-auto flex", "isolate me-auto flex"),
+  pageHeader.replace("flex-[0_1_34rem]", "[flex:1_1_34rem]"),
+  pageHeader.replace("max-w-full flex-wrap", "max-w-full flex-nowrap"),
+  pageHeader.replace(/(minimal\s*\?\s*"lg:shrink-0"\s*:\s*")([^"]*)(")/u, (_, prefix, classes, suffix) => prefix + classes.replace(/\bms-auto\b/u, "me-auto") + suffix),
+];
+check("Equivalent-property negatives reject stretched/filled docks, wrong RTL anchoring and expanded outer basis", dockMutants.every(source => {
+  if (source === pageHeader) return false;
+  try { dockLayout(source); return false; } catch { return true; }
+}));
+
+async function verifyGlobalHeader(source) {
+  const ast = ts.createSourceFile("AdminShell.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let header, companyMark, mainClasses;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "CompanyMark") companyMark = node;
+    if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(property => ts.isJsxAttribute(property) && property.name.getText(ast) === "data-admin-shell-header")) header = node;
+    if (ts.isJsxOpeningElement(node) && node.tagName.getText(ast) === "main") mainClasses = node.attributes.properties.find(property => ts.isJsxAttribute(property) && property.name.getText(ast) === "className")?.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(header && companyMark && mainClasses && ts.isStringLiteral(mainClasses));
+  const code = ts.transpileModule(`${companyMark.getText(ast)}\nfunction renderGlobalHeader(){return (${header.getText(ast)});}`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const company = { name: "شركة اختبار", cmsLabel: "TEST CMS", adminLabel: "إدارة الاختبار", publicWebsiteUrl: "/public-fixture", accentColor: "#d8b87a", logoUrl: "", compactLogoUrl: "" };
+  let cases = 0;
+  for (const width of [390, 820, 1536]) for (const pendingHref of [null, "/admin/content/categories"]) {
+    const events = [], state = [];
+    let releaseLogout;
+    const bindings = { company, pendingHref, pathname: "/admin/content/topics", setMobileState: value => state.push(value), fetch: (url, options) => { events.push({ type: "fetch", url, options }); return new Promise(resolve => { releaseLogout = resolve; }); }, window: { location: { assign: url => events.push({ type: "assign", url }) } } };
+    const { renderGlobalHeader, CompanyMark } = Function("require", "exports", ...Object.keys(bindings), code + ";return {renderGlobalHeader,CompanyMark};")(() => jsxRuntime, {}, ...Object.values(bindings));
+    const tree = renderGlobalHeader();
+    assert.equal(tree.type, "header"); assert.ok("data-admin-shell-header" in tree.props);
+    const shellPadding = layoutProperties(tree.props.className, width);
+    assert.equal(shellPadding["padding-inline"], "calc(var(--spacing) * 4)", "Global Header horizontal padding remains16px");
+    assert.equal(shellPadding["padding-block"], "calc(var(--spacing) * 3)", "Global Header vertical padding is12px");
+    assert.equal(shellPadding.padding, undefined, "Global Header does not restore all-axis padding");
+    assert.equal(layoutProperties(mainClasses.text, width).gap, "calc(var(--spacing) * 6)", "Main cadence is24px");
+    const row = tree.props.children;
+    const groups = React.Children.toArray(row.props.children).filter(React.isValidElement);
+    assert.equal(groups.length, 2);
+    const rowStyle = layoutProperties(row.props.className, width);
+    assert.equal(rowStyle.gap, "calc(var(--spacing) * 4)");
+    assert.equal(rowStyle["flex-direction"], width < 640 ? "column" : "row");
+    for (const group of groups) assert.equal(layoutProperties(group.props.className, width).gap, "calc(var(--spacing) * 3)");
+    const menu = React.Children.toArray(groups[0].props.children).find(node => React.isValidElement(node) && node.type === "button");
+    const controls = React.Children.toArray(groups[1].props.children).filter(React.isValidElement);
+    const logout = controls.find(node => node.type === "button");
+    assert.ok(menu && logout);
+    assert.equal(menu.props.type, "button"); assert.equal(menu.props["aria-label"], "فتح القائمة");
+    const menuStyle = layoutProperties(menu.props.className, width);
+    assert.equal(menuStyle.display, width < 1024 ? "grid" : "none");
+    assert.equal(menuStyle.width, "calc(var(--spacing) * 11)"); assert.equal(menuStyle.height, "calc(var(--spacing) * 11)");
+    menu.props.onClick(); assert.deepEqual(state, [{ pathname: "/admin/content/topics", open: true }]);
+    assert.equal(logout.props.type, "button"); assert.equal(logout.props.children.trim(), "خروج");
+    const statuses = controls.filter(node => node.props.role === "status");
+    assert.equal(statuses.length, pendingHref ? 1 : 0);
+    if (pendingHref) assert.ok(statuses[0].props.children.trim().length > 0);
+    const mark = CompanyMark({ company, compact: false });
+    assert.equal(mark.props["aria-label"], company.name); assert.equal(mark.props.children, "شر");
+    const markStyle = layoutProperties(mark.props.className, width);
+    assert.equal(markStyle.width, "calc(var(--spacing) * 10)"); assert.equal(markStyle.height, "calc(var(--spacing) * 10)");
+    const media = CompanyMark({ company: { ...company, logoUrl: "/synthetic-logo.svg" }, compact: false }).props.children;
+    assert.equal(media.type, "img"); assert.equal(media.props.alt, ""); assert.equal(media.props.src, "/synthetic-logo.svg");
+    const operation = logout.props.onClick();
+    assert.deepEqual(events, [{ type: "fetch", url: "/api/admin/auth/logout", options: { method: "POST", credentials: "same-origin" } }], "Logout uses its exact existing request without navigating early");
+    releaseLogout({ ok: true }); await operation;
+    assert.deepEqual(events[1], { type: "assign", url: company.publicWebsiteUrl }); assert.equal(events.length, 2);
+    const html = renderToStaticMarkup(tree);
+    assert.ok(html.includes(company.adminLabel) && html.includes(company.cmsLabel));
+    cases += 1;
+  }
+  return cases;
+}
+check("Actual global Header preserves six responsive/pending states, exact compact spacing, identity and injected menu/logout behavior", await verifyGlobalHeader(shell) === 6);
+const globalHeaderMutants = [
+  shell.replace("admin-premium-card rounded-[28px] px-4 py-3", "admin-premium-card rounded-[28px] p-4"),
+  shell.replace('gap-6 px-4 py-4 sm:px-6 lg:px-7', 'gap-7 px-4 py-4 sm:px-6 lg:px-7'),
+  shell.replace('method: "POST", credentials: "same-origin"', 'method: "GET", credentials: "same-origin"'),
+  shell.replace('method: "POST", credentials: "same-origin"', 'method: "POST", credentials: "omit"'),
+];
+check("Global Header negatives reject former padding/cadence and changed logout method or credentials", (await Promise.all(globalHeaderMutants.map(async source => {
+  if (source === shell) return false;
+  try { await verifyGlobalHeader(source); return false; } catch { return true; }
+}))).every(Boolean));
+
+const acceptanceArgument = process.argv.find(argument => argument.startsWith("--acceptance-file="));
+if (acceptanceArgument) {
+  const acceptancePath = resolve(root, acceptanceArgument.slice("--acceptance-file=".length));
+  const acceptance = JSON.parse(readFileSync(acceptancePath, "utf8"));
+  const externalAlignment = acceptance.scope === "header_external_alignment";
+  const sha = bytes => createHash("sha256").update(bytes).digest("hex");
+  const phaseBaseline = JSON.parse(readFileSync(resolve(dirname(acceptancePath), "baseline.json"), "utf8"));
+  const originalSource = path => {
+    const entry = phaseBaseline.entries.find(item => item.path === path);
+    assert.ok(entry, `Missing phase baseline ${path}`);
+    const bytes = readFileSync(resolve(dirname(acceptancePath), "baseline", path));
+    assert.equal(sha(bytes), entry.sha256.toLowerCase(), `Original source bytes ${path}`);
+    return bytes;
+  };
+  const originalShell = originalSource("src/components/admin/AdminShell.tsx").toString("utf8");
+  const originalHeader = originalSource("src/components/admin/ui/AdminPageContextHeader.tsx").toString("utf8");
+  if (externalAlignment) {
+    sidebarLayout(originalShell);
+    assert.throws(() => dockLayout(originalHeader), /Default action dock must align externally left in RTL/u);
+    check("Exact phase-baseline Header rejects the wrong external anchor while Sidebar normal flow remains protected", true);
+  } else {
+    assert.throws(() => sidebarLayout(originalShell), /Desktop navigation must participate in normal document flow/u);
+    assert.throws(() => dockLayout(originalHeader), /Default action dock must use content width/u);
+    check("Exact phase-baseline Sidebar and filled Header dock are independently rejected for their actual layout properties", true);
+  }
+  const close = (actual, expected, label) => {
+    assert.ok(Number.isFinite(actual) && Number.isFinite(expected) && Math.abs(actual - expected) <= 1, `${label}: ${actual} vs ${expected}`);
+  };
+  const rectEqual = (actual, expected, label) => {
+    for (const key of ["x", "y", "width", "height"]) close(actual[key], expected[key], `${label}.${key}`);
+  };
+  const sources = (entries, current = true) => {
+    assert.ok(Array.isArray(entries) && entries.length > 0);
+    for (const entry of entries) assert.equal(sha(current ? readFileSync(resolve(root, entry.path)) : originalSource(entry.path)), entry.sha256.toLowerCase(), `${current ? "Current" : "Baseline"} source ${entry.path}`);
+    for (const path of ["src/components/admin/AdminShell.tsx", "src/components/admin/ui/AdminPageContextHeader.tsx", "src/app/globals.css"]) assert.ok(entries.some(entry => entry.path === path));
+  };
+  const rasterMetadata = new Map();
+  async function capture(record, current) {
+    assert.equal(record.dir, "rtl");
+    if (externalAlignment) {
+      assert.equal(record.ready, true, "External alignment evidence must capture a ready rendered Header");
+      assert.ok(record.header.title.width > 0 && record.header.title.height > 0 && record.header.text.width > 0 && record.header.text.height > 0, "Header title and content have nonempty rendered bounds");
+      assert.ok(record.header.dock.actions.length > 0 && record.header.dock.actions.every(action => typeof action.text === "string" && action.text.trim().length > 0 && !/loading|جار[ٍي]?\s*(?:التحميل|تحميل)|يرجى الانتظار/iu.test(action.text)), "Actual Header children have meaningful non-loading labels");
+      if (record.header.titleText !== undefined) assert.ok(typeof record.header.titleText === "string" && record.header.titleText.trim().length > 0 && !/loading|جار[ٍي]?\s*(?:التحميل|تحميل)|يرجى الانتظار/iu.test(record.header.titleText), "Captured heading text is meaningful and non-loading");
+    }
+    assert.ok(record.viewport.w > 0 && record.viewport.h > 0);
+    assert.ok(record.root.sw <= record.root.w + 1, "No horizontal document overflow");
+    sources(record.source, current);
+    assert.ok(record.image && /^[\da-f]{64}$/iu.test(record.imageSha256));
+    const image = readFileSync(resolve(dirname(acceptancePath), record.image));
+    assert.equal(sha(image), record.imageSha256.toLowerCase(), `Screenshot ${record.image}`);
+    if (!rasterMetadata.has(record.imageSha256)) rasterMetadata.set(record.imageSha256, sharp(image).metadata());
+    const metadata = await rasterMetadata.get(record.imageSha256);
+    assert.ok(["png", "jpeg", "webp"].includes(metadata.format) && metadata.width > 0 && metadata.height > 0, "Nonempty decoded raster; extension is not assumed to identify its format");
+  }
+  async function verifyAcceptance(bundle) {
+    sources(bundle.sourceFiles);
+    assert.ok(Array.isArray(bundle.pairs) && bundle.pairs.length > 0);
+    assert.equal(new Set(bundle.pairs.map(pair => pair.id)).size, bundle.pairs.length);
+    for (const pair of bundle.pairs) {
+      const { before, after } = pair;
+      await capture(before, false); await capture(after, true);
+      assert.deepEqual(after.viewport, before.viewport);
+      assert.equal(after.url, before.url);
+      close(after.root.top, before.root.top, "Matched document scroll state");
+      for (const key of ["rect", "title", "text"]) rectEqual(after.header[key], before.header[key], `Unchanged header ${key}`);
+      const wrappedOuterLine = externalAlignment && before.header.outer.rect.top >= before.header.text.bottom - 1 && after.header.outer.rect.top >= after.header.text.bottom - 1;
+      if (wrappedOuterLine) {
+        for (const key of ["y", "width", "height"]) close(after.header.outer.rect[key], before.header.outer.rect[key], `Unchanged wrapped outer dock ${key}`);
+        close(after.header.outer.rect.left, after.header.rect.left + parseFloat(after.header.style.borderLeftWidth) + parseFloat(after.header.style.paddingLeft), "Wrapped outer dock aligns to Header content-left");
+      } else rectEqual(after.header.outer.rect, before.header.outer.rect, "Unchanged outer dock");
+      const { actions, style, rect } = after.header.dock;
+      const originalDock = before.header.dock.rect;
+      const dockTranslation = rect.x - originalDock.x;
+      if (externalAlignment) {
+        const leftEdge = after.header.rect.left + parseFloat(after.header.style.borderLeftWidth) + parseFloat(after.header.style.paddingLeft);
+        close(rect.left, leftEdge, "Dock aligns with the Header's actual external left content edge");
+        close(rect.width, originalDock.width, "Dock width remains unchanged");
+        close(rect.height, originalDock.height, "Dock height remains unchanged");
+        close(rect.y, originalDock.y, "Dock vertical position remains unchanged");
+      }
+      assert.ok(actions.length > 0);
+      assert.equal(actions.length, before.header.dock.actions.length);
+      actions.forEach((action, index) => {
+        const original = before.header.dock.actions[index];
+        assert.equal(action.text, original.text); assert.equal(action.href, original.href);
+        if (externalAlignment) {
+          close(action.x - original.x, dockTranslation, "Every action translates horizontally with its dock");
+          for (const key of ["y", "width", "height"]) close(action[key], original[key], `Unchanged action ${key}`);
+        } else rectEqual(action, original, "Unchanged action geometry");
+        assert.ok(action.left >= rect.left - 1 && action.right <= rect.right + 1);
+      });
+      for (const key of ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth", "gap"]) assert.equal(style[key], before.header.dock.style[key]);
+      const rowCount = entries => {
+        const rows = [];
+        for (const action of entries) {
+          const center = action.y + action.height / 2;
+          if (!rows.some(row => Math.abs(row - center) <= 1)) rows.push(center);
+        }
+        return rows.length;
+      };
+      assert.equal(rowCount(actions), rowCount(before.header.dock.actions), "Responsive row membership remains unchanged");
+      if (rowCount(actions) === 1) {
+        const union = Math.max(...actions.map(action => action.right)) - Math.min(...actions.map(action => action.left));
+        const edges = ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"].reduce((total, key) => total + parseFloat(style[key]), 0);
+        close(rect.width, union + edges, "One-row dock fits actual content and edges");
+      } else {
+        assert.ok(rect.width <= after.header.outer.rect.width + 1, "Wrapped dock stays within available width at any viewport; natural row space is allowed");
+      }
+      if (after.sidebar && after.viewport.w >= 1024) {
+        assert.equal(after.sidebar.wrapper.style.position, "static");
+        assert.equal(after.sidebar.nav.style.overflowY, "visible");
+        assert.ok(after.sidebar.nav.sh <= after.sidebar.nav.h + 1);
+        close(after.sidebar.nav.top, 0, "Desktop navigation has no independent scroll offset");
+      } else if (String(pair.mode).includes("drawer")) {
+        assert.ok(after.sidebar);
+        assert.equal(after.sidebar.nav.style.overflowY, "auto");
+        close(after.sidebar.rect.height, after.viewport.h, "Mobile drawer stays viewport bounded");
+      }
+    }
+    if (externalAlignment) return bundle.pairs.length;
+    const { before, after } = bundle.wheel;
+    assert.deepEqual(after.viewport, before.viewport); assert.equal(after.url, before.url);
+    const base = bundle.pairs.find(pair => pair.before.url === before.url && JSON.stringify(pair.before.viewport) === JSON.stringify(before.viewport) && pair.before.sidebar && pair.before.viewport.w >= 1024);
+    assert.ok(base, "Wheel measurement has a matched pre-wheel state");
+    sources(before.source, false); sources(after.source);
+    close(before.root.top, base.before.root.top, "Old wheel leaves document unchanged");
+    assert.ok(before.sidebar.nav.top - base.before.sidebar.nav.top > 10, "Old wheel demonstrably scrolled navigation");
+    const documentDelta = after.root.top - base.after.root.top;
+    assert.ok(documentDelta > 10, "New wheel scrolls the document");
+    close(after.sidebar.nav.top, base.after.sidebar.nav.top, "New wheel leaves navigation offset unchanged");
+    close(after.sidebar.wrapper.rect.top, base.after.sidebar.wrapper.rect.top - documentDelta, "Sidebar moves with the document");
+    return bundle.pairs.length;
+  }
+  const pairs = await verifyAcceptance(acceptance);
+  check(externalAlignment ? "Supplied current Browser receipt validates external left alignment, unit translation and raster/source hashes" : "Supplied current Browser receipt validates paired geometry, raster/source hashes and actual wheel ownership", pairs > 0, `${pairs} matched pairs; Owner visual approval remains separate`);
+  const receiptMutations = [
+    bundle => { bundle.sourceFiles[0].sha256 = "0".repeat(64); },
+    bundle => { bundle.pairs[0].after.viewport.w += 1; },
+    bundle => { bundle.pairs[0].after.imageSha256 = "0".repeat(64); },
+    bundle => { bundle.pairs[0].after.header.dock.rect.width += 50; },
+    bundle => { bundle.pairs[0].after.header.dock.actions[0].x += 2; },
+    externalAlignment ? bundle => {
+      const dock = bundle.pairs[0].after.header.dock;
+      for (const key of ["x", "left", "right"]) dock.rect[key] += 16;
+      for (const action of dock.actions) for (const key of ["x", "left", "right"]) action[key] += 16;
+    } : bundle => { bundle.wheel.after.root.top = 0; },
+    ...(externalAlignment ? [bundle => { bundle.pairs[0].after.ready = false; }] : []),
+  ];
+  check(externalAlignment ? "Browser receipt negatives reject stale evidence, wrong external gap, stretch and nonuniform translation" : "Browser receipt negatives reject stale sources/images, mismatched states, filled docks, moved actions and wrong scroll ownership", (await Promise.all(receiptMutations.map(async mutate => {
+    const altered = structuredClone(acceptance); mutate(altered);
+    try { await verifyAcceptance(altered); return false; } catch { return true; }
+  }))).every(Boolean));
+} else {
+  console.log("Source/SSR/compiled-CSS checks only: actual Browser geometry and Owner visual approval are not inferred.");
+}
 
 const failed = checks.filter((item) => !item.ok);
 console.log(

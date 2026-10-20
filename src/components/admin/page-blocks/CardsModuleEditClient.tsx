@@ -2,7 +2,8 @@
 
 import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
-import { AdminFormListboxSelect, AdminLinkField } from "../ui";
+import { AdminCard, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 import {
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -11,7 +12,6 @@ import {
   ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
-  ModuleEditorSection,
   ModuleEditorTabs,
   ModuleEditorVisibilityAlignRow,
 } from "./ModuleEditorPresentation";
@@ -48,6 +48,8 @@ function renderCardHref(item: CardsBlockItem, index: number) {
       label="الرابط (اختياري)"
       defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
       showAnchor
+      presentation="inline"
+      actionPresentation="bare"
     />
   );
 }
@@ -85,18 +87,7 @@ export default function CardsModuleEditClient({
             name={block.name}
             status={block.status}
             inputClassName={fieldClassName("h-11")}
-          >
-            <AdminFormListboxSelect
-              name="columns"
-              label="عدد الأعمدة"
-              defaultValue={String(config.columns ?? 3)}
-              options={[
-                { value: "2", label: "2" },
-                { value: "3", label: "3" },
-                { value: "4", label: "4" },
-              ]}
-            />
-          </ModuleEditorIdentitySection>
+          />
 
           <ModuleEditorTabs
             moduleKind="cards"
@@ -105,60 +96,95 @@ export default function CardsModuleEditClient({
               {
                 id: "content",
                 content: (
-                  <ModuleEditorSection>
-                    <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="short-text" span={6}>
-                        <ModuleEditorVisibilityAlignRow
-                          label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
-                          showName="show_eyebrow"
-                          boldName="eyebrow_bold"
-                          alignmentName="eyebrow_alignment"
-                          showDefault={eyebrowFormat.visible}
-                          boldDefault={eyebrowFormat.bold}
-                          alignmentDefault={eyebrowFormat.alignment}
-                        >
-                          <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={6}>
-                        <ModuleEditorVisibilityAlignRow
-                          label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
-                          showName="show_title"
-                          boldName="title_bold"
-                          alignmentName="title_alignment"
-                          showDefault={titleFormat.visible}
-                          boldDefault={titleFormat.bold}
-                          alignmentDefault={titleFormat.alignment}
-                        >
-                          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="long-content" span={12}>
-                        <ModuleEditorVisibilityAlignRow
-                          label={MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}
-                          showName="show_description"
-                          boldName="description_bold"
-                          alignmentName="description_alignment"
-                          showDefault={descriptionFormat.visible}
-                          boldDefault={descriptionFormat.bold}
-                          alignmentDefault={descriptionFormat.alignment}
-                        >
-                          <textarea
-                            name="description"
-                            defaultValue={config.description ?? ""}
-                            rows={2}
-                            className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                    <AdminCardsItemsField items={config.items ?? []} minItems={1} showIcon renderHref={renderCardHref} />
-                  </ModuleEditorSection>
+                  <ModuleEditorFieldGrid>
+                    <ModuleEditorField nature="short-text" span={6}>
+                      <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
+                        label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
+                        showName="show_eyebrow"
+                        boldName="eyebrow_bold"
+                        alignmentName="eyebrow_alignment"
+                        showDefault={eyebrowFormat.visible}
+                        boldDefault={eyebrowFormat.bold}
+                        alignmentDefault={eyebrowFormat.alignment}
+                      >
+                        <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+                      </ModuleEditorVisibilityAlignRow>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={6}>
+                      <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
+                        label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
+                        showName="show_title"
+                        boldName="title_bold"
+                        alignmentName="title_alignment"
+                        showDefault={titleFormat.visible}
+                        boldDefault={titleFormat.bold}
+                        alignmentDefault={titleFormat.alignment}
+                      >
+                        <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+                      </ModuleEditorVisibilityAlignRow>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="long-content" span={12}>
+                      <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
+                        label={MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}
+                        showName="show_description"
+                        boldName="description_bold"
+                        alignmentName="description_alignment"
+                        showDefault={descriptionFormat.visible}
+                        boldDefault={descriptionFormat.bold}
+                        alignmentDefault={descriptionFormat.alignment}
+                      >
+                        <textarea
+                          name="description"
+                          defaultValue={config.description ?? ""}
+                          rows={2}
+                          className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
+                        />
+                      </ModuleEditorVisibilityAlignRow>
+                    </ModuleEditorField>
+                  </ModuleEditorFieldGrid>
+                ),
+              },
+              {
+                id: "cards",
+                content: <AdminCardsItemsField items={config.items ?? []} minItems={1} showIcon renderHref={renderCardHref} presentation="premium" />,
+              },
+              {
+                id: "presentation",
+                sectionHeaderPresentation: "control",
+                content: (
+                  <AdminFormGrid columns={2}>
+                    <AdminCard presentation="premium" className="p-3">
+                      <AdminFormListboxSelect
+                        name="columns"
+                        label="عدد الأعمدة"
+                        defaultValue={String(config.columns ?? 3)}
+                        options={[
+                          { value: "2", label: "2" },
+                          { value: "3", label: "3" },
+                          { value: "4", label: "4" },
+                        ]}
+                        sizing="full"
+                      />
+                    </AdminCard>
+                  </AdminFormGrid>
                 ),
               },
               {
                 id: "pages",
-                content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
+                sectionHeaderPresentation: "control",
+                content: (
+                  <ModuleEditorPagesTab
+                    moduleName={block.name}
+                    assignmentContext={assignmentContext}
+                    presentation="premium"
+                  />
+                ),
               },
             ]}
           />

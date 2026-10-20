@@ -14,6 +14,8 @@ import {
   AdminMetricCardsGrid,
   AdminTablePagination,
 } from "../../../../components/admin/ui";
+import { AdminDataGridActionIcon } from "../../../../components/admin/ui/AdminDataGrid";
+import { AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import { withAdminActionSettledResult, type AdminActionResult } from "../../../../lib/admin/admin-action-result";
@@ -515,11 +517,11 @@ export default function CategoriesListClient({
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" },
-            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
-            { label: "إجمالي السلاسل", value: controller.result.metrics?.series ?? 0, tone: "blue", compact: true },
-            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
-            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
+            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", icon: <AdminModuleTabIcon name="database" />, compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" },
+            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", icon: <AdminModuleTabIcon name="content" />, compact: true },
+            { label: "إجمالي السلاسل", value: controller.result.metrics?.series ?? 0, tone: "blue", icon: <AdminDataGridActionIcon action="copy-link" size="lg" />, compact: true },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", icon: <AdminDataGridActionIcon action="visibility" size="lg" />, compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", icon: <AdminDataGridActionIcon action="visibility" isCurrentlyHidden size="lg" />, compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>
@@ -548,6 +550,13 @@ export default function CategoriesListClient({
               className: "max-w-[330px]",
             },
             filters,
+            filterPanelPresentation: {
+              variant: "premium",
+              fullWidthFilterIds: ["categories-status-filter"],
+              fieldIcons: {
+                "categories-status-filter": <AdminModuleTabIcon name="overview" />,
+              },
+            },
             values: { status: controller.query.filters.status },
             onQueryPatch: controller.applyQueryPatch,
           }}

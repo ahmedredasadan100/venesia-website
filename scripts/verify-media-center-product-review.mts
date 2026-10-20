@@ -1,6 +1,10 @@
 import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
+import ts from "typescript";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
@@ -654,6 +658,82 @@ const editor = read(
 );
 const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
 const mediaHubConfig = read("src/lib/media-hub-modules/parse-config.ts");
+// Exercise the actual action's validation/config path before its first write.
+// No alternate validation or serializer is implemented by this fixture.
+const actionAst = ts.createSourceFile("media-hub/actions.ts", action, ts.ScriptTarget.Latest, true);
+const updateNode = actionAst.statements.find(
+  (node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "updateMediaHubModule",
+);
+assert.ok(updateNode?.body);
+const writeIndex = updateNode.body.statements.findIndex(node =>
+  ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(actionAst) === "coordinated"),
+);
+assert.ok(writeIndex > 0);
+const pureAction = ts.transpileModule(
+  updateNode.body.statements.slice(0, writeIndex).map(node => node.getText(actionAst)).join("\n"),
+  { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } },
+).outputText;
+const actionUtils = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>("../src/lib/page-blocks/admin-utils.ts");
+const mediaContract = await jiti.import<typeof import("../src/lib/media-hub-modules/presentation-contract.ts")>("../src/lib/media-hub-modules/presentation-contract.ts");
+const mediaConfigContract = await jiti.import<typeof import("../src/lib/media-hub-modules/parse-config.ts")>("../src/lib/media-hub-modules/parse-config.ts");
+const formattingContract = await jiti.import<typeof import("../src/lib/page-blocks/configs.ts")>("../src/lib/page-blocks/configs.ts");
+let sessionAllowed = true, sessionCalls = 0;
+const validateAndBuild = new Function("owners",
+  "const {requireAdminSession,cleanText,parseNumber,parseFormStatus,parseMediaHubSectionKey,buildMediaHubModuleConfig,buildMediaHubContentHierarchy,buildMediaHubCollectionView,buildPageBlockTextFormattingPatch,buildCollectionModuleDisplayFormattingFromFormData}=owners;return async function(formData){" + pureAction + "\nreturn {id,...nextRow};}",
+)({
+  ...actionUtils, ...mediaContract, ...mediaConfigContract, ...formattingContract,
+  requireAdminSession: async () => { sessionCalls++; if (!sessionAllowed) throw Error("Unauthorized fixture"); return { id: "isolated-actor" }; },
+}) as (data: FormData) => Promise<{id: number; section_key: string; config: ReturnType<typeof buildMediaHubModuleConfig>}>;
+const listingForm = (section = "featured", placement = "listing") => {
+  const form = new FormData();
+  for (const [key, value] of Object.entries({
+    id: "11", name: "Isolated News Listing", description: "internal description",
+    section_key: section, placement, data_source: "topics", content_type: "news",
+    item_limit: "12", presentation: "grid", items_per_row: "4", details_text: "تفاصيل *حرفية* <tag>",
+    title: "عنوان محفوظ", eyebrow: "تمهيد محفوظ", presentation_description: "وصف محفوظ",
+    cta_text: "استكشف", collection_layout: "editorial", collection_card_variant: "default",
+    secondary_item_count: "3", content_hierarchy_mode: "featured-first",
+    show_title_on_page: "true", title_bold: "true", title_alignment: "left",
+    show_details: "true", details_alignment: "center", status: "published",
+  })) form.set(key, value);
+  return form;
+};
+const newsListing = await validateAndBuild(listingForm());
+assert.equal(newsListing.section_key, "featured");
+assert.equal(newsListing.config.placement, "listing");
+assert.equal(newsListing.config.type, "news");
+assert.equal(newsListing.config.listing?.itemsPerRow, 4);
+assert.equal(newsListing.config.listing?.itemLimit, 12);
+assert.equal(newsListing.config.listing?.display.details.text, "تفاصيل *حرفية* <tag>");
+const reloadedNews = parseMediaHubModuleConfig(newsListing.config as never, "featured");
+const publicNews = resolveMediaListingConfig({isVisible: true, assignmentId: 11, config: reloadedNews} as never);
+assert.ok(publicNews);
+assert.equal(publicNews.contentType, "news");
+assert.deepEqual(publicNews.presentation, newsListing.config.listing);
+for (const section of ["featured", "videos", "gallery", "press", "site-updates"]) {
+  assert.equal((await validateAndBuild(listingForm(section))).config.placement, "listing");
+}
+for (const placement of ["hub", "featured", "", "invalid"]) {
+  await assert.rejects(validateAndBuild(listingForm("featured", placement)), /المحتوى المميز يُدار من موديول Featured المستقل/);
+}
+const noPlacement = listingForm(); noPlacement.delete("placement");
+await assert.rejects(validateAndBuild(noPlacement), /Featured/);
+await assert.rejects(validateAndBuild(listingForm("invalid")), /نوع السكشن غير صالح/);
+const invalidType = listingForm(); invalidType.set("content_type", "invalid");
+await assert.rejects(validateAndBuild(invalidType), /نوع محتوى القائمة غير صالح/);
+const invalidSource = listingForm(); invalidSource.set("data_source", "invalid");
+await assert.rejects(validateAndBuild(invalidSource), /مصدر البيانات غير مدعوم/);
+const missingName = listingForm(); missingName.delete("name");
+await assert.rejects(validateAndBuild(missingName), /بيانات الموديول غير مكتملة/);
+assert.equal((await validateAndBuild(listingForm("site-updates", "hub"))).config.placement, "hub");
+sessionAllowed = false;
+const beforeDenied = sessionCalls;
+await assert.rejects(validateAndBuild(listingForm()), /Unauthorized fixture/);
+assert.equal(sessionCalls, beforeDenied + 1);
+assert.ok(action.includes('await requireAdminSession()'));
+assert.ok(action.includes('saveModuleTemplateWithPageAssignments('));
+console.log("PASS Media Hub action: listing+featured save/read/public contract; retired Featured, invalid section/source/type/identity and unauthorized requests remain rejected.");
+
 const collectionHeader = read(
   "src/components/collection-modules/CollectionSectionHeader.tsx",
 );
@@ -869,7 +949,7 @@ assert.ok(capabilityFields.includes('name="secondary_item_count"'));
 assert.ok(capabilityFields.includes('name="collection_layout"'));
 assert.ok(capabilityFields.includes('name="items_per_row"'));
 assert.ok(capabilityFields.includes('name="collection_card_variant"'));
-assert.ok(capabilityFields.includes('label="طريقة العرض"'));
+assert.ok(capabilityFields.includes('title="طريقة العرض"') && capabilityFields.includes(': "طريقة العرض"'));
 assert.ok(capabilityFields.includes("4 لأربعة أعمدة"));
 assert.ok(capabilityFields.includes('mosaic: "فسيفساء بصرية"'));
 assert.ok(capabilityFields.includes('timeline: "خط زمني بالبطاقات"'));
@@ -1137,4 +1217,127 @@ assert.ok(
   ),
 );
 
+/** Real-client regression at the existing Hub owner, never a Browser/DB claim. */
+async function verifyHubPremiumPreservation() {
+  const require = createRequire(import.meta.url), React = require("react") as typeof import("react");
+  const { renderToStaticMarkup } = require("react-dom/server") as typeof import("react-dom/server");
+  type Harness = { load: (file: string, roots?: string[]) => Record<string, unknown>; files: Set<string> };
+  type Ports = Map<string, unknown>;
+  const { createRemainingContentOwnerHarness } = require("./fixtures/remaining-content-owner-harness.mjs") as { createRemainingContentOwnerHarness: (root: string, options: { sourceOverrides?: Map<string, string>; additionalPorts: Ports }) => Harness };
+  const editorFile = "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx", collectionFile = "src/components/admin/page-blocks/CollectionModuleFields.tsx";
+  const baselineArg = process.argv.find(value => value.startsWith("--baseline-file=")), overrides = new Map<string, string>();
+  if (baselineArg) {
+    const snapshot = JSON.parse(readFileSync(baselineArg.slice(16), "utf8")) as { entries: { path: string; hash: string; content: string }[] };
+    for (const file of [editorFile, collectionFile]) {
+      const entry = snapshot.entries.find(value => value.path.replaceAll("\\", "/") === file); assert.ok(entry, "Captured before source required: " + file);
+      const bytes = Buffer.from(entry.content, "base64"); assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.hash.toLowerCase()); overrides.set(file, bytes.toString("utf8"));
+    }
+  } else {
+    const { execFileSync } = await import("node:child_process");
+    for (const file of [editorFile, collectionFile]) overrides.set(file, execFileSync("git", ["show", "HEAD:" + file], { cwd: ROOT, windowsHide: true, encoding: "utf8" }));
+  }
+  const noTransport = async () => { throw Error("Unexpected Hub static transport"); };
+  const ports: Ports = new Map<string, unknown>([
+    ["next/navigation", { useRouter: () => ({ push() {}, replace() {}, refresh() {} }), usePathname: () => "/admin/pages-blocks/blocks/media-hub/11", useSearchParams: () => new URLSearchParams("tab=content"), redirect: noTransport }],
+    ["next/link", { __esModule: true, default: ({ href, children }: { href: string; children: import("react").ReactNode }) => React.createElement("a", { href }, children) }],
+    ["next/image", { __esModule: true, default: (input: Record<string, unknown>) => { const props = { ...input }; for (const key of ["fill", "priority", "unoptimized", "quality", "loader"]) delete props[key]; return React.createElement("img", props); } }],
+  ]);
+  const previousFetch = globalThis.fetch, previousSessionAllowed = sessionAllowed;
+  sessionAllowed = true;
+  globalThis.fetch = async () => { throw Error("Offline Hub acceptance forbids network"); };
+  try {
+    const before = createRemainingContentOwnerHarness(ROOT, { sourceOverrides: overrides, additionalPorts: ports }), after = createRemainingContentOwnerHarness(ROOT, { additionalPorts: ports });
+    type Field = { name: string; type: string; value: string; checked: boolean; enabled: boolean; submitted: boolean; visible: boolean; min: string | null; max: string | null; required: boolean };
+    const native = (html: string): Field[] => {
+      const decode = (value: string) => value.replace(/&(?:amp|lt|gt|quot|#x27|#39);/gi, match => ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'", "&#39;": "'" }[match.toLowerCase()] ?? match));
+      type Frame = { tag: string; hidden: boolean; disabled: boolean; select?: Field; selected?: boolean; textarea?: Field };
+      const stack: Frame[] = [], fields: Field[] = [], voids = new Set(["input", "img", "link", "meta", "br", "hr", "source"]);
+      for (const match of html.matchAll(/<!--[\s\S]*?-->|<![^>]*>|<\/?[\w-]+\b[^>]*>|[^<]+/g)) {
+        const token = match[0]; if (!token.startsWith("<")) { const textarea = stack.at(-1)?.textarea; if (textarea) textarea.value += decode(token); continue; } if (token.startsWith("<!")) continue;
+        if (token.startsWith("</")) { const tag = token.slice(2).match(/^[\w-]+/)![0].toLowerCase(), index = stack.findLastIndex(value => value.tag === tag); assert.ok(index >= 0); stack.length = index; continue; }
+        const tag = token.slice(1).match(/^[\w-]+/)![0].toLowerCase(), attrs = Object.fromEntries([...token.slice(tag.length + 1, -1).matchAll(/([^\s=/>]+)(?:="([^"]*)")?/g)].map(([, key, value]) => [key, decode(value ?? "")]));
+        const parent = stack.at(-1), hidden = Boolean(parent?.hidden || "hidden" in attrs || (attrs.class ?? "").split(/\s+/).includes("hidden") || /display\s*:\s*none/i.test(attrs.style ?? ""));
+        const disabled = Boolean(parent?.disabled || tag === "fieldset" && "disabled" in attrs);
+        const frame: Frame = { tag, hidden, disabled };
+        if (attrs.name && ["input", "select", "textarea"].includes(tag)) {
+          const type = attrs.type || tag, checked = "checked" in attrs, enabled = !disabled && !("disabled" in attrs);
+          const field: Field = { name: attrs.name, type, value: attrs.value ?? "", checked, enabled, submitted: enabled && (!["checkbox", "radio"].includes(type) || checked), visible: type !== "hidden" && !hidden, min: attrs.min ?? null, max: attrs.max ?? null, required: "required" in attrs }; fields.push(field); if (tag === "select") frame.select = field; if (tag === "textarea") frame.textarea = field;
+        }
+        if (tag === "option") { const select = stack.findLast(value => value.select); if (select?.select && (!select.selected || "selected" in attrs)) { select.select.value = attrs.value ?? ""; if ("selected" in attrs) select.selected = true; } }
+        if (!voids.has(tag) && !token.endsWith("/>")) stack.push(frame);
+      }
+      return fields;
+    };
+    const dataFor = (fields: Field[]) => { const data = new FormData(); for (const field of fields) if (field.submitted) data.append(field.name, field.value); return data; };
+    const stable = (fields: Field[]) => fields.map(({ visible, ...field }) => { void visible; return field; }).sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || a.value.localeCompare(b.value));
+    const assignmentContext = { pages: [{ id: 1, title: "Home", slug: "home", path: "/" }], assignments: [{ id: 11, page_id: 1, template_id: 11, slot: "main", sort_order: 20, is_visible: true, page_title: "Home", page_slug: "home", page_path: "/" }] };
+    const render = (harness: Harness, section: string, config: unknown, listing = false) => {
+      const Editor = harness.load(resolve(ROOT, editorFile)).default as import("react").ElementType, Feedback = harness.load(resolve(ROOT, "src/components/admin/AdminFeedbackProvider.tsx")).default as import("react").ElementType;
+      return renderToStaticMarkup(React.createElement(Feedback, null, React.createElement(Editor, { block: { id: 11, name: "Isolated Hub", slug: listing && section === "featured" ? "media-listing-presentation-news" : "fixture-hub-" + section, description: "Retained internal note", status: "unpublished", section_key: section, config }, assignmentContext, updateAction: noTransport })));
+    };
+    const cases: Record<string, unknown>[] = [], forms: FormData[] = [];
+    const sections = ["site-updates", "videos", "gallery", "press"] as const;
+    for (const section of sections) {
+      const capabilities = getMediaHubCollectionCapabilities(section);
+      for (const layout of capabilities.view.layouts) for (const show of [true, false]) {
+        const input = parseMediaHubModuleConfig({ placement: "hub", itemLimit: 9, contentHierarchy: { mode: getMediaHubPresentationVariantCapabilities(section, layout).contentHierarchyMode, secondaryItemCount: 3 }, display: { title: false, image: true, category: false, series: true, excerpt: false, date: true }, presentation: { eyebrow: "Retained eyebrow", title: "Retained title", description: "Retained description", ctaText: "Retained CTA", showEyebrow: show, showTitle: show, showDescription: show, showCta: show, titleBold: true, titleAlignment: "left", descriptionBold: true, descriptionAlignment: "center", collectionView: { layout, itemsPerRow: 3, cardVariant: "compact" } } }, section);
+        assert.equal(input.presentation.collectionView.layout, layout, "Requested layout reaches the actual editor without legacy hierarchy remapping");
+        const original = native(render(before, section, input)), current = native(render(after, section, input));
+        assert.deepEqual(stable(current), stable(original), section + "/" + layout + ": before/after fields, values, limits and successful-control semantics");
+        const data = dataFor(current), saved = await validateAndBuild(data), expected = await validateAndBuild(dataFor(original));
+        assert.deepEqual(saved.config, expected.config); assert.deepEqual((await validateAndBuild(dataFor(native(render(after, section, saved.config))))).config, saved.config, "Actual client/parser remount parity");
+        const variant = getMediaHubPresentationVariantCapabilities(section, layout);
+        assert.equal(current.find(field => field.name === "secondary_item_count")?.type, variant.contentHierarchyMode === "featured-first" ? "number" : "hidden");
+        assert.equal(current.find(field => field.name === "items_per_row")?.type, variant.itemsPerRow ? "select" : "hidden");
+        assert.equal(current.find(field => field.name === "collection_card_variant")?.type, variant.cardVariant ? "select" : "hidden");
+        assert.ok(current.filter(field => ["eyebrow", "title", "presentation_description", "cta_text"].includes(field.name)).every(field => field.enabled && field.submitted), "Inactive authored text/formatting stays successful");
+        assert.equal(current.find(field => field.name === "presentation_description")?.value, input.presentation.description, "SSR textarea body retains actual authored description");
+        cases.push({ section, layout, show, placement: "hub", before: original, after: current, nativeParity: true, canonicalParity: true, remountParity: true, conditional: variant });
+        if (show && layout === capabilities.view.defaults.layout) forms.push(data);
+      }
+    }
+    for (const section of ["featured", ...sections] as const) for (const presentation of ["grid", "list"] as const) {
+      const config = parseMediaHubModuleConfig({ placement: "listing", type: section === "featured" ? "news" : section === "videos" ? "video" : section === "site-updates" ? "site_update" : section, listing: { presentation, itemsPerRow: 3, itemLimit: 6, display: { title: false, image: true, details: { visible: false, text: "Retained details", bold: true, alignment: "left" } } } }, section);
+      const original = native(render(before, section, config, true)), current = native(render(after, section, config, true));
+      assert.deepEqual(stable(current), stable(original), "Listing consumer native regression: " + section + "/" + presentation);
+      assert.deepEqual((await validateAndBuild(dataFor(current))).config, (await validateAndBuild(dataFor(original))).config);
+      cases.push({ section, presentation, placement: "listing", nativeParity: true, canonicalParity: true, fieldCount: current.length });
+    }
+    // Execute the actual action with only its external transactional write port isolated.
+    let writes = 0, failWrite = false, persisted: unknown;
+    const assignmentOwner = after.load(resolve(ROOT, "src/lib/page-blocks/sync-module-page-assignments.ts"), ["parsePageIdsFromForm"]);
+    const savePorts: Ports = new Map(ports); savePorts.set("next/navigation", { redirect: (href: string) => { throw Object.assign(Error("isolated redirect"), { href }); } });
+    savePorts.set("src/lib/page-blocks/sync-module-page-assignments", { parsePageIdsFromForm: assignmentOwner.parsePageIdsFromForm, async saveModuleTemplateWithPageAssignments(kind: string, id: number, row: unknown, pageIds: number[]) { assert.equal(kind, "media-hub"); assert.equal(id, 11); assert.deepEqual(pageIds, [1]); if (failWrite) throw Error("isolated_hub_save_failure"); writes++; persisted = structuredClone(row); return { id, affectedPageIds: pageIds }; } });
+    savePorts.set("src/lib/page-blocks/admin-revalidate", { revalidateBlockModulePaths: async () => {}, revalidateCommittedPageBlockAction: async (result: unknown) => result });
+    const mutation = createRemainingContentOwnerHarness(ROOT, { additionalPorts: savePorts }), update = mutation.load(resolve(ROOT, "src/app/admin/pages-blocks/blocks/media-hub/actions.ts"), ["updateMediaHubModule"]).updateMediaHubModule as (data: FormData) => Promise<void>;
+    for (const data of forms) {
+      await assert.rejects(() => update(data), (error: unknown) => Boolean(error && typeof error === "object" && "href" in error && String(error.href).includes("/admin/pages-blocks/blocks/media-hub/11?saved=1")));
+      assert.deepEqual((persisted as { config: unknown }).config, (await validateAndBuild(data)).config);
+      const accepted = structuredClone(persisted), count = writes; failWrite = true; await assert.rejects(() => update(data), /isolated_hub_save_failure/); assert.equal(writes, count); assert.deepEqual(persisted, accepted); failWrite = false;
+    }
+    assert.equal(writes, 4);
+    const retired = new FormData(); for (const [key, value] of forms[0]) retired.append(key, value); retired.set("section_key", "featured");
+    await assert.rejects(() => update(retired), /المحتوى المميز يُدار من موديول Featured المستقل/); assert.equal(writes, 4, "Retired Featured cannot enter the Hub write port");
+    const sampleConfig = parseMediaHubModuleConfig({ presentation: { title: "Retained title" } }, "videos"), sampleHtml = render(after, "videos", sampleConfig), sampleFields = native(sampleHtml);
+    const inheritedDisabled = native("<fieldset hidden disabled>" + sampleHtml + "</fieldset>");
+    assert.equal(inheritedDisabled.length, sampleFields.length); assert.ok(inheritedDisabled.every(field => !field.visible && !field.enabled && !field.submitted), "Ancestor disabled/hidden semantics are observed, never inferred from input attributes alone");
+    const missingTitle = sampleFields.filter(field => field.name !== "title");
+    assert.throws(() => assert.deepEqual(stable(missingTitle), stable(sampleFields)), "Dropping a real native capability must fail the observer comparison");
+    assert.notEqual((await validateAndBuild(dataFor(missingTitle))).config.presentation.title, (await validateAndBuild(dataFor(sampleFields))).config.presentation.title, "Dropped authored values must reach the real parser as a different payload");
+    const defaultOwner = (harness: Harness) => {
+      const Fields = harness.load(resolve(ROOT, collectionFile)).CollectionPresentationFields as import("react").ElementType, capabilities = getMediaHubCollectionCapabilities("videos");
+      return renderToStaticMarkup(React.createElement(Fields, { hierarchy: capabilities.hierarchy.defaults, hierarchyCapabilities: capabilities.hierarchy, view: capabilities.view.defaults, viewCapabilities: capabilities.view, itemLimit: 9, contextLabel: "Videos" }));
+    };
+    assert.equal(defaultOwner(after), defaultOwner(before), "Existing Collection owner default rendered HTML is unchanged");
+    const routeFile = "src/app/admin/pages-blocks/blocks/media-hub/[id]/page.tsx", route = ts.createSourceFile(routeFile, read(routeFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let bound = false; const visit = (node: ts.Node) => { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(route) === "MediaHubModuleEditClient") bound = node.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(route) === "updateAction" && attribute.initializer?.getText(route) === "{updateMediaHubModule}"); ts.forEachChild(node, visit); }; visit(route); assert.ok(bound, "Actual edit route binds the actual tested update action");
+    const outputArg = process.argv.find(value => value.startsWith("--output-dir=")), outputDir = resolve(ROOT, outputArg?.slice(13) ?? ".tmp-qa/media-hub-premium/current"); assert.ok(outputDir.startsWith(resolve(ROOT, ".tmp-qa") + "/") || outputDir.startsWith(resolve(ROOT, ".tmp-qa") + "\\"));
+    const files = new Set([...after.files, ...mutation.files, editorFile, collectionFile, routeFile, "scripts/verify-media-center-product-review.mts"]);
+    const sourceHashes = Object.fromEntries([...files].sort().map(file => [file, createHash("sha256").update(readFileSync(resolve(ROOT, file))).digest("hex")]));
+    await mkdir(outputDir, { recursive: true }); await writeFile(resolve(outputDir, "media-hub-preservation.json"), JSON.stringify({ status: "PASS", baseline: baselineArg?.slice(16) ?? "git HEAD", cases, sourceHashes, lifecycle: { active: sections, retiredFeatured: "excluded; actual mutation denial retained" }, sharedDefaultHtmlParity: true, actualMutationSuccesses: writes, actualMutationFailuresRetainPrior: writes, negativeProof: ["retired Featured rejected before write", "real rendered ancestor hidden+disabled descendants are not successful", "removed native field fails baseline comparison and changes real saved payload", "existing invalid section/source/type/identity and unauthorized action-prefix probes"], nativeStates: "Mounted/HTML-hidden/ancestor-disabled/successful fields observed; computed visibility and user-event transitions need Browser", savePath: "actual route -> updateMediaHubModule -> real config builders -> real parsePageIdsFromForm -> in-memory external transactional write port", acceptance: { functional: "PASS", technicalVisual: "pending Browser", ownerApproval: "pending" }, boundary: { browser: false, network: false, database: false, realAuth: false, publicRendering: false } }, null, 2) + "\n");
+    console.log("PASS Media Hub Premium preservation: " + cases.length + " actual-client states, four actual-action successes/failures, listing regression, unchanged default HTML.");
+  } finally { globalThis.fetch = previousFetch; sessionAllowed = previousSessionAllowed; }
+}
+
+await verifyHubPremiumPreservation();
 console.log("Media Center architecture correction verification passed.");

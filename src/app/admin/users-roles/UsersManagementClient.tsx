@@ -39,6 +39,7 @@ import {
   type AdminInstantMutationRowInteraction,
 } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { formatAdminDateTime } from "../../../lib/content-dates";
+import { AdminDataGridDateTimeCell } from "../../../components/admin/ui/AdminDataGrid";
 import {
   ADMIN_USERS_LIST_PAGE_SIZES,
   adminUserEntityListRowSchema,
@@ -164,9 +165,10 @@ function createAdminUserColumns(input: {
       minWidth: 164,
       width: 174,
       renderCell: ({ row }) => (
-        <span className="block text-right text-sm text-white/55">
-          {formatAdminDateTime(row.last_login_at)}
-        </span>
+        <AdminDataGridDateTimeCell
+          value={row.last_login_at}
+          className="block text-right text-sm text-white/55"
+        />
       ),
     },
     {
@@ -174,9 +176,10 @@ function createAdminUserColumns(input: {
       minWidth: 164,
       width: 174,
       renderCell: ({ row }) => (
-        <span className="block text-right text-sm text-white/55">
-          {formatAdminDateTime(row.created_at)}
-        </span>
+        <AdminDataGridDateTimeCell
+          value={row.created_at}
+          className="block text-right text-sm text-white/55"
+        />
       ),
     },
     {

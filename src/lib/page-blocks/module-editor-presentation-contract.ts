@@ -49,6 +49,48 @@ export type ModuleEditorFieldNature =
 
 export type ModuleEditorFieldSpan = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
 
+/** Stable editor identity; environment-specific record IDs do not identify a reference. */
+export type ModuleEditorCompositionSource = {
+  sourceFile: string;
+  exportName: string;
+  mode: Readonly<Record<string, string>>;
+  section: string;
+};
+
+type ModuleEditorCompositionRelationship =
+  | { role: "reference" }
+  | {
+      role: "adopter";
+      reference: { moduleSlug: string; sectionId: string };
+      contractDifferences: readonly string[];
+    };
+
+/** Declared presentation relationship, independent of capability adoption or visual approval. */
+export type ModuleEditorCompositionApplicability = {
+  source: ModuleEditorCompositionSource;
+  rationale: string;
+} & (
+  | ({ functionalScope: "standalone-cta" } & ModuleEditorCompositionRelationship)
+  | ({ functionalScope: "compact-inline-settings" } & (
+      | {
+          role: "reference";
+          /** Supplied design identity; the textual full-width requirement takes precedence. */
+          visualReference: {
+            assetName: string;
+            assetPath: string;
+            sha256: string;
+            inputPlacement: "full-card-internal-width";
+          };
+        }
+      | Extract<ModuleEditorCompositionRelationship, { role: "adopter" }>
+    ))
+);
+
+export type ResolvedModuleEditorCompositionApplicability = {
+  applicability: ModuleEditorCompositionApplicability;
+  reference: Extract<ModuleEditorCompositionApplicability, { role: "reference" }>;
+};
+
 export const MODULE_EDITOR_FIELD_PRESENTATION: Record<
   ModuleEditorFieldNature,
   { defaultSpan: ModuleEditorFieldSpan; multiline: boolean }

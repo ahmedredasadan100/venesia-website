@@ -1,4 +1,4 @@
-import AdminMetricCard, { type AdminMetricCardTone } from "./AdminMetricCard";
+import AdminMetricCard, { type AdminMetricCardProps, type AdminMetricCardTone } from "./AdminMetricCard";
 
 export type AdminMetricCardsGridItem = {
   label: string;
@@ -11,6 +11,7 @@ export type AdminMetricCardsGridItem = {
   onClick?: () => void;
   active?: boolean;
   ariaLabel?: string;
+  icon?: AdminMetricCardProps["icon"];
 };
 
 export type AdminMetricCardsGridProps = {
@@ -18,8 +19,8 @@ export type AdminMetricCardsGridProps = {
   className?: string;
 };
 
-const GRID_CLASSES = "grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]";
-const VISUAL_BLEED_VIEWPORT_CLASSES = "-mt-8 overflow-x-auto pt-8";
+const GRID_CLASSES = "grid min-w-0 gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr))]";
+const VISUAL_BLEED_VIEWPORT_CLASSES = "-mt-8 min-w-0 pt-8";
 
 export default function AdminMetricCardsGrid({ items, className = "" }: AdminMetricCardsGridProps) {
   return (

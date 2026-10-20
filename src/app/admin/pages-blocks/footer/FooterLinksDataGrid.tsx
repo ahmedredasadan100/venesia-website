@@ -365,6 +365,7 @@ export default function FooterLinksDataGrid({
       />
 
       <VenesiaModal
+        closeOnEscape
         open={modalOpen}
         title={isCreate ? "إضافة رابط" : "تعديل رابط"}
         description="أدخل اسم العنصر واختر الرابط من النظام. يمكنك إخفاء الرابط دون حذفه."

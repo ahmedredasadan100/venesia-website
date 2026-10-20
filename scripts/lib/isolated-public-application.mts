@@ -275,8 +275,9 @@ export async function runApplicationHandoff(
         "20261010005444_media_relocation_lease_journal.sql",
         "20261010052006_project_managed_media_reference_rebind.sql",
         "20261016120000_project_tracking_copy_move.sql",
+        "20261020150519_dashboard_real_media_thumbnails.sql",
       ],
-      "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, terminal integration conflict, configurable image ceiling, legacy content image retirement, guarded media deletion, and Project Tracking Copy/Move extensions may follow the SEO security declaration.",
+      "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, terminal integration conflict, configurable image ceiling, legacy content image retirement, guarded media deletion, Project Tracking Copy/Move, and Dashboard thumbnail extensions may follow the SEO security declaration.",
     );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);

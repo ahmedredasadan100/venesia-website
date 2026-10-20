@@ -3,6 +3,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
 
 const root = resolve(process.cwd());
 const failures = [];
@@ -18,6 +19,36 @@ function read(relPath) {
 
 function assert(condition, message) {
   if (!condition) failures.push(message);
+}
+
+function usesSharedStructuralSlugLock(source) {
+  const tree = ts.createSourceFile("content-actions.ts", source, ts.ScriptTarget.Latest, true);
+  const importedOwner = tree.statements.some((node) =>
+    ts.isImportDeclaration(node) &&
+    ts.isStringLiteral(node.moduleSpecifier) &&
+    node.moduleSpecifier.text === "../../../../../lib/page-blocks/module-edit-registry" &&
+    !node.importClause?.isTypeOnly && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+    node.importClause.namedBindings.elements.some((binding) =>
+      binding.name.text === "isStructuralContentTemplateSlug" && !binding.propertyName && !binding.isTypeOnly),
+  );
+  const update = tree.statements.find((node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "updateContentBlock");
+  if (!importedOwner || !update?.body) return false;
+  const declarations = new Map(update.body.statements.flatMap((node) =>
+    ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.Const)
+      ? node.declarationList.declarations.filter((declaration) => ts.isIdentifier(declaration.name))
+        .map((declaration) => [declaration.name.text, declaration.initializer])
+      : []));
+  if (declarations.has("isStructuralContentTemplateSlug")) return false;
+  const isIdentifier = (node, name) => Boolean(node && ts.isIdentifier(node) && node.text === name);
+  const isExistingProperty = (node, name) => Boolean(node && ts.isPropertyAccessExpression(node) &&
+    isIdentifier(node.expression, "existing") && node.name.text === name);
+  const lock = declarations.get("slugLocked"), slug = declarations.get("slug");
+  return Boolean(lock && ts.isCallExpression(lock) &&
+    isIdentifier(lock.expression, "isStructuralContentTemplateSlug") && lock.arguments.length === 2 &&
+    isExistingProperty(lock.arguments[0], "slug") && isExistingProperty(lock.arguments[1], "variant") &&
+    slug && ts.isConditionalExpression(slug) && isIdentifier(slug.condition, "slugLocked") &&
+    isExistingProperty(slug.whenTrue, "slug") && isIdentifier(slug.whenFalse, "requestedSlug"));
 }
 
 const registry = read("src/lib/page-blocks/module-edit-registry.ts");
@@ -64,8 +95,14 @@ assert(
   "Technical identity must not retain a visible or dead Module Editor presentation path",
 );
 assert(
-  actions.includes("isStructuralContentTemplateSlug(existing.slug, existing.variant)"),
-  "Server update must lock structural slugs via shared helper",
+  usesSharedStructuralSlugLock(actions),
+  "Server update must lock structural slugs via the canonical helper and preserve existing slugs",
+);
+assert(
+  !usesSharedStructuralSlugLock(actions.replaceAll("isStructuralContentTemplateSlug", "unrelatedHelper")) &&
+    !usesSharedStructuralSlugLock(actions.replace("slugLocked ? existing.slug : requestedSlug", "slugLocked ? requestedSlug : existing.slug")) &&
+    !usesSharedStructuralSlugLock(actions.replace("../../../../../lib/page-blocks/module-edit-registry", "../../../../../lib/page-blocks/unrelated-owner")),
+  "Slug guard must reject missing owners, foreign imports and overwritten structural slugs",
 );
 
 // Public URL slug surfaces must remain editable — smoke check these files still accept slug edits.

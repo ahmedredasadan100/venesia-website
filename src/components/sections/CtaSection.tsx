@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { BlockRendererProps } from "./block-registry";
 import {
   asCtaConfig,
+  pageBlockCtaFontWeightClass,
   pageBlockTextAlignClass,
   pageBlockTextPlacementClass,
   resolvePageBlockTextFormat,
@@ -59,7 +60,7 @@ export default function CtaSection({ block }: BlockRendererProps) {
                 href={config.primaryCta.href}
                 target={config.primaryCta.target === "_blank" ? "_blank" : undefined}
                 rel={config.primaryCta.target === "_blank" ? "noreferrer" : undefined}
-                className="inline-flex rounded-xl bg-[#D8B87A] px-6 py-3 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d]"
+                className={`inline-flex rounded-xl bg-[#D8B87A] px-6 py-3 text-sm ${pageBlockCtaFontWeightClass(config.ctaBold, "font-semibold")} text-[#06101C] transition hover:bg-[#e5c98d]`}
               >
                 {config.primaryCta.label}
               </Link>
@@ -70,7 +71,7 @@ export default function CtaSection({ block }: BlockRendererProps) {
                 href={config.secondaryCta.href}
                 target={config.secondaryCta.target === "_blank" ? "_blank" : undefined}
                 rel={config.secondaryCta.target === "_blank" ? "noreferrer" : undefined}
-                className="inline-flex rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/75 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
+                className={`inline-flex rounded-xl border border-white/15 px-6 py-3 text-sm ${pageBlockCtaFontWeightClass(config.ctaBold, "font-semibold")} text-white/75 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]`}
               >
                 {config.secondaryCta.label}
               </Link>

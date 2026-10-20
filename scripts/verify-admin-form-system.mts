@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
@@ -57,6 +58,7 @@ const {
   ADMIN_TIME_ZONE,
   formatAdminDateOnly,
   formatAdminDateTime,
+  serializeAdminDateTimeDisplay,
   parseFormPublishedDate,
   resolveTopicPublishedAt,
 } = await jiti.import<typeof import("../src/lib/content-dates.ts")>(
@@ -1796,15 +1798,112 @@ const articleSaveHelpers = read(
 );
 check(
   "Shared Date and Time owner fixes Admin presentation without changing the stored instant",
-  ADMIN_DATE_TIME_PATTERN === "DD MMM YYYY, hh:mm A" &&
+  ADMIN_DATE_TIME_PATTERN === "DD/MM/YYYY, hh:mm AM/PM" &&
     ADMIN_DATE_ONLY_PATTERN === "DD MMM YYYY" &&
     ADMIN_TIME_ZONE === "Africa/Cairo" &&
     formatAdminDateTime("2026-08-06T23:24:00.000Z") ===
-      "07 Aug 2026, 02:24 AM" &&
+      "\u206607/08/2026, 02:24 AM\u2069" &&
     formatAdminDateTime("2026-08-07") === "07 Aug 2026" &&
     formatAdminDateOnly("2026-08-07") === "07 Aug 2026" &&
     formatAdminDateOnly("2026-02-30") === "—",
 );
+check(
+  "Admin timestamps keep numeric Latin presentation across Cairo midnight, noon, offsets, DST, and leap day",
+  [
+    ["2026-12-01T00:53:00.000Z", "01/12/2026, 02:53 AM"],
+    ["2026-12-01T12:53:00.000Z", "01/12/2026, 02:53 PM"],
+    ["2026-11-30T22:00:00.000Z", "01/12/2026, 12:00 AM"],
+    ["2026-12-01T10:00:00.000Z", "01/12/2026, 12:00 PM"],
+    ["2026-12-31T23:05:00.000Z", "01/01/2027, 01:05 AM"],
+    ["2026-12-01T02:53:00.000+02:00", "01/12/2026, 02:53 AM"],
+    ["2026-04-23T21:30:00.000Z", "23/04/2026, 11:30 PM"],
+    ["2026-04-23T22:30:00.000Z", "24/04/2026, 01:30 AM"],
+    ["2024-02-29T09:05:00.000Z", "29/02/2024, 11:05 AM"],
+  ].every(([value, expected]) => {
+    const actual = formatAdminDateTime(value);
+    return actual === `\u2066${expected}\u2069` &&
+      actual.slice(1, -1) === expected &&
+      /^[0-9]{2}\/[0-9]{2}\/[0-9]{4}, [0-9]{2}:[0-9]{2} (AM|PM)$/.test(actual.slice(1, -1));
+  }),
+);
+check(
+  "Admin date rendering keeps empty and invalid sentinels plus the independent date-only contract",
+  [undefined, null, "", "   ", "invalid", "2026-13-01T00:00:00.000Z"].every(
+    (value) => formatAdminDateTime(value) === "—",
+  ) &&
+    formatAdminDateTime("2026-02-30") === "—" &&
+    formatAdminDateTime("2024-02-29") === "29 Feb 2024" &&
+    formatAdminDateOnly("2026-12-01") === "01 Dec 2026" &&
+    formatAdminDateOnly("2026-12-01T00:53:00.000Z") === "—",
+);
+check(
+  "Admin timestamp serializer restores only its exact display envelope to the original export format",
+  serializeAdminDateTimeDisplay("\u206601/12/2026, 02:53 PM\u2069") === "01 Dec 2026, 02:53 PM" &&
+    serializeAdminDateTimeDisplay("عربي \"سطر\"\n\u206601/12/2026, 02:53 PM\u2069 · نهاية") === "عربي \"سطر\"\n01 Dec 2026, 02:53 PM · نهاية" &&
+    [
+      "01/12/2026, 02:53 PM", "—", "01 Dec 2026",
+      "\u2066نص آخر\u2069", "\u2067اتجاه عربي\u2069", "\u200EABC\u200F",
+      "\u206601/12/2026, 25:53 PM\u2069", "\u206601/12/2026, 02:53 pm\u2069",
+      "\u206601/12/2026, 02:53 PM", "01/12/2026, 02:53 PM\u2069",
+    ].every((value) => serializeAdminDateTimeDisplay(value) === value),
+);
+check(
+  "Admin timestamp serialization preserves the original English month tokens without converting the displayed day or time",
+  ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"].every((month, index) =>
+    serializeAdminDateTimeDisplay(`\u206602/${String(index + 1).padStart(2, "0")}/2026, 12:00 AM\u2069`) === `02 ${month} 2026, 12:00 AM`,
+  ),
+);
+const compactAdminDateCases = [
+  ["2026-08-06T23:24:00.000Z", "07/08/2026"],
+  ["2026-12-01T00:53:00.000Z", "01/12/2026"],
+  ["2026-11-30T22:00:00.000Z", "01/12/2026"],
+  ["2026-12-01T10:00:00.000Z", "01/12/2026"],
+  ["2026-12-31T23:05:00.000Z", "01/01/2027"],
+  ["2026-12-01T02:53:00.000+02:00", "01/12/2026"],
+  ["2026-04-23T21:30:00.000Z", "23/04/2026"],
+  ["2026-04-23T22:30:00.000Z", "24/04/2026"],
+  ["2024-02-29T09:05:00.000Z", "29/02/2024"],
+] as const;
+check(
+  "Compact Admin timestamp precision uses the same Cairo day across midnight, noon, offsets, DST, leap day and year boundaries",
+  compactAdminDateCases.every(([value, expected]) => formatAdminDateTime(value, "date") === `\u2066${expected}\u2069`),
+);
+check(
+  "Compact timestamp precision preserves invalid/empty sentinels and the independent date-only route",
+  [undefined, null, "", "   ", "invalid", "2026-13-01T00:00:00.000Z", "2026-02-30"].every((value) => formatAdminDateTime(value, "date") === "—") &&
+    formatAdminDateTime("2026-08-07", "date") === "07 Aug 2026" &&
+    formatAdminDateTime("2024-02-29", "date") === "29 Feb 2024" &&
+    formatAdminDateTime("2026-12-01", "date") === formatAdminDateOnly("2026-12-01"),
+);
+const datePrecisionInputs: (string | null | undefined)[] = [
+  ...compactAdminDateCases.map(([value]) => value), undefined, null, "", "   ", "invalid",
+  "2026-13-01T00:00:00.000Z", "2026-02-30", "2024-02-29", "2026-12-01",
+  "2026-12-01T12:53:00", "0001-12-01T12:53:00.000Z", "+010000-12-01T12:53:00.000Z",
+];
+check(
+  "Explicit full timestamp precision equals the unchanged default for every boundary input",
+  datePrecisionInputs.every((value) => formatAdminDateTime(value, "date-time") === formatAdminDateTime(value)),
+);
+const datePrecisionBaselineArgument = process.argv.find((argument) => argument.startsWith("--date-precision-baseline-file="));
+if (datePrecisionBaselineArgument) {
+  const baselinePath = resolve(ROOT, datePrecisionBaselineArgument.slice("--date-precision-baseline-file=".length));
+  const baseline: { entries: { path: string; sha256: string }[] } = JSON.parse(readFileSync(baselinePath, "utf8").replace(/^\uFEFF/u, ""));
+  const ownerPath = "src/lib/content-dates.ts";
+  const ownerSnapshot = resolve(dirname(baselinePath), "baseline", ownerPath);
+  const ownerBytes = readFileSync(ownerSnapshot);
+  assert.equal(createHash("sha256").update(ownerBytes).digest("hex"), baseline.entries.find((entry) => entry.path === ownerPath)?.sha256);
+  const previousDates = await jiti.import<typeof import("../src/lib/content-dates.ts")>(ownerSnapshot);
+  const previousTree = ts.createSourceFile(ownerPath, ownerBytes.toString("utf8"), ts.ScriptTarget.Latest, true);
+  const currentTree = ts.createSourceFile(ownerPath, read(ownerPath), ts.ScriptTarget.Latest, true);
+  const serializerBody = (tree: ts.SourceFile) => tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "serializeAdminDateTimeDisplay")?.body?.getText(tree);
+  const formatterBinding = (tree: ts.SourceFile) => tree.statements.flatMap((node) => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : []).find((node) => node.name.getText(tree) === "ADMIN_DATE_TIME_FORMATTER")?.getText(tree);
+  check(
+    "Captured full timestamp output and serializer/Intl owners remain exact after compact precision opt-in",
+    datePrecisionInputs.every((value) => formatAdminDateTime(value) === previousDates.formatAdminDateTime(value)) &&
+      serializerBody(currentTree) === serializerBody(previousTree) &&
+      formatterBinding(currentTree) === formatterBinding(previousTree),
+  );
+}
 const publicationForm = new FormData();
 publicationForm.set("published_at", "2026-08-15");
 const submittedPublicationDate = parseFormPublishedDate(publicationForm);

@@ -411,6 +411,10 @@ function readColumnItems(formData: FormData, prefix: string) {
 }
 
 function buildVisionGoalsConfig(formData: FormData): VisionGoalsModuleConfig {
+  const introContentFormat = cleanText(formData.get("intro_content_format"));
+  if (introContentFormat && introContentFormat !== "markdown") {
+    throw new Error("صيغة المحتوى الطويل غير مدعومة.");
+  }
   const intro = cleanText(formData.get("intro"))
     .split(/\n{2,}/)
     .map((part) => part.trim())
@@ -420,6 +424,7 @@ function buildVisionGoalsConfig(formData: FormData): VisionGoalsModuleConfig {
     eyebrow: cleanText(formData.get("eyebrow")) || undefined,
     title: cleanText(formData.get("title")) || undefined,
     intro,
+    ...(introContentFormat === "markdown" ? { introContentFormat: "markdown" as const } : {}),
     image: optionalImagePath(formData, "image"),
     imageAlt: cleanText(formData.get("image_alt")) || undefined,
     vision: {

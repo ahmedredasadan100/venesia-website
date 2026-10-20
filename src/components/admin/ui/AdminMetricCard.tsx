@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export type AdminMetricCardTone = "gold" | "blue" | "green" | "amber" | "violet" | "cyan";
 
 export type AdminMetricCardProps = {
@@ -11,6 +13,8 @@ export type AdminMetricCardProps = {
   onClick?: () => void;
   active?: boolean;
   ariaLabel?: string;
+  /** Decorative semantic glyph supplied by the consumer's existing icon owner. */
+  icon?: ReactNode;
 };
 
 const TONE_STYLES: Record<
@@ -71,13 +75,25 @@ export default function AdminMetricCard({
   onClick,
   active = false,
   ariaLabel,
+  icon,
 }: AdminMetricCardProps) {
   const styles = TONE_STYLES[tone];
   const alignClasses = align === "center" ? "items-center text-center" : "items-start text-right";
-  const sizeClasses = compact ? "min-h-[84px] gap-1.5 px-4 py-3" : "min-h-[96px] gap-2 p-4";
-  const valueSizeClass = compact ? "text-2xl" : "text-3xl";
+  const sizeClasses = icon
+    ? `${compact ? "min-h-[80px]" : "min-h-[96px]"} gap-2 p-3`
+    : compact ? "min-h-[84px] gap-1.5 px-4 py-3" : "min-h-[96px] gap-2 p-4";
+  const valueSizeClass = icon ? "text-[22px] md:text-2xl" : compact ? "text-2xl" : "text-3xl";
 
   const Component = onClick ? "button" : "div";
+  const content = (
+    <>
+      <p dir={icon ? "ltr" : undefined} className={`font-en ${valueSizeClass} font-bold leading-none ${styles.valueClass}${icon ? " inline-flex max-w-full items-baseline whitespace-nowrap" : ""}`}>
+        {value}
+        {suffix}
+      </p>
+      <p className={icon ? "text-xs font-bold leading-5 text-white/62" : "text-sm font-bold leading-snug text-white/62"}>{label}</p>
+    </>
+  );
 
   return (
     <Component
@@ -107,11 +123,16 @@ export default function AdminMetricCard({
         style={{ background: `radial-gradient(circle at 85% 12%, ${styles.accent}, transparent 42%)` }}
         aria-hidden="true"
       />
-      <p className={`font-en ${valueSizeClass} font-bold leading-none ${styles.valueClass}`}>
-        {value}
-        {suffix}
-      </p>
-      <p className="text-sm font-bold leading-snug text-white/62">{label}</p>
+      {icon ? (
+        <div className="flex w-full min-w-0 items-center justify-between gap-2" dir="rtl">
+          <div data-admin-metric-content="" className={`flex min-w-0 flex-1 flex-col gap-1 ${alignClasses}`}>
+            {content}
+          </div>
+          <span data-admin-metric-icon="" aria-hidden="true" className={`inline-flex size-5.5 shrink-0 items-center justify-center md:size-6 [&>svg]:size-5.5 md:[&>svg]:size-6 ${styles.valueClass}`}>
+            {icon}
+          </span>
+        </div>
+      ) : content}
     </Component>
   );
 }

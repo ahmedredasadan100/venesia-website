@@ -714,6 +714,7 @@ export default function HeroManagerClient({
       </div>
 
       <VenesiaModal
+        closeOnEscape
         open={showCreateModal}
         title="إضافة هيرو جديد"
         description="اختر Hero variant ثم افتح إعداداته؛ الـvariants الديناميكية تعتمدها Routes تلقائيًا دون نسخ بيانات الـDomain."

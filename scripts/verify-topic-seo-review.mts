@@ -19,11 +19,14 @@ require.extensions[".ts"] = (module, filename) => {
       moduleResolution: ts.ModuleResolutionKind.Node10,
       target: ts.ScriptTarget.ES2022,
       esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
     },
     fileName: filename,
   }).outputText;
   (module as NodeModule & { _compile(source: string, filename: string): void })._compile(output, filename);
 };
+
+require.extensions[".tsx"] = require.extensions[".ts"];
 
 const { getGlobalSeoDefaults } = require("../src/lib/seo/global-seo-defaults.ts") as typeof import("../src/lib/seo/global-seo-defaults.ts");
 const { resolveSeoMetadata } = require("../src/lib/seo/resolve-seo-metadata.ts") as typeof import("../src/lib/seo/resolve-seo-metadata.ts");
@@ -316,6 +319,66 @@ check(
     ].every((marker) => sharedFormSwitch.includes(marker)),
 );
 check("the shared switch default owns one compact framed presentation without changing card switches", sharedFormSwitch.includes('data-admin-form-switch-surface={surface ? "card" : "compact"}') && sharedFormSwitch.includes(': ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME'));
+check("embedded switch presentation is explicit and leaves both legacy surface branches intact", sharedFormSwitch.includes("embedded?: boolean") && sharedFormSwitch.includes("embedded = false") && sharedFormSwitch.includes("if (embedded)") && sharedFormSwitch.includes('data-admin-form-switch-surface="embedded"') && sharedFormSwitch.includes('data-admin-form-switch-surface={surface ? "card" : "compact"}') && sharedFormSwitch.includes("{labelContent}") && sharedFormSwitch.includes("{switchControl}"));
+const { createElement } = require("react") as typeof import("react");
+const { renderToStaticMarkup } = require("react-dom/server") as typeof import("react-dom/server");
+const sharedSwitchRuntime = require("../src/components/admin/ui/AdminFormSwitch.tsx") as typeof import("../src/components/admin/ui/AdminFormSwitch");
+const SharedSwitch = sharedSwitchRuntime.default;
+assert.equal(sharedSwitchRuntime.ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME, "h-8 min-w-20 justify-between border border-white/10 bg-white/[0.035] px-2.5 py-1.5");
+assert.equal(sharedSwitchRuntime.ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME, "rounded-xl border border-white/10 bg-black/16 px-4 py-3");
+const switchPresentationCases = [
+  { name: "compact", props: {} },
+  { name: "card", props: { surface: true } },
+  { name: "embedded", props: { embedded: true } },
+] as const;
+let switchRuntimeCases = 0;
+for (const presentation of switchPresentationCases) {
+  for (const controlled of [false, true]) {
+    for (const checked of [false, true]) {
+      for (const disabled of [false, true]) {
+        const props = {
+          id: "shared-switch-probe", name: "shared_switch_probe", label: "إظهار العناصر",
+          uncheckedValue: "false", value: "true", describedBy: "shared-switch-description", disabled,
+          ...presentation.props,
+          ...(controlled ? { checked, defaultChecked: !checked, onChange() {} } : { defaultChecked: checked }),
+        };
+        const html = renderToStaticMarkup(createElement(SharedSwitch, props));
+        const context = `${presentation.name}/${controlled ? "controlled" : "uncontrolled"}/${checked}/${disabled}`;
+        const inputs = Array.from(html.matchAll(/<input\b[^>]*>/gu), match => match[0]);
+        assert.equal(inputs.length, 2, context + " retains the fallback and native checkbox");
+        assert.ok(inputs[0].includes('type="hidden"') && inputs[0].includes('name="shared_switch_probe"') && inputs[0].includes('value="false"'), context);
+        assert.ok(inputs[1].includes('type="checkbox"') && inputs[1].includes('role="switch"') && inputs[1].includes('name="shared_switch_probe"') && inputs[1].includes('value="true"'), context);
+        assert.equal(/\schecked(?:=|\s|>)/u.test(inputs[1]), checked, context + " native ON/OFF");
+        assert.equal(/\sdisabled(?:=|\s|>)/u.test(inputs[1]), disabled, context + " native disabled state");
+        assert.ok(inputs[1].includes('aria-describedby="shared-switch-description"'), context + " description association");
+        assert.equal((html.match(/<label\b/gu) ?? []).length, 1, context + " one clickable label");
+        assert.equal(html.split("إظهار العناصر").length - 1, 1, context + " one visible title");
+        assert.ok(html.includes('class="relative inline-flex h-5 w-9 shrink-0"'), context + " existing 36x20 track");
+        assert.ok(html.includes("top-0.5 size-4 rounded-full") && html.includes("rtl:peer-checked:-translate-x-4") && html.includes("peer-focus-visible:ring-2"), context + " existing thumb, RTL and focus contract");
+        const labelTag = html.match(/^<label\b[^>]*>/u)?.[0];
+        assert.ok(labelTag && labelTag.includes('data-admin-form-switch-surface="' + presentation.name + '"'), context);
+        if (presentation.name === "embedded") {
+          assert.equal(/\b(?:border(?:-|\s)|bg-)/u.test(labelTag), false, context + " has no inner frame or background");
+          assert.ok(labelTag.includes("flex-col") && labelTag.includes("justify-between"), context + " separates the header from the existing small switch");
+          assert.ok(html.includes('<span class="inline-flex min-h-11 items-center"><span class="relative inline-flex h-5 w-9 shrink-0">'), context + " centers the unchanged small track in the shared 44px control row");
+        } else {
+          const expectedSurface = presentation.name === "card" ? sharedSwitchRuntime.ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME : sharedSwitchRuntime.ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME;
+          assert.ok(labelTag.includes(expectedSurface), context + " preserves the exact legacy frame");
+          assert.equal(renderToStaticMarkup(createElement(SharedSwitch, { ...props, embedded: false })), html, context + " omitted opt-in equals explicit false");
+        }
+        switchRuntimeCases += 1;
+      }
+    }
+  }
+  for (const fallback of [{ name: undefined, uncheckedValue: "false" }, { name: "shared_switch_probe", uncheckedValue: undefined }]) {
+    const html = renderToStaticMarkup(createElement(SharedSwitch, { ...presentation.props, ...fallback, label: "إظهار العناصر", value: "true" }));
+    assert.equal((html.match(/<input\b/gu) ?? []).length, 1, "No fallback is invented when its existing name/value contract is absent");
+    assert.equal(html.includes('type="hidden"'), false);
+  }
+}
+check("shared switch preserves native semantics and exact default/card surfaces across 24 rendered controlled/uncontrolled cases", switchRuntimeCases === 24);
+check("embedded switch reuses the original small track and conditional fallback without adding another input owner", sharedFormSwitch.match(/type="checkbox"/g)?.length === 1 && sharedFormSwitch.match(/const switchControl =/g)?.length === 1 && sharedFormSwitch.includes('className="relative inline-flex h-5 w-9 shrink-0"') && !formSwitch.includes("embedded"));
+
 check("publishing and display controls preserve field parity through shared owners", publishingOptions.match(/<AdminFormSwitch\b/g)?.length === 1 && !/<AdminFormSwitch\b/.test(displaySettings) && ["is_featured", "is_popular"].every((name) => publishingOptions.includes(`name="${name}"`)) && publishingOptions.includes('name="status"') && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));
 check("publishing decisions form two grouped cards inside the four-unit responsive dashboard", ["publication-schedule", "featured-popular"].every((id) => publishingOptions.includes(`id="${id}"`)) && sharedReview.includes("md:grid-cols-2") && sharedReview.includes("lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,1fr)]") && publishingOptions.includes('name="status"') && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes("TopicDateLabelField"));
 const sharedDatePicker = read("src/components/admin/ui/AdminDatePicker.tsx");

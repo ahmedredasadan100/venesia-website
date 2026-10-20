@@ -47,7 +47,7 @@ import {
   REDIRECTS_LIST_COLUMN_META,
   type RedirectColumnKey,
 } from "../../../../lib/admin/redirects/list-config";
-import { formatAdminDateTime } from "../../../../lib/content-dates";
+import { AdminDataGridDateTimeCell } from "../../../../components/admin/ui/AdminDataGrid";
 
 import RedirectFormModal from "./RedirectFormModal";
 import { createRedirectsCollectionToolbar } from "./RedirectsListFilters";
@@ -137,9 +137,10 @@ function createRedirectColumns(input: {
       minWidth: 164,
       width: 164,
       renderCell: ({ row }) => (
-        <span className="block text-right text-sm text-white/62">
-          {formatAdminDateTime(row.created_at)}
-        </span>
+        <AdminDataGridDateTimeCell
+          value={row.created_at}
+          className="block text-right text-sm text-white/62"
+        />
       ),
     },
     {
@@ -147,9 +148,10 @@ function createRedirectColumns(input: {
       minWidth: 164,
       width: 164,
       renderCell: ({ row }) => (
-        <span className="block text-right text-sm text-white/62">
-          {formatAdminDateTime(row.updated_at)}
-        </span>
+        <AdminDataGridDateTimeCell
+          value={row.updated_at}
+          className="block text-right text-sm text-white/62"
+        />
       ),
     },
     {

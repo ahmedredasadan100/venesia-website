@@ -1,9 +1,16 @@
 /**
  * Architecture acceptance gates for Admin Entity List System v1.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import React from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
+import postcss from "postcss";
+import { compile } from "@tailwindcss/node";
 import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -208,23 +215,49 @@ function findJsxUsages(componentName, directory = resolve(ROOT, "src")) {
   return usages;
 }
 
-function loadPureTypeScriptModule(path, dependencies = {}) {
-  const output = ts.transpileModule(read(path), {
+function loadPureTypeScriptModule(path, dependencies = {}, source = read(path), globals = {}) {
+  const output = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
     },
   }).outputText;
   const commonJsModule = { exports: {} };
-  Function("exports", "module", "require", output)(
+  Function("exports", "module", "require", ...Object.keys(globals), output)(
     commonJsModule.exports,
     commonJsModule,
     (specifier) => {
+      if (specifier === "react/jsx-runtime") return jsxRuntime;
       if (specifier in dependencies) return dependencies[specifier];
       throw new Error(`Unsupported dependency ${specifier} while loading ${path}`);
     },
+    ...Object.values(globals),
   );
   return commonJsModule.exports;
+}
+
+function hasCanonicalDateColumn(source, key) {
+  const file = ts.createSourceFile("date-columns.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let count = 0;
+  const visit = node => {
+    if (ts.isObjectLiteralExpression(node)) {
+      const property = name => node.properties.find(item => ts.isPropertyAssignment(item) && item.name.getText(file) === name)?.initializer;
+      const columnKey = property("key"), render = property("renderCell");
+      if (columnKey && ts.isStringLiteral(columnKey) && columnKey.text === key && render) {
+        const findOwner = child => {
+          if ((ts.isJsxSelfClosingElement(child) || ts.isJsxOpeningElement(child)) && child.tagName.getText(file) === "AdminDataGridDateTimeCell") {
+            const value = child.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText(file) === "value")?.initializer;
+            if (value && ts.isJsxExpression(value) && value.expression && ts.isPropertyAccessExpression(value.expression) && value.expression.expression.getText(file) === "row" && value.expression.name.text === key) count += 1;
+          }
+          ts.forEachChild(child, findOwner);
+        };
+        findOwner(render);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file); return count === 1;
 }
 
 const coreFiles = [
@@ -243,6 +276,7 @@ const coreFiles = [
   "src/components/admin/entity-list/AdminFloatingLayerContext.tsx",
   "src/components/admin/ui/AdminBulkActionBar.tsx",
   "src/components/admin/ui/AdminDataGrid.tsx",
+  "src/components/admin/ui/AdminDataGridDateTimeCell.tsx",
   "src/components/admin/ui/AdminListEmptyState.tsx",
   "src/components/admin/ui/AdminListboxSelect.tsx",
   "src/components/admin/ui/admin-floating-position.ts",
@@ -411,11 +445,13 @@ check(
 );
 
 check(
-  "Shared metric cards viewport owns horizontal scrolling and compensated hover-glow bleed",
+  "Shared metric cards wrap responsively while retaining compensated hover-glow bleed",
   metricCardsGrid.includes('data-admin-metric-cards-viewport=""') &&
-    metricCardsGrid.includes('"-mt-8 overflow-x-auto pt-8"') &&
+    metricCardsGrid.includes("-mt-8") && metricCardsGrid.includes("pt-8") &&
+    metricCardsGrid.includes("repeat(auto-fit,minmax(min(100%,") &&
+    !metricCardsGrid.includes("overflow-x-auto") &&
     !metricCardsGrid.includes("z-") &&
-    topicsClient.includes('className="min-w-[1146px]"') &&
+    !topicsClient.includes('className="min-w-[1146px]"') &&
     !topicsClient.includes(
       '<AdminEntityListPrimarySection className="overflow-x-auto',
     ),
@@ -614,8 +650,7 @@ check(
     !dataGrid.includes("[scrollbar-width:thin]") &&
     scrollbarStyles.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES") &&
     !scrollbarStyles.includes("[&::-webkit-scrollbar]:h-1.5") &&
-    venesiaScrollbarStyles.includes("[&::-webkit-scrollbar]:h-1.5") &&
-    venesiaScrollbarStyles.includes("[&::-webkit-scrollbar]:w-1.5") &&
+    venesiaScrollbarStyles.includes('VENESIA_SCROLLBAR_VISUAL_CLASSES = "venesia-scrollbar"') &&
     entityTable.includes("scrollLabel?: string") &&
     entityTable.includes("scrollLabel={scrollLabel}") &&
     !entityTable.includes("max-w-full overflow-hidden"),
@@ -928,7 +963,8 @@ check(
     /key:\s*"published_at"[\s\S]*?defaultVisible:\s*false/.test(categoriesColumns) &&
     /key:\s*"status"[\s\S]*?minWidth:\s*104[\s\S]*?width:\s*104/.test(categoriesColumns) &&
     /key:\s*"count"[\s\S]*?minWidth:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH[\s\S]*?width:\s*ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH/.test(categoriesColumns) &&
-    /key:\s*"created_at"[\s\S]*?defaultVisible:\s*true[\s\S]*?minWidth:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?width:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?dir="ltr"[\s\S]*?whitespace-nowrap/.test(categoriesColumns) &&
+    /key:\s*"created_at"[\s\S]*?defaultVisible:\s*true[\s\S]*?minWidth:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH[\s\S]*?width:\s*ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH/.test(categoriesColumns) &&
+    hasCanonicalDateColumn(categoriesColumns, "created_at") &&
     /key:\s*"actions"[\s\S]*?width:\s*ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH[\s\S]*?sticky:\s*"end"/.test(categoriesColumns) &&
     /key:\s*"name"[\s\S]*?flexible:\s*true/.test(categoriesColumns),
 );
@@ -1004,7 +1040,7 @@ check(
     seriesColumns.includes("ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH") &&
     seriesColumns.includes("ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH") &&
     seriesColumns.includes("ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH") &&
-    seriesColumns.includes('dir="ltr"') &&
+    hasCanonicalDateColumn(seriesColumns, "created_at") &&
     seriesColumns.includes('minWidth: 104') &&
     dataGrid.includes(
       "ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH = 112",
@@ -1490,6 +1526,486 @@ check('Actual primary pinning follows the existing responsive contract and remov
   entityTable.includes('primaryStickyMedia.removeEventListener("change", updateAvailableWidth)') &&
   entityTable.includes('observer.disconnect()'));
 
+
+// Execute the presentation owner, rather than accepting a consumer's icon tokens.
+const metricCardPath = "src/components/admin/ui/AdminMetricCard.tsx";
+const metricGridPath = "src/components/admin/ui/AdminMetricCardsGrid.tsx";
+const metricTabsPath = "src/components/admin/ui/AdminModuleTabs.tsx";
+function elements(node, predicate = () => true) {
+  const result = [];
+  function visit(value) {
+    if (Array.isArray(value)) return value.forEach(visit);
+    if (!React.isValidElement(value)) return;
+    if (predicate(value)) result.push(value);
+    visit(value.props.children);
+  }
+  visit(node);
+  return result;
+}
+function metricContract(source = read(metricCardPath)) {
+  const Card = loadPureTypeScriptModule(metricCardPath, {}, source).default;
+  let calls = 0;
+  const onClick = () => { calls += 1; };
+  const icon = React.createElement("svg", { "data-metric-probe": "" });
+  for (const active of [false, true]) {
+    const tree = Card({ label: "مقياس", value: 42, suffix: "/100", icon, active, onClick, ariaLabel: "تصفية المقياس" });
+    assert.equal(tree.type, "button");
+    assert.equal(tree.props.type, "button");
+    assert.equal(tree.props["aria-pressed"], active);
+    assert.equal(tree.props["aria-label"], "تصفية المقياس");
+    assert.equal(tree.props.onClick, onClick);
+    tree.props.onClick();
+    const content = elements(tree, element => "data-admin-metric-content" in element.props);
+    const glyph = elements(tree, element => "data-admin-metric-icon" in element.props);
+    assert.equal(content.length, 1);
+    assert.equal(glyph.length, 1);
+    assert.equal(glyph[0].props["aria-hidden"], "true");
+    assert.equal(elements(glyph[0], element => element.type === "p").length, 0);
+    const paragraphs = elements(content[0], element => element.type === "p");
+    assert.equal(paragraphs.length, 2);
+    assert.equal(renderToStaticMarkup(paragraphs[0]).replace(/<[^>]+>/gu, ""), "42/100");
+    assert.equal(renderToStaticMarkup(paragraphs[1]).replace(/<[^>]+>/gu, ""), "مقياس");
+    assert.equal(elements(content[0], element => "data-metric-probe" in element.props).length, 0);
+  }
+  assert.equal(calls, 2);
+  const staticTree = Card({ label: "ثابت", value: 0 });
+  assert.equal(staticTree.type, "div");
+  assert.equal(staticTree.props.onClick, undefined);
+  assert.equal(staticTree.props.type, undefined);
+  assert.equal(staticTree.props["aria-pressed"], undefined);
+  assert.equal(elements(staticTree, element => "data-admin-metric-icon" in element.props || "data-admin-metric-content" in element.props).length, 0);
+  const labelled = Card({ label: "افتراضي", value: 1, onClick });
+  assert.equal(labelled.props["aria-label"], "افتراضي");
+  return Card;
+}
+const MetricCard = metricContract();
+check("Actual Metric Card preserves value/label hierarchy, decorative icon isolation and button commands", Boolean(MetricCard));
+const metricMutants = [
+  read(metricCardPath).replace('data-admin-metric-icon="" aria-hidden="true"', 'data-admin-metric-icon=""'),
+  read(metricCardPath).replace('onClick ? "button" : "div"', '"div"'),
+  read(metricCardPath).replace('            onClick,', '            onClick: () => {},'),
+  read(metricCardPath).replace('"aria-pressed": active', '"aria-pressed": false'),
+  read(metricCardPath).replace(/\{value\}\r?\n/u, '{label}\n'),
+];
+check("Metric owner negatives reject hidden semantics, swallowed actions, fixed active state and changed values", metricMutants.every(source => {
+  if (source === read(metricCardPath)) return false;
+  try { metricContract(source); return false; } catch { return true; }
+}));
+const MetricGrid = loadPureTypeScriptModule(metricGridPath, { "./AdminMetricCard": { default: MetricCard } }).default;
+const gridItems = Array.from({ length: 7 }, (_, index) => ({ label: `مقياس ${index}`, value: index, active: index === 2, onClick: index < 6 ? () => index : undefined }));
+const gridTree = MetricGrid({ items: gridItems });
+const actualCards = elements(gridTree, element => element.type === MetricCard);
+check("Actual Metric Grid retains all seven ordered values, active state and exact callback identities", actualCards.length === gridItems.length && actualCards.every((element, index) => {
+  const { label, value, active, onClick } = element.props;
+  return label === gridItems[index].label && value === index && active === gridItems[index].active && onClick === gridItems[index].onClick;
+}));
+check("Actual metric viewport retains its bleed boundary without forcing a horizontal scrollport", "data-admin-metric-cards-viewport" in gridTree.props && !/\boverflow-x-(?:auto|scroll)\b/u.test(gridTree.props.className));
+
+// The neutral token resolves once to CSS; overflow remains a consumer concern.
+async function verifyScrollbarUtility() {
+  const tree = postcss.parse(read("src/app/globals.css"));
+  const definitions = [];
+  tree.walkAtRules("utility", node => { if (node.params === "venesia-scrollbar") definitions.push(node); });
+  assert.equal(definitions.length, 1);
+  const definition = definitions[0];
+  const applies = definition.nodes.filter(node => node.type !== "comment");
+  assert.equal(applies.length, 1);
+  assert.equal(applies[0].name, "apply");
+  const tokens = applies[0].params.split(/\s+/u);
+  assert.ok(tokens.length > 0 && tokens.every(token => /scrollbar/u.test(token)));
+  const adoption = [];
+  tree.walkAtRules("apply", node => { if (node.params === "venesia-scrollbar") adoption.push(node); });
+  assert.equal(adoption.length, 1);
+  assert.deepEqual(adoption[0].parent.selectors, ["html:has([data-admin-shell])", "html:has([data-admin-shell]) body", ":where([data-admin-shell], [data-admin-shell] *)"]);
+  assert.equal(adoption[0].parent.nodes.filter(node => node.type !== "comment").length, 1);
+  const options = { base: ROOT, onDependency() {} };
+  const direct = await compile('@import "tailwindcss";', options);
+  const named = await compile('@import "tailwindcss";\n' + definition.toString(), options);
+  function declarations(css) {
+    const result = {};
+    postcss.parse(css).walkDecls(decl => {
+      const ancestors = [];
+      for (let parent = decl.parent; parent; parent = parent.parent) ancestors.push(parent);
+      if (!ancestors.some(parent => parent.type === "atrule" && parent.name === "layer" && parent.params === "utilities")) return;
+      const selector = ancestors.filter(parent => parent.type === "rule").map(parent => parent.selector).join(" ");
+      const pseudo = selector.includes("::-webkit-scrollbar-thumb") ? "thumb" : selector.includes("::-webkit-scrollbar-track") ? "track" : selector.includes("::-webkit-scrollbar") ? "scrollbar" : "element";
+      const media = ancestors.filter(parent => parent.type === "atrule" && parent.name === "media").map(parent => parent.params).join("|");
+      result[[pseudo, selector.includes(":hover"), media, decl.prop].join("|")] = decl.value;
+    });
+    return result;
+  }
+  const inlineDeclarations = declarations(direct.build(tokens));
+  const namedDeclarations = declarations(named.build(["venesia-scrollbar"]));
+  assert.deepEqual(namedDeclarations, inlineDeclarations);
+  assert.equal(Object.keys(namedDeclarations).length, 9);
+  for (const key of Object.keys(namedDeclarations)) {
+    const [pseudo, , , property] = key.split("|");
+    assert.ok(["scrollbar-width", "scrollbar-color", "border-radius", "background-color", "height", "width"].includes(property));
+    if (["height", "width"].includes(property)) assert.equal(pseudo, "scrollbar");
+  }
+  return { declarations: namedDeclarations, selectors: adoption[0].parent.selectors };
+}
+const scrollbarUtility = await verifyScrollbarUtility();
+check("Installed Tailwind compiles the single scoped scrollbar utility to the same nine visual declarations", Boolean(scrollbarUtility));
+const tabDependencies = { react: React, "./AdminForm": {} };
+const currentTabs = loadPureTypeScriptModule(metricTabsPath, tabDependencies);
+const newGlyphs = ["database", "statistics"].map(name => renderToStaticMarkup(React.createElement(currentTabs.AdminModuleTabIcon, { name })));
+check("Metric semantic glyphs are distinct decorative SVGs in the existing icon owner", newGlyphs.every(markup => markup.includes("<svg") && markup.includes('aria-hidden="true"')) && newGlyphs[0] !== newGlyphs[1]);
+check("Existing editor and nowrap tab scrollports retain native scrolling without hidden-scrollbar overrides", !/scrollbar-width:none|webkit-scrollbar\]:hidden|-ms-overflow-style:none/u.test(read(metricTabsPath)) && read(metricTabsPath).includes("overflow-x-auto overscroll-x-contain"));
+
+// Optional local receipt compares the phase's exact originals, never Git HEAD.
+const baselineArgument = process.argv.find(argument => argument.startsWith("--baseline-file="));
+if (baselineArgument) {
+  const baselinePath = resolve(ROOT, baselineArgument.slice("--baseline-file=".length));
+  const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
+  const hash = value => createHash("sha256").update(value).digest("hex");
+  const before = path => {
+    const entry = baseline.entries.find(item => item.path === path);
+    assert.ok(entry, `Missing baseline ${path}`);
+    const bytes = entry.content ? Buffer.from(entry.content, "base64") : readFileSync(resolve(dirname(baselinePath), "baseline", path));
+    assert.equal(hash(bytes), entry.sha256.toLowerCase(), `Baseline hash ${path}`);
+    return bytes.toString("utf8");
+  };
+  const parse = (path, source) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const canonical = (sourceFile, transformer) => {
+    const transformed = ts.transform(sourceFile, [transformer]);
+    const structure = node => {
+      const children = [];
+      ts.forEachChild(node, child => { children.push(structure(child)); });
+      return { kind: node.kind, text: !ts.isSourceFile(node) && typeof node.text === "string" ? (ts.isJsxText(node) ? node.text.replace(/\s+/gu, " ").trim() : node.text) : undefined, isTypeOnly: node.isTypeOnly, children };
+    };
+    try { return JSON.stringify(structure(transformed.transformed[0])); } finally { transformed.dispose(); }
+  };
+  const consumers = ["src/components/admin/content/TopicsListClient.tsx", "src/app/admin/content/categories/CategoriesListClient.tsx", "src/app/admin/content/series/SeriesTableClient.tsx", "src/app/admin/projects/construction-updates/page.tsx"];
+  const consumerProof = consumers.map(path => {
+    const original = before(path), current = read(path), oldAst = parse(path, original), ast = parse(path, current);
+    const oldImports = new Set();
+    for (const statement of oldAst.statements) if (ts.isImportDeclaration(statement) && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)) for (const item of statement.importClause.namedBindings.elements) oldImports.add(item.name.text);
+    const arrays = [];
+    function collect(node) {
+      if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "metricItems" && node.initializer && ts.isArrayLiteralExpression(node.initializer)) arrays.push(node.initializer);
+      if (ts.isJsxAttribute(node) && node.name.getText(ast) === "items" && node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression && ts.isArrayLiteralExpression(node.initializer.expression)) arrays.push(node.initializer.expression);
+      ts.forEachChild(node, collect);
+    }
+    collect(ast);
+    assert.equal(arrays.length, 1);
+    const items = new Set(arrays[0].elements);
+    const labels = [], commands = [];
+    for (const item of items) {
+      assert.ok(ts.isObjectLiteralExpression(item));
+      const property = name => item.properties.find(candidate => ts.isPropertyAssignment(candidate) && candidate.name.getText(ast) === name)?.initializer;
+      const label = property("label"), icon = property("icon");
+      assert.ok(label && ts.isStringLiteral(label)); labels.push(label.text);
+      if (property("onClick")) commands.push(property("onClick").getText(ast));
+      assert.ok(icon && ts.isJsxSelfClosingElement(icon));
+      assert.ok(["AdminModuleTabIcon", "AdminDataGridActionIcon"].includes(icon.tagName.getText(ast)));
+    }
+    const normalize = context => {
+      const visit = node => {
+        if (items.has(node)) return ts.factory.updateObjectLiteralExpression(node, node.properties.filter(property => !(ts.isPropertyAssignment(property) && property.name.getText(ast) === "icon")));
+        if (ts.isImportDeclaration(node) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
+          const bindings = node.importClause.namedBindings;
+          const retained = bindings.elements.filter(item => {
+            if (oldImports.has(item.name.text)) return true;
+            assert.ok(["AdminModuleTabIcon", "AdminDataGridActionIcon"].includes(item.name.text), `Unexpected added import ${item.name.text}`);
+            assert.equal((item.propertyName ?? item.name).text, item.name.text);
+            const owner = item.name.text === "AdminModuleTabIcon" ? "AdminModuleTabs" : "AdminDataGrid";
+            assert.equal(resolve(ROOT, dirname(path), node.moduleSpecifier.text + ".tsx"), resolve(ROOT, `src/components/admin/ui/${owner}.tsx`));
+            return false;
+          });
+          if (!retained.length && !node.importClause.name) return undefined;
+          return ts.factory.updateImportDeclaration(node, node.modifiers, ts.factory.updateImportClause(node.importClause, node.importClause.isTypeOnly, node.importClause.name, ts.factory.updateNamedImports(bindings, retained)), node.moduleSpecifier, node.attributes);
+        }
+        return ts.visitEachChild(node, visit, context);
+      };
+      return node => ts.visitNode(node, visit);
+    };
+    const normalizeBefore = context => {
+      const visit = node => {
+        if (path.endsWith("TopicsListClient.tsx") && (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(oldAst) === "AdminMetricCardsGrid") {
+          const properties = node.attributes.properties.filter(property => {
+            if (!ts.isJsxAttribute(property) || property.name.getText(oldAst) !== "className") return true;
+            assert.ok(property.initializer && ts.isStringLiteral(property.initializer) && property.initializer.text === "min-w-[1146px]");
+            return false;
+          });
+          const attributes = ts.factory.updateJsxAttributes(node.attributes, properties);
+          return ts.isJsxSelfClosingElement(node) ? ts.factory.updateJsxSelfClosingElement(node, node.tagName, node.typeArguments, attributes) : ts.factory.updateJsxOpeningElement(node, node.tagName, node.typeArguments, attributes);
+        }
+        return ts.visitEachChild(node, visit, context);
+      };
+      return node => ts.visitNode(node, visit);
+    };
+    assert.equal(canonical(ast, normalize), canonical(oldAst, normalizeBefore), `Only approved icon additions and Topics min-width removal: ${path}`);
+    return { path, count: labels.length, labels, commands, unchangedMetricFieldsAndRestOfSource: true, beforeSha256: hash(original), afterSha256: hash(current) };
+  });
+  const oldCard = loadPureTypeScriptModule(metricCardPath, {}, before(metricCardPath)).default;
+  const scrollbarPath = "src/components/venesia-scrollbar-styles.ts";
+  const oldScrollbarToken = loadPureTypeScriptModule(scrollbarPath, {}, before(scrollbarPath)).VENESIA_SCROLLBAR_VISUAL_CLASSES;
+  const currentScrollbarCss = postcss.parse(read("src/app/globals.css"));
+  let scrollbarApply;
+  currentScrollbarCss.walkAtRules("utility", node => { if (node.params === "venesia-scrollbar") scrollbarApply = node.nodes.find(child => child.type === "atrule" && child.name === "apply")?.params; });
+  assert.equal(scrollbarApply, oldScrollbarToken, "The moved CSS visual definition retains the exact phase-baseline token declarations");
+  let defaultCases = 0;
+  for (const tone of ["gold", "blue", "green", "amber", "violet", "cyan"]) for (const compact of [false, true]) for (const align of ["start", "center"]) {
+    const props = { label: "لوحة المعلومات", value: 124, suffix: "/100", tone, compact, align };
+    assert.equal(renderToStaticMarkup(React.createElement(MetricCard, props)), renderToStaticMarkup(React.createElement(oldCard, props)));
+    defaultCases += 1;
+  }
+  const oldTabs = loadPureTypeScriptModule(metricTabsPath, tabDependencies, before(metricTabsPath));
+  const currentTabAst = parse(metricTabsPath, read(metricTabsPath));
+  const currentIconAlias = currentTabAst.statements.find(node => ts.isTypeAliasDeclaration(node) && node.name.text === "AdminModuleTabIconName");
+  assert.ok(currentIconAlias && ts.isUnionTypeNode(currentIconAlias.type));
+  assert.deepEqual(currentIconAlias.type.types.map(node => node.getText(currentTabAst)), ["ModuleEditorIconToken", '"database"', '"statistics"']);
+  const oldNames = [...before(metricTabsPath).matchAll(/name === "([^"]+)"/gu)].map(match => match[1]);
+  for (const name of [...oldNames, "unknown-fallback"]) assert.equal(renderToStaticMarkup(React.createElement(currentTabs.AdminModuleTabIcon, { name })), renderToStaticMarkup(React.createElement(oldTabs.AdminModuleTabIcon, { name })));
+  function tabNormalization(context) {
+    const visit = node => {
+      if (ts.isTypeAliasDeclaration(node) && node.name.text === "AdminModuleTabIconName") return ts.factory.updateTypeAliasDeclaration(node, node.modifiers, node.name, node.typeParameters, ts.factory.createTypeReferenceNode("ModuleEditorIconToken"));
+      if (ts.isConditionalExpression(node) && ts.isBinaryExpression(node.condition) && ts.isIdentifier(node.condition.left) && node.condition.left.text === "name" && ts.isStringLiteral(node.condition.right) && ["database", "statistics"].includes(node.condition.right.text)) return ts.visitNode(node.whenFalse, visit);
+      if (ts.isStringLiteral(node) && node.text.includes("overflow-x-auto")) return ts.factory.createStringLiteral(node.text.replace(/\s+(?:\[-ms-overflow-style:none\]|\[scrollbar-width:none\]|\[&::-webkit-scrollbar\]:hidden)/gu, ""));
+      return ts.visitEachChild(node, visit, context);
+    };
+    return node => ts.visitNode(node, visit);
+  }
+  assert.equal(canonical(parse(metricTabsPath, read(metricTabsPath)), tabNormalization), canonical(parse(metricTabsPath, before(metricTabsPath)), tabNormalization), "Tab defaults, overflow and keyboard/mounted behavior only differ by approved glyph/hide changes");
+  const headerPath = "src/components/admin/ui/AdminPageContextHeader.tsx";
+  const oldHeader = loadPureTypeScriptModule(headerPath, {}, before(headerPath)).default;
+  const Header = loadPureTypeScriptModule(headerPath).default;
+  let minimalHeaderCases = 0;
+  for (const status of ["ready", "loading", "error", "empty", "under-construction"]) for (const withSlots of [false, true]) {
+    const props = { variant: "minimal", status, title: "العنوان", ...(withSlots ? { eyebrow: "السياق", badge: "الحالة", description: "الوصف", breadcrumb: "المسار", meta: "البيانات", actions: React.createElement("button", { type: "button" }, "إجراء") } : {}) };
+    assert.equal(renderToStaticMarkup(React.createElement(Header, props)), renderToStaticMarkup(React.createElement(oldHeader, props)));
+    minimalHeaderCases += 1;
+  }
+  assert.ok(newGlyphs.every(markup => markup.includes('<svg') && markup.includes('aria-hidden="true"')));
+  assert.notEqual(newGlyphs[0], newGlyphs[1]);
+  const owners = [metricCardPath, metricGridPath, metricTabsPath, headerPath, scrollbarPath, "src/app/globals.css"].map(path => ({ path, beforeSha256: hash(before(path)), afterSha256: hash(read(path)) }));
+  const receipt = { status: "PASS", capturedAt: new Date().toISOString(), baseline: baselinePath, consumers: consumerProof, owners, defaultCardExactSsrCases: defaultCases, minimalHeaderExactSsrCases: minimalHeaderCases, existingIconExactSsrCases: oldNames.length + 1, tabKeyboardMountedOverflowSourceParity: true, scrollbarBaselineTokenParity: true, newDecorativeGlyphs: ["database", "statistics"], scrollbarUtility, limitations: ["Source, SSR and callbacks only; responsive geometry, scroll behavior and visual acceptance require actual Browser evidence."] };
+  const outputArgument = process.argv.find(argument => argument.startsWith("--output-file="));
+  if (outputArgument) writeFileSync(resolve(ROOT, outputArgument.slice("--output-file=".length)), JSON.stringify(receipt, null, 2) + "\n");
+  check("Exact phase baseline preserves all four consumer contracts, no-icon Card output and existing glyphs", true);
+}
+
+// Date-cell acceptance executes the actual owner. The DOM ports provide measured
+// rectangles and event scheduling only; they are not a layout engine or visual
+// proof. Actual Browser clipping, focus and portal placement remain separate QA.
+const dateCellPath = "src/components/admin/ui/AdminDataGridDateTimeCell.tsx";
+const dateCellSource = read(dateCellPath);
+const dateFormatter = loadPureTypeScriptModule("src/lib/content-dates.ts");
+const dateCellCases = [
+  { name: "full fits", content: { left: 30, right: 260 }, viewport: { left: 0, right: 300 }, obstacles: [], fullWidth: 196, expected: { compact: false, offset: 0, width: 230 } },
+  { name: "narrow content", content: { left: 30, right: 150 }, viewport: { left: 0, right: 300 }, obstacles: [], fullWidth: 196, expected: { compact: true, offset: 0, width: 120 } },
+  { name: "exact full fit", content: { left: 0, right: 133.425 }, viewport: { left: 0, right: 600 }, obstacles: [], fullWidth: 133.425, expected: { compact: false, offset: 0, width: 133.425 } },
+  { name: "fraction below full fit", content: { left: 0, right: 133.424 }, viewport: { left: 0, right: 600 }, obstacles: [], fullWidth: 133.425, expected: { compact: true, offset: 0, width: 133.424 } },
+  { name: "fractional scrollport clipping", content: { left: 100, right: 340 }, viewport: { left: 120.5, right: 300.25 }, obstacles: [], fullWidth: 196, expected: { compact: true, offset: 20.5, width: 179.75 } },
+  { name: "both sticky rails", content: { left: 0, right: 400 }, viewport: { left: 0, right: 400 }, obstacles: [{ left: 0, right: 90 }, { left: 250, right: 400 }], fullWidth: 196, expected: { compact: true, offset: 90, width: 160 } },
+  { name: "clipped old center can retain full in available gap", content: { left: 0, right: 164 }, viewport: { left: 0, right: 300 }, obstacles: [{ left: 141.687, right: 300 }], fullWidth: 133.425, expected: { compact: false, offset: 0, width: 141.687 } },
+  { name: "inline-start overlay repositions full text", content: { left: 0, right: 230 }, viewport: { left: 0, right: 300 }, obstacles: [{ left: 0, right: 25 }], fullWidth: 196, expected: { compact: false, offset: 25, width: 205 } },
+  { name: "overlapping rails are subtracted once", content: { left: 0, right: 400 }, viewport: { left: 0, right: 400 }, obstacles: [{ left: 0, right: 80 }, { left: 30, right: 90 }, { left: 250, right: 400 }], fullWidth: 196, expected: { compact: true, offset: 90, width: 160 } },
+  { name: "largest uncovered interval", content: { left: 0, right: 400 }, viewport: { left: 0, right: 400 }, obstacles: [{ left: 70, right: 100 }, { left: 300, right: 340 }], fullWidth: 196, expected: { compact: false, offset: 100, width: 200 } },
+  { name: "offscreen", content: { left: -200, right: -20 }, viewport: { left: 0, right: 300 }, obstacles: [], fullWidth: 196, expected: null },
+  { name: "fully covered", content: { left: 30, right: 150 }, viewport: { left: 0, right: 300 }, obstacles: [{ left: 0, right: 300 }], fullWidth: 196, expected: null },
+];
+
+function dateCellFixture(source = dateCellSource) {
+  const slots = [], frames = new Map(), observers = [], portals = [], positionCalls = [], scrollCalls = [];
+  let index = 0, frameId = 0;
+  const equal = (left, right) => left && right && left.length === right.length && left.every((value, i) => Object.is(value, right[i]));
+  const hooks = {
+    useRef(value) { return slots[index++] ??= { current: value }; },
+    useId() { return `date-fixture-${index++}`; },
+    useState(initial) { const slot = slots[index++] ??= { value: typeof initial === "function" ? initial() : initial }; return [slot.value, next => { slot.value = typeof next === "function" ? next(slot.value) : next; }]; },
+    useLayoutEffect(effect, deps) { const i = index++, previous = slots[i]; if (!previous || !equal(previous.deps, deps)) slots[i] = { effect, deps, pending: true, cleanup: previous?.cleanup }; },
+  };
+  const bounds = (left, right, top = 10, bottom = 30) => ({ left, right, top, bottom, width: right - left, height: bottom - top });
+  class ElementPort extends EventTarget {
+    constructor(rect, style = {}) { super(); this.rect = rect; this.style = style; this.children = []; this.listeners = new Map(); this.parentElement = null; }
+    getBoundingClientRect() { return this.rect; }
+    addEventListener(type, handler, options) { super.addEventListener(type, handler, options); const entries = this.listeners.get(type) ?? new Set(); entries.add(handler); this.listeners.set(type, entries); }
+    removeEventListener(type, handler, options) { super.removeEventListener(type, handler, options); this.listeners.get(type)?.delete(handler); }
+    contains(element) { return this === element || this.children.some(child => child.contains(element)); }
+    focus() { document.activeElement = this; }
+    count(type) { return this.listeners.get(type)?.size ?? 0; }
+  }
+  const scrollport = new ElementPort(bounds(0, 300), { borderLeftWidth: "0.8px", borderRightWidth: "0.8px" });
+  const row = new ElementPort(bounds(0, 600)), cell = new ElementPort(bounds(24, 266), { position: "sticky" });
+  const root = new ElementPort(bounds(30, 260)), full = new ElementPort(bounds(30, 226)), anchor = new ElementPort(bounds(40, 240)), tooltip = new ElementPort(bounds(0, 210));
+  const startRail = new ElementPort(bounds(0, 25), { position: "sticky" }), endRail = new ElementPort(bounds(270, 300), { position: "sticky" });
+  const unrelatedRowRail = new ElementPort(bounds(0, 300, 100, 130), { position: "sticky" });
+  // Physical horizontal scrolling moves the ordinary row content, not its pinned
+  // rails or the viewport. The owner supplies the direction and distance.
+  scrollport.scrollBy = options => {
+    assert.equal(Number.isFinite(options.left), true); scrollCalls.push({ ...options });
+    for (const element of [row, cell, root, full, anchor]) {
+      const rect = element.rect; element.rect = bounds(rect.left - options.left, rect.right - options.left, rect.top, rect.bottom);
+    }
+  };
+  cell.children = [root]; row.children = [startRail, cell, endRail, unrelatedRowRail]; root.parentElement = cell; cell.parentElement = row;
+  root.closest = selector => selector === "td" ? cell : selector === "[data-admin-data-grid-scroll]" ? scrollport : null;
+  cell.closest = selector => selector === "tr" ? row : null;
+  const document = { documentElement: { clientWidth: 300 }, body: {}, activeElement: null };
+  const window = Object.assign(new ElementPort(bounds(0, 300)), { getComputedStyle: element => element.style, requestAnimationFrame(callback) { frames.set(++frameId, callback); return frameId; }, cancelAnimationFrame(id) { frames.delete(id); } });
+  class ResizeObserverPort {
+    constructor(callback) { this.callback = callback; this.targets = new Set(); this.disconnected = false; observers.push(this); }
+    observe(element) { this.targets.add(element); }
+    disconnect() { this.disconnected = true; this.targets.clear(); }
+    fire() { this.callback(); }
+  }
+  const loaded = loadPureTypeScriptModule(dateCellPath, {
+    react: hooks,
+    "react-dom": { createPortal(child, target) { assert.equal(target, document.body); portals.push(child); return child; } },
+    "../../../lib/content-dates": dateFormatter,
+    "./useAdminFloatingMenuPosition": { useAdminFloatingMenuPosition(isOpen, ref, options) { positionCalls.push({ isOpen, ref, options }); return isOpen ? { style: { position: "fixed", left: 8, top: 8 }, placement: "bottom" } : null; } },
+  }, source, { document, window, ResizeObserver: ResizeObserverPort, fetch() { throw new Error("Date presentation must not fetch or mutate data"); } });
+  let props = { value: "2026-12-01T12:53:00.000Z" }, tree;
+  const elements = value => Array.isArray(value) ? value.flatMap(elements) : value && typeof value === "object" && "props" in value ? [value, ...elements(value.props.children)] : [];
+  const render = (next = {}) => {
+    props = { ...props, ...next }; index = 0; tree = loaded.default(props);
+    for (const element of elements(tree)) if (element.props.ref) {
+      element.props.ref.current = "data-admin-date-time" in element.props ? root : element.type === "button" ? anchor : element.props.role === "tooltip" ? tooltip : full;
+    }
+    for (const slot of slots) if (slot?.pending) { slot.pending = false; slot.cleanup?.(); slot.cleanup = slot.effect(); }
+    return tree;
+  };
+  return { loaded, render, get tree() { return tree; }, elements, root, full, anchor, tooltip, row, cell, startRail, endRail, unrelatedRowRail, scrollport, window, document, observers, frames, portals, positionCalls, scrollCalls, bounds,
+    flush() { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); return render(); },
+    cleanup() { slots.forEach(slot => slot?.cleanup?.()); },
+    button() { return elements(tree).find(element => element.type === "button"); },
+    visible() { return elements(tree).find(element => "data-admin-date-visible" in element.props)?.props.children; },
+  };
+}
+
+function verifyDateLayout(source = dateCellSource) {
+  const { loaded } = dateCellFixture(source);
+  for (const sample of dateCellCases) assert.deepEqual(loaded.resolveAdminDataGridDateTimeLayout(sample), sample.expected, sample.name);
+}
+verifyDateLayout();
+check("Date layout executes actual visible intervals, fractional fit, both rails and offscreen cases", true);
+
+function verifyDateLifecycle(source = dateCellSource) {
+  const fixture = dateCellFixture(source); fixture.render(); fixture.render();
+  const fullValue = dateFormatter.formatAdminDateTime("2026-12-01T12:53:00.000Z"), dateValue = dateFormatter.formatAdminDateTime("2026-12-01T12:53:00.000Z", "date");
+  assert.equal(fixture.visible(), fullValue); assert.equal(fixture.tree.props.dir, "ltr");
+  assert.deepEqual([...fixture.observers[0].targets], [fixture.root, fixture.full, fixture.scrollport]);
+  assert.equal(fixture.scrollport.count("scroll"), 1); assert.equal(fixture.window.count("resize"), 1);
+  assert.equal(fixture.elements(fixture.tree).find(element => element.props["aria-hidden"] === "true")?.props.children, fullValue);
+  fixture.endRail.rect = fixture.bounds(210, 300);
+  fixture.observers[0].fire(); fixture.observers[0].fire(); assert.equal(fixture.frames.size, 1); fixture.flush();
+  assert.equal(fixture.visible(), dateValue);
+  fixture.endRail.rect = fixture.bounds(270, 300);
+  fixture.scrollport.dispatchEvent(new Event("scroll")); assert.equal(fixture.frames.size, 1); fixture.flush(); assert.equal(fixture.visible(), fullValue);
+  fixture.scrollport.rect = fixture.bounds(0, 160); fixture.window.dispatchEvent(new Event("resize")); fixture.flush();
+  assert.equal(fixture.visible(), dateValue);
+  const positioned = fixture.elements(fixture.tree).find(element => element.props.style?.width);
+  assert.ok(Math.abs(positioned.props.style.width - 129.2) < 0.00001, "The actual effect deducts fractional scrollport borders");
+  fixture.full.rect = fixture.bounds(30, 130); fixture.observers[0].fire(); fixture.flush(); assert.equal(fixture.visible(), fullValue);
+  fixture.root.rect = fixture.bounds(-300, -100); fixture.scrollport.dispatchEvent(new Event("scroll")); fixture.flush();
+  assert.equal(fixture.tree.props["data-presentation"], "date-time");
+  fixture.observers[0].fire(); assert.equal(fixture.frames.size, 1); fixture.cleanup();
+  assert.equal(fixture.observers[0].disconnected, true); assert.equal(fixture.frames.size, 0);
+  assert.equal(fixture.scrollport.count("scroll"), 0); assert.equal(fixture.window.count("resize"), 0);
+}
+verifyDateLifecycle();
+check("Actual Date cell measures full reference and rail overlap, resizes/reveals/recomputes and cleans up", true);
+
+function verifyDateDisclosure(source = dateCellSource) {
+  const fixture = dateCellFixture(source); fixture.render(); fixture.render();
+  const value = dateFormatter.formatAdminDateTime("2026-12-01T12:53:00.000Z");
+  const key = () => { const event = new Event("keydown", { cancelable: true, bubbles: true }); Object.defineProperty(event, "key", { value: "Escape" }); return event; };
+  assert.equal(fixture.button().props.type, "button"); assert.equal(fixture.button().props.onClick, undefined); assert.equal(fixture.button().props["aria-label"], value);
+  let event = key(); fixture.button().props.onKeyDown(event); assert.equal(event.defaultPrevented, false);
+  for (const [open, close] of [["onFocus", "onBlur"], ["onMouseEnter", "onMouseLeave"]]) {
+    fixture.anchor.focus(); fixture.button().props[open](); fixture.render();
+    const tooltip = fixture.elements(fixture.tree).find(element => element.props.role === "tooltip"); assert.ok(tooltip);
+    assert.equal(tooltip.props.children, value); assert.equal(tooltip.props.dir, "ltr"); assert.equal(fixture.button().props["aria-describedby"], tooltip.props.id);
+    assert.equal(fixture.positionCalls.at(-1).ref.current, fixture.anchor); assert.equal(fixture.positionCalls.at(-1).options.floatingRef.current, fixture.tooltip);
+    event = key(); fixture.button().props.onKeyDown(event); fixture.render();
+    assert.equal(event.defaultPrevented, true); assert.equal(event.cancelBubble, true); assert.equal(fixture.document.activeElement, fixture.anchor);
+    assert.equal(fixture.elements(fixture.tree).some(element => element.props.role === "tooltip"), false);
+    event = key(); fixture.button().props.onKeyDown(event); assert.equal(event.defaultPrevented, false);
+    fixture.button().props[close](); fixture.render(); fixture.button().props[open](); fixture.render();
+    assert.ok(fixture.elements(fixture.tree).some(element => element.props.role === "tooltip"));
+    fixture.button().props[close](); fixture.render(); assert.equal(fixture.elements(fixture.tree).some(element => element.props.role === "tooltip"), false);
+  }
+  fixture.cleanup();
+}
+verifyDateDisclosure();
+check("Actual Date tooltip keeps full value for keyboard/hover, consumes only open Escape and retains focus", true);
+
+function verifyDateFocusReveal(source = dateCellSource) {
+  const visible = dateCellFixture(source); visible.render(); visible.render();
+  visible.anchor.focus(); visible.button().props.onFocus(); visible.render();
+  assert.equal(visible.frames.size, 1, "Focus revelation waits for the browser's native focus-scroll");
+  visible.flush();
+  assert.equal(visible.scrollCalls.length, 0, "A date already inside the unpinned band must not scroll on focus");
+  visible.cleanup();
+
+  const fixture = dateCellFixture(source);
+  fixture.root.rect = fixture.bounds(8, 128);
+  fixture.full.rect = fixture.bounds(8, 141.425);
+  fixture.anchor.rect = fixture.bounds(32.55, 103.45);
+  fixture.startRail.rect = fixture.bounds(0, 144);
+  fixture.render(); fixture.render();
+  const dateValue = dateFormatter.formatAdminDateTime("2026-12-01T12:53:00.000Z", "date");
+  assert.equal(fixture.visible(), dateValue, "An entirely occluded 120px date retains its compact intrinsic fallback");
+  assert.ok(fixture.anchor.rect.right < fixture.startRail.rect.right);
+  fixture.anchor.focus(); fixture.button().props.onFocus(); fixture.render();
+  assert.equal(fixture.scrollCalls.length, 0, "Focus revelation must not race the native synchronous focus-scroll");
+  fixture.button().props.onFocus(); assert.equal(fixture.frames.size, 1, "Repeated focus coalesces its pending reveal frame");
+  fixture.flush();
+  assert.equal(fixture.scrollCalls.length, 1, "Focus must reveal the date behind pinned actions");
+  assert.equal(fixture.scrollCalls[0].behavior, "instant");
+  assert.ok(fixture.scrollCalls[0].left < 0, "The left-occluded date must move right into the visible band");
+  assert.equal(fixture.startRail.rect.right, 144); assert.equal(fixture.endRail.rect.left, 270);
+  assert.ok(fixture.root.rect.left >= 144 && fixture.root.rect.right <= 270, "The actual scroll request moves the date cell into the available band");
+  assert.ok(fixture.anchor.rect.left >= 144 && fixture.anchor.rect.right <= 270, "The focused native control clears both pinned rails");
+  assert.equal(fixture.visible(), dateValue); assert.equal(fixture.document.activeElement, fixture.anchor);
+  assert.equal(fixture.button().props["aria-label"], dateFormatter.formatAdminDateTime("2026-12-01T12:53:00.000Z"));
+  assert.ok(fixture.elements(fixture.tree).some(element => element.props.role === "tooltip"));
+  fixture.button().props.onFocus(); fixture.flush();
+  assert.equal(fixture.scrollCalls.length, 1, "Refocusing the revealed date must not scroll again");
+  fixture.button().props.onFocus(); assert.equal(fixture.frames.size, 1); fixture.cleanup();
+  assert.equal(fixture.frames.size, 0, "Cleanup cancels the owner's pending focus reveal frame");
+  fixture.flush(); assert.equal(fixture.scrollCalls.length, 1);
+}
+verifyDateFocusReveal();
+check("Actual Date focus reveals a pinned-rail occlusion once, retains compact fallback and leaves visible focus stationary", true);
+
+for (const value of [null, undefined, "", "invalid", "2026-02-30", "2026-12-01"]) {
+  const fixture = dateCellFixture(); const tree = fixture.render({ value, fallback: React.createElement("em", null, "لم يُنشر"), fallbackTitle: "حالة التاريخ", className: "date-probe" });
+  const html = renderToStaticMarkup(tree); assert.equal(tree.props.title, "حالة التاريخ"); assert.equal(tree.props.className, "date-probe");
+  assert.equal(fixture.observers.length, 0); assert.equal(fixture.window.count("resize"), 0); assert.equal(fixture.button(), undefined);
+  assert.ok(value === "2026-12-01" ? html.includes("01 Dec 2026") : html.includes("لم يُنشر")); fixture.cleanup();
+}
+check("Empty, invalid and date-only cells retain exact fallback semantics without interactive timestamp controls", true);
+
+const dateMutants = [
+  ["ignore viewport", dateCellSource.replace("Math.max(content.left, viewport.left)", "content.left").replace("Math.min(content.right, viewport.right)", "content.right"), verifyDateLayout],
+  ["ignore sticky rails", dateCellSource.replace("for (const obstacle of obstacles)", "for (const obstacle of [])"), verifyDateLayout],
+  ["always compact", dateCellSource.replace("compact: fullWidth > width", "compact: true"), verifyDateLayout],
+  ["invert fit", dateCellSource.replace("compact: fullWidth > width", "compact: fullWidth < width"), verifyDateLayout],
+  ["ignore full reference width", dateCellSource.replace("full.getBoundingClientRect().width", "0"), verifyDateLifecycle],
+  ["stale resize", dateCellSource.replace("new ResizeObserver(scheduleUpdate)", "new ResizeObserver(() => {})"), verifyDateLifecycle],
+  ["stale scroll", dateCellSource.replace('scrollport?.addEventListener("scroll", scheduleUpdate, { passive: true });', ""), verifyDateLifecycle],
+  ["missing observer cleanup", dateCellSource.replace("observer.disconnect();", ""), verifyDateLifecycle],
+  ["short accessible value", dateCellSource.replace("aria-label={fullValue}", "aria-label={dateValue}"), verifyDateDisclosure],
+  ["form submit control", dateCellSource.replace('type="button"', 'type="submit"'), verifyDateDisclosure],
+  ["consuming closed Escape", dateCellSource.replace('event.key === "Escape" && isOpen', 'event.key === "Escape"'), verifyDateDisclosure],
+  ["bypassed focus reveal", dateCellSource.replace("() => revealRef.current?.()", "() => {}"), verifyDateFocusReveal],
+  ["reversed focus scroll direction", dateCellSource.replace("(geometry.content.left + geometry.content.right - left - right) / 2", "(left + right - geometry.content.left - geometry.content.right) / 2"), verifyDateFocusReveal],
+  ["scrolling an already visible focus", dateCellSource.replace("if (target.left >= left && target.right <= right && target.width <= geometry.content.width) return;", ""), verifyDateFocusReveal],
+  ["full timestamp fallback behind rails", dateCellSource.replace("compact: geometry.fullWidth > geometry.content.width", "compact: false"), verifyDateFocusReveal],
+  ["focus reveal before native focus scroll", dateCellSource.replace("focusFrameRef.current = window.requestAnimationFrame(() => revealRef.current?.());", "revealRef.current?.();"), verifyDateFocusReveal],
+  ["uncancelled focus reveal frame", dateCellSource.replace("window.cancelAnimationFrame(focusFrameRef.current);", ""), verifyDateFocusReveal],
+];
+for (const [name, source, proof] of dateMutants) {
+  assert.notEqual(source, dateCellSource, `Applied Date mutation ${name}`); assert.throws(() => proof(source), { name: "AssertionError" });
+  check(`Date negative rejects ${name}`, true);
+}
+const dateReexport = ts.createSourceFile("AdminDataGrid.tsx", dataGrid, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX).statements.some(node => ts.isExportDeclaration(node) && node.moduleSpecifier?.text === "./AdminDataGridDateTimeCell" && node.exportClause && ts.isNamedExports(node.exportClause) && node.exportClause.elements.some(item => item.name.text === "AdminDataGridDateTimeCell"));
+check("Date cell remains the exported existing AdminDataGrid presentation family", dateReexport);
+const dateEvidenceArgument = process.argv.find(argument => argument.startsWith("--date-output-file="));
+if (dateEvidenceArgument && !failures.length) writeFileSync(resolve(ROOT, dateEvidenceArgument.slice("--date-output-file=".length)), JSON.stringify({ status: "pass", capturedAt: new Date().toISOString(), sources: [dateCellPath, "src/components/admin/ui/AdminDataGrid.tsx", "src/lib/content-dates.ts"].map(path => ({ path, sha256: createHash("sha256").update(read(path)).digest("hex") })), geometryCases: dateCellCases.map(row => row.name), negativeCases: dateMutants.map(([name]) => name), callbackCases: ["measured full reference", "fractional borders", "self sticky and vertically unrelated rail excluded", "ResizeObserver targets", "RAF coalescing", "horizontal reveal", "window resize", "offscreen reset", "observer/listener/frame cleanup", "focus and hover full tooltip", "occluded narrow date compact fallback", "focus reveals date past sticky rails with physical scroll translation", "already visible focus does not scroll", "reveal callback cleanup", "open Escape consumed without focus movement", "closed Escape untouched", "blur and mouseleave dismissal", "native non-submitting button", "invalid/date-only fallback"], actualOwnerExecuted: true, transport: "Controlled React hooks, measured DOM ports, physical horizontal scroll translation and portal/floating-position transport; actual existing date formatter", dataWrites: 0, browserVerified: false, limitations: ["No browser CSS/layout, portal placement, real focus traversal or visual approval claim; these require actual affected consumers."] }, null, 2) + "\n");
 
 if (failures.length) {
   console.error("verify-admin-entity-list FAILED:");

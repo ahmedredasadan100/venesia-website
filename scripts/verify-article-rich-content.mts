@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import {
+import { createJiti } from "jiti";
+
+const {
   markdownToRichTextHtml,
+  normalizeArticleMarkdown,
+  plainTextToMarkdown,
+  renderRichTextHtml,
   renderArticleMarkdownHtml,
   richTextHtmlToMarkdown,
-} from "../src/lib/rich-text/html-utils.ts";
+} = await createJiti(import.meta.url, { fsCache: false, moduleCache: false })
+  .import<typeof import("../src/lib/rich-text/html-utils.ts")>("../src/lib/rich-text/html-utils.ts");
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -55,6 +61,45 @@ const editorHtml = markdownToRichTextHtml(markdown);
 const roundTrip = richTextHtmlToMarkdown(editorHtml);
 check("visual editor serialization retains the Markdown storage contract", roundTrip.includes("**نص عريض**") && roundTrip.includes("## قسم رئيسي") && roundTrip.includes("- عنصر أول") && roundTrip.includes("[رابط داخلي](/topics/example)"));
 check("Enter and Shift+Enter storage semantics remain distinct", richTextHtmlToMarkdown("<p>فقرة أولى</p><p>فقرة ثانية<br />سطر داخلي</p>") === "فقرة أولى\n\nفقرة ثانية\nسطر داخلي");
+
+
+// Regression: distinguish literal text nodes from marks through repeated saves.
+const roundTripCases = [
+  ["aligned line break", '<p style="text-align: center">الأول<br /><u>الثاني</u></p><p>فقرة مستقلة</p>', '<p style="text-align: center">الأول<br /><u>الثاني</u></p><p>فقرة مستقلة</p>'],
+  ["aligned literal continuation", '<p style="text-align: left">الأول<br />*حرفي* &lt;tag&gt;</p>', '<p style="text-align: left">الأول<br />*حرفي* &lt;tag&gt;</p>'],
+  ["underline", "<p><u>تحته خط</u></p>", "<p><u>تحته خط</u></p>"],
+  ["literal stars", "<p>نص *حرفي* محفوظ</p>", "<p>نص *حرفي* محفوظ</p>"],
+  ["literal angle brackets", "<p>نص &lt;tag&gt; محفوظ</p>", "<p>نص &lt;tag&gt; محفوظ</p>"],
+  ["combined marks", "<p><strong><em><u>تنسيق</u></em></strong></p>", "<p><strong><em><u>تنسيق</u></em></strong></p>"],
+  ["literal underline syntax", "<p>&lt;u&gt;حرفي&lt;/u&gt;</p>", "<p>&lt;u&gt;حرفي&lt;/u&gt;</p>"],
+  ["literal entities", "<p>&amp;lt;tag&amp;gt; &amp;amp;</p>", "<p>&amp;lt;tag&amp;gt; &amp;amp;</p>"],
+  ["numeric text entities", "<p>&#60;tag&#62; &#42;نص&#42;</p>", "<p>&lt;tag&gt; *نص*</p>"],
+  ["escaped block syntax", "<p># عنوان حرفي<br />1. سطر حرفي<br />- شرطة<br />::left:: نص</p>", "<p># عنوان حرفي<br />1. سطر حرفي<br />- شرطة<br />::left:: نص</p>"],
+] as const;
+for (const [name, initialHtml, expectedHtml] of roundTripCases) {
+  let current = initialHtml as string;
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const stored = richTextHtmlToMarkdown(current);
+    assert.equal(normalizeArticleMarkdown(stored), stored, name + " must not be mistaken for legacy HTML");
+    assert.equal(renderArticleMarkdownHtml(stored), expectedHtml, name + " public cycle " + cycle);
+    current = markdownToRichTextHtml(normalizeArticleMarkdown(stored));
+    assert.equal(current, expectedHtml, name + " editor cycle " + cycle);
+  }
+  check(name + " preserves text and marks for three save/reload cycles", true);
+}
+check("ordinary punctuation retains existing Article serialization", richTextHtmlToMarkdown("<p>Authored core paragraph.</p>") === "Authored core paragraph.");
+check("entity-decoded text cannot collide with serialization placeholders", renderArticleMarkdownHtml(richTextHtmlToMarkdown("<p>&#86;ENESIABLOCK0END VENESIAESCAPE0END</p><p><u>خط</u></p>")) === "<p>VENESIABLOCK0END VENESIAESCAPE0END</p><p><u>خط</u></p>");
+const legacyPlain = "*حرفي* <tag> &lt;tag&gt; \\ _نص_ [رابط](/about)\n# عنوان حرفي";
+const escapedLegacy = plainTextToMarkdown(legacyPlain);
+check("legacy plain text is escaped at the shared boundary without interpreting it", renderArticleMarkdownHtml(escapedLegacy) === "<p>*حرفي* &lt;tag&gt; &amp;lt;tag&amp;gt; \\ _نص_ [رابط](/about)<br /># عنوان حرفي</p>");
+check("escaped punctuation and actual formatting can coexist", renderArticleMarkdownHtml("**عريض** " + plainTextToMarkdown("*حرفي*")) === "<p><strong>عريض</strong> *حرفي*</p>");
+check("HTML consumer semantics retain marks and literal text", renderRichTextHtml('<p><strong>عريض</strong> <em>مائل</em> <u>خط</u> &lt;tag&gt; *حرفي*</p>') === '<p><strong>عريض</strong> <em>مائل</em> <u>خط</u> &lt;tag&gt; *حرفي*</p>');
+for (const input of ['<script>alert(1)</script><p onclick="alert(1)">نص</p>', '<p><a href="javascript:alert(1)">خطر</a></p>', '<p><img src=x onerror=alert(1)>نص</p>', '<u onclick="alert(1)">خط</u>']) {
+  for (const html of [renderRichTextHtml(input), renderArticleMarkdownHtml(richTextHtmlToMarkdown(input))]) {
+    assert.ok(!/<script|<img|\son\w+=|href="javascript:/i.test(html));
+  }
+}
+check("HTML and Markdown remain inside the shared sanitization contract", true);
 
 const sharedEditor = read("src/components/admin/AdminRichTextEditor.tsx");
 const articleEditor = read("src/components/admin/content/editors/article/TopicMarkdownEditor.tsx");

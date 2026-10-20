@@ -5,11 +5,17 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createJiti } from "jiti";
+import { Children, Fragment, createElement, isValidElement, useState } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ts from "typescript";
+import { getModuleEditorSectionMetadata, MODULE_EDITOR_TAB_LABELS } from "../src/lib/page-composition/module-registry-metadata.ts";
 
 import {
   DEFAULT_HERO_ELEMENT_ORDER,
   HERO_MEDIA_GEOMETRY,
   HERO_VARIANTS,
+  heroFlexJustifyClass,
   normalizeHeroElementOrder,
   normalizeHeroTemplateProductConfig,
   parseOptionalBool,
@@ -276,8 +282,10 @@ assert(
       "onClick={() => onBoldChange(!bold)}",
     ) &&
     heroVisibilitySource.includes(
-      "value={String(hasBoldControl ? bold : boldDefault)}",
-    ),
+      "value={String(submittedBold)}",
+    ) &&
+    heroVisibilitySource.includes("preserveUnsetBold = false") &&
+    heroVisibilitySource.includes("boldName && submittedBold !== undefined"),
   "Hero text weight uses one shared toolbar button and preserves the canonical submitted field",
 );
 assert(
@@ -356,8 +364,13 @@ assert(
 );
 assert(
   (heroCtaEditorSource.match(/data-hero-cta-row=/g) ?? []).length === 2 &&
-    heroCtaEditorSource.includes('controlsPlacement="cards"') &&
+    heroCtaEditorSource.includes('presentation="premium"') &&
+    heroCtaEditorSource.includes('<AdminFormGrid columns={2}>') &&
+    (heroCtaEditorSource.match(/<AdminCard presentation="premium"/g) ?? []).length === 2 &&
+    heroCtaEditorSource.includes('<AdminFormControlHeader title="الزر الأساسي"') &&
+    heroCtaEditorSource.includes('<AdminFormControlHeader title="الزر الثانوي"') &&
     (heroCtaEditorSource.match(/presentation="inline"/g) ?? []).length === 2 &&
+    (heroCtaEditorSource.match(/actionPresentation="bare"/g) ?? []).length === 2 &&
     (heroCtaEditorSource.match(/chooseLinkLabel="اختيار الرابط"/g) ?? [])
       .length === 2 &&
     heroVisibilitySource.includes('controlsPlacement === "cards"') &&
@@ -373,8 +386,8 @@ assert(
     heroCtaEditorSource.includes('aria-label="نص الزر الأساسي"') &&
     heroCtaEditorSource.includes('aria-label="نص الزر الثانوي"') &&
     !/<span[^>]*>نص الزر (?:الأساسي|الثانوي)<\/span>/.test(heroCtaEditorSource) &&
-    heroCtaEditorSource.includes('<AdminFormGrid columns={1}>'),
-  "Hero CTA text and shared link picker use two balanced cards with synchronized formatting inside each card",
+    (heroCtaEditorSource.match(/<AdminFormGrid columns=\{1\}>/g) ?? []).length === 2,
+  "Hero CTA shares one canonical formatting row and two balanced premium link cards while the default cards owner remains intact",
 );
 assert(
   heroOrderEditorSource.includes('data-project-hero-action-cards=""') &&
@@ -445,7 +458,8 @@ assert(
     heroEditorSource.includes('data-hero-media-section="mobile"') &&
     heroEditorSource.includes('name="images"') &&
     heroEditorSource.includes('name="mobile_images"') &&
-    moduleRegistryMetadataSource.includes('navigationLabelAr: "الصور"') &&
+    getModuleEditorSectionMetadata("hero", "media")?.navigationLabelAr === MODULE_EDITOR_TAB_LABELS.images &&
+    MODULE_EDITOR_TAB_LABELS.images === "الصور" &&
     !moduleRegistryMetadataSource.includes('navigationLabelAr: "ديسكتوب"') &&
     !moduleRegistryMetadataSource.includes('navigationLabelAr: "موبايل"'),
   "Hero desktop and mobile galleries share one Images tab without changing their submitted fields",
@@ -458,7 +472,8 @@ assert(
     !mediaGallerySource.includes("تصفح وإضافة") &&
     !mediaGallerySource.includes("لا توجد صور —") &&
     heroEditorSource.includes('data-hero-image-composition=""') &&
-    heroEditorSource.includes("HERO_CONTROL_CARD_CLASS_NAME") &&
+    heroEditorSource.includes('<AdminCard presentation="premium" className="h-full p-3">') &&
+    heroEditorSource.includes('label={<AdminFormControlHeader title="تكوين الصورة"') &&
     heroEditorSource.indexOf('data-hero-image-composition=""') <
       heroEditorSource.indexOf('data-hero-media-section="desktop"'),
   "Hero galleries use one equal-size add card and image composition is an independent text-style card",
@@ -611,11 +626,291 @@ assert(
       "alignment={hasAlignmentControl ? alignment : undefined}",
     ) &&
     heroVisibilitySource.includes(
-      "bold={hasBoldControl ? bold : undefined}",
+      "bold={hasBoldControl ? (bold ?? false) : undefined}",
     ) &&
     heroEditorSource.includes("...(!isStandardInternal"),
   "Standard Internal CMS exposes supported typography tools while keeping ordering fixed",
 );
+
+// Exercise the actual shared row: the CTA-only unset opt-in must not alter
+// Hero's default explicit boolean submission or its native Bold control.
+const heroUiLoader = createJiti(import.meta.url, {
+  fsCache: false,
+  jsx: { runtime: "automatic" },
+});
+const [{ default: AdminCard }, { AdminFormControlHeader }, { default: AdminFormSwitch }, { default: AdminTextFormatControls }] = await Promise.all([
+  heroUiLoader.import("../src/components/admin/ui/AdminCard.tsx"),
+  heroUiLoader.import("../src/components/admin/ui/AdminForm.tsx"),
+  heroUiLoader.import("../src/components/admin/ui/AdminFormSwitch.tsx"),
+  heroUiLoader.import("../src/components/admin/ui/AdminTextFormatControls.tsx"),
+]);
+const heroRowTree = ts.createSourceFile("ModuleEditorPresentation.tsx", heroVisibilitySource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const heroRowNode = heroRowTree.statements.find(node =>
+  ts.isFunctionDeclaration(node) && node.name?.text === "ModuleEditorVisibilityAlignRow");
+const heroRowSurface = heroRowTree.statements.filter(ts.isVariableStatement)
+  .flatMap(node => node.declarationList.declarations)
+  .find(node => ts.isIdentifier(node.name) && node.name.text === "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME");
+if (!heroRowNode || !heroRowSurface?.initializer || !ts.isStringLiteral(heroRowSurface.initializer)) {
+  throw new Error("The actual shared Hero row and its existing surface must be available to the rendering guard.");
+}
+const compiledHeroRow = ts.transpileModule(heroRowNode.getText(heroRowTree).replace(/^export /u, ""), {
+  compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const HeroVisibilityAlignRow = new Function(
+  "React", "Children", "useState", "AdminCard", "AdminFormControlHeader", "AdminFormSwitch", "AdminTextFormatControls", "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME",
+  `${compiledHeroRow}\nreturn ModuleEditorVisibilityAlignRow;`,
+)({ createElement, Fragment }, Children, useState, AdminCard, AdminFormControlHeader, AdminFormSwitch, AdminTextFormatControls, heroRowSurface.initializer.text);
+assert(
+  heroVisibilityAdapterSource.includes("ModuleEditorVisibilityAlignRow as default"),
+  "Hero adapter retains the actual shared visibility and text-formatting owner",
+);
+
+for (const presentation of ["card", "premium"]) {
+  for (const preserveUnsetBold of [false, true]) {
+    for (const boldDefault of [undefined, false, true]) {
+      for (const enableBold of [false, true]) {
+        const markup = renderToStaticMarkup(createElement(HeroVisibilityAlignRow, {
+          label: "عنوان الاختبار",
+          showName: "show_title",
+          alignmentName: "title_alignment",
+          boldName: "title_bold",
+          showDefault: false,
+          alignmentDefault: "center",
+          enableBold,
+          ...(presentation === "premium" ? { presentation } : {}),
+          ...(preserveUnsetBold ? { preserveUnsetBold } : {}),
+          ...(boldDefault === undefined ? {} : { boldDefault }),
+        }));
+        const hiddenFields = [...markup.matchAll(/<input\b[^>]*>/gu)]
+          .map(([tag]) => tag)
+          .filter(tag => /\btype="hidden"/u.test(tag))
+          .map(tag => [
+            /\bname="([^"]+)"/u.exec(tag)?.[1],
+            /\bvalue="([^"]*)"/u.exec(tag)?.[1],
+          ]);
+        const expectedBold = preserveUnsetBold ? boldDefault : (boldDefault ?? false);
+        const boldInputs = hiddenFields.filter(([name]) => name === "title_bold");
+        const boldButtons = [...markup.matchAll(/<button\b[^>]*>/gu)]
+          .map(([tag]) => tag)
+          .filter(tag => tag.includes('data-admin-text-format-bold=""'));
+        const fieldsArePreserved =
+          JSON.stringify(hiddenFields) === JSON.stringify([
+            ["show_title", "false"],
+            ["title_alignment", "center"],
+            ...(expectedBold === undefined ? [] : [["title_bold", String(expectedBold)]]),
+          ]) &&
+          boldInputs.length === (expectedBold === undefined ? 0 : 1) &&
+          boldButtons.length === (enableBold ? 1 : 0) &&
+          boldButtons.every(tag =>
+            tag.includes(`aria-pressed="${String(boldDefault ?? false)}"`) &&
+            tag.includes('type="button"') &&
+            !/\bdisabled(?:=|\s|>)/u.test(tag)) &&
+          !markup.includes('name="undefined"');
+        const submitted = new FormData();
+        for (const [name, value] of hiddenFields) submitted.append(name, value);
+        const heroRoundtrip = preserveUnsetBold ||
+          ["home-cinematic", "internal-page", "project-detail"].every(variant => {
+            const parsed = parseHeroContentControlsFormData(submitted);
+            const saved = normalizeHeroTemplateProductConfig(parsed, variant);
+            const reloaded = resolveHeroContentControlsForVariant(JSON.parse(JSON.stringify(saved)), variant);
+            return reloaded.titleBold === expectedBold &&
+              reloaded.showTitle === false && reloaded.titleAlignment === "center";
+          });
+        assert(
+          fieldsArePreserved && heroRoundtrip,
+          `Actual ${presentation} Hero row: Bold ${String(boldDefault)}, control ${enableBold ? "enabled" : "hidden"}, unset opt-in ${preserveUnsetBold} retains native submission and parser roundtrip`,
+        );
+      }
+    }
+  }
+}
+
+function findSharedBoldButton(node) {
+  if (!isValidElement(node)) return undefined;
+  if (node.type === "button" && node.props["data-admin-text-format-bold"] === "") return node;
+  for (const child of Children.toArray(node.props.children)) {
+    const found = findSharedBoldButton(child);
+    if (found) return found;
+  }
+  return undefined;
+}
+for (const bold of [false, true]) {
+  let changedValue;
+  const button = findSharedBoldButton(AdminTextFormatControls({
+    bold,
+    onBoldChange: next => { changedValue = next; },
+  }));
+  button?.props.onClick();
+  assert(
+    button?.props["aria-pressed"] === bold && changedValue === !bold,
+    `Actual shared Bold button toggles ${bold} to ${!bold} through its existing callback`,
+  );
+}
+
+// Resolve the actual Hero link/read chain. Only the registered pages provider
+// uses in-memory fixture data; no database client or production data is called.
+const heroLinkLoader = createJiti(import.meta.url, {
+  fsCache: false,
+  alias: { "server-only": resolve("node_modules/next/dist/compiled/server-only/empty.js") },
+});
+const { resolveHeroConfigLinks } = await heroLinkLoader.import("../src/lib/admin/links/hero-config.ts");
+const { getHeroConfig, readHeroLinkTarget } = await heroLinkLoader.import("../src/lib/page-sections.ts");
+const { ensureAdminLinkProvidersRegistered } = await heroLinkLoader.import("../src/lib/admin/links/providers/index.ts");
+const { registerAdminLinkProvider } = await heroLinkLoader.import("../src/lib/admin/links/registry.ts");
+ensureAdminLinkProvidersRegistered();
+let heroTargetProviderReads = 0;
+registerAdminLinkProvider({
+  type: "pages",
+  label: "صفحة اختبار",
+  labelPlural: "صفحات اختبار",
+  search: async () => { throw new Error("Hero target verification cannot search live providers."); },
+  resolveMany: async ids => {
+    if (JSON.stringify(ids) !== "[901]") throw new Error("Unexpected Hero target fixture resource.");
+    heroTargetProviderReads += 1;
+    return new Map([[901, "/about"]]);
+  },
+});
+const heroTargetCases = [];
+for (const target of [undefined, "_self", "_blank", null, "_top"]) {
+  for (const [kind, link, href] of [
+    ["internal", { link_kind: "internal", linked_type: "pages", linked_id: 901, href: "/stale", anchor: "team" }, "/about#team"],
+    ["external", { link_kind: "external", href: "https://example.test/hero#team" }, "https://example.test/hero#team"],
+    ["anchor", { link_kind: "anchor", href: "#team", anchor: "team" }, "#team"],
+  ]) {
+    const value = { ...link, ...(target === undefined ? {} : { target }) };
+    heroTargetCases.push({
+      label: `${kind} ${String(target)}`,
+      config: { primaryCtaLink: value, secondaryCtaLink: { ...value } },
+      href,
+      target: target === "_blank" ? "_blank" : "_self",
+      explicitTarget: target === "_blank" || target === "_self" ? target : undefined,
+    });
+  }
+}
+for (const [label, config] of [
+  ["legacy href", { primaryCtaHref: "https://example.test/legacy", secondaryCtaHref: "https://example.test/legacy" }],
+  ["legacy string link", { primaryCtaLink: "https://example.test/legacy", secondaryCtaLink: "https://example.test/legacy" }],
+  ["legacy object without kind", { primaryCtaLink: { href: "https://example.test/legacy" }, secondaryCtaLink: { href: "https://example.test/legacy" } }],
+]) heroTargetCases.push({ label, config, href: "https://example.test/legacy", target: "_self" });
+
+const resolvedHeroTargetCases = [];
+for (const value of [undefined, null, "https://example.test", [], { target: "_top" }, { link_kind: "none", target: "_blank" }]) {
+  assert(readHeroLinkTarget(value) === undefined, `Hero target reader rejects unsupported or unauthored target metadata: ${JSON.stringify(value)}`);
+}
+for (const target of ["_self", "_blank"]) {
+  assert(readHeroLinkTarget({ link_kind: "external", target }) === target, `Hero target reader retains explicit ${target}`);
+}
+for (const fixture of heroTargetCases) {
+  const stored = { title: "عنوان محفوظ", primaryCtaLabel: "الزر الأساسي", secondaryCtaLabel: "الزر الثانوي", ...fixture.config };
+  const before = JSON.stringify(stored);
+  const resolved = await resolveHeroConfigLinks(stored);
+  for (const variant of ["home-cinematic", "internal-page"]) {
+    const parsed = getHeroConfig({ variant, config: resolved });
+    const targetsPreserved = ["primary", "secondary"].every(prefix =>
+      parsed[`${prefix}CtaHref`] === fixture.href &&
+      (parsed[`${prefix}CtaLink`]?.target === "_blank" ? "_blank" : "_self") === fixture.target);
+    assert(
+      targetsPreserved && parsed.title === stored.title && JSON.stringify(stored) === before,
+      `${variant}: actual Hero link resolver and reader preserve ${fixture.label} without changing stored data or href resolution`,
+    );
+    resolvedHeroTargetCases.push({ ...fixture, variant, config: parsed });
+  }
+}
+assert(heroTargetProviderReads === 10, "Hero internal targets resolve both buttons through the isolated canonical pages provider");
+
+// Render the exact public CTA functions with real Next Link and shared hooks;
+// extraction avoids loading unrelated Hero media/domain resources in this test.
+const heroCtaTree = ts.createSourceFile("DynamicHeroSection.tsx", heroSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const heroCtaFunctionNames = ["HeroPressableLink", "useIntentPrefetch", "HeroReservedSlot", "HeroCtaButtons"];
+const heroCtaNodes = heroCtaFunctionNames.map(name => heroCtaTree.statements.find(node =>
+  ts.isFunctionDeclaration(node) && node.name?.text === name));
+if (heroCtaNodes.some(node => !node)) throw new Error("The public Hero CTA owners must be available to the rendering guard.");
+const compiledHeroCta = ts.transpileModule(heroCtaNodes.map(node => node.getText(heroCtaTree)).join("\n"), {
+  compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const [{ default: HeroNextLink }, { usePressFeedback }] = await Promise.all([
+  heroUiLoader.import("next/link"),
+  heroUiLoader.import("../src/hooks/use-press-feedback.ts"),
+]);
+const HeroCtaButtons = new Function(
+  "React", "Link", "usePressFeedback", "useState", "heroFlexJustifyClass", "readHeroLinkTarget",
+  `${compiledHeroCta}\nreturn HeroCtaButtons;`,
+)({ createElement, Fragment }, HeroNextLink, usePressFeedback, useState, heroFlexJustifyClass, readHeroLinkTarget);
+for (const fixture of resolvedHeroTargetCases) {
+  const markup = renderToStaticMarkup(createElement(HeroCtaButtons, { config: fixture.config }));
+  const anchors = [...markup.matchAll(/<a\b[^>]*>/gu)].map(([tag]) => tag);
+  assert(
+    anchors.length === 2 && anchors.every(tag => {
+      const href = /\bhref="([^"]*)"/u.exec(tag)?.[1];
+      const target = /\btarget="([^"]*)"/u.exec(tag)?.[1];
+      const rel = /\brel="([^"]*)"/u.exec(tag)?.[1];
+      return href === fixture.href && target === fixture.explicitTarget &&
+        (target === "_blank"
+          ? rel?.split(/\s+/u).includes("noopener") && rel.split(/\s+/u).includes("noreferrer")
+          : rel === undefined);
+    }),
+    `${fixture.variant}: actual public Hero CTA anchors retain ${fixture.label} target, canonical href and safe new-window rel`,
+  );
+}
+const heroWithoutLinks = getHeroConfig({ variant: "internal-page", config: await resolveHeroConfigLinks({}) });
+assert(
+  renderToStaticMarkup(createElement(HeroCtaButtons, { config: heroWithoutLinks })) === "",
+  "Hero target adoption does not create buttons for absent links",
+);
+
+// Execute the two production composition expressions, including partial domain
+// slides. A slide-owned href must not inherit unrelated manual link metadata.
+function heroCompositionInitializer(functionName, variableName) {
+  const owner = heroCtaTree.statements.find(node =>
+    ts.isFunctionDeclaration(node) && node.name?.text === functionName);
+  const declaration = owner?.body?.statements.filter(ts.isVariableStatement)
+    .flatMap(node => node.declarationList.declarations)
+    .find(node => ts.isIdentifier(node.name) && node.name.text === variableName);
+  if (!declaration?.initializer) throw new Error(`Missing production Hero composition: ${functionName}.${variableName}`);
+  return declaration.initializer.getText(heroCtaTree);
+}
+const composeHomeHero = new Function(
+  "config", "activeSlide", "title", "highlight", "subtitle", "description",
+  `return (${heroCompositionInitializer("HomeDynamicHero", "activeConfig")});`,
+);
+const composeInternalHero = new Function(
+  "hero", "domainSlide",
+  `return (${heroCompositionInitializer("DynamicHeroSection", "resolvedHero")});`,
+);
+const authoredHeroConfig = getHeroConfig({ variant: "home-cinematic", config: {
+  title: "عنوان محفوظ",
+  primaryCtaLabel: "أساسي", primaryCtaHref: "/manual-primary",
+  primaryCtaLink: { link_kind: "internal", target: "_blank" },
+  secondaryCtaLabel: "ثانوي", secondaryCtaHref: "/manual-secondary",
+  secondaryCtaLink: { link_kind: "internal", target: "_self" },
+} });
+for (const [label, slide] of [
+  ["no domain override", undefined],
+  ["media-only slide", { desktopImage: "/fixture.webp" }],
+  ["primary override", { primaryCtaLabel: "أساسي مستقل", primaryCtaHref: "/domain-primary" }],
+  ["secondary override", { secondaryCtaLabel: "ثانوي مستقل", secondaryCtaHref: "/domain-secondary" }],
+  ["both overrides", { primaryCtaLabel: "أساسي مستقل", primaryCtaHref: "/domain-primary", secondaryCtaLabel: "ثانوي مستقل", secondaryCtaHref: "/domain-secondary" }],
+]) {
+  const sourceHero = { variant: "internal-page", config: authoredHeroConfig };
+  const before = JSON.stringify(sourceHero);
+  const home = composeHomeHero(authoredHeroConfig, slide, "عنوان محفوظ", "", "", "");
+  const internal = composeInternalHero(sourceHero, slide);
+  for (const [variant, composed] of [["home/projects-hub", home], ["standard internal", internal.config]]) {
+    assert(
+      ["primary", "secondary"].every(prefix => {
+        const hrefKey = `${prefix}CtaHref`;
+        const linkKey = `${prefix}CtaLink`;
+        const overridden = typeof slide?.[hrefKey] === "string";
+        const expectedHref = variant === "standard internal" && slide
+          ? slide[hrefKey] : (slide?.[hrefKey] ?? authoredHeroConfig[hrefKey]);
+        return composed[hrefKey] === expectedHref &&
+          composed[linkKey] === (overridden ? undefined : authoredHeroConfig[linkKey]);
+      }) && JSON.stringify(sourceHero) === before &&
+      (slide !== undefined || internal === sourceHero),
+      `${variant}: actual ${label} composition clears only the target of a slide-owned href and retains existing fallback behavior`,
+    );
+  }
+}
 assert(
   !mediaCenterConfigSource.includes("heroImagePositionClassName") &&
     !internalPageLayoutSource.includes("heroImagePositionClassName"),

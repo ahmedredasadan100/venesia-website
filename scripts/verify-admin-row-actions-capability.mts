@@ -5421,7 +5421,7 @@ check(
       ),
     ].some((sourceFile) => read(sourceFile).includes("contextLine")) &&
     !read(paths.pageHeader).includes("contextLine") &&
-    ["flex", "min-w-0", "flex-1", "flex-col", "gap-7", "px-4", "py-4", "sm:px-6", "lg:px-7"].every(
+    ["flex", "min-w-0", "flex-1", "flex-col", "gap-6", "px-4", "py-4", "sm:px-6", "lg:px-7"].every(
       (token) => /<main className="([^"]+)"/.exec(read(paths.shell))?.[1].split(" ").includes(token),
     ) &&
     !read(paths.shell).includes("admin-premium-card mb-5"),

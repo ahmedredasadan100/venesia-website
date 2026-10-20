@@ -18,6 +18,7 @@ import {
   type ResolvedCollectionDisplayTextFormatting,
 } from "../../lib/page-blocks/configs";
 import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
+import { FEED_MAX_VISIBLE_DOTS } from "../feed-modules/feed-grouped-list-contract";
 import PublicGoldPill from "../public/PublicGoldPill";
 import FeaturedContentCard from "./FeaturedContentCard";
 
@@ -276,6 +277,7 @@ export default function FeaturedCarousel({
               count={slides.length}
               activeIndex={activeIndex}
               onSelect={goTo}
+              maxVisible={FEED_MAX_VISIBLE_DOTS}
               itemLabel={
                 isGroup || isEditorial
                   ? "مجموعات المحتوى المميز"

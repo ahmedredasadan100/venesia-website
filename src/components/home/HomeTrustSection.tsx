@@ -262,7 +262,8 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
           {resolved.formatting.description?.visible ? <RichTextContent
             value={resolved.description}
             mode="rich"
-            className={`home-trust-intro ${TEXT_ALIGN_CLASS[resolved.formatting.description.alignment]} ${resolved.formatting.description.bold ? "font-bold" : "font-normal"}`}
+            demoteHeadings
+            className={`article-rich-text home-trust-intro ${TEXT_ALIGN_CLASS[resolved.formatting.description.alignment]} ${resolved.formatting.description.bold ? "font-bold" : "font-normal"}`}
           /> : null}
         </div>
 

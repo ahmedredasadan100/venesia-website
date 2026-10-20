@@ -14,6 +14,10 @@ export type AdminFormSwitchProps = {
   onChange?: ChangeEventHandler<HTMLInputElement>;
   disabled?: boolean;
   surface?: boolean;
+  /** The containing card owns the surface; keep the native label and control. */
+  embedded?: boolean;
+  /** Inline settings keep the same native checkbox and label participation. */
+  embeddedLayout?: "stacked" | "inline";
   value?: string;
   /** Submitted before the checkbox so FormData.getAll(name).at(-1) is authoritative. */
   uncheckedValue?: string;
@@ -31,6 +35,8 @@ export default function AdminFormSwitch({
   onChange,
   disabled = false,
   surface = false,
+  embedded = false,
+  embeddedLayout = "stacked",
   value,
   uncheckedValue,
   className = "",
@@ -63,6 +69,20 @@ export default function AdminFormSwitch({
       {label}
     </span>
   );
+
+  if (embedded) {
+    return (
+      <label
+        id={id}
+        data-admin-form-switch-surface="embedded"
+        data-admin-form-switch-layout={embeddedLayout === "inline" ? embeddedLayout : undefined}
+        className={`${embeddedLayout === "inline" ? "flex min-w-0 cursor-pointer items-center justify-between gap-2" : "flex h-full min-w-0 cursor-pointer flex-col items-start justify-between gap-3"} ${disabled ? "cursor-not-allowed opacity-55" : ""} ${className}`.trim()}
+      >
+        {labelContent}
+        <span className={embeddedLayout === "inline" ? "inline-flex shrink-0 items-center" : "inline-flex min-h-11 items-center"}>{switchControl}</span>
+      </label>
+    );
+  }
 
   return (
     <label

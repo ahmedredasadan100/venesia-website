@@ -1,6 +1,18 @@
 @import "tailwindcss";
 @source not "../../.tmp-qa/**/*";
 
+/* Visuals only; consumers continue to own overflow, dimensions and scrolling. */
+@utility venesia-scrollbar {
+  @apply [scrollbar-width:thin] [scrollbar-color:rgba(216,184,122,0.38)_rgba(255,255,255,0.06)] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/[0.04] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#D8B87A]/35 hover:[&::-webkit-scrollbar-thumb]:bg-[#D8B87A]/55;
+}
+
+/* The real Admin document scroller and nested native scrollers share one look. */
+html:has([data-admin-shell]),
+html:has([data-admin-shell]) body,
+:where([data-admin-shell], [data-admin-shell] *) {
+  @apply venesia-scrollbar;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -320,7 +332,8 @@ body {
 
 /* ─── Venesia Admin Sidebar: real layout integration ─────────────
    The sidebar is not a framed panel anymore.
-   No own height, no own scroll, no own background, no divider.
+   Navigation retains native scrolling when its contents exceed the viewport.
+   No own background or divider.
    It participates in the page canvas exactly like Joomla-style admin layout. */
 .admin-sidebar-shell {
   background: transparent !important;
@@ -330,19 +343,11 @@ body {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   overflow: visible !important;
-  scrollbar-width: none;
 }
 
 .admin-sidebar-shell,
 .admin-sidebar-shell * {
   scroll-behavior: auto;
-}
-
-.admin-sidebar-shell::-webkit-scrollbar,
-.admin-sidebar-shell *::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
 }
 
 .admin-sidebar-shell::before,
@@ -452,6 +457,14 @@ select.admin-select option {
 .rich-text-content ol {
   margin: 0 0 1.125rem;
   padding-right: 1.5rem;
+}
+
+.rich-text-content ul {
+  list-style-type: disc;
+}
+
+.rich-text-content ol {
+  list-style-type: decimal;
 }
 
 .rich-text-content li {
@@ -1418,7 +1431,7 @@ select.admin-select option {
 
 .slot-editorial-flow--copy-wide {
   --slot-editorial-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  --slot-editorial-align: center;
+  --slot-editorial-align: start;
 }
 
 .slot-editorial-media {

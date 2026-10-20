@@ -1,6 +1,11 @@
 "use client";
 
-import { AdminFormGrid } from "../../../../../../components/admin/ui";
+import {
+  AdminCard,
+  AdminFormControlHeader,
+  AdminFormGrid,
+} from "../../../../../../components/admin/ui";
+import { AdminModuleTabIcon } from "../../../../../../components/admin/ui/AdminModuleTabs";
 import { resolveHeroMediaSlot } from "../../../../../../lib/hero/hero-content-controls";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,13 +15,9 @@ import AdminImagePathListField from "../../../../../../components/admin/page-blo
 import {
   ModuleEditorHeader,
   ModuleEditorFeedbackSlot,
-  ModuleEditorField,
-  ModuleEditorFieldGrid,
   ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
-  ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorTabs,
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import { AdminFormListboxSelect } from "../../../../../../components/admin/ui";
@@ -34,9 +35,7 @@ import { updateHeroTemplateDetails } from "../actions";
 import HeroCtaFields from "./HeroCtaFields";
 import HeroElementOrderEditor from "./HeroElementOrderEditor";
 import HeroTextFieldRow from "./HeroTextFieldRow";
-import HeroVisibilityAlignRow, {
-  HERO_CONTROL_CARD_CLASS_NAME,
-} from "./HeroVisibilityAlignRow";
+import HeroVisibilityAlignRow from "./HeroVisibilityAlignRow";
 
 type HeroEditClientProps = {
   hero: {
@@ -393,66 +392,66 @@ function HeroRenderedAreaCard({ previewPath }: { previewPath: string | null }) {
   return (
     <div
       ref={surfaceRef}
-      className={`${HERO_CONTROL_CARD_CLASS_NAME} h-full`}
+      className="h-full"
       data-hero-rendered-area-state={state.status}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-white/70">
-          مساحة عرض الهيرو الفعلية
-        </span>
-        {metrics ? (
-          <span className="rounded-full border border-[#D8B87A]/20 bg-[#D8B87A]/[0.06] px-2.5 py-1 text-[10px] font-semibold text-[#D8B87A]/80">
-            {metrics.viewportWidth < 768 ? "هاتف" : "سطح المكتب"} · DOM مباشر
-          </span>
-        ) : null}
-      </div>
-
-      {state.status === "loading" ? (
-        <p className="mt-3 text-xs leading-6 text-white/45">
-          جارٍ قياس الصفحة العامة المرتبطة…
-        </p>
-      ) : state.status === "unavailable" ? (
-        <p className="mt-3 text-xs leading-6 text-white/45">{state.reason}</p>
-      ) : metrics ? (
-        <div className="mt-3 space-y-3">
-          <p
-            className="font-mono text-lg font-semibold text-[#E6C98D]"
-            dir="ltr"
-          >
-            Rendered Hero Area: {roundedPixels(metrics.renderedWidth)} ×{" "}
-            {roundedPixels(metrics.renderedHeight)} px
-          </p>
-          <dl className="grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-              <dt className="text-white/40">Rendered Width</dt>
-              <dd className="mt-1 font-mono text-white/75" dir="ltr">
-                {roundedPixels(metrics.renderedWidth)} px
-              </dd>
-            </div>
-            <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-              <dt className="text-white/40">Rendered Height</dt>
-              <dd className="mt-1 font-mono text-white/75" dir="ltr">
-                {roundedPixels(metrics.renderedHeight)} px
-              </dd>
-            </div>
-          </dl>
-          <p className="truncate font-mono text-[10px] text-white/30" dir="ltr">
-            {previewPath}
-          </p>
+      <AdminCard presentation="premium" className="h-full p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <AdminFormControlHeader title="مساحة عرض الهيرو الفعلية" icon={<AdminModuleTabIcon name="overview" />} presentation="leading-icon" />
+          {metrics ? (
+            <span className="rounded-full border border-[#D8B87A]/20 bg-[#D8B87A]/[0.06] px-2.5 py-1 text-[10px] font-semibold text-[#D8B87A]/80">
+              {metrics.viewportWidth < 768 ? "هاتف" : "سطح المكتب"} · DOM مباشر
+            </span>
+          ) : null}
         </div>
-      ) : null}
 
-      {shouldMeasure && previewPath ? (
-        <iframe
-          ref={iframeRef}
-          src={previewPath}
-          title="قياس مساحة عرض Hero العامة"
-          aria-hidden="true"
-          tabIndex={-1}
-          onLoad={handleFrameLoad}
-          className="pointer-events-none fixed left-[-100000px] top-0 h-screen w-screen border-0 opacity-0"
-        />
-      ) : null}
+        {state.status === "loading" ? (
+          <p className="mt-3 text-xs leading-6 text-white/45">
+            جارٍ قياس الصفحة العامة المرتبطة…
+          </p>
+        ) : state.status === "unavailable" ? (
+          <p className="mt-3 text-xs leading-6 text-white/45">{state.reason}</p>
+        ) : metrics ? (
+          <div className="mt-3 space-y-3">
+            <p
+              className="font-mono text-lg font-semibold text-[#E6C98D]"
+              dir="ltr"
+            >
+              Rendered Hero Area: {roundedPixels(metrics.renderedWidth)} ×{" "}
+              {roundedPixels(metrics.renderedHeight)} px
+            </p>
+            <dl className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                <dt className="text-white/40">Rendered Width</dt>
+                <dd className="mt-1 font-mono text-white/75" dir="ltr">
+                  {roundedPixels(metrics.renderedWidth)} px
+                </dd>
+              </div>
+              <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                <dt className="text-white/40">Rendered Height</dt>
+                <dd className="mt-1 font-mono text-white/75" dir="ltr">
+                  {roundedPixels(metrics.renderedHeight)} px
+                </dd>
+              </div>
+            </dl>
+            <p className="truncate font-mono text-[10px] text-white/30" dir="ltr">
+              {previewPath}
+            </p>
+          </div>
+        ) : null}
+
+        {shouldMeasure && previewPath ? (
+          <iframe
+            ref={iframeRef}
+            src={previewPath}
+            title="قياس مساحة عرض Hero العامة"
+            aria-hidden="true"
+            tabIndex={-1}
+            onLoad={handleFrameLoad}
+            className="pointer-events-none fixed left-[-100000px] top-0 h-screen w-screen border-0 opacity-0"
+          />
+        ) : null}
+      </AdminCard>
     </div>
   );
 }
@@ -516,148 +515,130 @@ export default function HeroEditClient({
 
   const contentTab = isProjectDetail ? (
     <div className="space-y-5">
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="domain" className="text-base">
-          عرض بيانات المشروع
-        </ModuleEditorSectionHeading>
-        <ModuleEditorFieldGrid className="mt-4 lg:grid-cols-2 xl:grid-cols-12">
-          <ModuleEditorField nature="binary-state" span={6}>
-            <HeroVisibilityAlignRow
-              label="موقع المشروع"
-              alignmentName="eyebrow_alignment"
-              showName="show_eyebrow"
-              boldName="eyebrow_bold"
-              alignmentDefault={controls.eyebrowAlignment}
-              showDefault={controls.showEyebrow}
-              boldDefault={controls.eyebrowBold}
-            />
-          </ModuleEditorField>
-          <ModuleEditorField nature="binary-state" span={6}>
-            <HeroVisibilityAlignRow
-              label="اسم المشروع الإنجليزي"
-              alignmentName="title_alignment"
-              showName="show_title"
-              boldName="title_bold"
-              alignmentDefault={controls.titleAlignment}
-              showDefault={controls.showTitle}
-              boldDefault={controls.titleBold}
-            />
-          </ModuleEditorField>
-          <ModuleEditorField nature="binary-state" span={6}>
-            <HeroVisibilityAlignRow
-              label="اسم المشروع العربي"
-              alignmentName="subtitle_alignment"
-              showName="show_subtitle"
-              boldName="subtitle_bold"
-              alignmentDefault={controls.subtitleAlignment}
-              showDefault={controls.showSubtitle}
-              boldDefault={controls.subtitleBold}
-            />
-          </ModuleEditorField>
-          <ModuleEditorField nature="binary-state" span={6}>
-            <HeroVisibilityAlignRow
-              label="وصف المشروع"
-              alignmentName="description_alignment"
-              showName="show_description"
-              boldName="description_bold"
-              alignmentDefault={controls.descriptionAlignment}
-              boldDefault={controls.descriptionBold}
-              showDefault={controls.showDescription}
-            />
-          </ModuleEditorField>
-        </ModuleEditorFieldGrid>
-        <input type="hidden" name="show_highlight" value="false" />
-        <input type="hidden" name="highlight_bold" value="false" />
-        <input type="hidden" name="highlight_alignment" value="right" />
-      </ModuleEditorSection>
+      <AdminFormGrid columns={2}>
+        <HeroVisibilityAlignRow
+          label="موقع المشروع"
+          icon={<AdminModuleTabIcon name="content" />}
+          presentation="premium"
+          alignmentName="eyebrow_alignment"
+          showName="show_eyebrow"
+          boldName="eyebrow_bold"
+          alignmentDefault={controls.eyebrowAlignment}
+          showDefault={controls.showEyebrow}
+          boldDefault={controls.eyebrowBold}
+        />
+        <HeroVisibilityAlignRow
+          label="اسم المشروع الإنجليزي"
+          icon={<AdminModuleTabIcon name="content" />}
+          presentation="premium"
+          alignmentName="title_alignment"
+          showName="show_title"
+          boldName="title_bold"
+          alignmentDefault={controls.titleAlignment}
+          showDefault={controls.showTitle}
+          boldDefault={controls.titleBold}
+        />
+        <HeroVisibilityAlignRow
+          label="اسم المشروع العربي"
+          icon={<AdminModuleTabIcon name="content" />}
+          presentation="premium"
+          alignmentName="subtitle_alignment"
+          showName="show_subtitle"
+          boldName="subtitle_bold"
+          alignmentDefault={controls.subtitleAlignment}
+          showDefault={controls.showSubtitle}
+          boldDefault={controls.subtitleBold}
+        />
+        <HeroVisibilityAlignRow
+          label="وصف المشروع"
+          icon={<AdminModuleTabIcon name="content" />}
+          presentation="premium"
+          alignmentName="description_alignment"
+          showName="show_description"
+          boldName="description_bold"
+          alignmentDefault={controls.descriptionAlignment}
+          boldDefault={controls.descriptionBold}
+          showDefault={controls.showDescription}
+        />
+      </AdminFormGrid>
+      <input type="hidden" name="show_highlight" value="false" />
+      <input type="hidden" name="highlight_bold" value="false" />
+      <input type="hidden" name="highlight_alignment" value="right" />
     </div>
   ) : (
     <div className="space-y-5">
-      <ModuleEditorSection>
-        <ModuleEditorFieldGrid className="gap-4 lg:grid-cols-2 xl:grid-cols-12">
-          <ModuleEditorField nature="short-text" span={6}>
-            <HeroTextFieldRow
-              label="النص التمهيدي"
-              name="eyebrow"
-              defaultValue={String(config.eyebrow ?? "")}
-              boldName="eyebrow_bold"
-              alignmentName="eyebrow_alignment"
-              showName="show_eyebrow"
-              boldDefault={controls.eyebrowBold}
-              alignmentDefault={controls.eyebrowAlignment}
-              showDefault={controls.showEyebrow}
-            />
-          </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={6}>
-            <HeroTextFieldRow
-              label="العنوان الرئيسي"
-              name="title"
-              defaultValue={String(config.title ?? "")}
-              boldName="title_bold"
-              alignmentName="title_alignment"
-              showName="show_title"
-              boldDefault={controls.titleBold}
-              alignmentDefault={controls.titleAlignment}
-              showDefault={controls.showTitle}
-            />
-          </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={6}>
-            <HeroTextFieldRow
-              label="النص المميز"
-              name="highlight"
-              defaultValue={String(config.highlight ?? "")}
-              boldName="highlight_bold"
-              alignmentName="highlight_alignment"
-              showName="show_highlight"
-              boldDefault={controls.highlightBold}
-              alignmentDefault={controls.highlightAlignment}
-              showDefault={controls.showHighlight}
-            />
-          </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={6}>
-            <HeroTextFieldRow
-              label="العنوان الفرعي"
-              name="subtitle"
-              defaultValue={String(config.subtitle ?? "")}
-              boldName="subtitle_bold"
-              alignmentName="subtitle_alignment"
-              showName="show_subtitle"
-              boldDefault={controls.subtitleBold}
-              alignmentDefault={controls.subtitleAlignment}
-              showDefault={controls.showSubtitle}
-            />
-          </ModuleEditorField>
-
-          <ModuleEditorField nature="short-description" span={6}>
-            <HeroTextFieldRow
-              label="الوصف"
-              name="description"
-              defaultValue={String(config.description ?? "")}
-              preserveRichText
-              boldName="description_bold"
-              alignmentName="description_alignment"
-              showName="show_description"
-              boldDefault={controls.descriptionBold}
-              alignmentDefault={controls.descriptionAlignment}
-              showDefault={controls.showDescription}
-              placeholder="اكتب وصف الهيرو..."
-            />
-          </ModuleEditorField>
-        </ModuleEditorFieldGrid>
-      </ModuleEditorSection>
+      <AdminFormGrid columns={2}>
+        <HeroTextFieldRow
+          label="النص التمهيدي"
+          name="eyebrow"
+          defaultValue={String(config.eyebrow ?? "")}
+          boldName="eyebrow_bold"
+          alignmentName="eyebrow_alignment"
+          showName="show_eyebrow"
+          boldDefault={controls.eyebrowBold}
+          alignmentDefault={controls.eyebrowAlignment}
+          showDefault={controls.showEyebrow}
+        />
+        <HeroTextFieldRow
+          label="العنوان الرئيسي"
+          name="title"
+          defaultValue={String(config.title ?? "")}
+          boldName="title_bold"
+          alignmentName="title_alignment"
+          showName="show_title"
+          boldDefault={controls.titleBold}
+          alignmentDefault={controls.titleAlignment}
+          showDefault={controls.showTitle}
+        />
+        <HeroTextFieldRow
+          label="النص المميز"
+          name="highlight"
+          defaultValue={String(config.highlight ?? "")}
+          boldName="highlight_bold"
+          alignmentName="highlight_alignment"
+          showName="show_highlight"
+          boldDefault={controls.highlightBold}
+          alignmentDefault={controls.highlightAlignment}
+          showDefault={controls.showHighlight}
+        />
+        <HeroTextFieldRow
+          label="العنوان الفرعي"
+          name="subtitle"
+          defaultValue={String(config.subtitle ?? "")}
+          boldName="subtitle_bold"
+          alignmentName="subtitle_alignment"
+          showName="show_subtitle"
+          boldDefault={controls.subtitleBold}
+          alignmentDefault={controls.subtitleAlignment}
+          showDefault={controls.showSubtitle}
+        />
+        <HeroTextFieldRow
+          label="الوصف"
+          name="description"
+          defaultValue={String(config.description ?? "")}
+          preserveRichText
+          boldName="description_bold"
+          alignmentName="description_alignment"
+          showName="show_description"
+          boldDefault={controls.descriptionBold}
+          alignmentDefault={controls.descriptionAlignment}
+          showDefault={controls.showDescription}
+          placeholder="اكتب وصف الهيرو..."
+        />
+      </AdminFormGrid>
     </div>
   );
 
   const orderTab = (
     <div>
-      <ModuleEditorSection>
+      <AdminCard presentation="premium" className="p-3">
         <HeroElementOrderEditor
           defaultOrder={controls.heroElementOrder}
           allowedKeys={
             isProjectDetail ? PROJECT_DETAIL_HERO_ELEMENT_KEYS : undefined
           }
         />
-      </ModuleEditorSection>
+      </AdminCard>
     </div>
   );
 
@@ -692,77 +673,75 @@ export default function HeroEditClient({
           tabs={[
             {
               id: "content",
+              sectionHeaderPresentation: "control",
               content: contentTab,
             },
             {
               id: "buttons",
+              sectionHeaderPresentation: "control",
               content: (
                 <div>
-                  <ModuleEditorSection>
-                    {isProjectDetail ? (
-                      <HeroVisibilityAlignRow
-                        label="تنسيق إجراءات المشروع"
-                        alignmentName="cta_alignment"
-                        showName="show_cta"
-                        boldName="cta_bold"
-                        alignmentDefault={controls.ctaAlignment}
-                        boldDefault={controls.ctaBold}
-                        showDefault
-                        enableVisibility={false}
-                        presentation="plain"
-                      >
-                        <HeroElementOrderEditor
-                          projectActions={{
-                            defaultOrder: controls.projectActionOrder,
-                            visibility: {
-                              download: controls.showProjectDownloadAction,
-                              tracking: controls.showProjectTrackingAction,
-                              reservation:
-                                controls.showProjectReservationAction,
-                            },
-                          }}
-                        />
-                      </HeroVisibilityAlignRow>
-                    ) : (
-                      <HeroCtaFields
-                        primaryLabel={String(config.primaryCtaLabel ?? "")}
-                        primaryLink={primaryCtaLink}
-                        secondaryLabel={String(config.secondaryCtaLabel ?? "")}
-                        secondaryLink={secondaryCtaLink}
-                        showDefault={controls.showCta}
-                        boldDefault={controls.ctaBold}
-                        alignmentDefault={controls.ctaAlignment}
+                  {isProjectDetail ? (
+                    <HeroVisibilityAlignRow
+                      label="تنسيق إجراءات المشروع"
+                      icon={<AdminModuleTabIcon name="section" />}
+                      alignmentName="cta_alignment"
+                      showName="show_cta"
+                      boldName="cta_bold"
+                      alignmentDefault={controls.ctaAlignment}
+                      boldDefault={controls.ctaBold}
+                      showDefault
+                      enableVisibility={false}
+                      presentation="premium"
+                    >
+                      <HeroElementOrderEditor
+                        projectActions={{
+                          defaultOrder: controls.projectActionOrder,
+                          visibility: {
+                            download: controls.showProjectDownloadAction,
+                            tracking: controls.showProjectTrackingAction,
+                            reservation:
+                              controls.showProjectReservationAction,
+                          },
+                        }}
                       />
-                    )}
-                  </ModuleEditorSection>
+                    </HeroVisibilityAlignRow>
+                  ) : (
+                    <HeroCtaFields
+                      primaryLabel={String(config.primaryCtaLabel ?? "")}
+                      primaryLink={primaryCtaLink}
+                      secondaryLabel={String(config.secondaryCtaLabel ?? "")}
+                      secondaryLink={secondaryCtaLink}
+                      showDefault={controls.showCta}
+                      boldDefault={controls.ctaBold}
+                      alignmentDefault={controls.ctaAlignment}
+                    />
+                  )}
                 </div>
               ),
             },
             {
               id: "media",
+              sectionHeaderPresentation: "control",
               content: (
                 <div className="space-y-4" data-hero-media-sections="">
                   <div data-hero-image-composition="">
-                    <AdminFormGrid columns={2} className="items-stretch [&>*]:h-full">
-                      <div className="h-full">
-                        <div className={`${HERO_CONTROL_CARD_CLASS_NAME} h-full`}>
-                          <AdminFormListboxSelect
-                            name="image_composition"
-                            sizing="full"
-                            label="تكوين الصورة"
-                            defaultValue={imageComposition}
-                            options={HERO_IMAGE_COMPOSITION_OPTIONS_AR}
-                          />
-                        </div>
-                      </div>
-                      <div className="h-full">
-                        <HeroRenderedAreaCard previewPath={previewPath} />
-                      </div>
+                    <AdminFormGrid columns={2}>
+                      <AdminCard presentation="premium" className="h-full p-3">
+                        <AdminFormListboxSelect
+                          name="image_composition"
+                          sizing="full"
+                          label={<AdminFormControlHeader title="تكوين الصورة" icon={<AdminModuleTabIcon name="media" />} presentation="leading-icon" />}
+                          defaultValue={imageComposition}
+                          options={HERO_IMAGE_COMPOSITION_OPTIONS_AR}
+                        />
+                      </AdminCard>
+                      <HeroRenderedAreaCard previewPath={previewPath} />
                     </AdminFormGrid>
                   </div>
                   {!isProjectDetail ? (
                     <div data-hero-media-section="desktop">
-                      <ModuleEditorSection>
+                      <AdminCard presentation="premium" className="p-3">
                         <AdminImagePathListField
                           name="images"
                           mediaSlot={resolveHeroMediaSlot(guidanceVariant, "desktop")}
@@ -771,13 +750,14 @@ export default function HeroEditClient({
                           label="صور سطح المكتب"
                           defaultValue={imagesText}
                           density="compact"
+                          actionPresentation="card"
                         />
-                      </ModuleEditorSection>
+                      </AdminCard>
                     </div>
                   ) : null}
                   {!isProjectDetail ? (
                     <div data-hero-media-section="mobile">
-                      <ModuleEditorSection>
+                      <AdminCard presentation="premium" className="p-3">
                         <AdminImagePathListField
                           name="mobile_images"
                           mediaSlot={resolveHeroMediaSlot(guidanceVariant, "mobile")}
@@ -786,8 +766,9 @@ export default function HeroEditClient({
                           label="صور الهاتف المحمول"
                           defaultValue={mobileImagesText}
                           density="compact"
+                          actionPresentation="card"
                         />
-                      </ModuleEditorSection>
+                      </AdminCard>
                     </div>
                   ) : null}
                 </div>
@@ -797,16 +778,19 @@ export default function HeroEditClient({
               ? [
                   {
                     id: "order",
+                    sectionHeaderPresentation: "control" as const,
                     content: orderTab,
                   },
                 ]
               : []),
             {
               id: "display",
+              sectionHeaderPresentation: "control",
               content: (
                 <ModuleEditorPagesTab
                   moduleName={hero.name}
                   assignmentContext={assignmentContext}
+                  presentation="premium"
                 />
               ),
             },

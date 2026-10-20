@@ -43,10 +43,13 @@ assert(
   "Vision goals internal slug must remain preserved and hidden from Product UI",
 );
 assert(client.includes("تم حفظ موديول الرؤية والأهداف بنجاح."), "Vision goals save notice missing");
-assert(
-  actions.includes("isStructuralContentTemplateSlug(existing.slug, existing.variant)"),
-  "Vision goals slug must be locked on update via structural helper",
-);
+function preservesStructuralSlug(source) {
+  return /isStructuralContentTemplateSlug\(\s*existing\.slug\s*,\s*existing\.variant\s*,?\s*\)/.test(source)
+    && /const\s+slug\s*=\s*slugLocked\s*\?\s*existing\.slug\s*:\s*requestedSlug/.test(source);
+}
+assert(preservesStructuralSlug(actions), "Vision goals slug must remain locked through the canonical helper");
+assert(!preservesStructuralSlug(actions.replace(/isStructuralContentTemplateSlug/g, "unrelatedHelper")), "Slug guard must reject a missing canonical owner");
+assert(!preservesStructuralSlug(actions.replace(/slugLocked\s*\?\s*existing\.slug/, "slugLocked ? requestedSlug")), "Slug guard must reject overwriting a structural slug");
 
 if (failures.length) {
   console.error("verify-vision-goals-admin FAILED:");

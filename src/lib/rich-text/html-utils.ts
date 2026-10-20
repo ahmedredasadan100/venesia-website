@@ -90,27 +90,44 @@ function sanitizeHref(href: string) {
   return null;
 }
 
+// CommonMark backslash escapes distinguish authored text from formatting syntax.
+const MARKDOWN_ESCAPES = /\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g;
+
+export function plainTextToMarkdown(value: string) {
+  // Escape only this dialect's inline markers and block prefixes. Ordinary
+  // punctuation keeps its existing stored representation (for example a period).
+  return value
+    .replace(/[\\*_[\]<>]/g, "\\$&")
+    .replace(/^(\s*)(#{1,3}|-)(?=\s)/gm, "$1\\$2")
+    .replace(/^(\s*\d+)\.(?=\s)/gm, "$1\\.")
+    .replace(/^(\s*)::(?=(?:right|center|left|justify)::)/gm, "$1\\::");
+}
+
 function renderMarkdownInline(value: string) {
+  let prefix = "VENESIAESCAPE";
+  while (value.includes(prefix)) prefix += "X";
+  const escaped: string[] = [];
+  const protectedText = value.replace(MARKDOWN_ESCAPES, (_, character: string) => {
+    escaped.push(character);
+    return prefix + (escaped.length - 1) + "END";
+  });
   const links: string[] = [];
-  const tokenized = value.replace(
+  const tokenized = protectedText.replace(
     /\[([^\]\n]+)\]\(([^)\s]+)\)/g,
     (source, label: string, href: string) => {
       const safeHref = sanitizeHref(href);
       if (!safeHref) return source;
-
-      const token = `\u0007VENESIALINK${links.length}\u0007`;
-      links.push(
-        `<a href="${escapeHtmlAttr(safeHref)}">${renderMarkdownInlineFormatting(label)}</a>`,
-      );
+      const token = prefix + "LINK" + links.length + "END";
+      links.push('<a href="' + escapeHtmlAttr(safeHref) + '">' + renderMarkdownInlineFormatting(label) + "</a>");
       return token;
     },
   );
-
   let output = renderMarkdownInlineFormatting(tokenized);
   links.forEach((link, index) => {
-    output = output.replace(`\u0007VENESIALINK${index}\u0007`, link);
+    output = output.replace(prefix + "LINK" + index + "END", () => link);
   });
-  return output;
+  // Restore escaped characters only after parsing, and only as escaped HTML text.
+  return output.replace(new RegExp(prefix + "(\\d+)END", "g"), (_, index: string) => escapeHtml(escaped[Number(index)]));
 }
 
 function renderMarkdownInlineFormatting(value: string) {
@@ -132,6 +149,7 @@ export function markdownToRichTextHtml(value: string) {
   const html: string[] = [];
   let listType: "ul" | "ol" | null = null;
   let paragraphLines: string[] = [];
+  let paragraphAlignment: string | null = null;
 
   function closeList() {
     if (!listType) return;
@@ -141,10 +159,12 @@ export function markdownToRichTextHtml(value: string) {
 
   function closeParagraph() {
     if (!paragraphLines.length) return;
+    const attributes = paragraphAlignment ? ` style="text-align: ${paragraphAlignment}"` : "";
     html.push(
-      `<p>${renderMarkdownInline(paragraphLines.join("\n")).replace(/\n/g, "<br />")}</p>`,
+      `<p${attributes}>${renderMarkdownInline(paragraphLines.join("\n")).replace(/\n/g, "<br />")}</p>`,
     );
     paragraphLines = [];
+    paragraphAlignment = null;
   }
 
   for (const rawLine of lines) {
@@ -172,9 +192,8 @@ export function markdownToRichTextHtml(value: string) {
     if (aligned) {
       closeParagraph();
       closeList();
-      html.push(
-        `<p style="text-align: ${aligned[1]}">${renderMarkdownInline(aligned[2])}</p>`,
-      );
+      paragraphAlignment = aligned[1];
+      paragraphLines.push(aligned[2]);
       continue;
     }
 
@@ -220,55 +239,74 @@ export function markdownToRichTextHtml(value: string) {
 }
 
 function htmlInlineToMarkdown(value: string) {
-  let output = value
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<(strong|b)>([\s\S]*?)<\/\1>/gi, "**$2**")
-    .replace(/<(em|i)>([\s\S]*?)<\/\1>/gi, "*$2*")
-    .replace(/<u>([\s\S]*?)<\/u>/gi, "<u>$1</u>")
-    .replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (source, attributes: string, label: string) => {
-      const hrefMatch = attributes.match(/href=("([^"]*)"|'([^']*)'|([^\s>]+))/i);
-      const href = hrefMatch ? (hrefMatch[2] ?? hrefMatch[3] ?? hrefMatch[4] ?? "") : "";
+  const links: (string | null)[] = [];
+  return value.split(/(<[^>]*>)/g).map((part) => {
+    if (!part.startsWith("<")) {
+      // Decode each entity once, before escaping the text node. Never parse its
+      // decoded angle brackets as tags or re-serialize generated Markdown.
+      const text = part.replace(/&(?:amp|lt|gt|quot|nbsp|#\d+|#x[\da-f]+);/gi, (entity) => {
+        if (/^&#/i.test(entity)) {
+          const hex = /^&#x/i.test(entity);
+          const code = parseInt(entity.slice(hex ? 3 : 2, -1), hex ? 16 : 10);
+          return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : "\ufffd";
+        }
+        return decodeBasicEntities(entity.toLowerCase());
+      });
+      return plainTextToMarkdown(text);
+    }
+    if (/^<br\s*\/?>$/i.test(part)) return "\n";
+    if (/^<\/?(?:strong|b)>$/i.test(part)) return "**";
+    if (/^<\/?(?:em|i)>$/i.test(part)) return "_";
+    if (/^<\/?u>$/i.test(part)) return part.toLowerCase();
+    if (/^<a\b/i.test(part)) {
+      const match = part.match(/href=("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      const href = match ? (match[2] ?? match[3] ?? match[4] ?? "") : "";
       const safeHref = sanitizeHref(decodeBasicEntities(href));
-      return safeHref ? `[${label}](${safeHref})` : label;
-    })
-    .replace(/<[^>]+>/g, "");
-
-  output = decodeBasicEntities(output).replace(/\u00a0/g, " ");
-  return output.trim();
+      links.push(safeHref);
+      return safeHref ? "[" : "";
+    }
+    if (/^<\/a>$/i.test(part)) {
+      const href = links.pop();
+      return href ? "](" + href.replace(/\(/g, "%28").replace(/\)/g, "%29").replace(/\s/g, "%20") + ")" : "";
+    }
+    if (/^<\/p>$/i.test(part)) return "\n\n";
+    return "";
+  }).join("").trim();
 }
 
-/** Serializes sanitized TipTap HTML back into the unchanged Article Markdown storage contract. */
+/** Serializes sanitized TipTap HTML using the existing Article Markdown dialect. */
 export function richTextHtmlToMarkdown(value: string) {
   let html = sanitizeRichTextHtml(value).replace(/\r?\n/g, "");
   if (!html) return "";
-
-  html = html.replace(/<(ul|ol)>([\s\S]*?)<\/\1>/gi, (_, type: "ul" | "ol", body: string) => {
+  let prefix = "VENESIABLOCK";
+  const literalProjection = htmlInlineToMarkdown(html);
+  while (html.includes(prefix) || literalProjection.includes(prefix)) prefix += "X";
+  const blocks: string[] = [];
+  const expandBlocks = (text: string) => text.replace(new RegExp(prefix + "(\\d+)END", "g"), (_, index: string) => blocks[Number(index)]);
+  const block = (markdown: string) => {
+    blocks.push(markdown);
+    return prefix + (blocks.length - 1) + "END";
+  };
+  html = html.replace(/<(ul|ol)>([\s\S]*?)<\/\1>/gi, (_, type: string, body: string) => {
     let index = 0;
     const items = Array.from(body.matchAll(/<li>([\s\S]*?)<\/li>/gi)).map((match) => {
       index += 1;
-      const prefix = type.toLowerCase() === "ol" ? `${index}. ` : "- ";
-      return `${prefix}${htmlInlineToMarkdown(match[1])}`;
+      return (type.toLowerCase() === "ol" ? index + ". " : "- ") + htmlInlineToMarkdown(match[1]);
     });
-    return items.length ? `${items.join("\n")}\n\n` : "";
+    return block(items.length ? items.join("\n") + "\n\n" : "");
   });
-
   html = html
-    .replace(/<h([1-3])>([\s\S]*?)<\/h\1>/gi, (_, level: string, content: string) => {
-      return `${"#".repeat(Number(level))} ${htmlInlineToMarkdown(content)}\n`;
-    })
+    .replace(/<h([1-3])>([\s\S]*?)<\/h\1>/gi, (_, level: string, content: string) => block("#".repeat(Number(level)) + " " + htmlInlineToMarkdown(content) + "\n"))
     .replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, (_, content: string) => {
-      const text = htmlInlineToMarkdown(content);
-      return text ? `${text.split("\n").map((line) => `> ${line}`).join("\n")}\n\n` : "";
+      const text = expandBlocks(htmlInlineToMarkdown(content));
+      return block(text ? text.split("\n").map((line) => "> " + line).join("\n") + "\n\n" : "");
     })
     .replace(/<p([^>]*)>([\s\S]*?)<\/p>/gi, (_, attributes: string, content: string) => {
-      const style = readSafeTextAlignFromTag(`<p${attributes}>`);
-      const alignment = style?.replace("text-align: ", "");
+      const alignment = readSafeTextAlignFromTag("<p" + attributes + ">")?.replace("text-align: ", "");
       const text = htmlInlineToMarkdown(content);
-      const prefix = alignment && alignment !== "right" ? `::${alignment}:: ` : "";
-      return text ? `${prefix}${text}\n\n` : "";
+      return block(text ? (alignment && alignment !== "right" ? "::" + alignment + ":: " : "") + text + "\n\n" : "");
     });
-
-  return htmlInlineToMarkdown(html)
+  return expandBlocks(htmlInlineToMarkdown(html))
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -278,7 +316,9 @@ export function richTextHtmlToMarkdown(value: string) {
 export function normalizeArticleMarkdown(value: string) {
   const source = value.replace(/\r\n/g, "\n").trim();
   if (!source) return "";
-  return isHtmlContent(source) ? richTextHtmlToMarkdown(source) : source;
+  // Bare <u> is the already-supported Markdown underline mark, not an HTML document.
+  const htmlCandidate = source.replace(MARKDOWN_ESCAPES, "").replace(/<\/?u>/gi, "");
+  return isHtmlContent(htmlCandidate) ? richTextHtmlToMarkdown(source) : source;
 }
 
 function sanitizeTextAlignStyle(styleValue: string) {

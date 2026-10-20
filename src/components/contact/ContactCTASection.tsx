@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { pageBlockCtaFontWeightClass } from "../../lib/page-blocks/configs";
 import type { ContactCtaContent } from "./contact-cms-mappers";
 
 type ContactCTASectionProps = {
@@ -49,7 +50,7 @@ export default function ContactCTASection({ cmsContent }: ContactCTASectionProps
             {cta.primaryLabel.trim() ? (
               <a
                 href={cta.primaryHref || "#"}
-                className="rounded-xl bg-gradient-to-l from-[#e7b66a] to-[#b98236] px-7 py-4 font-semibold text-black transition duration-300 hover:-translate-y-0.5 hover:brightness-110"
+                className={`rounded-xl bg-gradient-to-l from-[#e7b66a] to-[#b98236] px-7 py-4 ${pageBlockCtaFontWeightClass(cta.ctaBold, "font-semibold")} text-black transition duration-300 hover:-translate-y-0.5 hover:brightness-110`}
               >
                 {cta.primaryLabel}
               </a>
@@ -58,7 +59,7 @@ export default function ContactCTASection({ cmsContent }: ContactCTASectionProps
             {cta.secondaryLabel.trim() ? (
               <a
                 href={cta.secondaryHref || "#"}
-                className="rounded-xl border border-white/15 px-7 py-4 font-semibold text-white transition duration-300 hover:-translate-y-0.5 hover:border-[#d2a75a]/50 hover:text-[#d2a75a]"
+                className={`rounded-xl border border-white/15 px-7 py-4 ${pageBlockCtaFontWeightClass(cta.ctaBold, "font-semibold")} text-white transition duration-300 hover:-translate-y-0.5 hover:border-[#d2a75a]/50 hover:text-[#d2a75a]`}
               >
                 {cta.secondaryLabel}
               </a>

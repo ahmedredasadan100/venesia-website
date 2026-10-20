@@ -5,13 +5,19 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createJiti } from "jiti";
+import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => normalizeVerificationText(readFileSync(resolve(ROOT, path), "utf8"));
 const jiti = createJiti(import.meta.url);
 const {
+  SEARCH_PLATFORM_SCOPES,
+  SEARCH_PLATFORM_PRESENTATIONS,
+  SEARCH_PLATFORM_RESULT_LIMITS,
+  SEARCH_PLATFORM_FILTERS,
   DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY,
   asSearchPlatformConfig,
+  isSearchPlatformTemplate,
   buildSearchPlatformInterfaceDisplayFromFormData,
   resolveSearchPlatformInterfaceDisplay,
 } = await jiti.import<
@@ -53,6 +59,7 @@ const cacheTags = read("src/lib/cache/revalidate-public-cache-tags.ts");
 const searchConfig = read("src/lib/page-blocks/search-platform-config.ts");
 const searchModule = read("src/components/search-platform/SearchPlatformModule.tsx");
 const searchEditor = read("src/components/admin/page-blocks/editors/SearchPlatformModuleEditor.tsx");
+const contentEditor = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
 const contentActions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 const moduleRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
 const moduleRegistryMetadata = read(
@@ -264,9 +271,13 @@ assert.ok(input.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
 assert.ok(input.includes('from "../venesia-scrollbar-styles"'));
 assert.ok(!input.includes("admin-scrollbar"));
 assert.ok(scrollbarOwner.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
-assert.ok(scrollbarOwner.includes("[scrollbar-width:thin]"));
-assert.ok(scrollbarOwner.includes("[&::-webkit-scrollbar]:h-1.5"));
-assert.ok(scrollbarOwner.includes("[&::-webkit-scrollbar]:w-1.5"));
+assert.ok(scrollbarOwner.includes('VENESIA_SCROLLBAR_VISUAL_CLASSES = "venesia-scrollbar"'));
+const scrollbarUtility = /@utility venesia-scrollbar\s*\{([^}]+)\}/.exec(globalStyles)?.[1] ?? "";
+assert.ok(scrollbarUtility.includes("[scrollbar-width:thin]"));
+assert.ok(scrollbarUtility.includes("[&::-webkit-scrollbar]:h-1.5"));
+assert.ok(scrollbarUtility.includes("[&::-webkit-scrollbar]:w-1.5"));
+assert.equal((globalStyles.match(/@utility venesia-scrollbar\b/g) ?? []).length, 1);
+assert.ok(!scrollbarUtility.includes("overflow"), "The neutral scrollbar utility must remain visual only");
 assert.ok(adminScrollbarAlias.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
 assert.ok(!adminScrollbarAlias.includes("[scrollbar-width:thin]"));
 assert.ok(!globalStyles.includes(".admin-scrollbar"));
@@ -510,16 +521,117 @@ assert.ok(searchEditor.includes('controlMode="visibility-only"'));
 for (const field of ["placeholder", "empty_results_title", "empty_results_description"]) {
   assert.ok(searchEditor.includes(`name="${field}"`));
 }
-assert.equal(
-  searchEditor.match(/span=\{4\}/gu)?.length,
-  8,
-  "Search interface controls must remain three equal cards per desktop row",
-);
-assert.equal(
-  searchEditor.match(/span=\{3\}/gu)?.length,
-  4,
-  "Search settings controls must remain four equal cards per desktop row",
-);
+// The approved split changes layout only: the exact original field inventory
+// remains partitioned once across text/search/presentation, with mounted tabs.
+const searchEditorAst = ts.createSourceFile("SearchPlatformModuleEditor.tsx", searchEditor, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+type SearchJsxNode = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+function searchJsxNodes(node: ts.Node): SearchJsxNode[] {
+  const result: SearchJsxNode[] = [];
+  function visit(current: ts.Node) {
+    if (ts.isJsxOpeningElement(current) || ts.isJsxSelfClosingElement(current)) result.push(current);
+    ts.forEachChild(current, visit);
+  }
+  visit(node);
+  return result;
+}
+function searchAttribute(node: SearchJsxNode, name: string) {
+  return node.attributes.properties.find((attribute): attribute is ts.JsxAttribute =>
+    ts.isJsxAttribute(attribute) && attribute.name.getText(searchEditorAst) === name);
+}
+function searchLiteral(node: SearchJsxNode, name: string) {
+  const value = searchAttribute(node, name)?.initializer;
+  return value && ts.isStringLiteral(value) ? value.text : undefined;
+}
+function searchTag(node: SearchJsxNode) { return node.tagName.getText(searchEditorAst); }
+const searchControlTags = new Set(["TextField", "ModuleEditorVisibilityAlignRow", "AdminFormListboxSelect", "AdminCheckbox"]);
+const searchControls = searchJsxNodes(searchEditorAst).filter(node => searchControlTags.has(searchTag(node)));
+const searchNamedAttributes = ["name", "showName", "boldName", "alignmentName"];
+const searchTextNames = ["title", "description", "help_text", "placeholder", "empty_results_title", "empty_results_description"];
+const searchFormattingNames = ["search_title", "search_description", "search_help_text", "search_results_title"].flatMap(field => [`show_${field}`, `${field}_bold`, `${field}_alignment`]);
+const expectedSearchFormNames = [...searchTextNames, ...searchFormattingNames, "show_search_action", "search_scope", "content_types", "search_filters", "result_limit", "search_presentation", "default_sort"];
+const authoredSearchFormNames = searchControls.flatMap(node => searchNamedAttributes.flatMap(name => searchLiteral(node, name) ? [searchLiteral(node, name)!] : []));
+assert.equal(expectedSearchFormNames.length, 25);
+assert.deepEqual(authoredSearchFormNames.slice().sort(), expectedSearchFormNames.slice().sort(), "All 25 config names occur exactly once, without new or missing capabilities");
+assert.equal(searchControls.filter(node => searchTag(node) === "TextField").length, 6);
+assert.equal(searchControls.filter(node => searchTag(node) === "ModuleEditorVisibilityAlignRow").length, 5);
+assert.equal(searchControls.filter(node => searchTag(node) === "AdminFormListboxSelect").length, 4);
+assert.equal(searchControls.filter(node => searchTag(node) === "AdminCheckbox").length, 2);
+assert.ok(searchControls.every(node => !searchAttribute(node, "disabled") && !searchAttribute(node, "readOnly")), "Adoption must not disable an existing setting");
+const originalSearchBindings: Record<string, string> = {
+  title: "{config.title}", description: "{config.description}", help_text: "{config.helpText}", placeholder: "{config.placeholder}",
+  empty_results_title: "{config.interfaceDisplay.emptyResults.title}", empty_results_description: "{config.interfaceDisplay.emptyResults.description}",
+  search_scope: "{config.scope}", result_limit: "{String(config.resultLimit)}", search_presentation: "{config.presentation}", default_sort: "{config.defaultSort}",
+};
+for (const node of searchControls) {
+  const name = searchLiteral(node, "name");
+  if (name && originalSearchBindings[name]) assert.equal(searchAttribute(node, "defaultValue")?.initializer?.getText(searchEditorAst), originalSearchBindings[name], `${name} retains its canonical initial value`);
+  if (searchTag(node) === "AdminFormListboxSelect") {
+    const header = searchJsxNodes(searchAttribute(node, "label")!).filter(child => searchTag(child) === "AdminFormControlHeader");
+    assert.equal(header.length, 1, `${name} uses one shared control header as its label`);
+    assert.equal(searchLiteral(header[0], "presentation"), "leading-icon");
+    assert.equal(searchLiteral(node, "sizing"), "full");
+    let ancestor: ts.Node | undefined = node.parent;
+    while (ancestor && !(ts.isJsxElement(ancestor) && searchTag(ancestor.openingElement) === "AdminCard")) ancestor = ancestor.parent;
+    assert.ok(ancestor && ts.isJsxElement(ancestor), `${name} retains its premium setting card`);
+    assert.equal(searchLiteral(ancestor.openingElement, "presentation"), "premium");
+  }
+}
+for (const row of searchControls.filter(node => searchTag(node) === "ModuleEditorVisibilityAlignRow")) {
+  assert.equal(searchLiteral(row, "presentation"), "premium");
+  assert.ok(searchAttribute(row, "icon"));
+  const showName = searchLiteral(row, "showName")!;
+  const key = ({ show_search_title: "title", show_search_description: "description", show_search_help_text: "helpText", show_search_results_title: "resultsTitle", show_search_action: "searchAction" } as Record<string, string>)[showName];
+  assert.equal(searchAttribute(row, "showDefault")?.initializer?.getText(searchEditorAst), `{config.interfaceDisplay.${key}.visible}`);
+  if (key === "searchAction") {
+    assert.equal(searchLiteral(row, "controlMode"), "visibility-only");
+    assert.ok(!searchAttribute(row, "boldName") && !searchAttribute(row, "alignmentName"));
+  } else {
+    assert.equal(searchAttribute(row, "boldDefault")?.initializer?.getText(searchEditorAst), `{config.interfaceDisplay.${key}.bold}`);
+    assert.equal(searchAttribute(row, "alignmentDefault")?.initializer?.getText(searchEditorAst), `{config.interfaceDisplay.${key}.alignment}`);
+  }
+}
+const sectionBranches = new Map<string, ts.Node>();
+function visitSearchSection(node: ts.Node) {
+  if (ts.isConditionalExpression(node)) {
+    const match = /^section === "all" \|\| section === "(text|search|presentation)"$/u.exec(node.condition.getText(searchEditorAst));
+    if (match) {
+      assert.equal(sectionBranches.has(match[1]), false, "Each section has one owner");
+      sectionBranches.set(match[1], node.whenTrue);
+    }
+  }
+  ts.forEachChild(node, visitSearchSection);
+}
+visitSearchSection(searchEditorAst);
+assert.deepEqual([...sectionBranches.keys()], ["text", "search", "presentation"]);
+const sectionExpectedNames = {
+  text: [...searchTextNames, ...searchFormattingNames, "show_search_action"],
+  search: ["search_scope", "content_types", "search_filters"],
+  presentation: ["result_limit", "search_presentation", "default_sort"],
+};
+for (const [section, branch] of sectionBranches) {
+  const nodes = searchJsxNodes(branch);
+  const names = nodes.filter(node => searchControlTags.has(searchTag(node))).flatMap(node => searchNamedAttributes.flatMap(name => searchLiteral(node, name) ? [searchLiteral(node, name)!] : []));
+  assert.deepEqual(names.sort(), sectionExpectedNames[section as keyof typeof sectionExpectedNames].slice().sort(), `${section} retains its exact functional field group`);
+  const grids = nodes.filter(node => searchTag(node) === "AdminFormGrid");
+  assert.deepEqual(grids.map(node => searchAttribute(node, "columns")?.initializer?.getText(searchEditorAst)), section === "search" ? ["{1}", "{2}", "{3}", "{3}"] : ["{3}"], `${section} delegates responsive composition to the current grid`);
+  assert.equal(nodes.filter(node => searchTag(node) === "ModuleEditorSectionHeading").length, 1);
+  assert.ok(branch.getText(searchEditorAst).includes('section === "all" ? ('), "Split tabs must not duplicate their existing shared section header");
+}
+assert.ok(searchEditor.includes('section = "all"'), "The existing direct editor retains all sections by default");
+assert.ok(!searchEditor.includes("ModuleEditorFieldGrid") && !searchEditor.includes("ModuleEditorField") && !searchEditor.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME") && !/\bgrid-cols-/u.test(searchEditor), "Search owns composition, not a parallel grid or card style");
+assert.ok(!searchEditor.includes("useState") && !searchEditor.includes("AdminRichTextEditor"), "Presentation adoption adds no local state or unsupported editor");
+const nativeSearchInputs = searchJsxNodes(searchEditorAst).filter(node => searchTag(node) === "input");
+assert.equal(nativeSearchInputs.length, 1, "The existing TextField remains the single native text-input template");
+assert.ok(searchAttribute(nativeSearchInputs[0], "required") && searchAttribute(nativeSearchInputs[0], "defaultValue"));
+assert.ok(!searchAttribute(nativeSearchInputs[0], "value") && !searchAttribute(nativeSearchInputs[0], "maxLength"));
+const searchTabsSource = contentEditor.slice(contentEditor.indexOf("const searchPlatformTabs ="), contentEditor.indexOf("const savedMessage ="));
+assert.ok(searchTabsSource.includes('isSearchPlatform') && searchTabsSource.includes('["content", "search", "presentation"] as const') && searchTabsSource.includes('id: "pages"'));
+assert.ok(searchTabsSource.includes('section={section === "content" ? "text" : section}') && searchTabsSource.includes('sectionHeaderPresentation: "control"'));
+assert.ok(searchTabsSource.includes('assignmentContext={assignmentContext} presentation="premium"') && !searchTabsSource.includes("showUsageBanner"), "Premium assignments preserve multi-page usage and position information");
+assert.ok(contentEditor.includes('const isSearchPlatform = editorKey === "search-platform"') && contentEditor.includes('tabs={searchPlatformTabs}'));
+assert.ok(searchJsxNodes(searchEditorAst).every(node => !["AdminModuleTabs", "ModuleEditorTabs"].includes(searchTag(node))), "The parent remains the only rendered tab owner; importing its shared icon does not create tabs");
+const sharedTabsSource = read("src/components/admin/ui/AdminModuleTabs.tsx");
+assert.ok(sharedTabsSource.includes("{tabs.map((tab) => (") && sharedTabsSource.includes("hidden={tab.id !== activeId}"), "Inactive field groups remain mounted for native FormData and draft preservation");
 assert.equal(
   searchEditor.match(/^\s+hideLabel\r?$/gmu)?.length,
   3,
@@ -541,6 +653,84 @@ assert.ok(searchEditor.includes('<legend className="sr-only">أنواع المح
 assert.ok(searchEditor.includes('<legend className="sr-only">الفلاتر المتاحة</legend>'));
 assert.ok(searchEditor.includes('data-search-platform-option-group="content-types"'));
 assert.ok(searchEditor.includes('data-search-platform-option-group="filters"'));
+// Search has two premium multi-selection groups. Each option consumes the
+// shared checkbox-row tile inside its three-column grid, without nested cards.
+const sharedCheckboxRowImport = searchEditorAst.statements.filter(ts.isImportDeclaration).find(node =>
+  ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../../lib/admin/admin-ui-styles");
+assert.ok(sharedCheckboxRowImport?.importClause?.namedBindings && ts.isNamedImports(sharedCheckboxRowImport.importClause.namedBindings));
+assert.ok(sharedCheckboxRowImport.importClause.namedBindings.elements.some(node => !node.propertyName && node.name.text === "ADMIN_FORM"), "Search choice tiles consume the canonical shared row token directly");
+const searchOptionGroupContracts = [
+  { group: "content-types", legend: "أنواع المحتوى", source: "CONTENT_TYPES", option: "contentType", name: "content_types", checked: "config.contentTypes.includes(contentType)", label: "getContentTypeLabel(contentType)" },
+  { group: "filters", legend: "الفلاتر المتاحة", source: "SEARCH_PLATFORM_FILTERS", option: "filter", name: "search_filters", checked: "config.filters.includes(filter)", label: "FILTER_LABELS[filter]" },
+] as const;
+for (const contract of searchOptionGroupContracts) {
+  const groups = searchJsxNodes(searchEditorAst).filter(node => searchLiteral(node, "data-search-platform-option-group") === contract.group);
+  assert.equal(groups.length, 1, `${contract.group} has one rendered group owner`);
+  const group = groups[0];
+  let fieldset: ts.Node | undefined = group.parent;
+  while (fieldset && !(ts.isJsxElement(fieldset) && searchTag(fieldset.openingElement) === "fieldset")) fieldset = fieldset.parent;
+  assert.ok(fieldset && ts.isJsxElement(fieldset), `${contract.group} remains a semantic fieldset`);
+  const groupNodes = searchJsxNodes(fieldset);
+  const optionGrids = groupNodes.filter(node => searchTag(node) === "AdminFormGrid");
+  assert.equal(optionGrids.length, 1, `${contract.group} has one shared option grid`);
+  assert.equal(searchAttribute(optionGrids[0], "columns")?.initializer?.getText(searchEditorAst), "{3}", `${contract.group} adopts the existing responsive three-column grid`);
+  assert.ok(!searchAttribute(optionGrids[0], "presentation") && !searchAttribute(optionGrids[0], "className"), `${contract.group} retains shared grid breakpoints and spacing without local layout overrides`);
+  const cards = groupNodes.filter(node => searchTag(node) === "AdminCard");
+  assert.equal(cards.length, 1, `${contract.group} uses one grouped card, without nested option cards`);
+  assert.equal(searchLiteral(cards[0], "presentation"), "premium");
+  let cardAncestor: ts.Node | undefined = group.parent;
+  while (cardAncestor && cardAncestor !== fieldset && cardAncestor !== cards[0].parent) cardAncestor = cardAncestor.parent;
+  assert.equal(cardAncestor, cards[0].parent, `${contract.group} is contained by its premium card`);
+  const legends = groupNodes.filter(node => searchTag(node) === "legend");
+  assert.equal(legends.length, 1, `${contract.group} retains one native group label`);
+  assert.ok(ts.isJsxElement(legends[0].parent));
+  assert.equal(legends[0].parent.children.filter(ts.isJsxText).map(node => node.text.trim()).join(""), contract.legend);
+  const headers = groupNodes.filter(node => searchTag(node) === "AdminFormControlHeader");
+  assert.equal(headers.length, 1, `${contract.group} has one shared visible header`);
+  assert.equal(searchLiteral(headers[0], "title"), contract.legend);
+  assert.equal(searchLiteral(headers[0], "presentation"), "leading-icon");
+  assert.ok(searchAttribute(headers[0], "icon"));
+  const description = searchAttribute(headers[0], "description");
+  assert.ok(description, `${contract.group} retains supporting copy`);
+  const descriptionNodes = searchJsxNodes(description).filter(node => searchLiteral(node, "id"));
+  assert.equal(descriptionNodes.length, 1);
+  const descriptionId = searchLiteral(descriptionNodes[0], "id");
+  assert.ok(descriptionId);
+  assert.equal(searchLiteral(fieldset.openingElement, "aria-describedby"), descriptionId, `${contract.group} describes its fieldset with the visible header copy`);
+  assert.equal(searchJsxNodes(searchEditorAst).filter(node => searchLiteral(node, "id") === descriptionId).length, 1);
+  const checkboxes = groupNodes.filter(node => searchTag(node) === "AdminCheckbox");
+  assert.equal(checkboxes.length, 1, `${contract.group} maps its options through one shared checkbox template`);
+  const checkbox = checkboxes[0];
+  assert.equal(searchLiteral(checkbox, "name"), contract.name);
+  assert.equal(searchAttribute(checkbox, "value")?.initializer?.getText(searchEditorAst), `{${contract.option}}`);
+  assert.equal(searchAttribute(checkbox, "defaultChecked")?.initializer?.getText(searchEditorAst), `{${contract.checked}}`);
+  assert.equal(searchAttribute(checkbox, "label")?.initializer?.getText(searchEditorAst), `{${contract.label}}`);
+  for (const prop of ["checked", "onChange", "onClick", "disabled", "readOnly"]) assert.ok(!searchAttribute(checkbox, prop), `${contract.group} retains native uncontrolled selection without ${prop}`);
+  assert.ok(checkbox.attributes.properties.every(ts.isJsxAttribute), `${contract.group} cannot replace native bindings through a spread`);
+  assert.ok(ts.isJsxElement(checkbox.parent) && searchTag(checkbox.parent.openingElement) === "label", `${contract.group} keeps the clickable native label around its checkbox`);
+  const nativeLabel = checkbox.parent;
+  assert.equal(searchAttribute(nativeLabel.openingElement, "className")?.initializer?.getText(searchEditorAst), "{ADMIN_FORM.checkboxRow}", `${contract.group} tiles reuse the shared frame, padding and typography without local CSS`);
+  assert.ok(!searchAttribute(nativeLabel.openingElement, "style"), `${contract.group} tiles do not override their shared surface`);
+  let optionGridAncestor: ts.Node | undefined = nativeLabel.parent;
+  while (optionGridAncestor && optionGridAncestor !== fieldset && optionGridAncestor !== optionGrids[0].parent) optionGridAncestor = optionGridAncestor.parent;
+  assert.equal(optionGridAncestor, optionGrids[0].parent, `${contract.group} native option labels are children of its three-column grid`);
+  const visibleLabels = nativeLabel.children.filter(ts.isJsxElement).filter(node => searchTag(node.openingElement) === "span");
+  assert.equal(visibleLabels.length, 1);
+  assert.equal(searchLiteral(visibleLabels[0].openingElement, "className"), "min-w-0 flex-1", `${contract.group} tile text can shrink and align beside its native checkbox in RTL`);
+  assert.equal(visibleLabels[0].children.filter(ts.isJsxExpression).map(node => node.expression?.getText(searchEditorAst)).join(""), contract.label, `${contract.group} visible and accessible option labels match`);
+  let optionsMap: ts.Node | undefined = nativeLabel.parent;
+  while (optionsMap && optionsMap !== fieldset && !ts.isCallExpression(optionsMap)) optionsMap = optionsMap.parent;
+  assert.ok(optionsMap && ts.isCallExpression(optionsMap) && ts.isPropertyAccessExpression(optionsMap.expression), `${contract.group} uses its canonical option collection`);
+  assert.equal(optionsMap.expression.name.text, "map");
+  assert.equal(optionsMap.expression.expression.getText(searchEditorAst), contract.source);
+  const callback = optionsMap.arguments[0];
+  assert.ok(callback && ts.isArrowFunction(callback));
+  assert.equal(callback.parameters.length, 1);
+  assert.equal(callback.parameters[0].name.getText(searchEditorAst), contract.option);
+  assert.equal(searchJsxNodes(callback.body).filter(node => searchTag(node) === "label").length, 1, `${contract.group} has no nested option labels`);
+  assert.ok(groupNodes.every(node => !["button", "input", "AdminFormSwitch", "AdminFormListboxSelect"].includes(searchTag(node))), `${contract.group} keeps multi-select checkbox semantics`);
+  assert.ok(groupNodes.every(node => !searchAttribute(node, "disabled") && !searchAttribute(node, "onClick")), `${contract.group} adds no disabled group or local click handler`);
+}
 for (const englishProductCopy of [
   'label="Placeholder"',
   'label="Help Text"',
@@ -640,6 +830,151 @@ assert.deepEqual(
   { visible: false },
   "Legacy Search action formatting must resolve safely to the icon visibility contract",
 );
+
+// Exercise the real private Action builder using the established source-extraction
+// technique. Import only its real pure dependencies, never the Server Action or DB.
+const searchContentTypes = await jiti.import<typeof import("../src/lib/admin/content/content-types.ts")>("../src/lib/admin/content/content-types.ts");
+const searchAdminUtils = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>("../src/lib/page-blocks/admin-utils.ts");
+const searchMetadataOwner = await jiti.import<typeof import("../src/lib/page-composition/module-registry-metadata.ts")>("../src/lib/page-composition/module-registry-metadata.ts");
+const searchRegistryOwner = await jiti.import<typeof import("../src/lib/page-blocks/module-edit-registry.ts")>("../src/lib/page-blocks/module-edit-registry.ts");
+const searchActionsAst = ts.createSourceFile("actions.ts", contentActions, ts.ScriptTarget.Latest, true);
+const searchBuilders = searchActionsAst.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "buildSearchPlatformConfig");
+assert.equal(searchBuilders.length, 1);
+const searchBuilderDependencies = {
+  cleanText: searchAdminUtils.cleanText,
+  isContentType: searchContentTypes.isContentType,
+  SEARCH_PLATFORM_SCOPES,
+  SEARCH_PLATFORM_PRESENTATIONS,
+  SEARCH_PLATFORM_RESULT_LIMITS,
+  SEARCH_PLATFORM_FILTERS,
+  buildSearchPlatformInterfaceDisplayFromFormData,
+};
+const searchBuilderJavascript = ts.transpileModule(searchBuilders[0].getText(searchActionsAst), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+const actualSearchBuilder = new Function(...Object.keys(searchBuilderDependencies), searchBuilderJavascript + "\nreturn buildSearchPlatformConfig;")(...Object.values(searchBuilderDependencies)) as (form: FormData) => import("../src/lib/page-blocks/search-platform-config.ts").SearchPlatformConfig;
+function searchContractForm() {
+  const form = new FormData();
+  for (const [key, value] of interfaceForm) form.append(key, value);
+  for (const name of searchTextNames) form.set(name, `${name}: نص حرفي *نجمة* <tag> & "اقتباس" ١٢٣`);
+  form.set("search_scope", "selected");
+  form.append("content_types", "article");
+  form.append("content_types", "news");
+  for (const filter of SEARCH_PLATFORM_FILTERS) form.append("search_filters", filter);
+  form.set("result_limit", "12");
+  form.set("search_presentation", "full-grid");
+  form.set("default_sort", "newest");
+  return form;
+}
+assert.deepEqual([...SEARCH_PLATFORM_SCOPES], ["all", "selected"]);
+assert.deepEqual([...SEARCH_PLATFORM_PRESENTATIONS], ["compact", "full-list", "full-grid"]);
+assert.deepEqual([...SEARCH_PLATFORM_RESULT_LIMITS], [6, 9, 12, 24]);
+assert.deepEqual([...SEARCH_PLATFORM_FILTERS], ["content-type", "category", "series"]);
+assert.deepEqual([...searchContentTypes.CONTENT_TYPES], ["article", "news", "press", "site_update", "video", "gallery"]);
+let searchRoundtrips = 0;
+for (const scope of SEARCH_PLATFORM_SCOPES) {
+  for (const presentation of SEARCH_PLATFORM_PRESENTATIONS) {
+    for (const limit of SEARCH_PLATFORM_RESULT_LIMITS) {
+      for (const sort of ["newest", "oldest"] as const) {
+        const form = searchContractForm();
+        form.set("search_scope", scope);
+        form.set("search_presentation", presentation);
+        form.set("result_limit", String(limit));
+        form.set("default_sort", sort);
+        form.delete("content_types");
+        const types = scope === "all" ? [...searchContentTypes.CONTENT_TYPES] : ["article", "news"];
+        for (const type of types) form.append("content_types", type);
+        const built = actualSearchBuilder(form);
+        const reloaded = asSearchPlatformConfig(JSON.parse(JSON.stringify(built)));
+        assert.deepEqual(reloaded, built, `${scope}/${presentation}/${limit}/${sort}: actual Action config survives JSON save/read`);
+        assert.deepEqual(reloaded, {
+          title: form.get("title"), description: form.get("description"), placeholder: form.get("placeholder"), helpText: form.get("help_text"),
+          scope, contentTypes: types, resultLimit: limit, presentation, filters: [...SEARCH_PLATFORM_FILTERS], defaultSort: sort,
+          interfaceDisplay: { ...savedInterfaceDisplay, emptyResults: { title: form.get("empty_results_title"), description: form.get("empty_results_description") } },
+        }, "Every authored field, literal character and formatting state retains its original meaning");
+        searchRoundtrips += 1;
+      }
+    }
+  }
+}
+assert.equal(searchRoundtrips, 48);
+for (const type of searchContentTypes.CONTENT_TYPES) {
+  const form = searchContractForm();
+  form.delete("content_types");
+  form.append("content_types", type);
+  assert.deepEqual(asSearchPlatformConfig(actualSearchBuilder(form)).contentTypes, [type], `Selected scope accepts ${type}`);
+}
+for (const name of searchTextNames) {
+  const form = searchContractForm();
+  form.set(name, "  ");
+  assert.throws(() => actualSearchBuilder(form), /أكمل/u, `${name} remains required at the save boundary`);
+}
+for (const [name, invalidValues] of Object.entries({ search_scope: ["", "topics", "__proto__"], result_limit: ["0", "1", "5", "10", "13", "25", "NaN"], search_presentation: ["", "list", "hero"], default_sort: ["", "popular", "random"] })) {
+  for (const value of invalidValues) {
+    const form = searchContractForm();
+    form.set(name, value);
+    assert.throws(() => actualSearchBuilder(form), /غير مدعوم/u, `${name} rejects ${value}`);
+  }
+}
+const noTypesForm = searchContractForm();
+noTypesForm.delete("content_types");
+assert.throws(() => actualSearchBuilder(noTypesForm), /نوع محتوى واحد/u);
+noTypesForm.append("content_types", "not-a-content-type");
+assert.throws(() => actualSearchBuilder(noTypesForm), /نوع محتوى واحد/u);
+noTypesForm.set("search_scope", "all");
+assert.deepEqual(actualSearchBuilder(noTypesForm).contentTypes, [], "All-scope writes retain the existing submitted-list contract");
+assert.deepEqual(asSearchPlatformConfig(actualSearchBuilder(noTypesForm)).contentTypes, [...searchContentTypes.CONTENT_TYPES], "All-scope reads intentionally expand to every canonical type");
+const sanitizedForm = searchContractForm();
+sanitizedForm.append("content_types", "not-a-content-type");
+sanitizedForm.append("content_types", "article");
+sanitizedForm.append("search_filters", "unsafe-filter");
+sanitizedForm.append("search_filters", "category");
+const sanitizedBuilt = actualSearchBuilder(sanitizedForm);
+assert.deepEqual(sanitizedBuilt.contentTypes, ["article", "news", "article"]);
+assert.deepEqual(sanitizedBuilt.filters, [...SEARCH_PLATFORM_FILTERS, "category"]);
+assert.deepEqual(asSearchPlatformConfig(sanitizedBuilt).contentTypes, ["article", "news"]);
+assert.deepEqual(asSearchPlatformConfig(sanitizedBuilt).filters, [...SEARCH_PLATFORM_FILTERS]);
+sanitizedForm.delete("search_filters");
+assert.deepEqual(asSearchPlatformConfig(actualSearchBuilder(sanitizedForm)).filters, [], "An explicitly empty filter selection remains empty");
+const literalLegacy = "نص قديم *حرفي* <tag> & ١٢٣";
+const legacySearchConfig = asSearchPlatformConfig({
+  title: literalLegacy, description: literalLegacy, placeholder: literalLegacy,
+  help_text: literalLegacy, scope: "selected", contentTypes: ["news", "news", "invalid"], result_limit: "24", presentation: "full-list", default_sort: "oldest", filters: ["series", "series", "invalid"],
+  interface_display: { title: { visible: "false", bold: "true", alignment: "left" }, help_text: { visible: "0", bold: "1", alignment: "center" }, search_action: { visible: false }, results_title: { visible: false, bold: true, alignment: "right" }, empty_results: { title: literalLegacy, description: literalLegacy } },
+});
+assert.equal(legacySearchConfig.title, literalLegacy);
+assert.equal(legacySearchConfig.description, literalLegacy);
+assert.equal(legacySearchConfig.placeholder, literalLegacy);
+assert.equal(legacySearchConfig.helpText, literalLegacy);
+assert.equal(legacySearchConfig.resultLimit, 24);
+assert.equal(legacySearchConfig.presentation, "full-list");
+assert.equal(legacySearchConfig.defaultSort, "oldest");
+assert.deepEqual(legacySearchConfig.contentTypes, ["news"]);
+assert.deepEqual(legacySearchConfig.filters, ["series"]);
+assert.deepEqual(legacySearchConfig.interfaceDisplay.title, { visible: false, bold: true, alignment: "left" });
+assert.deepEqual(legacySearchConfig.interfaceDisplay.helpText, { visible: false, bold: true, alignment: "center" });
+assert.deepEqual(legacySearchConfig.interfaceDisplay.searchAction, { visible: false });
+assert.deepEqual(legacySearchConfig.interfaceDisplay.resultsTitle, { visible: false, bold: true, alignment: "right" });
+assert.deepEqual(legacySearchConfig.interfaceDisplay.emptyResults, { title: literalLegacy, description: literalLegacy });
+for (const [slug, variant] of [["search-platform", "default"], ["topics-search", "search-platform"], ["qa-new-search-consumer", "search-platform"]]) {
+  assert.equal(isSearchPlatformTemplate(slug, variant), true);
+  assert.equal(searchRegistryOwner.getContentModuleEditorKey(slug, variant), "search-platform");
+  assert.deepEqual(searchRegistryOwner.resolveContentModuleEditorConfig({ slug, variant, config: legacySearchConfig }), legacySearchConfig, "Every family alias consumes the same canonical reader");
+}
+assert.equal(isSearchPlatformTemplate("home-story", "default"), false);
+const searchTabIds = ["content", "search", "presentation", "pages"];
+assert.deepEqual(searchTabIds.map(id => searchMetadataOwner.getModuleEditorSectionMetadata("content", id, "search-platform")?.navigationLabelAr), ["النصوص", "إعدادات البحث", "إعدادات العرض", "الظهور"]);
+for (const id of searchTabIds) {
+  assert.equal(searchAdminUtils.resolveModuleEditorTabId(id, searchTabIds), id, `Existing and new ${id} navigation remains addressable`);
+  const redirectForm = new FormData();
+  redirectForm.set("module_editor_tab", id);
+  redirectForm.set("return_page_id", "14");
+  redirectForm.set("return_to", "/admin/pages-blocks/pages");
+  const redirect = new URL(searchAdminUtils.withModuleEditorReturnContextFromForm("/admin/pages-blocks/blocks/content/187?saved=1", redirectForm), "http://localhost:3000");
+  assert.equal(redirect.searchParams.get("tab"), id, `${id} survives the actual save redirect owner`);
+  assert.equal(redirect.searchParams.get("returnPageId"), "14");
+  assert.equal(redirect.searchParams.get("saved"), "1");
+}
+assert.equal(searchAdminUtils.resolveModuleEditorTabId("unsupported", searchTabIds), "content");
+console.log(`PASS Search UI adoption: exact 25-field inventory, four flat tabs, ${searchRoundtrips} actual Action/JSON/read roundtrips, canonical limits, invalid-input rejection and legacy aliases.`);
 assert.ok(/'search',\r?\n\s*'\/search'/u.test(migration));
 assert.ok(migration.includes("'search-platform'"));
 assert.ok(migration.includes("mutate_page_composition"));

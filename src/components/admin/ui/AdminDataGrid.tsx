@@ -13,6 +13,8 @@ import AdminCheckbox from "./AdminCheckbox";
 import AdminDataGridQueryStatus from "./AdminDataGridQueryStatus";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
+export { default as AdminDataGridDateTimeCell } from "./AdminDataGridDateTimeCell";
+
 const ADMIN_DATA_GRID_NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
 
 /** Keep Admin table values in Latin digits without changing the RTL interface. */
@@ -168,7 +170,7 @@ export const ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH =
   ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.cellInlinePaddingPx * 2 +
   ADMIN_DATA_GRID_ROW_ACTIONS_CONTRACT.borderSafetyPx;
 
-/** Canonical width for `DD MMM YYYY, hh:mm A` Admin timestamp columns. */
+/** Canonical width for full `DD/MM/YYYY, hh:mm AM/PM` Admin timestamps. */
 export const ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH = 196;
 
 /** Sort-safe width for compact numeric count columns. */
@@ -462,14 +464,18 @@ export function AdminDataGridActionIcon({
   action,
   isCurrentlyHidden = false,
   active = false,
+  size = "sm",
 }: {
   action: AdminDataGridAction;
   isCurrentlyHidden?: boolean;
   active?: boolean;
+  /** Shared glyph scales: 16px default, 18px form controls, 22px prominent actions. */
+  size?: "sm" | "md" | "lg";
 }) {
+  const iconClassName = size === "lg" ? "size-5.5 shrink-0" : size === "md" ? "size-4.5 shrink-0" : ADMIN_DATA_GRID_RULES.actionIcon;
   if (action === "edit") {
     return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M4 20h4.8L19.2 9.6a2.4 2.4 0 0 0-3.4-3.4L5.4 16.6 4 20Z" />
         <path d="m14.5 7.5 2 2" />
       </svg>
@@ -478,14 +484,14 @@ export function AdminDataGridActionIcon({
 
   if (action === "visibility") {
     return isCurrentlyHidden ? (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M3 3l18 18" />
         <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
         <path d="M9.2 5.6A9.8 9.8 0 0 1 12 5c5 0 8.5 4.5 9.5 7a13 13 0 0 1-2.4 3.6" />
         <path d="M6.5 6.9C4.5 8.2 3 10.4 2.5 12c1 2.5 4.5 7 9.5 7 1.2 0 2.3-.25 3.3-.7" />
       </svg>
     ) : (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
         <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
       </svg>
@@ -494,7 +500,7 @@ export function AdminDataGridActionIcon({
 
   if (action === "duplicate") {
     return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M8 8h10v12H8z" />
         <path d="M6 16H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
       </svg>
@@ -506,7 +512,7 @@ export function AdminDataGridActionIcon({
       <svg
         aria-hidden="true"
         viewBox="0 0 24 24"
-        className={ADMIN_DATA_GRID_RULES.actionIcon}
+        className={iconClassName}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
@@ -521,7 +527,7 @@ export function AdminDataGridActionIcon({
 
   if (action === "preview") {
     return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M14 3h7v7" />
         <path d="M10 14 21 3" />
         <path d="M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h6" />
@@ -531,7 +537,7 @@ export function AdminDataGridActionIcon({
 
   if (action === "copy-link") {
     return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M10.6 13.4a4 4 0 0 0 5.66 0l2.14-2.14a4 4 0 0 0-5.66-5.66l-1.22 1.22" />
         <path d="M13.4 10.6a4 4 0 0 0-5.66 0L5.6 12.74a4 4 0 0 0 5.66 5.66l1.22-1.22" />
       </svg>
@@ -543,7 +549,7 @@ export function AdminDataGridActionIcon({
       <svg
         aria-hidden="true"
         viewBox="0 0 24 24"
-        className={ADMIN_DATA_GRID_RULES.actionIcon}
+        className={iconClassName}
         fill="currentColor"
       >
         <circle cx="12" cy="5" r="1.7" />
@@ -558,7 +564,7 @@ export function AdminDataGridActionIcon({
       <svg
         aria-hidden="true"
         viewBox="0 0 24 24"
-        className={ADMIN_DATA_GRID_RULES.actionIcon}
+        className={iconClassName}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
@@ -575,7 +581,7 @@ export function AdminDataGridActionIcon({
 
   if (action === "archive") {
     return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M3 7h18" />
         <path d="M5 7l1 12h12l1-12" />
         <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
@@ -585,7 +591,7 @@ export function AdminDataGridActionIcon({
 
   if (action === "restore") {
     return (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M3 12a9 9 0 0 1 15-6.7" />
         <path d="M18 3v4h-4" />
         <path d="M21 12a9 9 0 0 1-15 6.7" />
@@ -595,7 +601,7 @@ export function AdminDataGridActionIcon({
   }
 
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className={ADMIN_DATA_GRID_RULES.actionIcon} fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M4 7h16" />
       <path d="M9 7V5h6v2" />
       <path d="M7 7l1 13h8l1-13" />

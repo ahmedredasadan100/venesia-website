@@ -3,6 +3,8 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createJiti } from "jiti";
+import ts from "typescript";
 
 const root = resolve(process.cwd());
 const failures = [];
@@ -30,11 +32,56 @@ function readStructuralTemplateSlugs(source) {
 }
 
 function usesSharedStructuralSlugLock(source) {
-  const checksExistingIdentity =
-    /isStructuralContentTemplateSlug\(\s*existing\.slug\s*,\s*existing\.variant\s*\)/.test(source);
-  const preservesExistingSlug =
-    /slugLocked\s*\?\s*existing\.slug\s*:\s*requestedSlug/.test(source);
-  return checksExistingIdentity && preservesExistingSlug;
+  const tree = ts.createSourceFile("content-actions.ts", source, ts.ScriptTarget.Latest, true);
+  const importedOwner = tree.statements.some((node) =>
+    ts.isImportDeclaration(node) &&
+    ts.isStringLiteral(node.moduleSpecifier) &&
+    node.moduleSpecifier.text === "../../../../../lib/page-blocks/module-edit-registry" &&
+    !node.importClause?.isTypeOnly && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+    node.importClause.namedBindings.elements.some((binding) =>
+      binding.name.text === "isStructuralContentTemplateSlug" && !binding.propertyName && !binding.isTypeOnly),
+  );
+  const update = tree.statements.find((node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "updateContentBlock");
+  if (!importedOwner || !update?.body) return false;
+  const declarations = new Map(update.body.statements.flatMap((node) =>
+    ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.Const)
+      ? node.declarationList.declarations.filter((declaration) => ts.isIdentifier(declaration.name))
+        .map((declaration) => [declaration.name.text, declaration.initializer])
+      : []));
+  if (declarations.has("isStructuralContentTemplateSlug")) return false;
+  const isIdentifier = (node, name) => Boolean(node && ts.isIdentifier(node) && node.text === name);
+  const isExistingProperty = (node, name) => Boolean(node && ts.isPropertyAccessExpression(node) &&
+    isIdentifier(node.expression, "existing") && node.name.text === name);
+  const lock = declarations.get("slugLocked"), slug = declarations.get("slug");
+  return Boolean(lock && ts.isCallExpression(lock) &&
+    isIdentifier(lock.expression, "isStructuralContentTemplateSlug") && lock.arguments.length === 2 &&
+    isExistingProperty(lock.arguments[0], "slug") && isExistingProperty(lock.arguments[1], "variant") &&
+    slug && ts.isConditionalExpression(slug) && isIdentifier(slug.condition, "slugLocked") &&
+    isExistingProperty(slug.whenTrue, "slug") && isIdentifier(slug.whenFalse, "requestedSlug"));
+}
+
+function usesSharedEditorialGeometry(source) {
+  const tree = ts.createSourceFile("single-image.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const importedOwner = tree.statements.some((node) =>
+    ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) &&
+    node.moduleSpecifier.text === "../../lib/page-blocks/configs" &&
+    !node.importClause?.isTypeOnly && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+    node.importClause.namedBindings.elements.some((binding) =>
+      binding.name.text === "EDITORIAL_IMAGE_GEOMETRY" && !binding.propertyName && !binding.isTypeOnly));
+  let renderedFrame = false;
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(tree) === "className" &&
+      node.initializer && ts.isJsxExpression(node.initializer) &&
+      node.initializer.expression && ts.isTemplateExpression(node.initializer.expression)) {
+      renderedFrame ||= node.initializer.expression.templateSpans.some(({ expression }) =>
+        ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) &&
+        expression.expression.text === "EDITORIAL_IMAGE_GEOMETRY" && expression.name.text === "frameClass");
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  return importedOwner && renderedFrame;
 }
 
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
@@ -50,6 +97,8 @@ const slots = read("src/components/page-composition/slot-module-nodes.tsx");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 const slotRegistry = read("src/lib/page-composition/slot-module-registry.ts");
 const structuralTemplateSlugs = readStructuralTemplateSlugs(registry);
+const jiti = createJiti(import.meta.url, { fsCache: false });
+const { EDITORIAL_IMAGE_GEOMETRY } = await jiti.import("../src/lib/page-blocks/configs.ts");
 
 assert(registry.includes('"about-intro-single-image"'), "Editor registry key missing");
 assert(configs.includes("isAboutIntroSingleImageTemplate"), "Config detector missing");
@@ -64,7 +113,17 @@ assert(client.includes("AboutIntroSingleImageModuleEditor"), "Single-image edito
 assert(editor.includes('name="image_position"'), "imagePosition field missing");
 assert(!editor.includes("image_secondary"), "Single-image editor must not expose secondary image");
 assert(!editor.includes('name="config_schema"'), "config_schema must live in ContentModuleEditClient only");
-assert(section.includes("aspect-[16/12]"), "Public single-image frame aspect missing");
+assert(
+  EDITORIAL_IMAGE_GEOMETRY.frameClass === "aspect-[16/12]" &&
+    JSON.stringify(EDITORIAL_IMAGE_GEOMETRY.ratio) === "[16,12]" &&
+    usesSharedEditorialGeometry(section),
+  "Public single-image frame must consume the canonical 16/12 editorial geometry",
+);
+assert(
+  !usesSharedEditorialGeometry(section.replaceAll("EDITORIAL_IMAGE_GEOMETRY.frameClass", "EDITORIAL_IMAGE_GEOMETRY.ratio")) &&
+    !usesSharedEditorialGeometry(section.replace("../../lib/page-blocks/configs", "../../lib/page-blocks/unrelated-owner")),
+  "Editorial geometry guard must reject unused frame bindings and foreign owners",
+);
 assert(
   section.includes("slot-editorial-flow") &&
     section.includes("slot-editorial-flow--media-end") &&
@@ -92,6 +151,12 @@ assert(
 assert(
   usesSharedStructuralSlugLock(actions),
   "Server update must preserve slugs through the shared structural lock",
+);
+assert(
+  !usesSharedStructuralSlugLock(actions.replaceAll("isStructuralContentTemplateSlug", "unrelatedHelper")) &&
+    !usesSharedStructuralSlugLock(actions.replace("slugLocked ? existing.slug : requestedSlug", "slugLocked ? requestedSlug : existing.slug")) &&
+    !usesSharedStructuralSlugLock(actions.replace("../../../../../lib/page-blocks/module-edit-registry", "../../../../../lib/page-blocks/unrelated-owner")),
+  "Slug guard must reject missing owners, foreign imports and overwritten structural slugs",
 );
 
 if (failures.length) {

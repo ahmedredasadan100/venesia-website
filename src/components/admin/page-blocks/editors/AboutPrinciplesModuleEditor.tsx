@@ -13,9 +13,10 @@ import {
 
 import { useState } from "react";
 
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormListboxSelect } from "../../ui";
+import { AdminActionButton, AdminFormControlHeader, AdminFormListboxSelect } from "../../ui";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   ABOUT_PRINCIPLES_ICON_KEYS,
@@ -27,6 +28,8 @@ import {
 type AboutPrinciplesModuleEditorProps = {
   config: AboutPrinciplesModuleConfig;
   editorMode?: "about-principles" | "home-trust";
+  /** The shared flat tabs retain mounted fields and the existing save contract. */
+  section?: "all" | "text" | "cards";
 };
 
 const ICON_LABELS: Record<(typeof ABOUT_PRINCIPLES_ICON_KEYS)[number], string> = {
@@ -49,8 +52,11 @@ function padTrustItems(items: AboutPrinciplesItemConfig[] | undefined) {
 export default function AboutPrinciplesModuleEditor({
   config,
   editorMode = "about-principles",
+  section = "all",
 }: AboutPrinciplesModuleEditorProps) {
   const isHomeTrust = editorMode === "home-trust";
+  const showText = section === "all" || section === "text";
+  const showCards = section === "all" || section === "cards";
   const [items, setItems] = useState<AboutPrinciplesItemConfig[]>(() =>
     isHomeTrust ? padTrustItems(config.items) : normalizeItems(config.items),
   );
@@ -83,83 +89,92 @@ export default function AboutPrinciplesModuleEditor({
 
   return (
     <div className="space-y-6">
-      {isHomeTrust ? <input type="hidden" name="include_home_trust_intro" value="1" /> : null}
-      <input type="hidden" name="principle_count" value={String(items.length)} />
+      {isHomeTrust && showText ? <input type="hidden" name="include_home_trust_intro" value="1" /> : null}
+      {showCards ? <input type="hidden" name="principle_count" value={String(items.length)} /> : null}
 
-      <ModuleEditorSection>
+      {showText ? (
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={6}>
-        <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+        <ModuleEditorVisibilityAlignRow label="النص التمهيدي" presentation="premium" description={isHomeTrust ? "نص قصير يقدم فكرة القسم ويظهر فوق العنوان." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
           <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
         </ModuleEditorVisibilityAlignRow>
         </ModuleEditorField>
         <ModuleEditorField nature="short-text" span={6}>
-        <ModuleEditorVisibilityAlignRow label="العنوان الرئيسي" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+        <ModuleEditorVisibilityAlignRow label="العنوان الرئيسي" presentation="premium" description={isHomeTrust ? "العنوان الرئيسي للقسم ويظهر بحجم أكبر في الصفحة." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
           <input name="title" aria-label="العنوان الرئيسي" defaultValue={config.title ?? ""} className={fieldClassName()} />
         </ModuleEditorVisibilityAlignRow>
         </ModuleEditorField>
         {isHomeTrust ? (
           <ModuleEditorField nature="long-content" span={12}>
-          <ModuleEditorVisibilityAlignRow label="الفقرة التعريفية" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}><AdminRichTextEditor
+          <ModuleEditorVisibilityAlignRow label="الفقرة التعريفية" presentation="premium" description="محتوى تفصيلي يشرح فكرة القسم ويظهر في الصفحة." icon={<AdminModuleTabIcon name="content" />} showName="show_description" showDefault={descriptionFormat.visible} controlMode="visibility-only">
+          <AdminRichTextEditor
             name="principles_intro"
             label="الفقرة التعريفية"
             defaultValue={config.description ?? ""}
-            toolbarMode="none"
-            minHeight={72}
+            toolbarMode="full"
+            showLabel={false}
+            enableArticleStructure
+            enableTextAlign
+            legacyHtmlFormatting={{ boldName: "description_bold", bold: descriptionFormat.bold, alignmentName: "description_alignment", alignment: descriptionFormat.alignment }}
+            helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           /></ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
         ) : null}
         </ModuleEditorFieldGrid>
-      </ModuleEditorSection>
+      ) : null}
 
+      {showCards ? (
       <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <ModuleEditorSectionHeading intent="repeater">
-            {isHomeTrust ? "بطاقات الثقة (4)" : "المبادئ (حتى 6)"}
-          </ModuleEditorSectionHeading>
+          {isHomeTrust ? <ModuleEditorSectionHeading intent="repeater">بطاقات الثقة (4)</ModuleEditorSectionHeading> : <AdminFormControlHeader title="المبادئ (حتى 6)" />}
           {!isHomeTrust ? (
-            <button
+            <AdminActionButton
               type="button"
               onClick={addItem}
               disabled={items.length >= 6}
-              className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15 disabled:cursor-not-allowed disabled:opacity-40"
+              variant="gold"
             >
               إضافة عنصر
-            </button>
+            </AdminActionButton>
           ) : null}
         </div>
 
-        <ModuleEditorRepeaterGrid>
+        <ModuleEditorRepeaterGrid columns={isHomeTrust ? 2 : 3} presentation="premium">
           {items.map((item, index) => (
             <ModuleEditorRepeaterCard
               key={index}
+              presentation="premium"
+              icon={isHomeTrust ? <AdminModuleTabIcon name="section" /> : undefined}
+              description={isHomeTrust ? "عنوان البطاقة ووصفها وصورتها الاختيارية." : undefined}
               title={isHomeTrust ? `بطاقة ${index + 1}` : `عنصر ${index + 1}`}
               actions={!isHomeTrust ? (
                 <>
-                    <button
+                    <AdminActionButton
                       type="button"
                       onClick={() => moveItem(index, -1)}
                       disabled={index === 0}
-                      className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:opacity-40"
+                      size="icon"
+                      aria-label={`تحريك المبدأ ${index + 1} لأعلى`}
                     >
                       ↑
-                    </button>
-                    <button
+                    </AdminActionButton>
+                    <AdminActionButton
                       type="button"
                       onClick={() => moveItem(index, 1)}
                       disabled={index === items.length - 1}
-                      className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:opacity-40"
+                      size="icon"
+                      aria-label={`تحريك المبدأ ${index + 1} لأسفل`}
                     >
                       ↓
-                    </button>
-                    <button
+                    </AdminActionButton>
+                    <AdminActionButton
                       type="button"
                       onClick={() => removeItem(index)}
                       disabled={items.length <= 1}
-                      className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:opacity-40"
+                      variant="danger"
                     >
                       حذف
-                    </button>
+                    </AdminActionButton>
                 </>
               ) : undefined}
             >
@@ -201,8 +216,9 @@ export default function AboutPrinciplesModuleEditor({
               </label>
               {isHomeTrust ? (
                   <AdminMediaImageField
-                  mediaSlot={contentModuleMediaSlot("home-trust")}
-name={`principle_${index}_image`}
+                    variant="card"
+                    mediaSlot={contentModuleMediaSlot("home-trust")}
+                    name={`principle_${index}_image`}
                     label="صورة الكارت — اختياري"
                     defaultValue={item.image ?? ""}
                     altName={`principle_${index}_image_alt`}
@@ -216,6 +232,7 @@ name={`principle_${index}_image`}
           ))}
         </ModuleEditorRepeaterGrid>
       </ModuleEditorSection>
+      ) : null}
     </div>
   );
 }

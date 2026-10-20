@@ -1,6 +1,8 @@
 /** Verify Projects Hub adoption of the existing Hero and Projects owners. */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 
 const root = resolve(process.cwd());
 const failures = [];
@@ -47,7 +49,49 @@ assert(
   "Projects Theme must map Page Composition Regions without changing the CMS contract",
 );
 assert(pageSrc.includes("loadAndBuildProjectsHubPlan"), "projects page must load the canonical CMS plan");
-assert(pageSrc.includes("تعذر تحميل صفحة المشروعات"), "incomplete composition must fail closed");
+const pageTree = ts.createSourceFile("ProjectsPage.tsx", pageSrc, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const pageFunction = pageTree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "ProjectsPage");
+const loaderTree = ts.createSourceFile("ProjectsPlanLoader.ts", planLoaderSrc, ts.ScriptTarget.Latest, true);
+const readErrorClass = loaderTree.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === "ProjectsHubPublicReadError");
+if (!pageFunction || !readErrorClass) throw new Error("The canonical Projects page and public read error owner must remain available");
+const compiledPage = ts.transpileModule(
+  `${readErrorClass.getText(loaderTree).replace(/^export /u, "")}\n${pageFunction.getText(pageTree).replace(/^export default /u, "")}`,
+  { compilerOptions: { jsx: ts.JsxEmit.React, jsxFactory: "createElement", target: ts.ScriptTarget.ES2022 } },
+).outputText;
+let fixturePlan = { status: "unavailable", reason: "incomplete_hub_modules", modules: [] };
+let publishedProjectReads = 0;
+const fixtureProjects = [{ id: "isolated-read-only-project" }];
+const pageOwner = runInNewContext(`${compiledPage}\n({ ProjectsPage, ProjectsHubPublicReadError });`, {
+  loadAndBuildProjectsHubPlan: async () => fixturePlan,
+  loadPublishedProjects: async () => { publishedProjectReads += 1; return fixtureProjects; },
+  ProjectsHubUnavailableState: "canonical-unavailable-owner",
+  ProjectsHubPage: "canonical-hub-owner",
+  createElement: (type, props) => ({ type, props }),
+  logWarn: () => {},
+});
+const unavailableResult = await pageOwner.ProjectsPage();
+assert(
+  unavailableResult.type === "canonical-unavailable-owner" && publishedProjectReads === 0 &&
+    pageSrc.includes("ProjectsHubUnavailableState,") &&
+    hubPageSrc.includes("export function ProjectsHubUnavailableState()") &&
+    hubPageSrc.includes('data-projects-hub-state="unavailable"'),
+  "incomplete composition must fail closed through the canonical unavailable owner before project data loads",
+);
+fixturePlan = { status: "error", reason: "composition_read_error", modules: [] };
+let thrownReadError;
+try { await pageOwner.ProjectsPage(); } catch (error) { thrownReadError = error; }
+assert(
+  thrownReadError instanceof pageOwner.ProjectsHubPublicReadError &&
+    thrownReadError.reason === fixturePlan.reason && publishedProjectReads === 0,
+  "Projects public read errors must throw through their canonical error owner without rendering or loading project data",
+);
+fixturePlan = { status: "ready", modules: [{ slug: "isolated-module" }] };
+const readyResult = await pageOwner.ProjectsPage();
+assert(
+  readyResult.type === "canonical-hub-owner" && readyResult.props.projects === fixtureProjects &&
+    readyResult.props.modulePlan === fixturePlan.modules && publishedProjectReads === 1,
+  "ready composition must pass its actual modules and project read to the canonical Hub owner",
+);
 assert(!pageSrc.includes("isProjectsHubCmsEnabled"), "projects page must not have an environment adoption gate");
 assert(!planLoaderSrc.includes("feature_flag_disabled"), "plan loader must not expose a feature-flag bypass");
 assert(
@@ -146,7 +190,11 @@ assert(!textFieldOwnerSrc.includes("function toolClass"), "Generic text fields m
 assert(
   moduleEditorPresentationSrc.includes("boldName") &&
     moduleEditorPresentationSrc.includes("name={boldName}") &&
-    moduleEditorPresentationSrc.includes("value={String(enableBold ? bold : boldDefault)}"),
+    moduleEditorPresentationSrc.includes("preserveUnsetBold = false") &&
+    moduleEditorPresentationSrc.includes('controlMode === "text" && enableBold && Boolean(boldName)') &&
+    /const submittedBold = hasBoldControl\s*\? bold\s*: preserveUnsetBold \? boldDefault : \(boldDefault \?\? false\);/u.test(moduleEditorPresentationSrc) &&
+    moduleEditorPresentationSrc.includes("boldName && submittedBold !== undefined") &&
+    moduleEditorPresentationSrc.includes("value={String(submittedBold)}"),
   "saved bold values must stay in the shared formatting owner",
 );
 assert(moduleEditorPresentationSrc.includes("AdminTextFormatControls"), "typographic weight must remain a shared Hero CMS product control");
@@ -156,16 +204,35 @@ assert(
   "shared Hero toolbars must keep one stable responsive layout",
 );
 assert(genericHeroEditorSrc.includes("HeroCtaFields"), "Generic Hero must consume the shared CTA editor");
+const heroTree = ts.createSourceFile("HeroEditClient.tsx", genericHeroEditorSrc, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const heroNodes = [];
+function visitHero(node) { heroNodes.push(node); ts.forEachChild(node, visitHero); }
+visitHero(heroTree);
+const heroAttribute = (node, name) => node.attributes.properties.find(prop => ts.isJsxAttribute(prop) && prop.name.getText(heroTree) === name);
+const heroFieldNodes = heroNodes.filter(node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(heroTree) === "HeroTextFieldRow");
+const heroDescription = heroFieldNodes.find(node => heroAttribute(node, "name")?.initializer?.getText(heroTree) === '"description"');
 assert(
-  genericHeroEditorSrc.includes("HeroVisibilityAlignRow") &&
-    genericHeroEditorSrc.includes('toolbarMode="none"') &&
+  genericHeroEditorSrc.includes("HeroVisibilityAlignRow") && heroDescription &&
+    heroAttribute(heroDescription, "preserveRichText") &&
+    heroAttribute(heroDescription, "boldName")?.initializer?.getText(heroTree) === '"description_bold"' &&
+    textFieldOwnerSrc.includes("HeroVisibilityAlignRow") &&
+    textFieldOwnerSrc.includes('type="hidden"') && textFieldOwnerSrc.includes("name={name}") &&
+    textFieldOwnerSrc.includes("value={text === initialText ? defaultValue : text}") &&
+    textFieldOwnerSrc.includes('name={preserveRichText ? `${name}_editor` : name}') &&
+    textFieldOwnerSrc.includes("onChange={(event) => setText(event.target.value)}") &&
+    !textFieldOwnerSrc.includes("<textarea") && !genericHeroEditorSrc.includes("AdminRichTextEditor") &&
     !genericHeroEditorSrc.includes("visibilityName=") &&
     !genericHeroEditorSrc.includes("enableTextAlign"),
-  "Generic Hero description must use the shared Hero presentation toolbar without rich-text styling controls",
+  "Generic Hero description must retain its original rich value until edited through the single-line field and shared Hero toolbar",
 );
+const heroContent = heroNodes.find(node => ts.isVariableDeclaration(node) && node.name.getText(heroTree) === "contentTab")?.initializer;
+const contentGrids = heroNodes.filter(node => ts.isJsxOpeningElement(node) && node.tagName.getText(heroTree) === "AdminFormGrid" && heroContent && node.pos >= heroContent.pos && node.end <= heroContent.end);
 assert(
-  genericHeroEditorSrc.includes("ModuleEditorFieldGrid") &&
-    genericHeroEditorSrc.includes('<ModuleEditorField nature="long-content" span={6}>') &&
+  heroContent && ts.isConditionalExpression(heroContent) && heroContent.condition.getText(heroTree) === "isProjectDetail" &&
+    contentGrids.length === 2 && contentGrids.every(node => heroAttribute(node, "columns")?.initializer?.getText(heroTree) === "{2}") &&
+    JSON.stringify(heroFieldNodes.map(node => heroAttribute(node, "name")?.initializer?.getText(heroTree))) === JSON.stringify(['"eyebrow"', '"title"', '"highlight"', '"subtitle"', '"description"']) &&
+    !heroContent.whenTrue.getText(heroTree).includes("<HeroTextFieldRow") &&
+    !heroContent.getText(heroTree).includes("<ModuleEditorSection") &&
     richTextEditorSrc.includes('label && toolbarMode !== "none"') &&
     !richTextEditorSrc.includes("toolbarPlacement") &&
     !richTextEditorSrc.includes("visibilityName"),

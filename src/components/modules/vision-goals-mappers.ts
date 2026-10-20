@@ -20,6 +20,7 @@ export type VisionGoalsContent = {
   eyebrow: string;
   title: string;
   intro: string[];
+  introContentFormat?: VisionGoalsModuleConfig["introContentFormat"];
   formatting: PageBlockTextFormattingMap;
   image?: string;
   imageAlt: string;
@@ -53,6 +54,7 @@ export function mapVisionGoalsBlock(block: ResolvedPageBlock): VisionGoalsConten
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     intro: config.intro ?? [],
+    introContentFormat: config.introContentFormat,
     formatting: resolvePageBlockTextFormattingMap(config, [
       { field: "eyebrow" },
       { field: "title", defaults: { bold: true } },
