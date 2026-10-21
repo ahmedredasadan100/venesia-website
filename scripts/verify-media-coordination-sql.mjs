@@ -30,17 +30,125 @@ const physicalMoveRuntime = read("src/lib/admin/media-catalog/physical-move.ts")
 const providerRuntime = read("src/lib/admin/media-catalog/reference-providers.ts");
 const packageJson = JSON.parse(read("package.json"));
 const qualityWorkflow = read(".github/workflows/quality-gate.yml");
-const qualityJob = qualityWorkflow.slice(
-  qualityWorkflow.indexOf("  quality-gate:"),
-  qualityWorkflow.indexOf("  media-coordination-postgres:"),
-);
-const postgresJob = qualityWorkflow.slice(
-  qualityWorkflow.indexOf("  media-coordination-postgres:"),
-);
+
+// Read only this workflow's block-style jobs. Reject unsupported or ambiguous
+// boundaries instead of letting a sibling job provide another job's evidence.
+function workflowJobs(source) {
+  const lines = source.split("\n");
+  const roots = lines.flatMap((line, index) => /^jobs:\s*(?:#.*)?$/u.test(line) ? [index] : []);
+  if (roots.length !== 1) throw new Error("Expected one block-style jobs mapping");
+  const jobs = new Map();
+  let current;
+  const finish = (end) => {
+    if (current) jobs.set(current.id, lines.slice(current.start, end).join("\n"));
+  };
+  for (let index = roots[0] + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\s*(?:#.*)?$/u.test(line)) continue;
+    if (/^\S/u.test(line)) {
+      finish(index);
+      current = undefined;
+      break;
+    }
+    if (/^ {4}\S|^ {5,}\S/u.test(line)) {
+      if (!current) throw new Error("Job content has no job boundary");
+      continue;
+    }
+    const header = /^ {2}([A-Za-z_][A-Za-z0-9_-]*):\s*(?:#.*)?$/u.exec(line);
+    if (!header) throw new Error(`Unsupported workflow job boundary at line ${index + 1}`);
+    finish(index);
+    if (jobs.has(header[1])) throw new Error(`Duplicate workflow job: ${header[1]}`);
+    current = { id: header[1], start: index };
+  }
+  finish(lines.length);
+  if (!jobs.size) throw new Error("Workflow jobs mapping is empty");
+  return jobs;
+}
+
+function checkWorkflowContracts(workflow, check) {
+  const jobs = workflowJobs(workflow);
+  const qualityJob = jobs.get("quality-gate");
+  const postgresJob = jobs.get("media-coordination-postgres");
+  if (!qualityJob || !postgresJob) throw new Error("Required Quality Gate or Media Coordination job is missing");
+  check("quality workflow has an independent PostgreSQL 17 job", postgresJob.startsWith("  media-coordination-postgres:") && postgresJob.includes("image: postgres:17-alpine") && postgresJob.includes("MEDIA_COORDINATION_DATABASE_REQUIRED: \"1\"") && postgresJob.includes("MEDIA_COORDINATION_DATABASE_DISPOSABLE: \"1\""));
+  check("quality workflow guards Media coordination RPC ACLs through the canonical gate and isolated job", qualityJob.includes("npm run ci:check") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-rpc-acl") && postgresJob.match(/npm run verify:media-coordination-rpc-acl/g)?.length === 1);
+  check("isolated PostgreSQL job does not consume Supabase secrets", !postgresJob.includes("SUPABASE_") && postgresJob.includes("127.0.0.1:5432/venesia_media_coordination_ci"));
+  check("isolated Media job retains its SQL and native PostgreSQL commands", postgresJob.match(/npm run verify:media-coordination-sql/g)?.length === 1 && postgresJob.match(/npm run verify:media-coordination-postgres/g)?.length === 1);
+}
 
 const checks = [];
 
 const check = (description, condition) => checks.push({ description, condition });
+
+function verifyWorkflowBoundaryControls() {
+  const jobs = workflowJobs(qualityWorkflow);
+  const mediaId = "media-coordination-postgres";
+  const qualityId = "quality-gate";
+  const mediaJob = jobs.get(mediaId);
+  const qualityJob = jobs.get(qualityId);
+  const compose = (entries) => `jobs:\n${entries.map(([, body]) => body).join("\n")}\n`;
+  const mutateJob = (id, mutate) => compose([...jobs].map(([key, body]) => [key, key === id ? mutate(body) : body]));
+  const inspect = (source) => {
+    const results = [];
+    try {
+      checkWorkflowContracts(source, (description, condition) => results.push({ description, condition }));
+      return { valid: results.every((entry) => entry.condition), failures: results.filter((entry) => !entry.condition).map((entry) => entry.description) };
+    } catch {
+      return { valid: false, failures: ["job boundary"] };
+    }
+  };
+  const positive = (description, source) => check(`workflow boundary control: ${description}`, inspect(source).valid);
+  const negative = (description, source, expectedFailure) => {
+    const result = inspect(source);
+    check(`workflow boundary control: ${description}`, !result.valid && result.failures.includes(expectedFailure));
+  };
+
+  positive("valid reordered jobs remain isolated", compose([...jobs].reverse()));
+  positive("Windows CRLF remains valid after canonical normalization", normalizeVerificationText(qualityWorkflow.replace(/\n/gu, "\r\n")));
+  positive("a UTF-8 BOM at the workflow start preserves job boundaries", `\uFEFF${qualityWorkflow}`);
+  positive("Media may be the final job", compose([...jobs].filter(([id]) => id !== mediaId).concat([[mediaId, mediaJob]])));
+  positive("Quality Gate may follow Media", compose([...jobs].filter(([id]) => id !== qualityId).concat([[qualityId, qualityJob]])));
+  positive("job-like text nested inside a run body does not split jobs", mutateJob(qualityId, (body) => `${body}\n      - name: Nested boundary fixture\n        run: |\n          media-coordination-postgres:\n          SUPABASE_SECRET: sibling-only`));
+  positive("top-level content after jobs is excluded", `${compose([...jobs])}env:\n  SUPABASE_SECRET: sibling-only\n`);
+  for (const id of ["taxonomy-consistency-postgres", "topics-bulk-publish-postgres"]) {
+    positive(`${id} registry and secret-like values stay outside Media`, mutateJob(id, (body) => body.replace("\n    env:\n", "\n    env:\n      SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io\n      SUPABASE_SERVICE_ROLE_KEY: sibling-only\n")));
+  }
+  for (const value of ["SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io", "SUPABASE_SERVICE_ROLE_KEY: forbidden", "SIBLING_VALUE: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"]) {
+    negative(`Media rejects ${value.split(":")[0]}`, mutateJob(mediaId, (body) => body.replace("\n    env:\n", `\n    env:\n      ${value}\n`)), "isolated PostgreSQL job does not consume Supabase secrets");
+  }
+
+  const misplaced = [
+    ["required flag", "MEDIA_COORDINATION_DATABASE_REQUIRED: \"1\"", "quality workflow has an independent PostgreSQL 17 job"],
+    ["disposable flag", "MEDIA_COORDINATION_DATABASE_DISPOSABLE: \"1\"", "quality workflow has an independent PostgreSQL 17 job"],
+    ["PostgreSQL image", "image: postgres:17-alpine", "quality workflow has an independent PostgreSQL 17 job"],
+    ["loopback database URL", "127.0.0.1:5432/venesia_media_coordination_ci", "isolated PostgreSQL job does not consume Supabase secrets"],
+    ["RPC ACL command", "npm run verify:media-coordination-rpc-acl", "quality workflow guards Media coordination RPC ACLs through the canonical gate and isolated job"],
+    ["SQL command", "npm run verify:media-coordination-sql", "isolated Media job retains its SQL and native PostgreSQL commands"],
+    ["native PostgreSQL command", "npm run verify:media-coordination-postgres", "isolated Media job retains its SQL and native PostgreSQL commands"],
+  ];
+  for (const [description, required, assertion] of misplaced) {
+    negative(`a sibling cannot supply the ${description}`, compose([...jobs].map(([id, body]) => [id, id === mediaId ? body.replace(required, "missing-owned-evidence") : `${body}\n    # ${required}`])), assertion);
+  }
+  negative("a sibling cannot supply the Quality Gate command", compose([...jobs].map(([id, body]) => [id, id === qualityId ? body.replace("npm run ci:check", "missing-owned-command") : `${body}\n    # npm run ci:check`])), "quality workflow guards Media coordination RPC ACLs through the canonical gate and isolated job");
+  negative("duplicate RPC ACL commands remain rejected", mutateJob(mediaId, (body) => `${body}\n    # npm run verify:media-coordination-rpc-acl`), "quality workflow guards Media coordination RPC ACLs through the canonical gate and isolated job");
+
+  const malformed = [
+    ["missing jobs root", qualityWorkflow.replace(/^jobs:/mu, "not-jobs:")],
+    ["duplicate jobs root", `${qualityWorkflow}\njobs:\n  extra:\n    runs-on: ubuntu-latest\n`],
+    ["empty jobs mapping", "jobs:\n"],
+    ["non-mapping jobs value", "jobs: []\n"],
+    ["job body without a boundary", "jobs:\n    runs-on: ubuntu-latest\n"],
+    ["missing Media job", compose([...jobs].filter(([id]) => id !== mediaId))],
+    ["missing Quality Gate job", compose([...jobs].filter(([id]) => id !== qualityId))],
+    ["duplicate Media job", compose([...jobs, [mediaId, mediaJob]])],
+    ["duplicate Quality Gate job", compose([...jobs, [qualityId, qualityJob]])],
+    ["malformed Media header", qualityWorkflow.replace("  media-coordination-postgres:", "  media-coordination-postgres: invalid")],
+    ["misindented sibling boundary", `${compose([...jobs])}   malformed-job:\n`],
+    ["tab-indented sibling boundary", `${compose([...jobs])}\tmalformed-job:\n`],
+    ["a later top-level block cannot supply Media", `jobs:\n${qualityJob}\nother:\n${mediaJob}`],
+  ];
+  for (const [description, source] of malformed) negative(`${description} fails closed`, source, "job boundary");
+}
 
 const functionBody = (name, source = leaseResolutionMigration.includes(`create or replace function public.${name}(`) ? leaseResolutionMigration : usageConfirmationMigration.includes(`create or replace function public.${name}(`) ? usageConfirmationMigration : migration) => {
   const marker = `create or replace function public.${name}`;
@@ -129,9 +237,8 @@ check("runner serializes provider-first and later entity writes without deadlock
 check("runner proves physical move versus stale safe-delete ordering in both directions", runner.includes("verifyPhysicalMoveAgainstStaleSafeDelete") && runner.includes("physical-move-race-stale-delete-after-transition") && runner.includes("media_delete_asset_identity_changed") && runner.includes("media_delete_write_lease_unresolved"));
 check("package exposes static ACL, SQL, and PostgreSQL coordination commands", packageJson.scripts?.["verify:media-coordination-rpc-acl"] === "node scripts/verify-media-coordination-rpc-acl.mjs" && packageJson.scripts?.["verify:media-coordination-sql"] === "node scripts/verify-media-coordination-sql.mjs" && packageJson.scripts?.["verify:media-coordination-postgres"] === "node --experimental-strip-types scripts/verify-media-coordination-postgres.mts");
 check("final local gate invokes coordination ACL and database proof safely", packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-rpc-acl") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-sql") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-postgres"));
-check("quality workflow has an independent PostgreSQL 17 job", postgresJob.startsWith("  media-coordination-postgres:") && postgresJob.includes("image: postgres:17-alpine") && postgresJob.includes("MEDIA_COORDINATION_DATABASE_REQUIRED: \"1\"") && postgresJob.includes("MEDIA_COORDINATION_DATABASE_DISPOSABLE: \"1\""));
-check("quality workflow guards Media coordination RPC ACLs through the canonical gate and isolated job", qualityJob.includes("npm run ci:check") && packageJson.scripts?.["ci:check"]?.includes("verify:media-coordination-rpc-acl") && postgresJob.match(/npm run verify:media-coordination-rpc-acl/g)?.length === 1);
-check("isolated PostgreSQL job does not consume Supabase secrets", !postgresJob.includes("SUPABASE_") && postgresJob.includes("127.0.0.1:5432/venesia_media_coordination_ci"));
+checkWorkflowContracts(qualityWorkflow, check);
+verifyWorkflowBoundaryControls();
 check("fixture enforces PostgreSQL 17", fixture.includes("server_major <> 17"));
 check("fixture resets only the isolated coordination proof schemas before reruns", fixture.includes("drop schema if exists media_coordination_acl_test cascade") && fixture.includes("drop schema if exists media_coordination_test cascade"));
 check("fixture creates Supabase runtime roles", fixture.includes("create role anon") && fixture.includes("create role authenticated") && fixture.includes("create role service_role"));
