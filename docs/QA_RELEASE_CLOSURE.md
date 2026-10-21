@@ -152,6 +152,55 @@ evidence under Section 3.4; do not repeat Full QA or broaden work to unrelated
 modules. Final visual approval remains with the Owner, and local proof does not
 authorize commits, release actions, or data mutations.
 
+## 3.2.2 Same-task maintenance of affected verification
+
+Every local development task must discover, test, and maintain its entire
+affected verification chain within that task: direct and indirect consumers,
+Product Tests, Guards, test scripts, Fixtures, and CI Workflows. Use the current
+owners, contracts, manifests, command registrations, and execution/CI entry
+points to identify impact; do not create a parallel inventory, runner, or QA owner.
+
+Before editing, identify the affected paths and expected behavior. During
+implementation, maintain their affected checks and fixtures at the existing
+owners. Correct proven stale expectations in the same task; do not defer that
+maintenance until release. Before local completion, record changed behavior,
+affected checks, failure classifications, corrections, retained evidence, and
+remaining blockers. An affected mandatory Development Verification check that
+is failed, blocked, skipped, or unverified prevents claiming local completion.
+
+Classify each failure from evidence before changing an expectation:
+
+| Cause | Required response |
+| --- | --- |
+| Proven Product or Contract regression | Correct the existing owner within the approved contract and scope; rerun affected consumer and regression checks. |
+| Proven stale test or guard expectation | Show the approved current contract and matching observed behavior, plus the expected/actual mismatch; correct the expectation at its owner while preserving positive, negative, and boundary coverage. Current code or a failed assertion alone is not that proof. |
+| Fixture, harness, guard implementation, or CI workflow defect | Repair the existing verification owner and affected dependents; preserve the behavior and security properties being asserted. |
+| Environment, tooling, or external dependency failure | Record the evidence and its effect on coverage; correct or rerun only within the existing authority. Report unavailable proof as blocked/unverified, never PASS. |
+| Cause not yet established | Retain the failure evidence and investigate within scope; do not presume a stale expectation or claim PASS. Existing Stop Conditions still apply. |
+| Unresolved Product, Architecture, security, permission, or data decision | Apply the existing Stop Conditions to the affected boundary; do not invent policy or expand authority. |
+
+An unrelated baseline finding requires current evidence and an explicit scope
+boundary; it does not authorize unrelated fixes or reopening accepted work.
+An unresolved mandatory Development Verification gate remains a blocker even
+when its cause is outside the implementation scope. Necessary affected
+verification maintenance is part of the task, while unrelated QA improvements
+remain out of scope.
+
+Do not delete or weaken assertions, narrow affected consumer coverage, disable
+security checks, or convert failure to Skip to obtain a pass. Preserve failed
+receipts and historical fixture/measurement identities under Section 3.4; never
+relabel old evidence as a new execution. Reuse valid unaffected evidence and
+rerun affected checks only. This obligation does not add a Full Quality Gate to
+each small change or require remote CI before Local Product Review. Workflow
+maintenance uses applicable local checks; required GitHub CI remains a release
+gate on the current PR head under Section 3.3.
+
+Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
+Truth, Stop Conditions, and authorization boundaries remain unchanged. This
+rule grants no additional Product, Architecture, Auth, Permission, Database,
+Migration, required-check, branch-protection, or Vercel-setting authority.
+Documentation-only work uses the applicable consistency checks in Section 15.
+
 ## 3.3 Batch Release Verification
 
 At completion of the group of changes:
