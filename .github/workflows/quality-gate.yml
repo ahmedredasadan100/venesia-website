@@ -242,6 +242,8 @@ jobs:
         run: npm run verify:taxonomy-consistency-postgres17
 
       - name: Generate the disposable Taxonomy schema TypeScript contract
+        env:
+          SUPABASE_INTERNAL_IMAGE_REGISTRY: docker.io
         run: >-
           supabase gen types typescript
           --db-url "$TAXONOMY_CONSISTENCY_DATABASE_URL"
