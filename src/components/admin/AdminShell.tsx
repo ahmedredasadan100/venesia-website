@@ -205,7 +205,7 @@ export default function AdminShell({
             <button
               type="button"
               onClick={toggleCollapsed}
-              className="absolute left-2 top-1/2 z-20 grid size-9 -translate-y-1/2 place-items-center rounded-full border bg-[#05070B]/80 text-sm font-bold shadow-[0_10px_28px_rgba(0,0,0,0.35)] transition hover:scale-105"
+              className="absolute left-2 top-1/2 z-20 grid size-9 -translate-y-1/2 place-items-center rounded-full border bg-[#05070B]/80 text-2xl font-bold leading-none shadow-[0_10px_28px_rgba(0,0,0,0.35)] transition hover:scale-105"
               style={{
                 borderColor:
                   "color-mix(in srgb, var(--admin-accent) 30%, transparent)",
@@ -251,7 +251,7 @@ export default function AdminShell({
                       />
                     ) : null}
                     <span
-                      className="grid size-9 shrink-0 place-items-center rounded-2xl border bg-white/[0.035] font-en text-base"
+                      className="grid size-9 shrink-0 place-items-center rounded-2xl border bg-white/[0.035] font-en text-[28px] leading-none"
                       style={{
                         borderColor:
                           "color-mix(in srgb, var(--admin-accent) 18%, transparent)",
@@ -291,7 +291,7 @@ export default function AdminShell({
                     ) : null}
                     <span className="flex min-w-0 items-center gap-3">
                       <span
-                        className="grid size-9 shrink-0 place-items-center rounded-2xl border bg-white/[0.035] font-en text-base"
+                        className="grid size-9 shrink-0 place-items-center rounded-2xl border bg-white/[0.035] font-en text-[28px] leading-none"
                         style={{
                           borderColor:
                             "color-mix(in srgb, var(--admin-accent) 18%, transparent)",
@@ -302,7 +302,7 @@ export default function AdminShell({
                       </span>
                       <span className="truncate">{item.label}</span>
                     </span>
-                    <span className={["text-xs transition", open ? "rotate-180" : "text-white/30"].join(" ")}>⌄</span>
+                    <span className={["text-base leading-none transition", open ? "rotate-180" : "text-white/30"].join(" ")}>⌄</span>
                   </button>
 
                   <div
@@ -350,7 +350,7 @@ export default function AdminShell({
             ].join(" ")}
             title="الانتقال للموقع"
           >
-            <span className="grid size-8 place-items-center rounded-2xl border border-white/10">↗</span>
+            <span className="grid size-8 place-items-center rounded-2xl border border-white/10 text-xl leading-none">↗</span>
             {!compact ? <span>الانتقال للموقع</span> : null}
           </Link>
         </div>
@@ -388,7 +388,7 @@ export default function AdminShell({
         {mobileOpen ? (
           <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="قائمة الإدارة">
             <button className="absolute inset-0 bg-black/76" onClick={() => setMobileState({ pathname, open: false })} aria-label="إغلاق القائمة" />
-            <div className="absolute right-0 top-0 h-full">{renderSidebar(true)}</div>
+            <div className="absolute right-0 top-0 h-full bg-[var(--admin-surface)]">{renderSidebar(true)}</div>
           </div>
         ) : null}
 
@@ -396,7 +396,7 @@ export default function AdminShell({
           <header className="admin-premium-card rounded-[28px] px-4 py-3" data-admin-shell-header>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setMobileState({ pathname, open: true })} className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.045] text-white/70 lg:hidden" aria-label="فتح القائمة">☰</button>
+                <button type="button" onClick={() => setMobileState({ pathname, open: true })} className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.045] text-2xl leading-none text-white/70 lg:hidden" aria-label="فتح القائمة">☰</button>
                 <CompanyMark company={company} compact={false} />
                 <div>
                   <p className="font-en text-[10px] tracking-[0.3em]" style={{ color: "var(--admin-accent)" }}>{company.cmsLabel}</p>

@@ -1542,6 +1542,111 @@ function elements(node, predicate = () => true) {
   visit(node);
   return result;
 }
+function actionGlyphContract(source = dataGrid) {
+  const Link = ({ children, ...props }) => {
+    const anchor = { ...props };
+    delete anchor.prefetch;
+    return React.createElement("a", anchor, children);
+  };
+  const gridModule = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    "next/link": { default: Link },
+    "./AdminCheckbox": { default: () => null },
+    "./AdminDataGridQueryStatus": { default: () => null },
+    "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" },
+    "./AdminDataGridDateTimeCell": { default: () => null },
+  }, source);
+  const Button = gridModule.AdminDataGridActionButton;
+  const Icon = gridModule.AdminDataGridActionIcon;
+  const onClick = () => {};
+  const onKeyDown = () => {};
+  const buttonRef = { current: null };
+  let cases = 0;
+  for (const action of ["edit", "preview", "more", "visibility", "feature"]) {
+    for (const size of ["default", "compact", "inline"]) {
+      for (const state of [{}, { disabled: true }, { pending: true }, { disabled: true, pending: true }]) {
+        const props = { action, size, ...state, href: "/admin/content/topics/7", onClick, onKeyDown, buttonRef, ariaExpanded: true, ariaHasPopup: "menu", ariaControls: "owned-menu", isCurrentlyHidden: true, active: true };
+        const reference = Button(props);
+        assert.equal(renderToStaticMarkup(reference), renderToStaticMarkup(Button({ ...props, iconSize: "sm" })), "Explicit small and omitted glyph scales retain identical default SSR");
+        for (const iconSize of [undefined, "sm", "md", "lg"]) {
+          const tree = Button({ ...props, iconSize });
+          const { children, ...outer } = tree.props;
+          const { children: referenceContent, ...referenceOuter } = reference.props;
+          assert.equal(tree.type, reference.type, "Glyph scale must not change Link/button selection");
+          assert.deepEqual(outer, referenceOuter, "Glyph scale must preserve geometry, focus classes, handlers, ARIA and state");
+          assert.match(outer.className, /focus-visible:outline/u);
+          assert.match(outer.className, size === "inline" ? /h-7 w-7/u : size === "compact" ? /h-10 w-10/u : /h-11 w-11/u);
+          if (state.disabled || state.pending) {
+            assert.equal(tree.type, "button");
+            assert.equal(outer.disabled, true);
+            assert.equal(outer.onClick, onClick);
+            assert.equal(outer.onKeyDown, onKeyDown);
+            assert.equal(outer.ref, buttonRef);
+            assert.equal(outer["aria-busy"], state.pending || undefined);
+            assert.equal(outer["aria-controls"], "owned-menu");
+          } else {
+            assert.equal(tree.type, Link);
+            assert.equal(outer.prefetch, false);
+            assert.equal(outer.href, props.href);
+          }
+          if (state.pending) assert.equal(renderToStaticMarkup(tree), renderToStaticMarkup(reference), "Pending spinner presentation must ignore glyph scale");
+          else {
+            assert.equal(children.type, Icon);
+            assert.deepEqual({ ...children.props, size: undefined }, { ...referenceContent.props, size: undefined }, "Action identity, visibility and active state pass through unchanged");
+            const glyph = Icon(children.props);
+            assert.equal(glyph.props["aria-hidden"], "true");
+            assert.equal(glyph.props.className, iconSize === "lg" ? "size-5.5 shrink-0" : iconSize === "md" ? "size-4.5 shrink-0" : "h-4 w-4 shrink-0");
+          }
+          cases += 1;
+        }
+      }
+    }
+  }
+  const bare = { children: "إجراء نصي", size: "compact", onClick };
+  assert.equal(renderToStaticMarkup(Button(bare)), renderToStaticMarkup(Button({ ...bare, iconSize: "lg" })), "Custom action content must not change when no semantic glyph is supplied");
+  return cases;
+}
+check("Actual action Button keeps default SSR and 44/40/28px controls while opting into existing 18/22px glyphs", actionGlyphContract() === 240);
+const actionGlyphMutants = [
+  dataGrid.replace('iconSize = "sm"', 'iconSize = "lg"'),
+  dataGrid.replace("size={iconSize}", 'size="sm"'),
+  dataGrid.replace("disabled={disabled || pending}", "disabled={disabled}"),
+  dataGrid.replaceAll("prefetch={false}", "prefetch={true}"),
+];
+check("Action glyph negatives reject changed defaults, ignored opt-in, pending interaction and prefetch regressions", actionGlyphMutants.every(source => {
+  if (source === dataGrid) return false;
+  try { actionGlyphContract(source); return false; } catch { return true; }
+}));
+function rowActionGlyphPassThrough(source = rowActions) {
+  const ast = ts.createSourceFile("AdminDataGridRowActions.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const owner = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "AdminDataGridRowActions");
+  const parameter = owner?.parameters[0].name;
+  assert.ok(parameter && ts.isObjectBindingPattern(parameter));
+  const glyphSize = parameter.elements.find(node => node.name.getText(ast) === "iconSize");
+  assert.equal(glyphSize?.initializer?.getText(ast), '"sm"', "Existing Row Actions consumers keep the small default glyph");
+  const calls = [];
+  function visit(node) {
+    if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(ast) === "AdminDataGridActionButton") {
+      const attribute = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText(ast) === "iconSize");
+      assert.ok(attribute?.initializer && ts.isJsxExpression(attribute.initializer));
+      assert.equal(attribute.initializer.expression?.getText(ast), "iconSize", "Every primary, status and More button must use the consumer's chosen glyph size");
+      calls.push(attribute);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(owner);
+  assert.equal(calls.length, 3, "The actual primary, inline status and More button callsites remain reachable");
+  return { ast, calls };
+}
+check("Shared Row Actions forwards one optional glyph size to actual primary, inline status and More buttons", Boolean(rowActionGlyphPassThrough()));
+const rowGlyphCalls = rowActionGlyphPassThrough();
+const rowGlyphMutants = [
+  ...rowGlyphCalls.calls.map(attribute => rowActions.slice(0, attribute.getStart(rowGlyphCalls.ast)) + rowActions.slice(attribute.end)),
+  rowActions.replace('iconSize = "sm"', 'iconSize = "lg"'),
+];
+check("Row glyph negatives reject omitted forwarding at each real button and changed shared defaults", rowGlyphMutants.every(source => {
+  if (source === rowActions) return false;
+  try { rowActionGlyphPassThrough(source); return false; } catch { return true; }
+}));
 function metricContract(source = read(metricCardPath)) {
   const Card = loadPureTypeScriptModule(metricCardPath, {}, source).default;
   let calls = 0;

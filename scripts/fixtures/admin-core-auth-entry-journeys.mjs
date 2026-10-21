@@ -7,14 +7,31 @@ import { registerCorePageRoute } from './admin-core-form-permission-context.mjs'
 export function buildCoreAuthEntryPlan(manifest){const rows=manifest.filter(row=>row.id==='authentication-login');assert.equal(rows.length,1);assert.equal(rows[0].classification,'explicit_exception');assert.deepEqual(rows[0].surfaces,['admin-login','maintenance-login']);return {consumer:rows[0].id,surfaces:[{id:'admin-login',path:'/admin/login',endpoint:'/api/admin/auth/login'},{id:'maintenance-login',path:'/maintenance',endpoint:'/api/maintenance/login'}],automaticCoverage:[]};}
 export function assertCoreAuthCookieMetadata(cookie,origin,ttl,before,after){assert.ok(cookie);assert.equal(cookie.name,'venesia_admin_session');assert.equal(cookie.domain,new URL(origin).hostname);assert.equal(cookie.path,'/');assert.equal(cookie.httpOnly,true);assert.equal(cookie.sameSite,'Lax');assert.equal(cookie.secure,false);assert.ok(cookie.expires>=before+ttl-2&&cookie.expires<=after+ttl+2,'Only the current owner TTL is accepted.');}
 export function coreAuthEntryBrowserOptions(surfaceId){assert.ok(['admin-login','maintenance-login'].includes(surfaceId));return surfaceId==='maintenance-login'?{serviceWorkers:'block'}:{};}
+const DASHBOARD_ENTRY_STATES={ready:{label:'قراءة المصادر ناجحة',receipt:'Dashboard جاهزة'},partial:{label:'قراءة جزئية',receipt:'Dashboard جزئية'},unavailable:{label:'القراءة غير متاحة',receipt:'Dashboard غير متاحة'}};
+// Measurement callers keep their two-snapshot endpoint and select an exact
+// expected state from the same contract as authenticated entry journeys.
+export function coreDashboardEntryReadinessCriteria(state){
+ assert.ok(Object.hasOwn(DASHBOARD_ENTRY_STATES,state),'Dashboard readiness must use a current source-reading state.');const expected=DASHBOARD_ENTRY_STATES[state];
+ const summary='main [data-dashboard-readiness-summary]',banner='main [data-dashboard-state-banner]';
+ return [
+  {target:{css:'main h1:text-is("لوحة التحكم")'},visible:true,count:1},
+  {target:{css:summary},visible:true,count:1,attribute:{name:'data-dashboard-readiness-summary',value:state}},
+  {target:{css:summary},attribute:{name:'role',value:'status'}},
+  {target:{css:`${summary}:text-is("${expected.label}")`},visible:true,count:1},
+  ...(state==='ready'?[{target:{css:banner},count:0}]:[
+   {target:{css:banner},visible:true,count:1,attribute:{name:'data-dashboard-state-banner',value:state}},
+   {target:{css:`${banner} h2:text-is("${expected.receipt}")`},visible:true,count:1},
+  ]),
+ ];
+}
 export async function assertCoreDashboardEntry(page,{timeout=60_000}={}){
  const main=page.locator('main');
  await expect(main.getByRole('heading',{name:'لوحة التحكم',exact:true,level:1})).toBeVisible({timeout});
  const summary=main.locator('[data-dashboard-readiness-summary]');
  await expect(summary).toHaveCount(1,{timeout});await expect(summary).toBeVisible({timeout});await expect(summary).toHaveAttribute('role','status',{timeout});
  const state=await summary.getAttribute('data-dashboard-readiness-summary');
- assert.ok(['ready','partial','unavailable'].includes(state),'Dashboard readiness must come from the current source-reading summary.');
- const expected={ready:{label:'قراءة المصادر ناجحة',receipt:'Dashboard جاهزة'},partial:{label:'قراءة جزئية',receipt:'Dashboard جزئية'},unavailable:{label:'القراءة غير متاحة',receipt:'Dashboard غير متاحة'}}[state];
+ assert.ok(Object.hasOwn(DASHBOARD_ENTRY_STATES,state),'Dashboard readiness must come from the current source-reading summary.');
+ const expected=DASHBOARD_ENTRY_STATES[state];
  await expect(summary).toHaveText(expected.label,{timeout});
  const banner=main.locator('[data-dashboard-state-banner]');
  if(state==='ready')await expect(banner).toHaveCount(0,{timeout});

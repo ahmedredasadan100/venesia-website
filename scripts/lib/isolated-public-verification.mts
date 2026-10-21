@@ -1998,7 +1998,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (gate.name === "normal-build" || gate.name === "hero-compatibility-build") env = childEnvironment;
       if (!("qualityScript" in gate) && gate.name !== "normal-build" && gate.name !== "hero-compatibility-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
       if (gate.name === "public-e2e" || gate.name === "admin-interactions" || gate.name === "admin-adoption" || gate.name === "media-upload-limit" || gate.name === "hero-compatibility") {
-        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
+        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-core-auth-entry-journeys.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
           .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
         if (measurement?.study === "heavy-editor-performance") {
           const priorHarness = adminStudyHarnesses.get(originalContext);
