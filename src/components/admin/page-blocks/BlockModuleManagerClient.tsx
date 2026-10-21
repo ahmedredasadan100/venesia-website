@@ -715,6 +715,7 @@ export default function BlockModuleManagerClient({
       />
 
       <VenesiaModal
+        closeOnEscape
         open={showCreateModal}
         title="إضافة بلوك جديد"
         description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كغير منشورة."

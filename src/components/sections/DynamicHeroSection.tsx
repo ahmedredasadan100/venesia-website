@@ -14,7 +14,8 @@ import {
 } from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
 import type { HeroDomainSlide } from "../../lib/hero/domain-backed-slides";
-import { getHeroConfig } from "../../lib/page-sections";
+import { getHeroConfig, readHeroLinkTarget } from "../../lib/page-sections";
+import type { AdminLinkTarget } from "../../lib/admin/links/types";
 import {
   heroFlexJustifyClass,
   heroTextAlignClass,
@@ -103,8 +104,10 @@ export default function DynamicHeroSection({
       mobileImages: domainSlide.mobileImage ? [domainSlide.mobileImage] : [],
       primaryCtaLabel: domainSlide.primaryCtaLabel,
       primaryCtaHref: domainSlide.primaryCtaHref,
+      primaryCtaLink: typeof domainSlide.primaryCtaHref === "string" ? undefined : hero.config?.primaryCtaLink,
       secondaryCtaLabel: domainSlide.secondaryCtaLabel,
       secondaryCtaHref: domainSlide.secondaryCtaHref,
+      secondaryCtaLink: typeof domainSlide.secondaryCtaHref === "string" ? undefined : hero.config?.secondaryCtaLink,
     },
   } : hero;
 
@@ -127,17 +130,19 @@ export default function DynamicHeroSection({
 
 function HeroPressableLink({
   href,
+  target,
   className,
   children,
 }: {
   href: string;
+  target?: AdminLinkTarget;
   className: string;
   children: ReactNode;
 }) {
   const { pressProps } = usePressFeedback();
   const prefetchProps = useIntentPrefetch();
   return (
-    <Link href={href} {...prefetchProps} {...pressProps} className={`home-pressable ${className}`}>
+    <Link href={href} target={target} rel={target === "_blank" ? "noopener noreferrer" : undefined} {...prefetchProps} {...pressProps} className={`home-pressable ${className}`}>
       {children}
     </Link>
   );
@@ -296,8 +301,10 @@ function HomeDynamicHero({
     description,
     primaryCtaLabel: activeSlide?.primaryCtaLabel ?? config.primaryCtaLabel,
     primaryCtaHref: activeSlide?.primaryCtaHref ?? config.primaryCtaHref,
+    primaryCtaLink: typeof activeSlide?.primaryCtaHref === "string" ? undefined : config.primaryCtaLink,
     secondaryCtaLabel: activeSlide?.secondaryCtaLabel ?? config.secondaryCtaLabel,
     secondaryCtaHref: activeSlide?.secondaryCtaHref ?? config.secondaryCtaHref,
+    secondaryCtaLink: typeof activeSlide?.secondaryCtaHref === "string" ? undefined : config.secondaryCtaLink,
   };
   const usesHomeCinematicTypography = hero.variant === "home-cinematic";
   const usesProjectIdentityTypography = hero.variant === "projects-hub";
@@ -509,6 +516,7 @@ function HeroCtaButtons({
         {hasPrimary ? (
           <HeroPressableLink
             href={config.primaryCtaHref!}
+            target={readHeroLinkTarget(config.primaryCtaLink)}
             className={`home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7 ${config.ctaBold ? "font-bold" : "font-medium"}`}
           >
             {config.primaryCtaLabel}
@@ -518,6 +526,7 @@ function HeroCtaButtons({
         {hasSecondary ? (
           <HeroPressableLink
             href={config.secondaryCtaHref!}
+            target={readHeroLinkTarget(config.secondaryCtaLink)}
             className={`home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7 ${config.ctaBold ? "font-bold" : "font-medium"}`}
           >
             {config.secondaryCtaLabel}

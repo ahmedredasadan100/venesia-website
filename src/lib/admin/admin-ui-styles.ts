@@ -23,6 +23,17 @@ export const ADMIN_MODAL = {
     "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] font-en text-lg text-white/55 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A]",
 } as const;
 
+/** Explicit compact presentation; existing modal consumers retain ADMIN_MODAL. */
+export const ADMIN_MODAL_COMPACT = {
+  header: "flex items-start justify-between gap-4 border-b border-white/8 px-4 py-3 sm:px-5",
+  body: "px-4 py-2.5 text-sm text-white/70 sm:px-5",
+  footer: "flex flex-wrap items-center justify-end gap-2 border-t border-white/8 px-4 py-3 sm:px-5",
+  eyebrow: ADMIN_MODAL.eyebrow,
+  title: "mt-1 text-xl font-bold text-white",
+  description: "mt-1 text-xs leading-6 text-white/52",
+  headerIcon: "flex size-11 shrink-0 items-center justify-center rounded-[12px] border border-[#D8B87A]/18 bg-[#D8B87A]/5 text-[#D8B87A]",
+} as const;
+
 export const ADMIN_MODAL_SIZES = {
   sm: "max-w-[420px]",
   md: "max-w-[640px]",
@@ -45,9 +56,9 @@ export const ADMIN_FORM = {
 } as const;
 
 /** Presentation only; the consuming control owns its state and selection semantics. */
-export function adminChoiceButtonClassName(active: boolean, extra = "") {
+export function adminChoiceButtonClassName(active: boolean, extra = "", density: "default" | "compact" = "default") {
   return [
-    "inline-flex min-h-11 cursor-pointer items-center justify-center rounded-2xl border px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45",
+    `inline-flex ${density === "compact" ? "min-h-9" : "min-h-11"} cursor-pointer items-center justify-center ${density === "compact" ? "rounded-[10px]" : "rounded-2xl"} border ${density === "compact" ? "px-3 py-1.5" : "px-4 py-2"} text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45`,
     active
       ? "border-[#D8B87A] bg-[linear-gradient(135deg,rgba(216,184,122,0.17),rgba(216,184,122,0.08))] text-[#F2D99B] shadow-[inset_0_1px_0_rgba(216,184,122,0.08)]"
       : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",

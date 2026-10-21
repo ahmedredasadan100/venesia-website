@@ -73,6 +73,7 @@ export default function ProjectLocationFormModal({
 
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title={mode === "create" ? `إضافة ${config.singularLabel}` : `تعديل ${config.singularLabel}`}
       description="احفظ الاسم والعلاقة والحالة والترتيب داخل مصدر مواقع المشاريع المعتمد."

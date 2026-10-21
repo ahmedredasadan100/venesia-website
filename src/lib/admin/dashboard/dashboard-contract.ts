@@ -49,6 +49,8 @@ export type DashboardReadModel = {
     category: string;
     updatedAt: string;
     publishedAt: string | null;
+    image?: string | null;
+    imageAlt?: string | null;
   }>;
   recentProjects: Array<{
     id: number;
@@ -57,6 +59,8 @@ export type DashboardReadModel = {
     slug: string;
     publicationStatus: string;
     updatedAt: string;
+    image?: string | null;
+    imageAlt?: string | null;
   }>;
   databaseDiagnostics: {
     source: string;
@@ -124,6 +128,12 @@ function text(value: unknown, path: string): string {
 function nullableText(value: unknown, path: string): string | null {
   if (value == null) return null;
   return text(value, path);
+}
+
+// Optional presentation fields never invalidate an otherwise valid v1 snapshot.
+// Availability and allowed media identities are resolved by the existing loader.
+function optionalMediaText(value: unknown): string | null {
+  return typeof value === "string" ? value.trim() || null : null;
 }
 
 function count(value: unknown, path: string): number {
@@ -228,6 +238,8 @@ export function parseDashboardReadModel(value: unknown): DashboardReadModel {
         category: text(item.category, `recentTopics.${index}.category`),
         updatedAt: text(item.updated_at, `recentTopics.${index}.updated_at`),
         publishedAt: nullableText(item.published_at, `recentTopics.${index}.published_at`),
+        image: optionalMediaText(item.image),
+        imageAlt: optionalMediaText(item.image_alt),
       };
     }),
     recentProjects: rows(root.recentProjects, "recentProjects").map((row, index) => {
@@ -242,6 +254,8 @@ export function parseDashboardReadModel(value: unknown): DashboardReadModel {
           `recentProjects.${index}.publication_status`,
         ),
         updatedAt: text(item.updated_at, `recentProjects.${index}.updated_at`),
+        image: optionalMediaText(item.image),
+        imageAlt: optionalMediaText(item.image_alt),
       };
     }),
     databaseDiagnostics: {

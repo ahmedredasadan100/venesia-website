@@ -12,6 +12,8 @@ import {
   getModuleEditorSectionMetadata,
 } from "../../../lib/page-composition/slot-module-registry";
 import {
+  AdminCard,
+  AdminFormControlHeader,
   AdminFormGrid,
   AdminFormGridItem,
   AdminFormSection,
@@ -310,12 +312,17 @@ export function ModuleEditorContentGroup({
 export function ModuleEditorRepeaterGrid({
   children,
   columns = 3,
+  presentation = "default",
   className = "",
 }: {
   children: ReactNode;
   columns?: 2 | 3;
+  presentation?: "default" | "premium";
   className?: string;
 }) {
+  if (presentation === "premium") {
+    return <div data-module-editor-repeater-grid=""><AdminFormGrid columns={columns} className={className}>{children}</AdminFormGrid></div>;
+  }
   return (
     <div
       data-module-editor-repeater-grid=""
@@ -328,15 +335,34 @@ export function ModuleEditorRepeaterGrid({
 
 export function ModuleEditorRepeaterCard({
   title,
+  description,
+  icon,
+  presentation = "default",
   actions,
   children,
   className = "",
 }: {
   title: ReactNode;
+  description?: ReactNode;
+  icon?: ReactNode;
+  presentation?: "default" | "premium";
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
+  if (presentation === "premium") {
+    return (
+      <AdminCard presentation="premium" className={`h-full p-3 ${className}`.trim()}>
+        <div data-module-editor-repeater-card="" className="space-y-3">
+          <header className="flex flex-wrap items-center justify-between gap-3">
+            <AdminFormControlHeader presentation="leading-icon" title={<span role="heading" aria-level={3}>{title}</span>} description={description} icon={icon} />
+            {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+          </header>
+          {children}
+        </div>
+      </AdminCard>
+    );
+  }
   return (
     <article
       data-module-editor-repeater-card=""
@@ -415,7 +441,9 @@ type ModuleEditorVisibilityAlignRowBaseProps = {
   showDefault?: boolean;
   enableVisibility?: boolean;
   controlsPlacement?: "header" | "footer" | "cards";
-  presentation?: "card" | "plain";
+  presentation?: "card" | "plain" | "premium";
+  description?: ReactNode;
+  icon?: ReactNode;
   className?: string;
   children?: ReactNode;
 };
@@ -429,6 +457,7 @@ type ModuleEditorVisibilityAlignRowProps =
           boldName?: string;
           alignmentDefault?: AdminTextAlignment;
           boldDefault?: boolean;
+          preserveUnsetBold?: boolean;
           enableAlignment?: boolean;
           enableBold?: boolean;
         }
@@ -438,6 +467,7 @@ type ModuleEditorVisibilityAlignRowProps =
           boldName?: never;
           alignmentDefault?: never;
           boldDefault?: never;
+          preserveUnsetBold?: never;
           enableAlignment?: never;
           enableBold?: never;
         }
@@ -451,23 +481,32 @@ export function ModuleEditorVisibilityAlignRow({
   controlMode = "text",
   alignmentDefault = "right",
   showDefault = true,
-  boldDefault = false,
+  boldDefault,
+  preserveUnsetBold = false,
   enableAlignment = true,
   enableBold = true,
   enableVisibility = true,
   controlsPlacement = "header",
   presentation = "card",
+  description,
+  icon,
   className = "",
   children,
 }: ModuleEditorVisibilityAlignRowProps) {
   const [alignment, setAlignment] =
     useState<AdminTextAlignment>(alignmentDefault);
   const [show, setShow] = useState(showDefault);
-  const [bold, setBold] = useState(boldDefault);
+  const [bold, setBold] = useState<boolean | undefined>(
+    preserveUnsetBold ? boldDefault : (boldDefault ?? false),
+  );
   const hasAlignmentControl =
     controlMode === "text" && enableAlignment && Boolean(alignmentName);
   const hasBoldControl =
     controlMode === "text" && enableBold && Boolean(boldName);
+
+  const submittedBold = hasBoldControl
+    ? bold
+    : preserveUnsetBold ? boldDefault : (boldDefault ?? false);
 
   const submittedValues = (
     <>
@@ -483,32 +522,33 @@ export function ModuleEditorVisibilityAlignRow({
           value={hasAlignmentControl ? alignment : alignmentDefault}
         />
       ) : null}
-      {boldName ? (
+      {boldName && submittedBold !== undefined ? (
         <input
           type="hidden"
           name={boldName}
-          value={String(hasBoldControl ? bold : boldDefault)}
+          value={String(submittedBold)}
         />
       ) : null}
     </>
   );
 
-  const renderControls = (toolbarLabel = `إعدادات ${label}`) => (
+  const renderControls = (toolbarLabel = `إعدادات ${label}`, part: "all" | "visibility" | "format" = "all", density: "default" | "compact" = "default") => (
     <div
       className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-nowrap"
       role="toolbar"
       aria-label={toolbarLabel}
       dir="rtl"
     >
-      {enableVisibility ? (
+      {enableVisibility && part !== "format" ? (
         <AdminFormSwitch
           label={show ? "ظاهر" : "مخفي"}
           checked={show}
           onChange={(event) => setShow(event.target.checked)}
           wrapLabel
+          className={density === "compact" ? "!min-w-0 !gap-1 !px-1" : undefined}
         />
       ) : null}
-      {hasAlignmentControl || hasBoldControl ? (
+      {part !== "visibility" && (hasAlignmentControl || hasBoldControl) ? (
         <AdminTextFormatControls
           ariaLabel={`تنسيق ${label}`}
           alignmentAriaLabel={`محاذاة ${label}`}
@@ -518,13 +558,34 @@ export function ModuleEditorVisibilityAlignRow({
               ? setAlignment
               : undefined
           }
-          bold={hasBoldControl ? bold : undefined}
+          bold={hasBoldControl ? (bold ?? false) : undefined}
           onBoldChange={hasBoldControl ? setBold : undefined}
           embedded
+          density={density}
         />
       ) : null}
     </div>
   );
+
+  if (presentation === "premium") {
+    return (
+      <AdminCard presentation="premium" className={`self-start p-3 ${className}`.trim()}>
+        <div data-module-editor-control-row="" data-module-editor-control-mode={controlMode} data-module-editor-settings-composition="compact-inline" className="space-y-2.5">
+          {submittedValues}
+          <div data-module-editor-settings-header="" className="flex min-w-0 flex-wrap items-center gap-1">
+            <div className="min-w-20 flex-1">
+              <AdminFormControlHeader title={label} description={description} icon={icon} presentation="compact-inline" />
+            </div>
+            <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1">
+              {hasAlignmentControl || hasBoldControl ? renderControls(`تنسيق ${label}`, "format", "compact") : null}
+              {enableVisibility ? renderControls(`إظهار ${label}`, "visibility", "compact") : null}
+            </div>
+          </div>
+          {children ? <div data-module-editor-settings-body="" className="min-w-0">{children}</div> : null}
+        </div>
+      </AdminCard>
+    );
+  }
 
   if (controlsPlacement === "cards") {
     return (
@@ -682,22 +743,30 @@ export function ModuleEditorIdentitySection({
 export function ModuleEditorPagesTab({
   moduleName,
   assignmentContext,
+  presentation = "default",
+  showUsageBanner = true,
   children,
 }: {
   moduleName: string;
   assignmentContext: ModuleAssignmentContext;
+  presentation?: "default" | "premium";
+  /** Omit repeated read-only usage details when the assignment view is the reference. */
+  showUsageBanner?: boolean;
   children?: ReactNode;
 }) {
   return (
     <div data-module-editor-pages="" className="space-y-5">
-      <ModuleCrossPageUsageBanner
-        moduleName={moduleName}
-        assignments={assignmentContext.assignments}
-      />
+      {showUsageBanner ? (
+        <ModuleCrossPageUsageBanner
+          moduleName={moduleName}
+          assignments={assignmentContext.assignments}
+        />
+      ) : null}
       {children ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           {children}
           <ModulePageAssignmentsField
+            presentation={presentation}
             pages={assignmentContext.pages}
             assignedPageIds={assignmentContext.assignments.map(
               (row) => row.page_id,
@@ -706,6 +775,7 @@ export function ModuleEditorPagesTab({
         </div>
       ) : (
         <ModulePageAssignmentsField
+          presentation={presentation}
           pages={assignmentContext.pages}
           assignedPageIds={assignmentContext.assignments.map(
             (row) => row.page_id,

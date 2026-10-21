@@ -6,10 +6,11 @@ import {
   type TopicsListingCollection,
   type TopicsListingPresentation,
 } from "../../../../lib/page-blocks/configs";
-import CollectionModuleEditor from "./CollectionModuleEditor";
+import CollectionModuleEditor, { CollectionModuleDisplayFormattingFields } from "./CollectionModuleEditor";
 
 type TopicsListingModuleEditorProps = {
   config: TopicsListingBlockConfig;
+  section?: "all" | "configuration" | "display";
   categoryOptions: readonly {
     id: number;
     slug: string;
@@ -35,6 +36,7 @@ function collectionValue(collection: TopicsListingCollection): TopicsCollectionO
 export default function TopicsListingModuleEditor({
   config,
   categoryOptions,
+  section = "all",
 }: TopicsListingModuleEditorProps) {
   const selectedCollection = collectionValue(config.collection);
   const selectedCategorySlug =
@@ -58,8 +60,14 @@ export default function TopicsListingModuleEditor({
     });
   }
 
+  if (section === "display") {
+    return <CollectionModuleDisplayFormattingFields display={config.display} surfacePresentation="premium" />;
+  }
+
   return (
     <CollectionModuleEditor
+      surfacePresentation="premium"
+      section={section}
       selection={{
         name: "collection",
         label: "التصنيف",

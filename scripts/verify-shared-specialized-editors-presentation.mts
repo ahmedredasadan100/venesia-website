@@ -381,13 +381,33 @@ check(
     security.match(/إدارة بيانات الدخول للحساب الحالي/g)?.length === 1,
 );
 
+function hasNestedModuleTabs(source: string) {
+  const tree = ts.createSourceFile("editor.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const owners = new Set(["AdminModuleTabs", "ModuleEditorTabs"]);
+  for (const statement of tree.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (statement.moduleSpecifier.text.endsWith("/AdminModuleTabs") && statement.importClause?.name) owners.add(statement.importClause.name.text);
+    if (bindings && ts.isNamedImports(bindings)) for (const specifier of bindings.elements) {
+      if (["AdminModuleTabs", "ModuleEditorTabs"].includes((specifier.propertyName ?? specifier.name).text)) owners.add(specifier.name.text);
+    }
+  }
+  let nested = false;
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && owners.has(node.tagName.getText(tree))) nested = true;
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  return nested;
+}
 check(
-  "the legacy nested About CTA Tabs owner is retired",
-  !aboutCta.includes("AdminModuleTabs") &&
+  "the legacy nested About CTA Tabs owner is retired; decorative tab icons are allowed",
+  !hasNestedModuleTabs(aboutCta) &&
+    hasNestedModuleTabs('import Tabs from "./AdminModuleTabs"; const node = <Tabs />;') &&
+    hasNestedModuleTabs('import { ModuleEditorTabs as Tabs } from "./ModuleEditorPresentation"; const node = <Tabs />;') &&
+    !hasNestedModuleTabs('import { AdminModuleTabIcon } from "./AdminModuleTabs"; const node = <AdminModuleTabIcon name="media" />;') &&
     !aboutCta.includes('section === "all"') &&
-    read(
-      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-    ).includes("aboutCtaTabs"),
+    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("aboutCtaTabs"),
 );
 
 check(
@@ -552,7 +572,7 @@ function getJsxStringValue(
   return null;
 }
 
-function collectModuleEditorTabs(path: string, activeEditorKey?: string) {
+function collectModuleEditorTabs(path: string, activeEditorKey?: string, activeModuleSlug?: string | null) {
   const source = read(path);
   const file = ts.createSourceFile(
     path,
@@ -601,6 +621,15 @@ function collectModuleEditorTabs(path: string, activeEditorKey?: string) {
     if (expression.kind === ts.SyntaxKind.NullKeyword) return null;
     if (ts.isArrayLiteralExpression(expression) || ts.isObjectLiteralExpression(expression)) {
       return TRUTHY;
+    }
+    if (activeModuleSlug !== undefined && ts.isCallExpression(expression) && expression.expression.getText(file) === "Boolean") {
+      const field = expression.arguments[0];
+      if (field && ts.isPropertyAccessExpression(field) && ts.isPropertyAccessExpression(field.expression) && field.expression.name.text === "editorSections") {
+        const lookup = field.expression.expression;
+        if (ts.isCallExpression(lookup) && lookup.expression.getText(file) === "getSlotModuleSlugMetadata" && lookup.arguments[0]?.getText(file) === "block.slug") {
+          return Boolean(activeModuleSlug && getSlotModuleSlugMetadata(activeModuleSlug)?.editorSections?.[field.name.text]);
+        }
+      }
     }
     if (ts.isIdentifier(expression)) {
       if (expression.text === "editorKey" && activeEditorKey !== undefined) {
@@ -694,6 +723,10 @@ function collectModuleEditorTabs(path: string, activeEditorKey?: string) {
     }
 
     if (ts.isConditionalExpression(expression)) {
+      if (activeModuleSlug !== undefined) {
+        const condition = evaluateStaticValue(expression.condition);
+        if (condition !== UNKNOWN) return resolveTabIds(Boolean(condition) ? expression.whenTrue : expression.whenFalse, resolving);
+      }
       return unique([
         ...resolveTabIds(expression.whenTrue, resolving),
         ...resolveTabIds(expression.whenFalse, resolving),
@@ -738,6 +771,22 @@ function collectModuleEditorTabs(path: string, activeEditorKey?: string) {
             : resolveTabIds(element, resolving),
         ),
       );
+    }
+
+    if (ts.isCallExpression(expression) && ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "map") {
+      let source: ts.Expression = expression.expression.expression;
+      while (ts.isParenthesizedExpression(source) || ts.isAsExpression(source)) source = source.expression;
+      const callback = expression.arguments[0];
+      if (ts.isArrayLiteralExpression(source) && callback && ts.isArrowFunction(callback) && callback.parameters.length === 1 && ts.isIdentifier(callback.parameters[0].name)) {
+        let body = callback.body;
+        while (ts.isParenthesizedExpression(body)) body = body.expression;
+        if (ts.isObjectLiteralExpression(body)) {
+          const id = body.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && property.name.getText(file) === "id");
+          if (id && ts.isIdentifier(id.initializer) && id.initializer.text === callback.parameters[0].name.text) {
+            return unique(source.elements.flatMap(element => ts.isStringLiteral(element) ? [element.text] : []));
+          }
+        }
+      }
     }
 
     return [];
@@ -795,14 +844,26 @@ function collectModuleEditorTabs(path: string, activeEditorKey?: string) {
 const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] =
   moduleEditorRootSources
     .filter(({ path }) => !path.endsWith("ContentModuleEditClient.tsx"))
-    .flatMap(({ path }) =>
-      collectModuleEditorTabs(path).map(({ moduleKind, tabIds }) => ({
-        sourcePath: path,
-        moduleKind,
-        moduleSlug: null,
-        tabIds,
-      })),
-    );
+    .flatMap(({ path }) => {
+      // Exercise both existing default and approved slug opt-in; unknown conditions still audit both branches.
+      const scopes = path.endsWith("FeaturedModuleEditClient.tsx")
+        ? [null, "media-featured-content-news"]
+        : [undefined];
+      return scopes.flatMap((moduleSlug) =>
+        collectModuleEditorTabs(path, undefined, moduleSlug).map(({ moduleKind, tabIds }) => ({
+          sourcePath: path, moduleKind, moduleSlug: moduleSlug ?? null, tabIds,
+        })),
+      );
+    });
+
+assert.deepEqual(
+  rootEditorInventory.filter(({ moduleKind }) => moduleKind === "featured").map(({ moduleSlug, tabIds }) => ({ moduleSlug, tabIds })),
+  [
+    { moduleSlug: null, tabIds: ["content", "text", "presentation", "pages"] },
+    { moduleSlug: "media-featured-content-news", tabIds: ["content", "text", "presentation", "pages"] },
+  ],
+  "Featured default and scoped consumers retain their approved independent text tab",
+);
 
 const contentEditorPath =
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx";
@@ -839,6 +900,12 @@ const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
     };
   }),
 ];
+
+assert.deepEqual(
+  contentEditorInventory.find(entry => entry.moduleSlug === "search-platform")?.tabIds,
+  ["content", "search", "presentation", "pages"],
+  "Search metadata audits every actual flat tab, including mapped sections and both legacy IDs",
+);
 
 const moduleEditorMetadataInventory = [
   ...rootEditorInventory,
@@ -971,7 +1038,7 @@ check(
 );
 
 check(
-  "all module-specific section surfaces delegate to the shared Module Editor section owner",
+  "all module-specific section surfaces delegate to shared Module Editor sections or existing Premium cards",
   moduleSpecificEditorSources.every(({ path }) => {
     const graph = collectExecutableSourceGraph({
       root: ROOT,
@@ -979,7 +1046,8 @@ check(
       symbolAware: true,
     });
     return [...graph.values()].some((file) =>
-      file.getFullText().includes("<ModuleEditorSection"),
+      file.getFullText().includes("<ModuleEditorSection") ||
+      file.getFullText().includes('<AdminCard presentation="premium"'),
     );
   }) &&
     moduleEditorSources.every(

@@ -14,6 +14,7 @@ import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  AdminDataGridDateTimeCell,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -434,12 +435,10 @@ export function createSeriesColumns(
       minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       renderCell: ({ row }) => (
-        <span
-          dir="ltr"
+        <AdminDataGridDateTimeCell
+          value={row.created_at}
           className="block whitespace-nowrap font-en text-sm tabular-nums text-white/68"
-        >
-          {row.created_at ? formatAdminDateTime(row.created_at) : "—"}
-        </span>
+        />
       ),
     },
     {
@@ -452,12 +451,10 @@ export function createSeriesColumns(
       minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       renderCell: ({ row }) => (
-        <span
-          dir="ltr"
+        <AdminDataGridDateTimeCell
+          value={row.updated_at}
           className="block whitespace-nowrap font-en text-sm tabular-nums text-white/68"
-        >
-          {row.updated_at ? formatAdminDateTime(row.updated_at) : "—"}
-        </span>
+        />
       ),
     },
     {

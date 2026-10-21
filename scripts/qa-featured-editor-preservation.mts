@@ -1,14 +1,23 @@
 import assert from "node:assert/strict";
-import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 import { chromium, type Browser, type Page } from "playwright";
 
 const require = createRequire(import.meta.url);
 const TEMP_PREFIX = "venesia-featured-editor-preservation-";
+const standalone = Boolean(process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url));
+
+// Real-owner SSR/save acceptance exits before the historical mocked Browser run.
+if (standalone && process.argv.includes("--premium-offline")) {
+  await verifyFeaturedPremiumOffline();
+}
 
 type BrowserIssue = {
   kind: "console" | "pageerror" | "requestfailed";
@@ -326,6 +335,9 @@ const uiMockSource = String.raw`
 import * as React from "react";
 
 export const ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME = "";
+
+export function AdminCard({ children }) { return React.createElement("section", null, children); }
+export function AdminFormControlHeader({ title, description }) { return React.createElement("header", null, title, description); }
 
 export function AdminCheckbox({ label, checked, onChange }) {
   return React.createElement("input", {
@@ -738,6 +750,140 @@ async function readManualIds(page: Page) {
   });
 }
 
+type FeaturedNativeControl = {
+  name: string; type: string; value: string; checked: boolean;
+  mounted: true; visible: boolean; enabled: boolean; submitted: boolean;
+  required: boolean; min: string | null; max: string | null; options: string[];
+};
+
+/** Observe the real rendered tree, including hidden/disabled ancestor semantics. */
+function featuredNativeControls(html: string): FeaturedNativeControl[] {
+  type Node = { tag: string; attrs: Record<string, string>; children: (Node | string)[]; parent: Node | null };
+  const decode = (value: string) => value.replace(/&(?:amp|lt|gt|quot|#x27|#39);/gi, match => ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#x27;": "'", "&#39;": "'" }[match.toLowerCase()] ?? match));
+  const tree: Node = { tag: "#document", attrs: {}, children: [], parent: null }, stack = [tree], nodes: Node[] = [];
+  const voids = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+  for (const token of html.matchAll(/<!--[\s\S]*?-->|<![^>]*>|<\/?[\w-]+\b[^>]*>|[^<]+/g)) {
+    const text = token[0];
+    if (text.startsWith("<!--") || text.startsWith("<!")) continue;
+    if (text.startsWith("</")) {
+      const tag = text.slice(2).match(/^[\w-]+/)![0].toLowerCase(), index = stack.findLastIndex(node => node.tag === tag);
+      assert.ok(index > 0); stack.length = index;
+    } else if (text.startsWith("<")) {
+      const tag = text.slice(1).match(/^[\w-]+/)![0].toLowerCase(), attrs = Object.fromEntries([...text.slice(tag.length + 1, -1).matchAll(/([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)].map(([, key, double, single, bare]) => [key.toLowerCase(), decode(double ?? single ?? bare ?? "")]));
+      const node: Node = { tag, attrs, children: [], parent: stack.at(-1)! }; stack.at(-1)!.children.push(node); nodes.push(node);
+      if (!voids.has(tag) && !text.endsWith("/>")) stack.push(node);
+    } else stack.at(-1)!.children.push(decode(text));
+  }
+  const ancestors = (node: Node) => { const values: Node[] = []; for (let current: Node | null = node; current; current = current.parent) values.push(current); return values; };
+  const textOf = (node: Node): string => node.children.map(child => typeof child === "string" ? child : textOf(child)).join("");
+  return nodes.filter(node => ["input", "textarea", "select"].includes(node.tag) && node.attrs.name).map(node => {
+    const parents = ancestors(node), type = node.attrs.type || node.tag, checked = "checked" in node.attrs;
+    const enabled = !parents.some(parent => parent === node ? "disabled" in parent.attrs : parent.tag === "fieldset" && "disabled" in parent.attrs);
+    const hidden = parents.some(parent => "hidden" in parent.attrs || (parent.attrs.class ?? "").split(/\s+/).includes("hidden") || /display\s*:\s*none/i.test(parent.attrs.style ?? ""));
+    const options = nodes.filter(option => option.tag === "option" && ancestors(option).includes(node));
+    const option = options.find(value => "selected" in value.attrs) ?? options[0];
+    const value = node.tag === "textarea" ? textOf(node) : node.tag === "select" ? option?.attrs.value ?? (option ? textOf(option) : "") : node.attrs.value ?? "";
+    return { name: node.attrs.name, type, value, checked, mounted: true, visible: type !== "hidden" && !hidden, enabled, submitted: enabled && (!["checkbox", "radio"].includes(type) || checked), required: "required" in node.attrs, min: node.attrs.min ?? null, max: node.attrs.max ?? null, options: options.map(value => value.attrs.value ?? textOf(value)) };
+  });
+}
+
+export async function verifyFeaturedPremiumOffline() {
+  const fixtureRoot = process.cwd(), editorFile = "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx";
+  const baselineArg = process.argv.find(value => value.startsWith("--baseline-file="));
+  let baseline: { path: string; hash: string; content: string }, baselineOrigin: string;
+  if (baselineArg) {
+    const captured = JSON.parse(await readFile(baselineArg.slice(16), "utf8")) as { entries: { path: string; hash: string; content: string }[] };
+    const entry = captured.entries.find(value => value.path.replaceAll("\\", "/") === editorFile); assert.ok(entry, "Captured baseline must include actual Featured editor");
+    baseline = entry; baselineOrigin = baselineArg.slice(16);
+  } else {
+    const { execFileSync } = await import("node:child_process");
+    const bytes = execFileSync("git", ["show", "HEAD:" + editorFile], { cwd: fixtureRoot, windowsHide: true });
+    baseline = { path: editorFile, hash: createHash("sha256").update(bytes).digest("hex"), content: bytes.toString("base64") }; baselineOrigin = "git HEAD:" + editorFile;
+  }
+  const beforeSource = Buffer.from(baseline.content, "base64").toString("utf8");
+  assert.equal(createHash("sha256").update(beforeSource).digest("hex").toUpperCase(), baseline.hash.toUpperCase());
+  const outputArg = process.argv.find(value => value.startsWith("--output-dir=")), outputDir = path.resolve(fixtureRoot, outputArg?.slice(13) ?? ".tmp-qa/featured-editor-preservation/current");
+  assert.ok(outputDir.startsWith(path.join(fixtureRoot, ".tmp-qa") + path.sep)); await mkdir(outputDir, { recursive: true });
+  type Config = import("../src/lib/featured-modules/contract").FeaturedModuleConfig;
+  type Harness = { load: (file: string, roots?: string[]) => Record<string, unknown>; files: Set<string>; state: { writes: number } };
+  type Ports = Map<string, unknown>;
+  const { createRemainingContentOwnerHarness } = require("./fixtures/remaining-content-owner-harness.mjs") as { createRemainingContentOwnerHarness: (root: string, options?: { sourceOverrides?: Map<string, string>; additionalPorts?: Ports }) => Harness };
+  const React = require("react") as typeof import("react"), { renderToStaticMarkup } = require("react-dom/server") as typeof import("react-dom/server");
+  const noAction = async () => { throw Error("Undeclared Featured QA transport"); };
+  const ports: Ports = new Map<string, unknown>([
+    ["next/navigation", { useRouter: () => ({ push() {}, replace() {}, refresh() {} }), usePathname: () => "/admin/pages-blocks/blocks/featured/3", useSearchParams: () => new URLSearchParams("tab=content"), redirect: noAction }],
+    ["next/link", { __esModule: true, default: ({ href, children, ...props }: { href: string; children: import("react").ReactNode; prefetch?: unknown }) => { delete props.prefetch; return React.createElement("a", { ...props, href }, children); } }],
+    ["next/image", { __esModule: true, default: (input: Record<string, unknown>) => { const props = { ...input }; for (const key of ["fill", "priority", "unoptimized", "quality", "loader"]) delete props[key]; return React.createElement("img", props); } }],
+  ]);
+  const previousFetch = globalThis.fetch; globalThis.fetch = async () => { throw Error("Offline Featured acceptance forbids network"); };
+  try {
+    const before = createRemainingContentOwnerHarness(fixtureRoot, { sourceOverrides: new Map([[editorFile, beforeSource]]), additionalPorts: ports }), after = createRemainingContentOwnerHarness(fixtureRoot, { additionalPorts: ports });
+    const owner = after.load(path.join(fixtureRoot, "src/lib/featured-modules/config.ts")) as unknown as { parseFeaturedModuleConfig: (input: Record<string, unknown>) => Config; buildFeaturedModuleConfig: (data: FormData) => Config };
+    const contract = after.load(path.join(fixtureRoot, "src/lib/featured-modules/contract.ts")) as unknown as { FEATURED_PRESENTATION_VARIANTS: Config["presentation"]["variant"][]; FEATURED_SELECTION_MODES: Config["selection"]["mode"][]; featuredPresentationProfile: (variant: Config["presentation"]["variant"]) => { supportsNavigation: boolean; itemsPerView: { mode: string } } };
+    const contentTypes = after.load(path.join(fixtureRoot, "src/lib/admin/content/content-types.ts")).MEDIA_EDITABLE_CONTENT_TYPES as import("../src/lib/admin/content/content-types").MediaEditableContentType[];
+    const formattingFields = after.load(path.join(fixtureRoot, "src/lib/page-blocks/configs.ts")).CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS as string[];
+    const options = { categories: [{ id: 1, slug: "reference-category", name: "Reference", parentId: null, depth: 0, scopeSlugs: ["reference-category", "child-category"] }], items: [{ id: 701, contentType: "article", title: "Available article", categorySlug: "child-category", publishedAt: "2026-10-20T00:00:00Z" }, ...contentTypes.map((contentType, index) => ({ id: 801 + index, contentType, title: contentType, categorySlug: "", publishedAt: "2026-10-20T00:00:00Z" }))] };
+    const assignments = { pages: [{ id: 1, title: "Home", slug: "home", path: "/" }, { id: 3, title: "Media", slug: "media-center", path: "/media-center" }], assignments: [{ id: 11, page_id: 1, template_id: 3, slot: "main", sort_order: 20, is_visible: true, page_title: "Home", page_slug: "home", page_path: "/" }] };
+    const render = (harness: Harness, config: Config, slug: string) => {
+      const Editor = harness.load(path.join(fixtureRoot, editorFile)).default as import("react").ElementType;
+      const Feedback = harness.load(path.join(fixtureRoot, "src/components/admin/AdminFeedbackProvider.tsx")).default as import("react").ElementType;
+      return renderToStaticMarkup(React.createElement(Feedback, null, React.createElement(Editor, { block: { id: 3, name: "Featured isolated", slug, description: "Retained internal note", status: "unpublished" }, config, editorOptions: options, assignmentContext: assignments, updateAction: noAction })));
+    };
+    const native = (fields: FeaturedNativeControl[]) => fields.map(({ visible, ...field }) => { void visible; return field; }).sort((a, b) => a.name.localeCompare(b.name) || a.type.localeCompare(b.type) || a.value.localeCompare(b.value));
+    const dataFor = (fields: FeaturedNativeControl[]) => { const data = new FormData(); for (const field of fields) if (field.submitted) data.append(field.name, field.value); return data; };
+    const cases: Record<string, unknown>[] = [], negatives: string[] = [];
+    const sources: Config["source"][] = [{ kind: "categories", categorySlug: "reference-category" }, ...contentTypes.map(contentType => ({ kind: "media-center" as const, contentType }))];
+    let representativeData: FormData | undefined, representativeConfig: Config | undefined;
+    for (const source of sources) for (const variant of contract.FEATURED_PRESENTATION_VARIANTS) for (const mode of contract.FEATURED_SELECTION_MODES) {
+      const config = owner.parseFeaturedModuleConfig({ source, selection: { mode, topicIds: [701, 999001, 503, 999002] }, itemLimit: 9, itemsPerView: 3, navigation: { showArrows: false, showDots: true, autoplay: false }, display: { title: false, image: true, category: false, series: true, excerpt: false, date: true }, displayFormatting: { titleBold: true, titleAlignment: "left", excerptBold: true, excerptAlignment: "center" }, presentation: { variant, eyebrow: "Retained eyebrow", title: "Retained title", description: "Retained description", ctaText: "Retained action", showTitle: false, titleBold: false, titleAlignment: "left", showDescription: false, descriptionBold: true, descriptionAlignment: "center", showCta: false, ctaBold: true, ctaAlignment: "left" } });
+      const slug = source.kind === "media-center" && source.contentType === "news" ? "media-featured-content-news" : "featured-isolated-" + source.kind;
+      const original = featuredNativeControls(render(before, config, slug)), current = featuredNativeControls(render(after, config, slug));
+      const requiredFields = ["id", "name", "slug", "description", "status", "source_kind", "selection_mode", "item_limit", "presentation_variant", "items_per_view", "show_navigation_arrows", "show_navigation_dots", "navigation_autoplay", "eyebrow", "title", "presentation_description", "cta_text", ...["eyebrow", "title", "description", "cta"].flatMap(field => ["show_" + field, field + "_bold", field + "_alignment"]), ...Object.keys(config.display).map(field => "show_" + field + "_on_page"), ...["title", ...formattingFields].flatMap(field => ["display_" + field + "_bold", "display_" + field + "_alignment"])];
+      assert.ok(requiredFields.every(name => current.some(field => field.name === name)), "Every canonical config capability has its real native control");
+      assert.deepEqual(native(current), native(original), "Every native field/value/enabled/submitted/limit/option preserved: " + JSON.stringify({ source, variant, mode }));
+      const profile = contract.featuredPresentationProfile(variant);
+      assert.equal(current.some(field => field.name === "category_slug"), source.kind === "categories"); assert.equal(current.some(field => field.name === "content_type"), source.kind === "media-center");
+      assert.equal(current.filter(field => field.name === "manual_topic_ids").length, mode === "manual" ? 4 : 0);
+      if (mode === "manual") assert.deepEqual(current.filter(field => field.name === "manual_topic_ids").map(field => field.value), ["701", "999001", "503", "999002"], "Manual unresolved IDs/order preserved");
+      assert.equal(current.find(field => field.name === "items_per_view")?.type, profile.itemsPerView.mode === "fixed" ? "hidden" : "number");
+      assert.equal(current.filter(field => field.name === "show_navigation_arrows").some(field => field.type === "checkbox"), profile.supportsNavigation);
+      const data = dataFor(current), expected = owner.buildFeaturedModuleConfig(dataFor(original)), saved = owner.buildFeaturedModuleConfig(data);
+      assert.deepEqual(saved, expected, "Canonical saved shape unchanged"); assert.deepEqual(owner.buildFeaturedModuleConfig(dataFor(featuredNativeControls(render(after, saved, slug)))), saved, "Canonical save/reload/save stable");
+      assert.ok(current.filter(field => ["title", "presentation_description", "cta_text", "display_title_alignment"].includes(field.name)).every(field => field.enabled && field.submitted), "Inactive display/text values still participate");
+      cases.push({ source, variant, mode, before: original, after: current, nativeParity: true, canonicalParity: true, reloadParity: true, conditional: { manualMounted: mode === "manual", sourceField: source.kind === "categories" ? "category_slug" : "content_type", countMode: profile.itemsPerView.mode, navigationMounted: profile.supportsNavigation }, boundary: "Actual React SSR and serializer/remount; event transitions and computed visibility require Browser" });
+      if (!representativeData && mode === "manual") { representativeData = data; representativeConfig = saved; }
+    }
+    assert.ok(representativeData && representativeConfig);
+    for (const [field, value] of [["category_slug", ""], ["manual_topic_ids", ""], ["item_limit", "0"], ["item_limit", "1.5"], ["item_limit", "13"]]) {
+      const invalid = new FormData(); for (const [key, item] of representativeData) invalid.append(key, item); invalid.delete(field); invalid.set(field, value);
+      assert.throws(() => owner.buildFeaturedModuleConfig(invalid)); negatives.push(field + "=" + value);
+    }
+    // Execute the actual mutation action while replacing only external write/read
+    // infrastructure. The real parser, assignment-ID parser, action and redirect run.
+    let writeCount = 0, failWrite = false, persisted: unknown = null, assignedPages: number[] = [];
+    const assignmentOwner = after.load(path.join(fixtureRoot, "src/lib/page-blocks/sync-module-page-assignments.ts"), ["parsePageIdsFromForm"]);
+    const savePorts: Ports = new Map(ports);
+    savePorts.set("next/navigation", { redirect: (href: string) => { throw Object.assign(Error("isolated redirect"), { href }); } });
+    savePorts.set("src/lib/supabase-admin", { getSupabaseAdmin: () => ({ from: (table: string) => { assert.equal(table, "featured_module_templates"); const query = { select() { return query; }, eq() { return query; }, neq() { return query; }, limit() { return query; }, async maybeSingle() { return { data: null, error: null }; } }; return query; } }) });
+    savePorts.set("src/lib/page-blocks/sync-module-page-assignments", { parsePageIdsFromForm: assignmentOwner.parsePageIdsFromForm, async saveModuleTemplateWithPageAssignments(kind: string, id: number, row: unknown, pageIds: number[]) { assert.equal(kind, "featured"); assert.equal(id, 3); if (failWrite) throw Error("isolated_featured_save_failure"); writeCount++; persisted = structuredClone(row); assignedPages = pageIds; return { id, affectedPageIds: pageIds }; } });
+    savePorts.set("src/lib/page-blocks/admin-revalidate", { revalidateBlockModulePaths: async () => {}, revalidateCommittedPageBlockAction: async (value: unknown) => value });
+    const actionHarness = createRemainingContentOwnerHarness(fixtureRoot, { additionalPorts: savePorts });
+    const update = actionHarness.load(path.join(fixtureRoot, "src/app/admin/pages-blocks/blocks/featured/actions.ts"), ["updateFeaturedModule"]).updateFeaturedModule as (data: FormData) => Promise<void>;
+    await assert.rejects(() => update(representativeData!), (error: unknown) => Boolean(error && typeof error === "object" && "href" in error && String(error.href).includes("/admin/pages-blocks/blocks/featured/3?saved=1")));
+    assert.equal(writeCount, 1); assert.deepEqual((persisted as { config: Config }).config, representativeConfig);
+    assert.deepEqual(assignedPages, (assignmentOwner.parsePageIdsFromForm as (data: FormData) => number[])(representativeData));
+    const acceptedRow = structuredClone(persisted); failWrite = true; await assert.rejects(() => update(representativeData!), /isolated_featured_save_failure/); assert.deepEqual(persisted, acceptedRow); assert.equal(writeCount, 1);
+    const routeFile = "src/app/admin/pages-blocks/blocks/featured/[id]/page.tsx", route = ts.createSourceFile(routeFile, await readFile(path.join(fixtureRoot, routeFile), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let bound = false; const visit = (node: ts.Node) => { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(route) === "FeaturedModuleEditClient") bound = node.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && ts.isIdentifier(attribute.name) && attribute.name.text === "updateAction" && attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression?.getText(route) === "updateFeaturedModule"); ts.forEachChild(node, visit); }; visit(route); assert.ok(bound, "Real route binds actual tested save action");
+    const files = new Set([...after.files, ...actionHarness.files, editorFile, routeFile, "scripts/qa-featured-editor-preservation.mts", "package.json", "package-lock.json"]);
+    const sourceHashes = Object.fromEntries(await Promise.all([...files].sort().map(async file => [file, createHash("sha256").update(await readFile(path.join(fixtureRoot, file))).digest("hex")])));
+    const receipt = { status: "PASS", reference: { rule: "ADMIN_UI_RULES §11.a-d", sources: ["src/components/admin/page-blocks/FeedPresentationVariantFields.tsx", "src/components/admin/page-blocks/editors/SearchPlatformModuleEditor.tsx"], applicability: "Source/choice/count/conditional navigation and formatted display composition; Featured owns its own profiles and does not adopt Feed independent variant storage or Search fields" }, baseline: { file: baselineOrigin, editorHash: baseline.hash }, sourceHashes, cases, negatives, savePath: { routeFile, action: "updateFeaturedModule", executedActualAction: true, parser: "buildFeaturedModuleConfig", assignments: "real parsePageIdsFromForm; external transactional write replaced by bounded in-memory port", successfulWrites: writeCount, failureRetainsSavedRow: true }, acceptance: { functional: "PASS", architecture: "consumer-only presentation; domain owners unchanged", technicalVisual: "pending Browser", ownerApproval: "pending" }, boundary: { network: false, database: false, browser: false, realAuth: false, publicRendering: false } };
+    await writeFile(path.join(outputDir, "featured-capability-preservation.json"), JSON.stringify(receipt, null, 2) + "\n");
+    console.log("Featured Premium preservation PASS: " + cases.length + " real source/variant/selection states; native/parser/remount parity; actual action success/failure and assignments. Browser/Owner pending.");
+  } finally { globalThis.fetch = previousFetch; }
+}
+
+async function runLegacyFeaturedBrowser() {
 const rootDir = process.cwd();
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
@@ -880,3 +1026,6 @@ try {
   if (server) await stopServer(server).catch(() => undefined);
   await rm(validateTempPath(tempDir), { recursive: true, force: true });
 }
+}
+
+if (standalone && !process.argv.includes("--premium-offline")) await runLegacyFeaturedBrowser();

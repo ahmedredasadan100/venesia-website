@@ -52,6 +52,7 @@ const entityListFilters = read(
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
 );
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const dateCellOwner = read("src/components/admin/ui/AdminDataGridDateTimeCell.tsx");
 const adminTable = read("src/components/admin/table-engine/useAdminTable.ts");
 const officialSeoOwner = read("src/lib/admin/seo-score.ts");
 const adminDateOwner = read("src/lib/content-dates.ts");
@@ -471,8 +472,37 @@ assert.match(
 );
 assert.match(
   updatedAtColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("updatedAt"\)[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*row\.updatedAt \? formatAdminDateTime\(row\.updatedAt\) : "غير متاح"/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("updatedAt"\)[\s\S]*sortKey:\s*"updatedAt"[\s\S]*minWidth:\s*PAGE_UPDATED_AT_COLUMN_WIDTH[\s\S]*width:\s*PAGE_UPDATED_AT_COLUMN_WIDTH/u,
 );
+// Pages supplies domain values and unavailable-state copy; the shared cell owns
+// full/compact date formatting. Rendered geometry is verified by its owner guard.
+function assertPagesDateCellComposition(
+  clientSource: string,
+  columnSource: string,
+  gridSource: string,
+  cellSource: string,
+) {
+  assert.match(clientSource, /import\s*\{[^}]*\bAdminDataGridDateTimeCell\b[^}]*\}\s*from\s*"\.\.\/\.\.\/\.\.\/\.\.\/components\/admin\/ui\/AdminDataGrid"/u);
+  assert.match(gridSource, /export\s*\{\s*default as AdminDataGridDateTimeCell\s*\}\s*from\s*"\.\/AdminDataGridDateTimeCell"/u);
+  assert.equal((columnSource.match(/<AdminDataGridDateTimeCell\b/gu) ?? []).length, 1);
+  assert.match(columnSource, /<AdminDataGridDateTimeCell\s+value=\{row\.updatedAt\}[\s\S]*fallback=\{row\.updatedAt\s*\?\s*"—"\s*:\s*"غير متاح"\}[\s\S]*fallbackTitle=\{\s*row\.updatedAt\s*\?\s*undefined\s*:\s*PAGES_READ_MODEL_TRANSITION_NOTICE\.message\s*\}/u);
+  assert.doesNotMatch(clientSource, /\bformatAdminDateTime\b/u);
+  assert.match(cellSource, /import\s*\{\s*formatAdminDateTime\s*\}\s*from\s*"\.\.\/\.\.\/\.\.\/lib\/content-dates"/u);
+  assert.match(cellSource, /export default function AdminDataGridDateTimeCell\b[\s\S]*const fullValue = formatAdminDateTime\(value\);[\s\S]*const dateValue = formatAdminDateTime\(value, "date"\);/u);
+}
+assertPagesDateCellComposition(client, updatedAtColumn, dataGrid, dateCellOwner);
+const dateCellNegativeProbes = [
+  { label: "wrong row value", column: updatedAtColumn.replace("value={row.updatedAt}", "value={row.createdAt}") },
+  { label: "invalid timestamp fallback lost", column: updatedAtColumn.replace('fallback={row.updatedAt ? "—" : "غير متاح"}', 'fallback="غير متاح"') },
+  { label: "transition notice lost", column: updatedAtColumn.replace("PAGES_READ_MODEL_TRANSITION_NOTICE.message", '"unavailable"') },
+  { label: "duplicate date field", column: `${updatedAtColumn}<AdminDataGridDateTimeCell value={row.updatedAt} />` },
+];
+for (const probe of dateCellNegativeProbes) {
+  assert.notEqual(probe.column, updatedAtColumn, `${probe.label} probe must mutate the actual column`);
+  assert.throws(() => assertPagesDateCellComposition(client, probe.column, dataGrid, dateCellOwner), { name: "AssertionError" }, probe.label);
+}
+assert.throws(() => assertPagesDateCellComposition(`${client}\nformatAdminDateTime(row.updatedAt);`, updatedAtColumn, dataGrid, dateCellOwner), { name: "AssertionError" }, "local formatter bypass");
+assert.throws(() => assertPagesDateCellComposition(client, updatedAtColumn, dataGrid, dateCellOwner.replace("../../../lib/content-dates", "../../../lib/local-dates")), { name: "AssertionError" }, "noncanonical formatter owner");
 assert.match(
   statusColumn,
   /sortable:\s*supportedSortFields\.has\("status"\)[\s\S]*sortKey:\s*"status"[\s\S]*minWidth:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*width:\s*Number\.parseInt\(ADMIN_DATA_GRID_COLUMNS\.statusCompact, 10\)[\s\S]*align:\s*"center"[\s\S]*sticky:\s*"end-adjacent"/u,

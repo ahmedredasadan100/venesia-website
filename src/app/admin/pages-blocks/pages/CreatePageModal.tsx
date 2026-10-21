@@ -37,6 +37,7 @@ export default function CreatePageModal() {
       </AdminActionButton>
 
       <VenesiaModal
+        closeOnEscape
         open={open}
         title="إضافة صفحة جديدة"
         description="سيتم إنشاء الصفحة كغير منشورة، ولن تظهر للعامة قبل النشر وتفعيل المسار العام."

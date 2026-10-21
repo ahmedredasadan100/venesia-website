@@ -11,6 +11,8 @@ import {
   AdminEntityListTableRegion,
 } from "../../../components/admin/entity-list/AdminEntityListSurface";
 import { AdminInfoBar, AdminTablePagination } from "../../../components/admin/ui";
+import { AdminDataGridActionIcon } from "../../../components/admin/ui/AdminDataGrid";
+import { AdminModuleTabIcon } from "../../../components/admin/ui/AdminModuleTabs";
 import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
 import {
   adminActionFailure,
@@ -438,6 +440,13 @@ export default function ProjectsTableClient({
               className: "max-w-[360px]",
             },
             filters: PROJECT_FILTERS,
+            filterPanelPresentation: type === "residential" ? {
+              variant: "premium",
+              fieldIcons: {
+                "project-publication-status": <AdminModuleTabIcon name="overview" />,
+                "project-featured": <AdminDataGridActionIcon action="feature" active size="md" />,
+              },
+            } : undefined,
             values: {
               featured: controller.query.filters.featured,
               publication_status: controller.query.filters.publicationStatus,

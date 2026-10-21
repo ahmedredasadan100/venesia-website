@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
 import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-content";
@@ -9,6 +8,7 @@ import AdminSeoScorePill from "../seo/AdminSeoScorePill";
 import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  AdminDataGridDateTimeCell,
   formatAdminDataGridNumber,
 } from "../ui/AdminDataGrid";
 import AdminCategoryBadge from "./AdminCategoryBadge";
@@ -286,7 +286,13 @@ export function createUnifiedContentColumns(
       sortable: true,
       sortKey: "created_at",
       minWidth: 140,
-      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.created_at)),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.created_at}
+          fallbackTitle="—"
+          className="block min-w-0 whitespace-nowrap"
+        />
+      ),
     },
     {
       key: "updated_at",
@@ -296,7 +302,13 @@ export function createUnifiedContentColumns(
       sortable: true,
       sortKey: "updated_at",
       minWidth: 140,
-      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.updated_at)),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.updated_at}
+          fallbackTitle="—"
+          className="block min-w-0 whitespace-nowrap"
+        />
+      ),
     },
     {
       key: "created_by",
@@ -316,10 +328,14 @@ export function createUnifiedContentColumns(
       hideable: true,
       sortable: false,
       minWidth: 140,
-      renderCell: ({ row }) =>
-        singleLine(
-          row.published_at ? formatAdminDateTime(row.published_at) : "لم يُنشر",
-        ),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.published_at}
+          fallback={row.published_at ? "—" : "لم يُنشر"}
+          fallbackTitle={row.published_at ? "—" : "لم يُنشر"}
+          className="block min-w-0 whitespace-nowrap"
+        />
+      ),
     },
     {
       key: "actions",

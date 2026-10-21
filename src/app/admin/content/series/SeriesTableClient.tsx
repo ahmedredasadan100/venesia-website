@@ -14,6 +14,8 @@ import {
   AdminMetricCardsGrid,
   AdminTablePagination,
 } from "../../../../components/admin/ui";
+import { AdminDataGridActionIcon } from "../../../../components/admin/ui/AdminDataGrid";
+import { AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
 import { withAdminActionSettledResult, type AdminActionResult } from "../../../../lib/admin/admin-action-result";
@@ -433,11 +435,11 @@ export default function SeriesTableClient({
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" && !controller.query.filters.categoryId },
-            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", compact: true },
-            { label: "متوسط الموضوعات لكل سلسلة", value: controller.result.metrics?.averageTopics ?? 0, tone: "blue", compact: true },
-            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
-            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
+            { label: "إجمالي السلاسل", value: controller.result.metrics?.total ?? 0, tone: "gold", icon: <AdminModuleTabIcon name="database" />, compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" && !controller.query.filters.categoryId },
+            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", icon: <AdminModuleTabIcon name="content" />, compact: true },
+            { label: "متوسط الموضوعات لكل سلسلة", value: controller.result.metrics?.averageTopics ?? 0, tone: "blue", icon: <AdminModuleTabIcon name="statistics" />, compact: true },
+            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", icon: <AdminDataGridActionIcon action="visibility" size="lg" />, compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
+            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", icon: <AdminDataGridActionIcon action="visibility" isCurrentlyHidden size="lg" />, compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>
@@ -461,6 +463,14 @@ export default function SeriesTableClient({
               className: "max-w-[330px]",
             },
             filters,
+            filterPanelPresentation: {
+              variant: "premium",
+              fullWidthFilterIds: ["series-status-filter", "series-category-filter"],
+              fieldIcons: {
+                "series-status-filter": <AdminModuleTabIcon name="overview" />,
+                "series-category-filter": <AdminModuleTabIcon name="plans" />,
+              },
+            },
             values: {
               status: controller.query.filters.status,
               category: controller.query.filters.categoryId

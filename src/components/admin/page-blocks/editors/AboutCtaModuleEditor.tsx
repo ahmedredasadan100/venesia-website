@@ -13,7 +13,8 @@ import {
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { AdminActionButton, AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
@@ -68,6 +69,7 @@ export default function AboutCtaModuleEditor({
   section,
 }: AboutCtaModuleEditorProps) {
   const isHomeContact = editorMode === "home-contact";
+  const ReorderButton = AdminActionButton;
   const fieldLabels = {
     eyebrow: "النص التمهيدي",
     title: "العنوان",
@@ -108,15 +110,14 @@ export default function AboutCtaModuleEditor({
   }
 
   const textFields = showText ? (
-      <ModuleEditorSection>
       <ModuleEditorFieldGrid>
       <ModuleEditorField nature="short-text" span={6}>
-      <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} presentation="premium" description={isHomeContact ? "نص قصير يقدم فكرة القسم ويظهر فوق العنوان." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
         <input name="eyebrow" aria-label={fieldLabels.eyebrow} defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
       </ModuleEditorVisibilityAlignRow>
       </ModuleEditorField>
       <ModuleEditorField nature="short-text" span={6}>
-      <ModuleEditorVisibilityAlignRow label={fieldLabels.title} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.title} presentation="premium" description={isHomeContact ? "العنوان الرئيسي للقسم مع الحفاظ على فواصل الأسطر." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
         {isHomeContact ? (
           <textarea
             name="title"
@@ -131,7 +132,7 @@ export default function AboutCtaModuleEditor({
       </ModuleEditorVisibilityAlignRow>
       </ModuleEditorField>
       <ModuleEditorField nature="long-content" span={12}>
-      <ModuleEditorVisibilityAlignRow label={fieldLabels.description} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.description} presentation="premium" description={isHomeContact ? "وصف القسم كما يظهر في الصفحة." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
         <textarea
           name="description"
           aria-label={fieldLabels.description}
@@ -142,11 +143,10 @@ export default function AboutCtaModuleEditor({
       </ModuleEditorVisibilityAlignRow>
       </ModuleEditorField>
       </ModuleEditorFieldGrid>
-      </ModuleEditorSection>
   ) : null;
 
-  const ctaFields = showCta ? (
-      <ModuleEditorSection>
+  const ctaContent = (
+      <>
       <AdminFormGrid>
         <label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
@@ -154,6 +154,7 @@ export default function AboutCtaModuleEditor({
         </label>
         <AdminLinkField
           prefix="button"
+          actionPresentation="bare"
           label={fieldLabels.buttonLink}
           chooseLinkLabel={fieldLabels.chooseLink}
           clearLinkLabel={fieldLabels.clearLink}
@@ -165,14 +166,18 @@ export default function AboutCtaModuleEditor({
         <span className="text-xs font-semibold text-white/55">{fieldLabels.note}</span>
         <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
       </label>
-      </ModuleEditorSection>
+      </>
+  );
+  const ctaFields = showCta ? (
+    <AdminCard presentation="premium" className="space-y-4 p-4">{ctaContent}</AdminCard>
   ) : null;
 
-  const imageFields = showImage ? (
-      <ModuleEditorSection>
+  const imageContent = (
       <AdminMediaImageField
-                  mediaSlot={contentModuleMediaSlot("about-cta")}
-name="image"
+        variant="card"
+        showLabel={false}
+        mediaSlot={contentModuleMediaSlot("about-cta")}
+        name="image"
         label="صورة القسم"
         defaultValue={config.image ?? ""}
         altName="image_alt"
@@ -180,36 +185,41 @@ name="image"
         altLabel={fieldLabels.imageAlt}
         browseFolder={isHomeContact ? "images/home" : "images/about"}
       />
-      </ModuleEditorSection>
+  );
+  const imageFields = showImage ? (
+    <AdminCard presentation="premium" className="space-y-4 p-4"><AdminFormControlHeader presentation="leading-icon" title="صورة القسم" icon={<AdminModuleTabIcon name="media" />} />{imageContent}</AdminCard>
   ) : null;
 
   const contactsFields = showContacts ? (
       <ModuleEditorSection>
-      <ModuleEditorRepeaterGrid>
+      <ModuleEditorRepeaterGrid columns={isHomeContact ? 2 : 3} presentation="premium">
         {contactRows.map((row, index) => (
           <ModuleEditorRepeaterCard
             key={row.uid}
+            presentation="premium"
+            icon={isHomeContact ? <AdminModuleTabIcon name="location" /> : undefined}
+            description={isHomeContact ? "بيانات وسيلة التواصل ورابطها وترتيبها." : undefined}
             title={`وسيلة ${index + 1}`}
             actions={(
               <>
-                <button
+                <ReorderButton
                   type="button"
                   onClick={() => moveRow(index, -1)}
                   disabled={index === 0}
                   aria-label="تحريك الصف لأعلى"
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
+                  size="icon"
                 >
                   ↑
-                </button>
-                <button
+                </ReorderButton>
+                <ReorderButton
                   type="button"
                   onClick={() => moveRow(index, 1)}
                   disabled={index === contactRows.length - 1}
                   aria-label="تحريك الصف لأسفل"
-                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-30"
+                  size="icon"
                 >
                   ↓
-                </button>
+                </ReorderButton>
               </>
             )}
           >
@@ -265,6 +275,7 @@ name="image"
             {isHomeContact && row.icon === "whatsapp" ? null : (
               <AdminLinkField
                 prefix={`contact_${index}`}
+                actionPresentation="bare"
                 label="الرابط — اختياري"
                 defaultValue={row.linkDefault}
               />

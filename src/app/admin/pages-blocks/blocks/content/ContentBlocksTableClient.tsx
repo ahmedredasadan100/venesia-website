@@ -60,6 +60,7 @@ import {
 } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { statusMeta } from "../../../../../lib/page-blocks/admin-utils";
 import { formatAdminDateTime } from "../../../../../lib/content-dates";
+import { AdminDataGridDateTimeCell } from "../../../../../components/admin/ui/AdminDataGrid";
 import {
   restorePageCompositionColumnPreferences,
   savePageCompositionColumnPreferences,
@@ -190,7 +191,10 @@ export default function ContentBlocksTableClient({
         type: "single_select",
         allValue: "all",
         placeholder: "النمط",
-        options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),
+        options: [...new Set([
+          ...VARIANT_OPTIONS.map(([value]) => value),
+          ...rows.map((row) => row.variant),
+        ])].map((value) => ({ value, label: variantLabel(value) })),
       },
     ],
     [rows],
@@ -739,7 +743,7 @@ export default function ContentBlocksTableClient({
 
                   {visibleColumnSet.has("updatedAt") ? (
                     <AdminDataGridCenterCell className="font-en text-xs tabular-nums text-white/55">
-                      {formatAdminDateTime(row.updated_at)}
+                      <AdminDataGridDateTimeCell value={row.updated_at} />
                     </AdminDataGridCenterCell>
                   ) : null}
 
@@ -767,6 +771,7 @@ export default function ContentBlocksTableClient({
       </div>
 
       <VenesiaModal
+        closeOnEscape
         open={showCreateModal}
         title="إضافة بلوك جديد"
         description="أنشئ القالب ثم عدّل المحتوى واربطه بالصفحات. البلوكات الجديدة تُنشأ كغير منشورة."

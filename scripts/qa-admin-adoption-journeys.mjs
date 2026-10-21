@@ -17,6 +17,7 @@ import { isCoreTemplateCreateSelection, coreSelectedTemplateCreates, coreTemplat
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt, buildCoreDomainFinalSixPlan, assertCoreDomainFinalSixReceipt, buildCoreDomainFinalUpdatePlan, assertCoreDomainFinalUpdateReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { registerCorePageRoute } from "./fixtures/admin-core-form-permission-context.mjs";
+import { assertCoreDashboardEntry } from "./fixtures/admin-core-auth-entry-journeys.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -375,10 +376,9 @@ try {
   await observe("login-submit-redirect", () => Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]));
   const coreLogin = coreClosure ? { username: process.env.QA_ADMIN_USERNAME, password: process.env.QA_ADMIN_PASSWORD } : null;
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
-  const dashboardHeading = page.getByRole("heading", { name: /^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u, level: 1 });
-  await observe("dashboard-ready", () => expect(dashboardHeading).toBeVisible({ timeout: 60_000 }));
+  const dashboardState = await observe("dashboard-ready", () => assertCoreDashboardEntry(page));
   evidence.push({ id: "existing-auth-login", status: "pass", coverage: [], authenticated: true,
-    dashboardState: (await dashboardHeading.textContent()).trim(), sessionArtifactWritten: false });
+    dashboardState, sessionArtifactWritten: false });
   write("admin-adoption-browser.json", receipt());
   checkpoint("login", "complete");
 
@@ -432,7 +432,7 @@ try {
         await Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]);
       }
       coreLogin.username = ""; coreLogin.password = "";
-      await expect(dashboardHeading).toBeVisible({ timeout: 60_000 });
+      await assertCoreDashboardEntry(page);
     });
     }
     if (journeySelection === null) {

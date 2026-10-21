@@ -13,9 +13,10 @@ import {
 
 import { useState, type ReactNode } from "react";
 
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
+import { AdminActionButton, AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { ADMIN_FORM, adminChoiceButtonClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
@@ -25,17 +26,21 @@ import {
   type AboutIntroModuleConfig,
 } from "../../../../lib/page-blocks/configs";
 
-type AboutIntroEditorSection = "all" | "text" | "images" | "cta";
+type AboutIntroEditorSection = "all" | "text" | "images" | "cta" | "cards";
 
 type AboutIntroModuleEditorProps = {
   config: AboutIntroModuleConfig;
   /** home-story shows CTA + 2 images; about-intro shows beats + 3 images (default). */
   editorMode?: "about-intro" | "home-story";
   /**
-   * When set (home-story flat tabs), render only one section.
+   * When set by the shared flat tabs, render only one section.
    * Defaults to `"all"` for the classic about-intro layout.
    */
   section?: AboutIntroEditorSection;
+  /** Existing premium presentation, without changing field capabilities. */
+  presentation?: "default" | "premium";
+  /** Opt into the existing full HTML editor without changing legacy consumers. */
+  descriptionToolbar?: "limited" | "full";
 };
 
 type HomeStoryImagePair = {
@@ -50,8 +55,12 @@ type HomeStoryButtonIcon = "none" | "arrow";
 type HomeStoryButtonIconPosition = "right" | "left";
 
 // The composition selects glyphs; their scale and frame belong to AdminFormControlHeader.
-function StoryControlIcon({ icon }: { icon: "link" | "alignment" | "image" | "pointer" }) {
-  const glyph: ReactNode = icon === "link" ? (
+function StoryControlIcon({ icon }: { icon: "link" | "alignment" | "image" | "pointer" | "text" | "content" }) {
+  const glyph: ReactNode = icon === "text" ? (
+    <path d="M4 6V3h16v3M12 3v18M8 21h8" />
+  ) : icon === "content" ? (
+    <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" /><path d="M14 3v6h6M8 13h8M8 17h6" /></>
+  ) : icon === "link" ? (
     <path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7" />
   ) : icon === "alignment" ? (
     <path d="M3 5h18M7 10h14M3 15h18M7 20h14" />
@@ -85,7 +94,7 @@ function SegmentedChoice<T extends string>({
   return (
     <div data-home-story-button-card={name} className="min-w-0 h-full">
       <AdminCard presentation="premium" className="flex h-full flex-col gap-2 p-3">
-      <AdminFormControlHeader title={label} description={description} icon={<StoryControlIcon icon={illustration} />} />
+      <AdminFormControlHeader presentation="leading-icon" title={label} description={description} icon={<StoryControlIcon icon={illustration} />} />
       <input type="hidden" name={name} value={value} />
       <div role="radiogroup" aria-label={label} className={ADMIN_FORM.choiceGroup}>
         {options.map((option) => {
@@ -99,7 +108,7 @@ function SegmentedChoice<T extends string>({
               title={option.label}
               aria-label={option.label}
               onClick={() => onChange(option.value)}
-              className={adminChoiceButtonClassName(active)}
+              className={adminChoiceButtonClassName(active, "", "compact")}
             >
               {option.label}
             </button>
@@ -181,14 +190,18 @@ export default function AboutIntroModuleEditor({
   config,
   editorMode = "about-intro",
   section = "all",
+  presentation = "default",
+  descriptionToolbar = "limited",
 }: AboutIntroModuleEditorProps) {
   const images = config.images ?? {};
   const beats = padBeats(config.beats);
   const isHomeStory = editorMode === "home-story";
+  const premium = isHomeStory || presentation === "premium";
+  const fullDescriptionEditor = isHomeStory || descriptionToolbar === "full";
   const showText = section === "all" || section === "text";
   const showImages = section === "all" || section === "images";
   const showCta = isHomeStory && (section === "all" || section === "cta");
-  const showBeats = !isHomeStory && section === "all";
+  const showBeats = !isHomeStory && (section === "all" || section === "cards");
   const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
   const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
   const subtitleFormat = resolvePageBlockTextFormat(config, "subtitle");
@@ -200,9 +213,9 @@ export default function AboutIntroModuleEditor({
         title: "العنوان",
         body: "الوصف",
         bodyHelper: "Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة.",
-        imageMain: "الصورة الأولى",
-        imageSecondary: "الصورة الثانية",
-        imageAlt: "وصف الصورة",
+        imageMain: "الصورة الرئيسية",
+        imageSecondary: "الصورة الثانوية",
+        imageAlt: "النص البديل للصورة (Alt Text)",
         buttonLabel: "نص الزر",
         buttonLink: "رابط الزر",
         chooseLink: "اختيار الرابط",
@@ -239,6 +252,36 @@ export default function AboutIntroModuleEditor({
     }));
   }
 
+  const aboutImageFields = ([
+    { key: "main", altKey: "mainAlt", label: fieldLabels.imageMain },
+    { key: "secondary", altKey: "secondaryAlt", label: fieldLabels.imageSecondary },
+    { key: "accent", altKey: "accentAlt", label: "الصورة 3 — اللمسة" },
+  ] as const).map((slot, index) => {
+    const field = (
+      <AdminMediaImageField
+        key={slot.key}
+        mediaSlot={contentModuleMediaSlot("about-intro")}
+        name={"image_" + slot.key}
+        label={slot.label}
+        variant={premium ? "card" : "default"}
+        showLabel={!premium}
+        showGuidance={premium ? false : undefined}
+        showReferenceLabel={premium ? false : undefined}
+        defaultValue={images[slot.key] ?? ""}
+        altName={"image_" + slot.key + "_alt"}
+        defaultAlt={images[slot.altKey] ?? ""}
+        altLabel={"النص البديل للصورة " + (index + 1)}
+        browseFolder="images/about"
+      />
+    );
+    return premium ? (
+      <AdminCard key={slot.key} presentation="premium" className="flex min-w-0 flex-col gap-3 p-3">
+        <AdminFormControlHeader presentation="leading-icon" title={slot.label} icon={<AdminModuleTabIcon name="media" />} />
+        {field}
+      </AdminCard>
+    ) : field;
+  });
+
   return (
     <div className={isHomeStory ? "space-y-6" : "space-y-4"}>
       {section === "all" ? <input type="hidden" name="config_schema" value="about-intro" /> : null}
@@ -248,30 +291,38 @@ export default function AboutIntroModuleEditor({
       <ModuleEditorSection>
         <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={6}>
-          <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} presentation={premium ? "premium" : "card"} description={premium ? "نص قصير يقدّم فكرة القسم ويظهر فوق العنوان." : undefined} icon={premium ? <StoryControlIcon icon="text" /> : undefined} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
             <input name="eyebrow" aria-label={fieldLabels.eyebrow} defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="short-text" span={6}>
-          <ModuleEditorVisibilityAlignRow label={fieldLabels.title} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow label={fieldLabels.title} presentation={premium ? "premium" : "card"} description={premium ? "العنوان الرئيسي للقسم ويظهر بحجم أكبر في الصفحة." : undefined} icon={premium ? <StoryControlIcon icon="content" /> : undefined} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
             <input name="title" aria-label={fieldLabels.title} defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           {!isHomeStory ? (
             <ModuleEditorField nature="short-text" span={12}>
-            <ModuleEditorVisibilityAlignRow label={fieldLabels.subtitle ?? "العنوان الفرعي"} showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
+            <ModuleEditorVisibilityAlignRow label={fieldLabels.subtitle ?? "العنوان الفرعي"} presentation={premium ? "premium" : "card"} description={premium ? "نص مكمل يظهر أسفل العنوان الرئيسي." : undefined} icon={premium ? <AdminModuleTabIcon name="content" /> : undefined} showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
               <input name="subtitle" aria-label={fieldLabels.subtitle ?? "العنوان الفرعي"} defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
             </ModuleEditorVisibilityAlignRow>
             </ModuleEditorField>
           ) : null}
           <ModuleEditorField nature="long-content" span={12}>
-          <ModuleEditorVisibilityAlignRow label={fieldLabels.body} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow label={fieldLabels.body} presentation={premium ? "premium" : "card"} description={premium ? "محتوى تفصيلي يشرح فكرة القسم ويظهر في الصفحة." : undefined} icon={premium ? <StoryControlIcon icon="content" /> : undefined} showName="show_description" showDefault={descriptionFormat.visible}
+            {...(fullDescriptionEditor
+              ? { controlMode: "visibility-only" as const }
+              : { boldName: "description_bold", alignmentName: "description_alignment", boldDefault: descriptionFormat.bold, alignmentDefault: descriptionFormat.alignment })}>
             <AdminRichTextEditor
               name="body"
               label={fieldLabels.body}
               defaultValue={config.body ?? ""}
-              toolbarMode="none"
-              minHeight={72}
+              toolbarMode={fullDescriptionEditor ? "full" : "none"}
+              minHeight={fullDescriptionEditor ? undefined : 72}
+              showLabel={!fullDescriptionEditor}
+              enableArticleStructure={fullDescriptionEditor}
+              enableTextAlign={fullDescriptionEditor}
+              legacyHtmlFormatting={fullDescriptionEditor ? { boldName: "description_bold", bold: descriptionFormat.bold, alignmentName: "description_alignment", alignment: descriptionFormat.alignment } : undefined}
+              helperText={fullDescriptionEditor ? fieldLabels.bodyHelper : undefined}
             />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
@@ -288,20 +339,20 @@ export default function AboutIntroModuleEditor({
           ) : null}
           {isHomeStory ? (
             <AdminFormGrid columns={2}>
-              <div className="min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-3">
+              <AdminCard presentation="premium" className="flex min-w-0 flex-col gap-3 p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold text-[#D8B87A]/70">{fieldLabels.imageMain}</p>
-                  <button
-                    type="button"
+                  <div className="min-w-0"><AdminFormControlHeader presentation="leading-icon" title={fieldLabels.imageMain} icon={<StoryControlIcon icon="image" />} /></div>
+                  <AdminActionButton
+                    size="icon"
                     onClick={swapHomeStoryImages}
                     title="نقل إلى الموضع الثاني"
                     aria-label="نقل إلى الموضع الثاني"
-                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
                   >
-                    ↓
-                  </button>
+                    <span aria-hidden="true">↓</span>
+                  </AdminActionButton>
                 </div>
                 <AdminMediaImageField
+                  variant="card"
                   mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
                   showGuidance={false}
                   showReferenceLabel={false}
@@ -316,21 +367,21 @@ name="image_main"
                   onAltValueChange={(value) => setHomeStoryImages((current) => ({ ...current, mainAlt: value }))}
                   browseFolder="images/home"
                 />
-              </div>
-              <div className="min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-3">
+              </AdminCard>
+              <AdminCard presentation="premium" className="flex min-w-0 flex-col gap-3 p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold text-[#D8B87A]/70">{fieldLabels.imageSecondary}</p>
-                  <button
-                    type="button"
+                  <div className="min-w-0"><AdminFormControlHeader presentation="leading-icon" title={fieldLabels.imageSecondary} icon={<StoryControlIcon icon="image" />} /></div>
+                  <AdminActionButton
+                    size="icon"
                     onClick={swapHomeStoryImages}
                     title="نقل إلى الموضع الأول"
                     aria-label="نقل إلى الموضع الأول"
-                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-white/10 bg-[#080B10] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
                   >
-                    ↑
-                  </button>
+                    <span aria-hidden="true">↑</span>
+                  </AdminActionButton>
                 </div>
                 <AdminMediaImageField
+                  variant="card"
                   mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
                   showGuidance={false}
                   showReferenceLabel={false}
@@ -349,43 +400,10 @@ name="image_secondary"
                   }
                   browseFolder="images/home"
                 />
-              </div>
+              </AdminCard>
             </AdminFormGrid>
           ) : (
-            <>
-              <div className="grid gap-5 lg:grid-cols-3">
-                <AdminMediaImageField
-                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
-name="image_main"
-                  label={fieldLabels.imageMain}
-                  defaultValue={images.main ?? ""}
-                  altName="image_main_alt"
-                  defaultAlt={images.mainAlt ?? ""}
-                  altLabel="النص البديل للصورة 1"
-                  browseFolder="images/about"
-                />
-                <AdminMediaImageField
-                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
-name="image_secondary"
-                  label={fieldLabels.imageSecondary}
-                  defaultValue={images.secondary ?? ""}
-                  altName="image_secondary_alt"
-                  defaultAlt={images.secondaryAlt ?? ""}
-                  altLabel="النص البديل للصورة 2"
-                  browseFolder="images/about"
-                />
-                <AdminMediaImageField
-                  mediaSlot={contentModuleMediaSlot(isHomeStory ? "home-story" : "about-intro")}
-name="image_accent"
-                  label="الصورة 3 — اللمسة"
-                  defaultValue={images.accent ?? ""}
-                  altName="image_accent_alt"
-                  defaultAlt={images.accentAlt ?? ""}
-                  altLabel="النص البديل للصورة 3"
-                  browseFolder="images/about"
-                />
-              </div>
-            </>
+            premium ? <AdminFormGrid columns={3}>{aboutImageFields}</AdminFormGrid> : <div className="grid gap-5 lg:grid-cols-3">{aboutImageFields}</div>
           )}
       </ModuleEditorSection>
       ) : null}
@@ -412,6 +430,7 @@ name="image_accent"
                       <AdminLinkField
                         prefix="button"
                         presentation="inline"
+                        actionPresentation={isHomeStory ? "bare" : "default"}
                         label={fieldLabels.buttonLink}
                         chooseLinkLabel={fieldLabels.chooseLink}
                         clearLinkLabel={fieldLabels.clearLink}
@@ -436,7 +455,7 @@ name="image_accent"
                         <AdminFormListboxSelect
                           name="button_open_target"
                           sizing="full"
-                          label={<AdminFormControlHeader title="فتح الرابط" description="حدد كيف يتم فتح الرابط." icon={<StoryControlIcon icon="link" />} />}
+                          label={<AdminFormControlHeader presentation="leading-icon" title="فتح الرابط" description="حدد كيف يتم فتح الرابط." icon={<StoryControlIcon icon="link" />} />}
                           defaultValue={config.button?.target === "_blank" ? "_blank" : "_self"}
                           options={[
                             { value: "_self", label: "نفس النافذة" },
@@ -460,10 +479,10 @@ name="image_accent"
 
       {showBeats ? (
       <ModuleEditorSection>
-          <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading>
-          <ModuleEditorRepeaterGrid>
+          {section === "all" ? <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading> : null}
+          <ModuleEditorRepeaterGrid presentation={presentation}>
             {beats.map((beat, index) => (
-              <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>
+              <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`} presentation={presentation} description={premium ? "الرقم / الشارة، العنوان والوصف." : undefined} icon={premium ? <AdminModuleTabIcon name="section" /> : undefined}>
                 <label className={ADMIN_FORM.labelStack}>
                   <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                   <input

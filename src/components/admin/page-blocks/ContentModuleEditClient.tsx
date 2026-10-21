@@ -195,6 +195,10 @@ export default function ContentModuleEditClient({
   const isAboutCta = editorKey === "about-cta";
   const isAboutPrinciples = editorKey === "about-principles";
   const isAboutApproach = editorKey === "about-approach";
+  const isSearchPlatform = editorKey === "search-platform";
+  const usesPremiumContentComposition =
+    isAboutIntroSingleImage || isVisionGoals || isHomeProjects ||
+    isAboutApproach || editorKey === "topics-listing" || editorKey === "generic";
   const isGenericIntro =
     editorKey === "generic" &&
     (block.slug === "topics-intro" || block.variant === "intro");
@@ -208,8 +212,53 @@ export default function ContentModuleEditClient({
 
   const pagesTab = {
     id: "pages",
-    content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
+    ...(usesPremiumContentComposition ? { sectionHeaderPresentation: "control" as const } : {}),
+    content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation={usesPremiumContentComposition ? "premium" : "default"} />,
   };
+
+  const singleImageTabs = isAboutIntroSingleImage
+    ? [
+        ...(["content", "images", "cards"] as const).map((section) => ({
+          id: section,
+          sectionHeaderPresentation: "control" as const,
+          content: <AboutIntroSingleImageModuleEditor config={config as ReturnType<typeof asAboutIntroSingleImageConfig>} section={section === "content" ? "text" : section} />,
+        })),
+        pagesTab,
+      ]
+    : [];
+
+  const visionGoalsTabs = isVisionGoals
+    ? [
+        ...(["content", "images", "vision", "goals"] as const).map((section) => ({
+          id: section,
+          sectionHeaderPresentation: "control" as const,
+          content: <VisionGoalsModuleEditor config={config as ReturnType<typeof asVisionGoalsConfig>} section={section === "content" ? "text" : section} />,
+        })),
+        pagesTab,
+      ]
+    : [];
+
+  const homeProjectsTabs = isHomeProjects
+    ? [
+        ...(["content", "projects", "cta"] as const).map((section) => ({
+          id: section,
+          sectionHeaderPresentation: "control" as const,
+          content: <HomeProjectsPlacementEditor config={config as ReturnType<typeof asHomeProjectsConfig>} section={section === "content" ? "text" : section} />,
+        })),
+        pagesTab,
+      ]
+    : [];
+
+  const topicsListingTabs = editorKey === "topics-listing"
+    ? [
+        ...(["content", "formatting"] as const).map((section) => ({
+          id: section,
+          sectionHeaderPresentation: "control" as const,
+          content: <TopicsListingModuleEditor config={config as ReturnType<typeof asTopicsListingConfig>} categoryOptions={topicCategoryOptions} section={section === "content" ? "configuration" : "display"} />,
+        })),
+        pagesTab,
+      ]
+    : [];
 
   const heroPlatformTabs = isProjectsHubHero
     ? [
@@ -267,13 +316,52 @@ export default function ContentModuleEditClient({
         },
         {
           id: "images",
+          sectionHeaderPresentation: "control" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="images" />,
         },
         {
           id: "cta",
+          sectionHeaderPresentation: "control" as const,
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="cta" />,
         },
-        pagesTab,
+        {
+          id: "pages",
+          sectionHeaderPresentation: "control" as const,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+        },
+      ]
+    : [];
+
+  const aboutIntroTabs = isAboutIntro
+    ? [
+        ...(["text", "images", "cards"] as const).map((section) => ({
+          id: section,
+          sectionHeaderPresentation: "control" as const,
+          content: <AboutIntroModuleEditor config={config as ReturnType<typeof asAboutIntroConfig>} editorMode="about-intro" section={section} presentation="premium" descriptionToolbar="full" />,
+        })),
+        {
+          id: "pages",
+          sectionHeaderPresentation: "control" as const,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+        },
+      ]
+    : [];
+
+  const homeTrustTabs = isHomeTrust
+    ? [
+        {
+          id: "content",
+          content: <AboutPrinciplesModuleEditor config={config as ReturnType<typeof asAboutPrinciplesConfig>} editorMode="home-trust" section="text" />,
+        },
+        {
+          id: "cards",
+          content: <AboutPrinciplesModuleEditor config={config as ReturnType<typeof asAboutPrinciplesConfig>} editorMode="home-trust" section="cards" />,
+        },
+        {
+          id: "pages",
+          sectionHeaderPresentation: "control" as const,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+        },
       ]
     : [];
 
@@ -289,13 +377,19 @@ export default function ContentModuleEditClient({
         },
         {
           id: "cta",
+          sectionHeaderPresentation: "control" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="cta" />,
         },
         {
           id: "contacts",
+          sectionHeaderPresentation: "control" as const,
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="contacts" />,
         },
-        pagesTab,
+        {
+          id: "pages",
+          sectionHeaderPresentation: "control" as const,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+        },
       ]
     : [];
 
@@ -318,6 +412,26 @@ export default function ContentModuleEditClient({
           content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="contacts" />,
         },
         pagesTab,
+      ]
+    : [];
+
+  const searchPlatformTabs = isSearchPlatform
+    ? [
+        ...(["content", "search", "presentation"] as const).map((section) => ({
+          id: section,
+          sectionHeaderPresentation: "control" as const,
+          content: (
+            <SearchPlatformModuleEditor
+              config={config as ReturnType<typeof asSearchPlatformConfig>}
+              section={section === "content" ? "text" : section}
+            />
+          ),
+        })),
+        {
+          id: "pages",
+          sectionHeaderPresentation: "control" as const,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+        },
       ]
     : [];
 
@@ -631,10 +745,24 @@ export default function ContentModuleEditClient({
           />
         ) : isHomeStory ? (
           <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeStoryTabs} activePanelContext={activePanelContext} />
+        ) : isAboutIntro ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={aboutIntroTabs} activePanelContext={activePanelContext} />
+        ) : isAboutIntroSingleImage ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={singleImageTabs} activePanelContext={activePanelContext} />
+        ) : isVisionGoals ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={visionGoalsTabs} activePanelContext={activePanelContext} />
+        ) : isHomeProjects ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeProjectsTabs} activePanelContext={activePanelContext} />
+        ) : editorKey === "topics-listing" ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={topicsListingTabs} activePanelContext={activePanelContext} />
+        ) : isHomeTrust ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeTrustTabs} activePanelContext={activePanelContext} />
         ) : isHomeContact ? (
           <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeContactTabs} activePanelContext={activePanelContext} />
         ) : isAboutCta ? (
           <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={aboutCtaTabs} activePanelContext={activePanelContext} />
+        ) : isSearchPlatform ? (
+          <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={searchPlatformTabs} activePanelContext={activePanelContext} />
         ) : (
           <ModuleEditorTabs
             moduleKind="content"
@@ -644,25 +772,7 @@ export default function ContentModuleEditClient({
               {
                 id: "content",
                 content:
-                  editorKey === "about-intro" ? (
-                    <AboutIntroModuleEditor
-                      config={config as ReturnType<typeof asAboutIntroConfig>}
-                      editorMode="about-intro"
-                    />
-                  ) : isAboutIntroSingleImage ? (
-                    <AboutIntroSingleImageModuleEditor
-                      config={config as ReturnType<typeof asAboutIntroSingleImageConfig>}
-                    />
-                  ) : editorKey === "vision-goals" ? (
-                    <VisionGoalsModuleEditor config={config as ReturnType<typeof asVisionGoalsConfig>} />
-                  ) : editorKey === "home-trust" ? (
-                    <AboutPrinciplesModuleEditor
-                      config={config as ReturnType<typeof asAboutPrinciplesConfig>}
-                      editorMode="home-trust"
-                    />
-                  ) : editorKey === "home-projects" ? (
-                    <HomeProjectsPlacementEditor config={config as ReturnType<typeof asHomeProjectsConfig>} />
-                  ) : editorKey === "about-principles" ? (
+                  editorKey === "about-principles" ? (
                     <AboutPrinciplesModuleEditor
                       config={config as ReturnType<typeof asAboutPrinciplesConfig>}
                       editorMode="about-principles"
@@ -679,19 +789,11 @@ export default function ContentModuleEditClient({
                     />
                   ) : editorKey === "projects-hub-map" ? (
                     <ProjectsHubMapModuleEditor config={config as ReturnType<typeof asProjectsHubMapConfig>} />
-                  ) : editorKey === "topics-listing" ? (
-                    <TopicsListingModuleEditor
-                      config={config as ReturnType<typeof asTopicsListingConfig>}
-                      categoryOptions={topicCategoryOptions}
-                    />
-                  ) : editorKey === "search-platform" ? (
-                    <SearchPlatformModuleEditor
-                      config={config as ReturnType<typeof asSearchPlatformConfig>}
-                    />
                   ) : (
                     <GenericContentModuleEditor
                       config={config as ReturnType<typeof asContentConfig>}
                       introPresentation={isGenericIntro}
+                      presentation="premium"
                     />
                   ),
               },

@@ -5,12 +5,38 @@ import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
 import { useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel, AdminMediaOriginalDimensions, adminMediaPresentationState } from "./AdminDeletedMediaNotice";
 
 import Image from "next/image";
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type ComponentProps } from "react";
 
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 import VenesiaModal from "../VenesiaModal";
+import AdminActionButton from "../ui/AdminActionButton";
+import { AdminDataGridActionIcon } from "../ui/AdminDataGrid";
 
+type AdminMediaImageActionAttributes = Omit<
+  ComponentProps<typeof AdminActionButton>,
+  "children" | "size" | "variant" | "className" | "href" | "form" | "type"
+> & { [attribute: `data-${string}`]: string | undefined };
 
+export function AdminMediaImageActions({
+  replace,
+  remove,
+}: {
+  replace: AdminMediaImageActionAttributes;
+  remove?: AdminMediaImageActionAttributes;
+}) {
+  return (
+    <div className="absolute bottom-3 left-3 flex gap-2 rounded-2xl bg-[#080B10]/95 p-1" data-admin-media-image-actions>
+      <AdminActionButton {...replace} size="icon" variant="gold">
+        <AdminDataGridActionIcon action="restore" size="md" />
+      </AdminActionButton>
+      {remove ? (
+        <AdminActionButton {...remove} size="icon" variant="danger">
+          <AdminDataGridActionIcon action="delete" size="md" />
+        </AdminActionButton>
+      ) : null}
+    </div>
+  );
+}
 
 type AdminMediaImageFieldProps = {
   name: string;
@@ -20,7 +46,7 @@ type AdminMediaImageFieldProps = {
   showGuidance?: boolean;
   showReferenceLabel?: boolean;
   browseFolder?: string;
-  variant?: "default" | "compact";
+  variant?: "default" | "compact" | "card";
   showLabel?: boolean;
   onValueChange?: (value: string) => void;
   compactAspectClassName?: string;
@@ -67,6 +93,7 @@ export default function AdminMediaImageField({
   const [prevDefaultAlt, setPrevDefaultAlt] = useState(defaultAlt);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [loadedDimensions, setLoadedDimensions] = useState<{ value: string; width: number; height: number } | null>(null);
   const referenceState = useAdminMediaReferenceState([value]);
   const presentation = adminMediaPresentationState(value, referenceState);
   const valueInputRef = useRef<HTMLInputElement>(null);
@@ -198,9 +225,64 @@ export default function AdminMediaImageField({
     );
   }
 
+  const cardPresentation = variant === "card";
+  const original = referenceState?.originals.find((item) => item.value === value
+    && Number.isFinite(item.width) && Number.isFinite(item.height)
+    && (item.width ?? 0) > 0 && (item.height ?? 0) > 0);
+  const dimensions = original?.width && original?.height
+    ? original
+    : loadedDimensions?.value === value ? loadedDimensions : null;
+  const aspectRatio = dimensions?.width && dimensions?.height
+    && Number.isFinite(dimensions.width) && Number.isFinite(dimensions.height)
+    && dimensions.width > 0 && dimensions.height > 0
+    ? dimensions.width / dimensions.height : 16 / 9;
+  const replaceLabel = presentation === "deleted" || presentation === "missing" ? "اختيار بديل" : "استبدال";
+  const selectedActions = cardPresentation ? (
+    <AdminMediaImageActions
+      replace={{
+        id: triggerId,
+        title: replaceLabel,
+        "aria-label": focusTargetId ? label : replaceLabel,
+        "aria-haspopup": "dialog",
+        "aria-expanded": pickerOpen,
+        "aria-describedby": ariaDescribedBy,
+        onClick: () => setPickerOpen(true),
+      }}
+      remove={allowRemove ? {
+        title: "إزالة",
+        "aria-label": "إزالة",
+        onClick: () => updateValue(""),
+      } : undefined}
+    />
+  ) : (
+    <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
+      <button
+        id={triggerId}
+        type="button"
+        aria-label={focusTargetId ? label : undefined}
+        aria-haspopup={focusTargetId ? "dialog" : undefined}
+        aria-expanded={focusTargetId ? pickerOpen : undefined}
+        aria-describedby={ariaDescribedBy}
+        onClick={() => setPickerOpen(true)}
+        className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-black/45 px-3 py-1.5 text-xs font-semibold text-[#F2D99B] backdrop-blur-sm hover:bg-[#D8B87A]/15"
+      >
+        {presentation === "deleted" || presentation === "missing" ? "اختيار بديل" : "استبدال"}
+      </button>
+      {allowRemove ? (
+        <button
+          type="button"
+          onClick={() => updateValue("")}
+          className="cursor-pointer rounded-lg border border-white/15 bg-black/45 px-3 py-1.5 text-xs text-white/70 backdrop-blur-sm hover:bg-white/10 hover:text-white"
+        >
+          إزالة
+        </button>
+      ) : null}
+    </div>
+  );
+
   return (
     <div
-      className="space-y-3"
+      className={cardPresentation ? "flex min-w-0 flex-1 flex-col gap-3" : "space-y-3"}
       data-admin-media-image-field={name}
       role={focusTargetId ? "group" : undefined}
       aria-invalid={focusTargetId ? ariaInvalid || undefined : undefined}
@@ -217,10 +299,14 @@ export default function AdminMediaImageField({
 
       {value ? (
         <div
-          className={`relative w-full max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
+          className={cardPresentation ? "flex w-full flex-1 flex-col items-center" : `relative w-full max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
           data-admin-media-image-card="selected"
         >
-          <div className="relative h-44">
+          <div
+            className={cardPresentation ? `relative w-full min-h-20 min-w-[min(100%,8rem)] max-h-[min(40vh,24rem)] shrink-0 overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}` : "relative h-44"}
+            style={cardPresentation ? { aspectRatio, maxWidth: `min(100%, calc(min(40vh, 24rem) * ${aspectRatio}))` } : undefined}
+            data-admin-media-image-frame
+          >
             <AdminMediaPreview value={value} state={referenceState} controlsOverlay>
               <button
                 type="button"
@@ -231,32 +317,13 @@ export default function AdminMediaImageField({
                 className="absolute inset-0 cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-[#D8B87A]"
                 data-admin-media-image-preview-trigger
               >
-                <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="(max-width: 416px) 100vw, 384px" />
+                <Image src={value} alt="" fill className={cardPresentation ? "object-contain" : "object-cover"} loading={previewLoading} onLoad={cardPresentation ? (event) => {
+                  const image = event.currentTarget;
+                  setLoadedDimensions({ value, width: image.naturalWidth, height: image.naturalHeight });
+                } : undefined} sizes={cardPresentation ? "(max-width: 767px) 100vw, 50vw" : "(max-width: 416px) 100vw, 384px"} />
               </button>
             </AdminMediaPreview>
-            <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
-              <button
-                id={triggerId}
-                type="button"
-                aria-label={focusTargetId ? label : undefined}
-                aria-haspopup={focusTargetId ? "dialog" : undefined}
-                aria-expanded={focusTargetId ? pickerOpen : undefined}
-                aria-describedby={ariaDescribedBy}
-                onClick={() => setPickerOpen(true)}
-                className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-black/45 px-3 py-1.5 text-xs font-semibold text-[#F2D99B] backdrop-blur-sm hover:bg-[#D8B87A]/15"
-              >
-                {presentation === "deleted" || presentation === "missing" ? "اختيار بديل" : "استبدال"}
-              </button>
-              {allowRemove ? (
-                <button
-                  type="button"
-                  onClick={() => updateValue("")}
-                  className="cursor-pointer rounded-lg border border-white/15 bg-black/45 px-3 py-1.5 text-xs text-white/70 backdrop-blur-sm hover:bg-white/10 hover:text-white"
-                >
-                  إزالة
-                </button>
-              ) : null}
-            </div>
+            {selectedActions}
           </div>
           {showReferenceLabel ? <div className="px-3 py-2"><AdminMediaReferenceLabel value={value} state={referenceState} /></div> : null}
         </div>
@@ -270,7 +337,7 @@ export default function AdminMediaImageField({
           aria-describedby={ariaDescribedBy}
           onClick={() => setPickerOpen(true)}
           data-admin-media-image-card="add"
-          className={`flex h-44 w-full max-w-sm cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"}`}
+          className={`flex w-full ${cardPresentation ? "aspect-video" : "h-44 max-w-sm"} cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"}`}
         >
           <span aria-hidden="true" className="text-2xl leading-none">+</span>
           <span>اختيار صورة</span>
@@ -296,6 +363,7 @@ export default function AdminMediaImageField({
       ) : null}
 
       <VenesiaModal
+        closeOnEscape
         open={previewOpen && presentation === "active"}
         onClose={() => setPreviewOpen(false)}
         title={`معاينة ${label}`}

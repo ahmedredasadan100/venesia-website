@@ -8,8 +8,11 @@ import { listAdminAuditLogs } from "../audit/list-admin-audit-logs";
 import type { AuditLogRecord } from "../audit/audit-types";
 import { requireAdminSession } from "../auth/require-admin-session";
 import { getMediaCatalogRuntimeState } from "../media-catalog/catalog";
+import { readUnavailableManagedValues } from "../media-catalog/deleted-reference-state";
 import { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION } from "../media-catalog/reference-providers";
-import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
+import { CMS_IMAGE_EXTENSION_SET, getExtension } from "../media-intelligence/cms-upload-policy";
+import { normalizeMediaFolder } from "../media-library-paths";
+import { parseConfiguredCmsImageUrl, resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
   buildAdminDashboardModel,
   parseDashboardReadModel,
@@ -57,12 +60,57 @@ function mapAuditEvent(event: AuditLogRecord): DashboardActivity {
   };
 }
 
+function dashboardImageSource(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    if (value.startsWith("/")) {
+      // Existing local Media paths only; reject URL escapes before filesystem reads.
+      const normalized = normalizeMediaFolder(value);
+      return value === `/${normalized}` && normalized.startsWith("images/") &&
+        CMS_IMAGE_EXTENSION_SET.has(getExtension(normalized)) ? value : null;
+    }
+    const url = new URL(value);
+    // Use one canonical reference for both identity and Catalog extraction;
+    // URL parsing must not silently repair controls, quotes or whitespace.
+    if (url.href !== value || url.username || url.password || url.search || url.hash) return null;
+    const identity = parseConfiguredCmsImageUrl(value);
+    return identity && CMS_IMAGE_EXTENSION_SET.has(getExtension(identity.objectPath))
+      ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveDashboardImages(model: DashboardReadModel): Promise<DashboardReadModel> {
+  // The RPC's existing six-topic/four-project windows bound Catalog work to one
+  // batch. Unexpected extra rows retain their data but cannot expand media reads.
+  const topics = model.recentTopics.map((row, index) => ({
+    ...row, image: index < 6 ? dashboardImageSource(row.image) : null,
+  }));
+  const projects = model.recentProjects.map((row, index) => ({
+    ...row, image: index < 4 ? dashboardImageSource(row.image) : null,
+  }));
+  const references = [...new Set([...topics, ...projects].flatMap(row => row.image ? [row.image] : []))];
+  let unavailable: Set<string>;
+  try {
+    unavailable = new Set(references.length ? await readUnavailableManagedValues(references) : []);
+  } catch (error) {
+    logError("Dashboard thumbnails unavailable", error, { source: "Media Catalog availability projection" });
+    unavailable = new Set(references);
+  }
+  return {
+    ...model,
+    recentTopics: topics.map(row => ({ ...row, image: row.image && !unavailable.has(row.image) ? row.image : null })),
+    recentProjects: projects.map(row => ({ ...row, image: row.image && !unavailable.has(row.image) ? row.image : null })),
+  };
+}
+
 async function readDashboardTruth(): Promise<DashboardSource<DashboardReadModel>> {
   const checkedAt = new Date().toISOString();
   const { data, error } = await getSupabaseAdmin().rpc("admin_dashboard_truth_v1");
   if (error) throw new Error(error.message);
 
-  const model = parseDashboardReadModel(data);
+  const model = await resolveDashboardImages(parseDashboardReadModel(data));
   const diagnostics = model.databaseDiagnostics;
   const rlsReady = Object.values(diagnostics.rls).every(Boolean);
   const provenanceReady =

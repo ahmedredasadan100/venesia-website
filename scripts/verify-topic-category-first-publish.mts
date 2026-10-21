@@ -186,7 +186,7 @@ try {
   );
   assert.match(
     categoriesColumns,
-    /row\.published_at\s*\?\s*formatAdminDateTime\(row\.published_at\)\s*:\s*"—"/,
+    /key:\s*"published_at",[^}]*?renderCell:\s*\(\{\s*row\s*\}\)\s*=>\s*\(\s*<AdminDataGridDateTimeCell\s+value=\{row\.published_at\}\s+fallbackTitle="—"\s+className="[^"]*"\s*\/>/,
     "the table renders only published_at with no created_at or updated_at fallback",
   );
   assert.doesNotMatch(

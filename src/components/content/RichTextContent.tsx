@@ -5,12 +5,14 @@ import {
   stripHtml,
 } from "../../lib/rich-text/html-utils";
 
+import { demoteArticleHeadingHierarchy } from "../../lib/rich-text/article-heading-semantics";
+
 export type RichTextContentProps = {
   value?: string | null;
   className?: string;
   /** rich = stored HTML; markdown = Article Markdown; plain = strip tags; auto = detect HTML */
   mode?: "rich" | "markdown" | "plain" | "auto";
-  /** Keep stored Article heading levels below the page's semantic H1. */
+  /** Opt into the existing semantic heading hierarchy for stored rich content. */
   demoteHeadings?: boolean;
 };
 
@@ -41,11 +43,12 @@ export default function RichTextContent({
   const useRichHtml = mode === "rich" || (mode === "auto" && isHtmlContent(raw));
 
   if (useRichHtml) {
+    const html = renderRichTextHtml(raw);
     return (
       <div
         className={`rich-text-content ${className}`.trim()}
         dir="rtl"
-        dangerouslySetInnerHTML={{ __html: renderRichTextHtml(raw) }}
+        dangerouslySetInnerHTML={{ __html: demoteHeadings ? demoteArticleHeadingHierarchy(html) : html }}
       />
     );
   }

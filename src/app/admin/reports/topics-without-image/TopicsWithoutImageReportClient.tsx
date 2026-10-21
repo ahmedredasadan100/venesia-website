@@ -46,6 +46,7 @@ import {
   type TopicsWithoutImageSortField,
 } from "../../../../lib/admin/media-catalog/topics-without-image-entity-list-contract";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
+import { AdminDataGridDateTimeCell } from "../../../../components/admin/ui/AdminDataGrid";
 import { TOPICS_WITHOUT_IMAGE_DEFAULT_COLUMN_KEYS } from "../../../../lib/admin/media-catalog/topics-without-image-list-config";
 
 import { saveTopicsWithoutImageColumnPreferences } from "./column-preferences";
@@ -249,9 +250,10 @@ function createReportColumns(): AdminEntityColumnDef<
       minWidth: 190,
       width: 190,
       renderCell: ({ row }) => (
-        <span className="block text-sm text-white/58">
-          {formatAdminDateTime(row.updatedAt)}
-        </span>
+        <AdminDataGridDateTimeCell
+          value={row.updatedAt}
+          className="block text-sm text-white/58"
+        />
       ),
     },
     {

@@ -43,6 +43,7 @@ import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
 import AdminListboxSelect from "../ui/AdminListboxSelect";
 import AdminConfirmDialog from "../ui/AdminConfirmDialog";
 import AdminTablePagination from "../ui/AdminTablePagination";
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 import MediaUsagePanel from "../media-intelligence/MediaUsagePanel";
 import MediaNoImage from "./MediaNoImage";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
@@ -810,6 +811,11 @@ export default function MediaLibraryCore({
               debounceMs: 350,
             }}
             filters={pickerKind ? [] : MEDIA_LIBRARY_FILTERS}
+            filterPanelPresentation={mode === "manage" && !pickerKind ? {
+              variant: "premium",
+              fullWidthFilterIds: ["kind"],
+              fieldIcons: { kind: <AdminModuleTabIcon name="media" /> },
+            } : undefined}
             values={{ kind }}
             contextOverrideActive={selectedAssets.length > 0}
             contextOverride={

@@ -1,6 +1,7 @@
 import {loadCoreResidualSearchContract,coreResidualSearchQueries,projectCoreResidualSearchRows,assertCoreResidualSearchFragments,bindCoreResidualSearchCells,assertCoreIntegrationSearchNative} from './admin-core-residual-search.mjs';
 import {observeCoreScrollbarAdoption} from "./admin-core-rendered-adoption.mjs";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
+import { assertCoreDashboardEntry } from './admin-core-auth-entry-journeys.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
@@ -227,7 +228,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
     });
     await run('readonly-dashboard-recent-owner-information-and-native-projection', [], async () => {
       const native = await checkpoint('dashboard'); assert.ok(Array.isArray(native.value) && native.value.length > 0);
-      await navigate('/admin'); await expect(main.getByRole('heading', { level: 1, name: /^Dashboard (جاهزة|جزئية|غير متاحة)$/ })).toBeVisible({ timeout: 60_000 });
+      await navigate('/admin'); await assertCoreDashboardEntry(page);
       const region = main.getByRole('region', { name: 'آخر المحتويات', exact: true }); await expect(region).toBeVisible();
       const ids = await region.locator('[data-admin-row-action="more"][data-admin-entity-id]').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('data-admin-entity-id'))));
       assert.deepEqual(ids, native.value.map(row => row.id));

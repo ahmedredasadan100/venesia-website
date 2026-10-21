@@ -2,7 +2,7 @@
 
 import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
-import { AdminFormListboxSelect, AdminFormSwitch } from "../ui";
+import { AdminCard, AdminFormControlHeader, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
 import {
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -11,7 +11,6 @@ import {
   ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
-  ModuleEditorSection,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
@@ -70,12 +69,13 @@ export default function BreadcrumbModuleEditClient({
               {
                 id: "content",
                 content: (
-                  <ModuleEditorSection>
-                    <ModuleEditorFieldGrid className="items-end">
+                  <div className="space-y-6">
+                    <ModuleEditorFieldGrid>
                       <ModuleEditorField nature="standard" span={4}>
+                        <AdminCard presentation="premium" className="h-full p-3">
                         <AdminFormListboxSelect
                           name="source"
-                          label="مصدر الرابط"
+                          label={<AdminFormControlHeader title="مصدر الرابط" />}
                           defaultValue={config.source ?? "navigation"}
                           options={[
                             { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
@@ -83,10 +83,12 @@ export default function BreadcrumbModuleEditClient({
                           ]}
                           sizing="full"
                         />
+                        </AdminCard>
                       </ModuleEditorField>
                       <ModuleEditorField nature="short-text" span={4}>
-                        <label className="block space-y-2">
-                          <span className="text-sm font-medium text-white/70">تسمية الرابط (اختياري)</span>
+                        <AdminCard presentation="premium" className="h-full p-3">
+                        <label className="block space-y-3">
+                          <AdminFormControlHeader title="تسمية الرابط (اختياري)" />
                           <input
                             name="current_label_override"
                             defaultValue={config.currentLabelOverride ?? ""}
@@ -94,25 +96,28 @@ export default function BreadcrumbModuleEditClient({
                             className={fieldClassName()}
                           />
                         </label>
+                        </AdminCard>
                       </ModuleEditorField>
                       <ModuleEditorField nature="binary-state" span={4}>
-                        <div className="flex h-full items-end pb-1.5">
+                        <AdminCard presentation="premium" className="h-full p-3">
                           <AdminFormSwitch
                             name="show_home"
-                            label="إظهار الرئيسية"
+                            label={<AdminFormControlHeader title="إظهار الرئيسية" />}
                             value="true"
                             defaultChecked={config.showHome !== false}
+                            embedded
                           />
-                        </div>
+                        </AdminCard>
                       </ModuleEditorField>
                     </ModuleEditorFieldGrid>
                     <BreadcrumbManualItemsField items={config.manualItems ?? []} />
-                  </ModuleEditorSection>
+                  </div>
                 ),
               },
               {
                 id: "pages",
-                content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
+                sectionHeaderPresentation: "control",
+                content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
               },
             ]}
           />

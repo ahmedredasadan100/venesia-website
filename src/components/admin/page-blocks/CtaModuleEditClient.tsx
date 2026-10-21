@@ -2,7 +2,9 @@
 
 import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
-import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
+import AdminMediaImageField from "../media/AdminMediaImageField";
+import { AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../ui";
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 import {
   ModuleEditorFeedback,
   ModuleEditorHeader,
@@ -11,7 +13,6 @@ import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorSaveArea,
-  ModuleEditorSection,
   ModuleEditorTabs,
   ModuleEditorVisibilityAlignRow,
 } from "./ModuleEditorPresentation";
@@ -72,18 +73,7 @@ export default function CtaModuleEditClient({
             name={block.name}
             status={block.status}
             inputClassName={fieldClassName("h-11")}
-          >
-            <AdminFormListboxSelect
-              name="background_style"
-              label="نمط الخلفية"
-              defaultValue={config.backgroundStyle ?? "dark"}
-              options={[
-                { value: "dark", label: "داكن" },
-                { value: "gold", label: "ذهبي" },
-                { value: "gradient", label: "متدرّج" },
-              ]}
-            />
-          </ModuleEditorIdentitySection>
+          />
 
           <ModuleEditorTabs
             moduleKind="cta"
@@ -92,10 +82,11 @@ export default function CtaModuleEditClient({
               {
                 id: "content",
                 content: (
-                  <ModuleEditorSection>
-                    <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="short-text" span={6}>
+                  <ModuleEditorFieldGrid>
+                    <ModuleEditorField nature="short-text" span={6}>
                       <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
                         label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
                         showName="show_eyebrow"
                         boldName="eyebrow_bold"
@@ -111,9 +102,11 @@ export default function CtaModuleEditClient({
                           className={fieldClassName("h-11")}
                         />
                       </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={6}>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={6}>
                       <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
                         label="العنوان"
                         showName="show_title"
                         boldName="title_bold"
@@ -129,9 +122,11 @@ export default function CtaModuleEditClient({
                           className={fieldClassName("h-11")}
                         />
                       </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={6}>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={6}>
                       <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
                         label={MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}
                         showName="show_description"
                         boldName="description_bold"
@@ -147,9 +142,11 @@ export default function CtaModuleEditClient({
                           className={fieldClassName("h-11")}
                         />
                       </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={6}>
+                    </ModuleEditorField>
+                    <ModuleEditorField nature="short-text" span={6}>
                       <ModuleEditorVisibilityAlignRow
+                        presentation="premium"
+                        icon={<AdminModuleTabIcon name="content" />}
                         label="النص المميز"
                         showName="show_highlight"
                         boldName="highlight_bold"
@@ -165,21 +162,46 @@ export default function CtaModuleEditClient({
                           className={fieldClassName("h-11")}
                         />
                       </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                    <div className="mt-4">
-                    <ModuleEditorVisibilityAlignRow
-                      label="تنسيق الأزرار"
-                      showName="show_cta"
-                      boldName="cta_bold"
-                      alignmentName="cta_alignment"
-                      showDefault={format("cta").visible}
-                      boldDefault={format("cta").bold}
-                      alignmentDefault={format("cta").alignment}
-                      controlsPlacement="cards"
-                      presentation="plain"
-                    >
-                      <div>
+                    </ModuleEditorField>
+                  </ModuleEditorFieldGrid>
+                ),
+              },
+              {
+                id: "images",
+                sectionHeaderPresentation: "control",
+                content: (
+                  <AdminFormGrid columns={1}>
+                    <AdminCard presentation="premium" className="p-3">
+                      <AdminMediaImageField
+                        name="background_image"
+                        label="صورة الخلفية"
+                        defaultValue={config.backgroundImage ?? ""}
+                        variant="card"
+                        showLabel={false}
+                        showGuidance={false}
+                      />
+                    </AdminCard>
+                  </AdminFormGrid>
+                ),
+              },
+              {
+                id: "cta",
+                content: (
+                  <ModuleEditorVisibilityAlignRow
+                    label="تنسيق الأزرار"
+                    icon={<AdminModuleTabIcon name="section" />}
+                    presentation="premium"
+                    showName="show_cta"
+                    boldName="cta_bold"
+                    alignmentName="cta_alignment"
+                    showDefault={format("cta").visible}
+                    preserveUnsetBold
+                    boldDefault={config.ctaBold}
+                    alignmentDefault={format("cta").alignment}
+                  >
+                    <AdminFormGrid columns={2}>
+                      <AdminCard presentation="premium" className="h-full space-y-3 p-3">
+                        <AdminFormControlHeader title="الزر الأساسي" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
                         <AdminFormGrid columns={1}>
                           <label className="min-w-0">
                             <span className="sr-only">نص زر الإجراء الأساسي</span>
@@ -197,40 +219,71 @@ export default function CtaModuleEditClient({
                             defaultValue={linkDefaultFromContainer(config.primaryCta as Record<string, unknown>)}
                             showAnchor
                             presentation="inline"
+                            actionPresentation="bare"
                             clearLinkLabel="مسح"
                           />
                         </AdminFormGrid>
-                      </div>
-                      <div>
-                        <AdminFormGrid columns={1}>
-                          <label className="min-w-0">
-                            <span className="sr-only">نص زر الإجراء الثانوي</span>
-                            <input
-                              name="secondary_cta_label"
-                              defaultValue={config.secondaryCta?.label ?? ""}
-                              aria-label="نص زر الإجراء الثانوي"
-                              placeholder="نص الزر الثانوي"
-                              className={fieldClassName("h-11 min-w-0")}
+                        </AdminCard>
+                        <AdminCard presentation="premium" className="h-full space-y-3 p-3">
+                          <AdminFormControlHeader title="الزر الثانوي" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+                          <AdminFormGrid columns={1}>
+                            <label className="min-w-0">
+                              <span className="sr-only">نص زر الإجراء الثانوي</span>
+                              <input
+                                name="secondary_cta_label"
+                                defaultValue={config.secondaryCta?.label ?? ""}
+                                aria-label="نص زر الإجراء الثانوي"
+                                placeholder="نص الزر الثانوي"
+                                className={fieldClassName("h-11 min-w-0")}
+                              />
+                            </label>
+                            <AdminLinkField
+                              prefix="secondary_cta"
+                              label="رابط زر الإجراء الثانوي"
+                              defaultValue={linkDefaultFromContainer(config.secondaryCta as Record<string, unknown>)}
+                              showAnchor
+                              presentation="inline"
+                              actionPresentation="bare"
+                              clearLinkLabel="مسح"
                             />
-                          </label>
-                          <AdminLinkField
-                            prefix="secondary_cta"
-                            label="رابط زر الإجراء الثانوي"
-                            defaultValue={linkDefaultFromContainer(config.secondaryCta as Record<string, unknown>)}
-                            showAnchor
-                            presentation="inline"
-                            clearLinkLabel="مسح"
-                          />
-                        </AdminFormGrid>
-                      </div>
-                    </ModuleEditorVisibilityAlignRow>
-                    </div>
-                  </ModuleEditorSection>
+                          </AdminFormGrid>
+                        </AdminCard>
+                    </AdminFormGrid>
+                  </ModuleEditorVisibilityAlignRow>
+                ),
+              },
+              {
+                id: "presentation",
+                sectionHeaderPresentation: "control",
+                content: (
+                  <AdminFormGrid columns={2}>
+                    <AdminCard presentation="premium" className="p-3">
+                      <AdminFormListboxSelect
+                        name="background_style"
+                        label="نمط الخلفية"
+                        defaultValue={config.backgroundStyle ?? "dark"}
+                        options={[
+                          { value: "dark", label: "داكن" },
+                          { value: "gold", label: "ذهبي" },
+                          { value: "gradient", label: "متدرّج" },
+                        ]}
+                        sizing="full"
+                      />
+                    </AdminCard>
+                  </AdminFormGrid>
                 ),
               },
               {
                 id: "pages",
-                content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
+                sectionHeaderPresentation: "control",
+                content: (
+                  <ModuleEditorPagesTab
+                    moduleName={block.name}
+                    assignmentContext={assignmentContext}
+                    presentation="premium"
+                    showUsageBanner={false}
+                  />
+                ),
               },
             ]}
           />

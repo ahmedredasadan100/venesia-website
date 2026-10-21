@@ -56,7 +56,7 @@ function buildCtaConfig(formData: FormData): CtaBlockConfig {
       { field: "title", defaults: { bold: true } },
       { field: "highlight", defaults: { bold: true } },
       { field: "description" },
-      { field: "cta", bold: false },
+      { field: "cta", bold: formData.has("cta_bold") },
     ]),
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),

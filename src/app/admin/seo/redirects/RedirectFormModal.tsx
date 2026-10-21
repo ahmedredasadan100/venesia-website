@@ -64,6 +64,7 @@ export default function RedirectFormModal({
 
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title={mode === "create" ? "إضافة تحويل" : "تعديل التحويل"}
       description="المسارات الداخلية تبدأ بـ /. يمكن استخدام عنوان URL كامل للوجهة الخارجية عند الحاجة."

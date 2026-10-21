@@ -11,6 +11,9 @@ import {
   AdminFormError,
   useOptionalAdminFormRuntime,
 } from "../ui/AdminFormRuntime";
+import AdminActionButton from "../ui/AdminActionButton";
+import { AdminDataGridActionIcon } from "../ui/AdminDataGrid";
+import { AdminMediaImageActions } from "./AdminMediaImageField";
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 
 
@@ -36,6 +39,7 @@ type AdminMediaGalleryFieldBaseProps = {
   browseFolder?: string;
   density?: "default" | "compact";
   selectionMode?: "single" | "multiple";
+  actionPresentation?: "default" | "bare" | "card";
 };
 
 type AdminMediaGalleryPathsProps = AdminMediaGalleryFieldBaseProps & {
@@ -117,6 +121,7 @@ export default function AdminMediaGalleryField(
     browseFolder = "images",
     density = "default",
     selectionMode = "single",
+    actionPresentation = "default",
   } = props;
   const itemsMode = props.valueMode === "items";
   const defaultKey = getDefaultKey(props);
@@ -344,21 +349,23 @@ export default function AdminMediaGalleryField(
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => removeAt(index)}
-              className="absolute right-2 top-2 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white/80 hover:text-white"
-              title="إزالة الصورة"
-              aria-label={`إزالة الصورة ${index + 1} من ${label}`}
-              data-admin-media-gallery-action="remove"
-            >
-              ×
-            </button>
+            {actionPresentation === "default" ? (
+              <button
+                type="button"
+                onClick={() => removeAt(index)}
+                className="absolute right-2 top-2 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white/80 hover:text-white"
+                title="إزالة الصورة"
+                aria-label={`إزالة الصورة ${index + 1} من ${label}`}
+                data-admin-media-gallery-action="remove"
+              >
+                ×
+              </button>
+            ) : null}
 
             <div
               className="relative aspect-[4/3]"
             >
-              <AdminMediaPreview value={item.url} state={referenceState}>
+              <AdminMediaPreview value={item.url} state={referenceState} controlsOverlay={actionPresentation === "card"}>
                 <Image
                   src={item.url}
                   alt={itemsMode ? item.alt : ""}
@@ -367,33 +374,97 @@ export default function AdminMediaGalleryField(
                   sizes="(max-width: 768px) 100vw, 50vw"
                 />
               </AdminMediaPreview>
+              {actionPresentation === "card" ? (
+                <AdminMediaImageActions
+                  replace={{
+                    id: itemsMode && index === 0 ? props.focusTargetId : undefined,
+                    title: ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال",
+                    "aria-label": ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال",
+                    "aria-haspopup": "dialog",
+                    "aria-expanded": pickerOpen && replaceIndex === index,
+                    "aria-describedby": itemsMode && index === 0 && hasUrlError ? `${props.name}-error` : undefined,
+                    onClick: () => openReplace(index),
+                    "data-admin-media-gallery-action": "replace",
+                  }}
+                  remove={{
+                    title: "إزالة الصورة",
+                    "aria-label": `إزالة الصورة ${index + 1} من ${label}`,
+                    onClick: () => removeAt(index),
+                    "data-admin-media-gallery-action": "remove",
+                  }}
+                />
+              ) : null}
             </div>
 
             <div className="space-y-2 px-3 py-2">
               <AdminMediaOriginalDimensions value={item.url} state={referenceState} />
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              {showReferenceLabel || actionPresentation !== "card" ? <div className="flex flex-wrap items-center justify-between gap-2">
                 {showReferenceLabel ? <div className="min-w-0 flex-1"><AdminMediaReferenceLabel value={item.url} state={referenceState} /></div> : null}
-                <button
-                  id={
-                    itemsMode && index === 0
-                      ? props.focusTargetId
-                      : undefined
-                  }
-                  type="button"
-                  onClick={() => openReplace(index)}
-                  aria-haspopup="dialog"
-                  aria-expanded={pickerOpen && replaceIndex === index}
-                  aria-describedby={
-                    itemsMode && index === 0 && hasUrlError
-                      ? `${props.name}-error`
-                      : undefined
-                  }
-                  className="cursor-pointer shrink-0 rounded-lg border border-[#D8B87A]/30 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10"
-                  data-admin-media-gallery-action="replace"
-                >
-                  {["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال"}
-                </button>
-              </div>
+                {actionPresentation === "card" ? null : actionPresentation === "bare" ? (
+                  <div
+                    className="inline-flex shrink-0 items-center gap-1"
+                    data-admin-media-gallery-actions="bare"
+                  >
+                    <AdminActionButton
+                      id={itemsMode && index === 0 ? props.focusTargetId : undefined}
+                      onClick={() => openReplace(index)}
+                      variant="gold-ghost"
+                      size="icon"
+                      title={
+                        ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState))
+                          ? "اختيار بديل"
+                          : "استبدال"
+                      }
+                      aria-label={
+                        ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState))
+                          ? "اختيار بديل"
+                          : "استبدال"
+                      }
+                      aria-haspopup="dialog"
+                      aria-expanded={pickerOpen && replaceIndex === index}
+                      aria-describedby={
+                        itemsMode && index === 0 && hasUrlError
+                          ? `${props.name}-error`
+                          : undefined
+                      }
+                      data-admin-media-gallery-action="replace"
+                    >
+                      <AdminDataGridActionIcon action="copy-link" size="lg" />
+                    </AdminActionButton>
+                    <AdminActionButton
+                      onClick={() => removeAt(index)}
+                      variant="danger-ghost"
+                      size="icon"
+                      title="إزالة الصورة"
+                      aria-label={`إزالة الصورة ${index + 1} من ${label}`}
+                      data-admin-media-gallery-action="remove"
+                    >
+                      <AdminDataGridActionIcon action="delete" size="lg" />
+                    </AdminActionButton>
+                  </div>
+                ) : (
+                  <button
+                    id={
+                      itemsMode && index === 0
+                        ? props.focusTargetId
+                        : undefined
+                    }
+                    type="button"
+                    onClick={() => openReplace(index)}
+                    aria-haspopup="dialog"
+                    aria-expanded={pickerOpen && replaceIndex === index}
+                    aria-describedby={
+                      itemsMode && index === 0 && hasUrlError
+                        ? `${props.name}-error`
+                        : undefined
+                    }
+                    className="cursor-pointer shrink-0 rounded-lg border border-[#D8B87A]/30 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10"
+                    data-admin-media-gallery-action="replace"
+                  >
+                    {["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال"}
+                  </button>
+                )}
+              </div> : null}
 
 
               {itemsMode ? (

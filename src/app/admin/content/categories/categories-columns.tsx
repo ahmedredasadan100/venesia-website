@@ -6,7 +6,6 @@ import { adminFormEditHref } from "../../../../lib/admin/form-runtime";
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
-import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { CategoryListRow } from "../../../../lib/admin/content/load-categories-list";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import {
@@ -15,6 +14,7 @@ import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  AdminDataGridDateTimeCell,
   getAdminDataGridHierarchyPrimaryColumnWidth,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import CategoryRowActions from "./CategoryRowActions";
@@ -297,10 +297,13 @@ export function createCategoryColumns(
       sortKey: "published_at",
       minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
-      renderCell: ({ row }) =>
-        singleLine(
-          row.published_at ? formatAdminDateTime(row.published_at) : "—",
-        ),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.published_at}
+          fallbackTitle="—"
+          className="block text-sm text-white/68"
+        />
+      ),
     },
     {
       key: "created_at",
@@ -312,12 +315,10 @@ export function createCategoryColumns(
       minWidth: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       width: ADMIN_DATA_GRID_DATE_TIME_COLUMN_WIDTH,
       renderCell: ({ row }) => (
-        <span
-          dir="ltr"
+        <AdminDataGridDateTimeCell
+          value={row.created_at}
           className="block whitespace-nowrap font-en text-sm tabular-nums text-white/68"
-        >
-          {row.created_at ? formatAdminDateTime(row.created_at) : "—"}
-        </span>
+        />
       ),
     },
     {
@@ -329,10 +330,13 @@ export function createCategoryColumns(
       sortKey: "updated_at",
       minWidth: 140,
       width: 150,
-      renderCell: ({ row }) =>
-        singleLine(
-          row.updated_at ? formatAdminDateTime(row.updated_at) : "—",
-        ),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.updated_at}
+          fallbackTitle="—"
+          className="block text-sm text-white/68"
+        />
+      ),
     },
     {
       key: "actions",

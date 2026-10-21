@@ -51,12 +51,13 @@ export async function updateMediaHubModule(formData: FormData) {
   const sectionKey = parseMediaHubSectionKey(
     cleanText(formData.get("section_key")),
   );
-  if (sectionKey === "featured") {
-    throw new Error("المحتوى المميز يُدار من موديول Featured المستقل.");
-  }
   const dataSource = cleanText(formData.get("data_source")) || "topics";
   const placementInput = cleanText(formData.get("placement"));
   const placement = placementInput === "listing" ? "listing" : "hub";
+  // News listings retain the featured section key; only non-listing Featured moved owners.
+  if (sectionKey === "featured" && placement !== "listing") {
+    throw new Error("المحتوى المميز يُدار من موديول Featured المستقل.");
+  }
   const config = buildMediaHubModuleConfig(
     sectionKey,
     dataSource,

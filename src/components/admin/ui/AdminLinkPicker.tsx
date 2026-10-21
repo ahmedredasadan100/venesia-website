@@ -726,6 +726,7 @@ export default function AdminLinkPicker({
 
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title="اختيار رابط"
       description="اختر نوع المورد ثم العنصر — Browse CMS Resources."

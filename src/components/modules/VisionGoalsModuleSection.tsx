@@ -1,5 +1,6 @@
 import { EDITORIAL_IMAGE_GEOMETRY } from "../../lib/page-blocks/configs";
 import Image from "next/image";
+import RichTextContent from "../content/RichTextContent";
 import type { VisionGoalsContent, VisionGoalsItem } from "./vision-goals-mappers";
 import { pageBlockTextAlignClass, pageBlockTextPlacementClass } from "../../lib/page-blocks/configs";
 
@@ -76,7 +77,7 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
   if (!showImage && !showCopy) return null;
 
   return (
-    <section className="relative border-y border-white/[0.05] py-10 @xl/slot-module:py-12">
+    <section className="relative border-y border-white/[0.05] py-10 @xl/slot-module:py-12" dir="rtl">
       <div className="mx-auto max-w-7xl px-6">
         <div
           className={
@@ -123,11 +124,18 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
                 </h2>
               ) : null}
 
-              {introFormat.visible ? content.intro.map((paragraph) =>
+              {introFormat.visible && content.introContentFormat === "markdown" ? (
+                <RichTextContent
+                  value={content.intro.join("\n\n")}
+                  mode="markdown"
+                  demoteHeadings
+                  className={`article-rich-text mt-6 first:mt-0 ${pageBlockTextAlignClass(introFormat.alignment, "container")} ${introFormat.bold ? "font-bold" : "font-normal"}`}
+                />
+              ) : introFormat.visible ? content.intro.map((paragraph) =>
                 paragraph.trim() ? (
                   <p
                     key={paragraph}
-                    className={`mt-6 text-[15px] leading-8 text-white/70 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(introFormat.alignment)} ${introFormat.bold ? "font-bold" : "font-normal"}`}
+                    className={`mt-6 text-[15px] leading-8 text-white/70 first:mt-0 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(introFormat.alignment)} ${introFormat.bold ? "font-bold" : "font-normal"}`}
                   >
                     {paragraph}
                   </p>

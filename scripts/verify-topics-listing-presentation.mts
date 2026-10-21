@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -346,10 +347,23 @@ check(
     }),
 );
 
-const editorFieldNames = Array.from(
-  collectionEditor.matchAll(/name="([^"]+)"/gu),
-  (match) => match[1],
-);
+function namedCollectionFields(source: string) {
+  const tree = ts.createSourceFile("collection.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const names: string[] = [];
+  function visit(node: ts.Node) {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        ["input", "select", "textarea", "AdminFormListboxSelect"].includes(node.tagName.getText(tree))) {
+      const name = node.attributes.properties.find((prop): prop is ts.JsxAttribute =>
+        ts.isJsxAttribute(prop) && prop.name.getText(tree) === "name");
+      if (name?.initializer && ts.isStringLiteral(name.initializer)) names.push(name.initializer.text);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  return names;
+}
+assert.deepEqual(namedCollectionFields('<><AdminModuleTabIcon name="media"/><input name="unexpected_field"/><AdminFormListboxSelect name="presentation"/></>'), ["unexpected_field", "presentation"]);
+const editorFieldNames = namedCollectionFields(collectionEditor);
 check(
   "Collection is the first editor control before Presentation and Display",
   collectionEditor.indexOf("name={selection.name}") <
@@ -380,8 +394,11 @@ check(
     !topicsEditor.includes('value: "topics"'),
 );
 check(
-  "Collection editor uses standard sections and keeps its controls in a fixed four-column Admin card grid",
-  collectionEditor.match(/<ModuleEditorSection(?:\s|>)/gu)?.length === 2 &&
+  "Collection editor preserves standard defaults and four-column controls with opt-in shared premium surfaces",
+  collectionEditor.match(/const Section = premium \? AdminCard : ModuleEditorSection/gu)?.length === 2 &&
+    collectionEditor.match(/surfacePresentation = "default"/gu)?.length === 2 &&
+    collectionEditor.includes('const ControlCard = premium ? AdminCard : "div"') &&
+    topicsEditor.includes('surfacePresentation="premium"') &&
     collectionEditor.includes('className="space-y-6"') &&
     collectionEditor.includes("<ModuleEditorSectionHeading") &&
     collectionEditor.includes("<AdminFormGrid columns={4}") &&

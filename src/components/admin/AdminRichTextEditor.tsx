@@ -38,6 +38,8 @@ type AdminRichTextEditorProps = {
   value?: string;
   placeholder?: string;
   minHeight?: number;
+  /** Suppress the visible caption when an enclosing shared field header owns it. */
+  showLabel?: boolean;
   maxHeight?: number;
   /** full = all tools; minimal = Bold (+ optional text align); none = content input only. */
   toolbarMode?: "full" | "minimal" | "none";
@@ -49,6 +51,13 @@ type AdminRichTextEditorProps = {
   storageFormat?: "html" | "markdown";
   /** Enables the Article block structure while retaining the same TipTap editor engine. */
   enableArticleStructure?: boolean;
+  /** Opt in when an HTML field previously inherited formatting from separate saved fields. */
+  legacyHtmlFormatting?: {
+    boldName: string;
+    bold: boolean;
+    alignmentName: string;
+    alignment: AdminTextAlignment;
+  };
   /** Locks editor input and toolbar commands without removing its submitted value. */
   readOnly?: boolean;
   onValueChange?: (value: string) => void;
@@ -97,6 +106,7 @@ export default function AdminRichTextEditor({
   value,
   placeholder = "اكتب المحتوى هنا...",
   minHeight = 220,
+  showLabel = true,
   maxHeight,
   toolbarMode = "full",
   enableTextAlign = false,
@@ -104,6 +114,7 @@ export default function AdminRichTextEditor({
   appearance = "dark",
   storageFormat = "html",
   enableArticleStructure = false,
+  legacyHtmlFormatting,
   readOnly = false,
   onValueChange,
 }: AdminRichTextEditorProps) {
@@ -139,12 +150,18 @@ export default function AdminRichTextEditor({
         : uncontrolledValue,
     [controlled, storageFormat, uncontrolledValue, value],
   );
+  const legacyFormatting = storageFormat === "html" ? legacyHtmlFormatting : undefined;
+  const legacySource = JSON.stringify([normalizedDefaultValue, legacyFormatting?.bold, legacyFormatting?.alignment]);
+  const [adoptedLegacySource, setAdoptedLegacySource] = useState<string | null>(null);
+  const legacyBold = Boolean(legacyFormatting?.bold && adoptedLegacySource !== legacySource);
+  const legacyAlignment = legacyFormatting?.alignment;
+  // Project inherited bold through TipTap's parser, but preserve the stored value until an edit.
   const projectedContent = useMemo(
     () =>
       storageFormat === "markdown"
         ? markdownToRichTextHtml(canonicalValue)
-        : canonicalValue,
-    [canonicalValue, storageFormat],
+        : legacyBold && canonicalValue ? `<strong>${canonicalValue}</strong>` : canonicalValue,
+    [canonicalValue, legacyBold, storageFormat],
   );
   const [linkEditorOpen, setLinkEditorOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -196,7 +213,7 @@ export default function AdminRichTextEditor({
             TextAlign.configure({
               types: ["paragraph"],
               alignments: ["left", "center", "right", "justify"],
-              defaultAlignment: "right",
+              defaultAlignment: legacyAlignment ?? "right",
             }),
           ]
         : []),
@@ -208,10 +225,14 @@ export default function AdminRichTextEditor({
         id: `${name}-editor`,
         class: "admin-rich-text-content focus:outline-none",
         dir: "rtl",
+        ...(legacyAlignment ? { style: `text-align: ${legacyAlignment}` } : {}),
         role: "textbox",
         "aria-label": label,
         "aria-invalid": hasError ? "true" : "false",
       },
+    },
+    onCreate: ({ editor: currentEditor }) => {
+      if (legacyBold && currentEditor.isEmpty) currentEditor.commands.setMark("bold");
     },
     onUpdate: ({ editor: currentEditor }) => {
       if (!hasUserInteractedRef.current) return;
@@ -219,7 +240,9 @@ export default function AdminRichTextEditor({
       const nextValue = storageFormat === "markdown"
         ? richTextHtmlToMarkdown(nextHtml)
         : nextHtml;
-      if (nextValue === currentValueRef.current) return;
+      if (nextValue === currentValueRef.current && !legacyBold) return;
+      // Once edited, HTML owns the bold marks; keeping the outer flag would make unbold impossible.
+      if (legacyFormatting) setAdoptedLegacySource(legacySource);
       currentValueRef.current = nextValue;
       if (!controlledRef.current) setUncontrolledValue(nextValue);
       onValueChangeRef.current?.(nextValue);
@@ -228,7 +251,7 @@ export default function AdminRichTextEditor({
     onFocus: () => {
       hasUserInteractedRef.current = true;
     },
-  }, [enableArticleStructure, isMinimal, storageFormat, withTextAlign]);
+  }, [enableArticleStructure, isMinimal, storageFormat, withTextAlign, legacyAlignment, legacyFormatting?.bold]);
 
   useEffect(() => {
     if (!editor) return;
@@ -248,13 +271,14 @@ export default function AdminRichTextEditor({
           id: `${name}-editor`,
           class: "admin-rich-text-content focus:outline-none",
           dir: "rtl",
+          ...(legacyAlignment ? { style: `text-align: ${legacyAlignment}` } : {}),
           role: "textbox",
           "aria-label": label,
           "aria-invalid": hasError ? "true" : "false",
         },
       },
     });
-  }, [editor, hasError, label, name]);
+  }, [editor, hasError, label, name, legacyAlignment]);
 
   useEffect(() => {
     editor?.setEditable(!editorReadOnly);
@@ -456,7 +480,14 @@ export default function AdminRichTextEditor({
         data-admin-form-derived-projection="content"
       />
 
-      {label && toolbarMode !== "none" ? (
+      {legacyFormatting ? (
+        <>
+          <input type="hidden" name={legacyFormatting.boldName} value={legacyBold ? "true" : "false"} readOnly />
+          <input type="hidden" name={legacyFormatting.alignmentName} value={legacyFormatting.alignment} readOnly />
+        </>
+      ) : null}
+
+      {showLabel && label && toolbarMode !== "none" ? (
         <span className={`text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/70"}`}>
           {label}
         </span>
@@ -544,6 +575,12 @@ export default function AdminRichTextEditor({
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content ol {
           margin: 0 0 18px;
           padding-right: 24px;
+        }
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content ul {
+          list-style-type: disc;
+        }
+        [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content ol {
+          list-style-type: decimal;
         }
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-content li {
           margin-bottom: 6px;

@@ -5,17 +5,18 @@ import path from "node:path";
 import ts from "typescript";
 
 /** Execute the current source owners with fail-closed, in-memory infrastructure ports. */
-export function createRemainingContentOwnerHarness(root) {
+export function createRemainingContentOwnerHarness(root, { sourceOverrides = new Map(), additionalPorts = new Map() } = {}) {
   const require = createRequire(import.meta.url);
   const files = new Set();
   const state = { rows: [], failWrite: false, writes: 0, actorCalls: 0 };
-  const category = { id: 1, name: "Proof category", slug: "proof-category", is_active: true, deleted_at: null };
+  const category = { id: 1, name: "Proof category", slug: "proof-category", parent_id: null, sort_order: 1, status: "published", is_active: true, deleted_at: null };
   function from(table) {
     assert.ok(["topics", "topic_categories", "topic_series", "projects"].includes(table), `Unexpected table ${table}`);
     let rows = table === "topics" ? state.rows : table === "topic_categories" ? [category] : table === "projects" ? [{ code: "P101" }] : [];
     let insert;
     const query = {
       select() { return query; }, limit(n) { rows = rows.slice(0, n); return query; },
+      order() { return query; },
       eq(k, v) { rows = rows.filter(r => r[k] === v); return query; },
       neq(k, v) { rows = rows.filter(r => r[k] !== v); return query; },
       is(k, v) { rows = rows.filter(r => (r[k] ?? null) === v); return query; },
@@ -47,11 +48,12 @@ export function createRemainingContentOwnerHarness(root) {
     ["src/lib/logging", { logError() {} }],
   ]);
   const cache = new Map();
+  for (const [specifier, value] of additionalPorts) ports.set(specifier, value);
   function load(file, roots) {
     const key = file + (roots?.join(",") ?? "");
     if (cache.has(key)) return cache.get(key).exports;
     files.add(path.relative(root, file).replaceAll("\\", "/"));
-    let source = readFileSync(file, "utf8");
+    let source = sourceOverrides.get(path.relative(root, file).replaceAll("\\", "/")) ?? readFileSync(file, "utf8");
     if (roots) {
       const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
       const declarations = new Map();
@@ -89,7 +91,7 @@ export function createRemainingContentOwnerHarness(root) {
     return loadedModule.exports;
   }
   return {
-    files, state,
+    files, state, load,
     media: load(path.join(root, "src/app/admin/content/topics/media-actions/save.ts")),
     hero: load(path.join(root, "src/app/admin/pages-blocks/blocks/hero/actions.ts"), ["buildHeroConfig"]),
     content: load(path.join(root, "src/app/admin/pages-blocks/blocks/content/actions.ts"), ["buildContentConfig"]),

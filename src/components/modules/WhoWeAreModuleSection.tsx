@@ -200,7 +200,8 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                     <RichTextContent
                       value={intro!.description}
                       mode="rich"
-                      className={`mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"} [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit`}
+                      demoteHeadings
+                      className={`article-rich-text mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(descriptionFormat.alignment, "container")} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"} [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit`}
                     />
                   </div>
                 ) : null}

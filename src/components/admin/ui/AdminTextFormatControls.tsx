@@ -14,6 +14,8 @@ type AdminTextFormatControlsProps = {
   ariaLabel: string;
   alignmentAriaLabel?: string;
   embedded?: boolean;
+  /** Compact settings rows opt in; other toolbar geometry stays unchanged. */
+  density?: "default" | "compact";
 };
 
 const ALIGNMENT_OPTIONS: Array<{
@@ -43,9 +45,9 @@ const ALIGNMENT_OPTIONS: Array<{
   },
 ];
 
-function toolClass(active: boolean, appearance: "dark" | "light") {
+function toolClass(active: boolean, appearance: "dark" | "light", density: "default" | "compact") {
   return [
-    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-xs font-semibold transition",
+    `inline-flex ${density === "compact" ? "size-6" : "size-8"} shrink-0 cursor-pointer items-center justify-center rounded-md text-xs font-semibold transition`,
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1",
     "disabled:cursor-not-allowed disabled:opacity-45",
     active
@@ -70,6 +72,7 @@ export default function AdminTextFormatControls({
   ariaLabel,
   alignmentAriaLabel = "محاذاة النص",
   embedded = false,
+  density = "default",
 }: AdminTextFormatControlsProps) {
   const allowedAlignments = requestedAlignmentOptions ?? (
     includeJustify
@@ -86,10 +89,11 @@ export default function AdminTextFormatControls({
 
   return (
     <div
-      className="inline-flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-nowrap"
+      className={`inline-flex min-w-0 flex-wrap items-center ${density === "compact" ? "gap-1" : "gap-1.5"} sm:flex-nowrap`}
       role={embedded ? "group" : "toolbar"}
       aria-label={ariaLabel}
       data-admin-text-format-controls=""
+      data-admin-text-format-density={density === "compact" ? density : undefined}
       dir="rtl"
     >
       {alignment !== undefined && onAlignmentChange ? (
@@ -110,7 +114,7 @@ export default function AdminTextFormatControls({
                 disabled={disabled}
                 onClick={() => onAlignmentChange(option.value)}
                 data-admin-text-alignment={option.value}
-                className={toolClass(active, appearance)}
+                className={toolClass(active, appearance, density)}
               >
                 <svg
                   aria-hidden="true"
@@ -137,7 +141,7 @@ export default function AdminTextFormatControls({
           disabled={disabled}
           onClick={() => onBoldChange(!bold)}
           data-admin-text-format-bold=""
-          className={toolClass(bold, appearance)}
+          className={toolClass(bold, appearance, density)}
         >
           <span aria-hidden="true" className="text-sm font-black leading-none">
             B

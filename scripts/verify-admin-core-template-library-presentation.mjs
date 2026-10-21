@@ -9,6 +9,7 @@ import {selectCoreLinkPreviewAction,assertCoreReadOnlyEditRequests} from './fixt
 import {registerHooks} from 'node:module';
 import {PGlite} from '@electric-sql/pglite';
 import {CORE_TEMPLATE_CARDS_SELECTION,assertCoreTemplateCardsSelectionReceipt,loadCoreTemplatePresentationPlan,assertCoreTemplatePresentationProjection,coreTemplateSearchCases,buildCoreTemplateSearchProjection,assertCoreTemplateSearchIds,assertCoreTemplateSearchObservation} from './fixtures/admin-core-template-library-presentation-plan.mjs';
+import {createRemainingContentOwnerHarness} from './fixtures/remaining-content-owner-harness.mjs';
 
 function searchReceipt(spec,nativeSearch,binding){return{mode:nativeSearch.mode,minLength:nativeSearch.minLength,sourceHashes:nativeSearch.sourceHashes,binding,posts:0,automaticCoverage:[],globalClosed:false,cases:nativeSearch.cases.map(item=>{const ids=item.groups.flat(),limit=Math.max(...spec.pageSizeOptions);return{...item,inputValue:item.query,queryParam:item.query||null,firstPageParam:null,limit,unrelatedParams:[],clearClicked:item.id==='clear',enterPressed:item.id!=='clear',pages:Array.from({length:Math.max(1,Math.ceil(ids.length/limit))},(_,index)=>ids.slice(index*limit,(index+1)*limit))};})};}
 let controls=0;const positive=(body)=>{body();controls++;},negative=(body)=>{assert.throws(body);controls++;};
@@ -146,4 +147,111 @@ try{
  positive(()=>{const result=native.verifyCoreTemplatePresentationCompletion(selectedHandle,selectedReceipt);assert.equal(result.libraries,1);assert.equal(result.nativeCheckpoints,4);assert.equal(result.exactPreferenceCleanup,true);assert.equal(result.globalClosed,false);});
  for(const change of [r=>r.journeySelection=null,r=>r.journeySelection='foreign',r=>r.evidence[1].nativeCheckpointIds.pop(),r=>r.evidence[1].nativeCheckpointIds.reverse(),r=>r.evidence[1].nativeCheckpointIds[0]=randomUUID(),r=>r.evidence[1].nativeActorId=92,r=>r.evidence[1].searchEvidence.binding.ownedRunId='foreign',r=>r.evidence[1].moduleKind='content',r=>r.evidence[1].readOnlyEdit.count=0,r=>r.evidence[1].ownedEditNavigation=false]){const bad=structuredClone(selectedReceipt);change(bad);negative(()=>native.verifyCoreTemplatePresentationCompletion(selectedHandle,bad));}
 }finally{await db.close();}
-console.log(JSON.stringify({status:'pass',controls,libraries:plan.length,declaredVisibleSortKeys:plan.reduce((sum,spec)=>sum+spec.sorts.length,0),searchCases:plan.length*coreTemplateSearchCases('qa-library-presentation-abcdef012345-controlled').length,proofBoundary:'Canonical source-derived sort projection, meaningful negative controls and actual verifier SQL on controlled PGlite only; authenticated Browser and owned PostgreSQL remain pending.',globalClosed:false}));
+
+// Block identity is the canonical persistence family plus its saved subtype,
+// never the display name. These are actual Server Action bodies with the
+// existing owner loader; every infrastructure operation is memory-only.
+const moduleIdentity=await product('../src/lib/page-blocks/module-edit-registry.ts');
+const canonicalKinds=await product('../src/lib/page-blocks/types.ts');
+const physicalRegistry=await product('../src/lib/page-blocks/block-module-registry.ts');
+const heroIdentity=await product('../src/lib/hero/hero-content-controls.ts');
+positive(()=>assert.deepEqual(plan.map(spec=>spec.kind).sort(),[...canonicalKinds.PAGE_MODULE_KINDS].sort()));
+for(const [kind,registration]of Object.entries(physicalRegistry.BLOCK_MODULE_REGISTRY))positive(()=>assert.equal(plan.find(spec=>spec.kind===kind).table,registration.templateTable));
+
+function contentVariantOptions(source,rows){
+ const file=ts.createSourceFile('ContentBlocksTableClient.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),nodes=[];
+ const visit=node=>{nodes.push(node);ts.forEachChild(node,visit);};visit(file);
+ const declaration=name=>{const matches=nodes.filter(node=>ts.isVariableDeclaration(node)&&node.name.getText(file)===name);assert.equal(matches.length,1);return matches[0];};
+ const variants=declaration('VARIANT_OPTIONS').initializer,filters=declaration('filters').initializer;
+ assert.ok(ts.isCallExpression(filters));assert.ok(ts.isArrowFunction(filters.arguments[0]));
+ const label=nodes.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='variantLabel');assert.ok(label);
+ const javascript=ts.transpileModule('const VARIANT_OPTIONS = '+variants.getText(file)+';\n'+label.getText(file)+'\nconst readFilters = '+filters.arguments[0].getText(file)+';', {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+ return Function('rows','statusMeta',javascript+';return readFilters().find(filter=>filter.paramKey==="variant").options;')(rows,plan.find(spec=>spec.kind==='content').statusLabel);
+}
+const contentPath='src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx',contentSource=readFileSync(contentPath,'utf8');
+const savedVariantRows=[...moduleIdentity.STRUCTURAL_CONTENT_TEMPLATE_SLUGS,'legacy-custom-pattern','default','default'].map((variant,index)=>({id:800+index,variant,status:index%2?'published':'unpublished'}));
+// Keep the real shared predicate implementation rather than an includes stub.
+const variantSearchOwner=await product('../src/lib/admin/entity-list/search-normalization.ts');
+function verifySavedVariants(source){
+ const options=contentVariantOptions(source,savedVariantRows),values=options.map(option=>option.value);
+ assert.equal(new Set(values).size,values.length);
+ for(const row of savedVariantRows)assert.ok(values.includes(row.variant),'Loaded subtype absent from actual filter: '+row.variant);
+ assert.equal(options.find(option=>option.value==='default').label,'افتراضي');
+ assert.equal(options.find(option=>option.value==='legacy-custom-pattern').label,'legacy-custom-pattern');
+ const file=ts.createSourceFile(contentPath,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let predicate;
+ const visit=node=>{if(ts.isPropertyAssignment(node)&&node.name.getText(file)==='matchesRow')predicate=node.initializer;ts.forEachChild(node,visit);};visit(file);assert.ok(predicate);
+ const js=ts.transpileModule('const matches = '+predicate.getText(file),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+ const matches=Function('adminCollectionSearchIncludes',js+';return matches;')(variantSearchOwner.adminCollectionSearchIncludes);
+ for(const value of values)assert.deepEqual(savedVariantRows.filter(row=>matches({...row,name:'misleading Hero CTA Feed',slug:'row-'+row.id},{search:'',filters:{status:'all',variant:value}})).map(row=>row.id),savedVariantRows.filter(row=>row.variant===value).map(row=>row.id));
+}
+positive(()=>verifySavedVariants(contentSource));
+const oldOptionsSource=contentSource.replace(/options: \[\.\.\.new Set\(\[[\s\S]*?\]\)\]\.map\(\(value\) => \(\{ value, label: variantLabel\(value\) \}\)\),/u,'options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),');
+assert.notEqual(oldOptionsSource,contentSource,'The old-options regression mutation must apply.');negative(()=>verifySavedVariants(oldOptionsSource));
+const wrongPredicate=contentSource.replace('return variant === "all" || row.variant === variant;','return variant === "all" || row.name === variant;');assert.notEqual(wrongPredicate,contentSource);negative(()=>verifySavedVariants(wrongPredicate));
+
+const memory=new Map(plan.map(spec=>[spec.table,[]])),memoryState={failWrite:false,denyActor:false,writes:0};
+const category={id:1,name:'Synthetic category',slug:'synthetic-category',status:'published',is_active:true,deleted_at:null,parent_id:null,sort_order:1};
+function memoryFrom(table){
+ assert.ok(memory.has(table)||physicalRegistry.ALL_ASSIGNMENT_TABLES.includes(table)||['pages','topics','topic_categories','topic_series','hero_assignments'].includes(table),'Undeclared isolated table '+table);
+ let rows=memory.get(table)??(table==='pages'?[{id:1}]:table==='topic_categories'?[category]:[]),insert;
+ const query={select(){return query;},order(){return query;},limit(n){rows=rows.slice(0,n);return query;},eq(key,value){rows=rows.filter(row=>row[key]===value);return query;},neq(key,value){rows=rows.filter(row=>row[key]!==value);return query;},is(key,value){rows=rows.filter(row=>(row[key]??null)===value);return query;},in(key,values){rows=rows.filter(row=>values.includes(row[key]));return query;},insert(value){assert.ok(memory.has(table));insert=structuredClone(value);return query;},async maybeSingle(){return{data:structuredClone(rows[0]??null),error:null};},async single(){assert.ok(insert);if(memoryState.failWrite)return{data:null,error:{message:'isolated_write_rejected'}};const stored={...insert,id:101+memory.get(table).length,sort_order:memory.get(table).length+1,updated_at:'2026-10-20T00:00:00Z',hero_assignments:[]};memory.get(table).push(stored);memoryState.writes++;return{data:structuredClone(stored),error:null};},then(resolve){return Promise.resolve({data:structuredClone(rows),error:null}).then(resolve);}};
+ return query;
+}
+async function memoryRpc(name,args){
+ assert.equal(name,'mutate_page_composition');assert.equal(args.p_actor_admin_user_id,7);
+ if(memoryState.failWrite)return{data:null,error:{message:'isolated_write_rejected'}};
+ const payload=args.p_payload;assert.deepEqual(payload.page_ids,[],'Classification tests never add public assignments.');
+ const kind=args.p_operation==='replace_hero_template'?'hero':payload.kind.replaceAll('_','-'),spec=plan.find(row=>row.kind===kind);assert.ok(spec);
+ assert.ok(['save_template','replace_hero_template'].includes(args.p_operation));
+ const row=memory.get(spec.table).find(row=>row.id===(payload.template_id??payload.hero_id));assert.ok(row);Object.assign(row,structuredClone(payload.template));memoryState.writes++;
+ return{data:{updated_at:row.updated_at,affected_page_ids:[]},error:null};
+}
+const ownerHarness=createRemainingContentOwnerHarness(projectDirectory,{additionalPorts:new Map([
+ ['src/lib/supabase-admin',{getSupabaseAdmin:()=>({from:memoryFrom,rpc:memoryRpc})}],
+ ['src/lib/cache/public-cache-generation',{async advancePublicCacheGeneration(){}}],
+ ['src/lib/admin/auth/require-admin-session',{async requireAdminSession(){if(memoryState.denyActor)throw Error('isolated_permission_rejected');return{id:7,username:'synthetic'};}}],
+ ['src/lib/admin/media-catalog/synchronization',{async synchronizeMediaReferenceWriteScopesAfterDomainMutation(){return{status:'synchronized'};}}],
+])});
+const createNames={content:'createContentBlock',hero:'createHeroTemplate',cards:'createCardsBlock',cta:'createCtaBlock',breadcrumb:'createBreadcrumbBlock',feed:'createFeedModule',featured:'createFeaturedModule'};
+const updateNames={content:'updateContentBlock',hero:'updateHeroTemplateDetails',cards:'updateCardsBlock',cta:'updateCtaBlock',breadcrumb:'updateBreadcrumbBlock',feed:'updateFeedModule',featured:'updateFeaturedModule'};
+const blockRoundTrips=[];
+for(const spec of plan.filter(row=>Object.hasOwn(createNames,row.kind))){
+ const actions=ownerHarness.load(resolve(projectDirectory,'src/app/admin/pages-blocks/blocks',spec.kind,'actions.ts'),[createNames[spec.kind],updateNames[spec.kind]]);
+ const variants=spec.kind==='hero'?heroIdentity.HERO_TEMPLATE_VARIANT_OPTIONS_AR.map(option=>[option.value,option.label]):spec.variants.length?spec.variants:[['default','default']];
+ let lastFields;
+ for(const [variant]of variants){
+  const fields={name:'Hero CTA Featured misleading '+spec.kind+' '+variant,slug:'isolated-'+spec.kind+'-'+variant,variant,feed_type:variant,widget_title:'Synthetic Feed',title:'Authored title',limit:'6',item_limit:'6',source:'auto',category_slug:category.slug,source_kind:'categories',selection_mode:'automatic',presentation_variant:variant,item_0_title:'Authored Card',item_0_body:'Authored Card body'};
+  lastFields=fields;
+  const form=()=>{const value=new FormData();for(const[key,item]of Object.entries(fields))value.set(key,String(item));return value;};
+  const created=await actions[createNames[spec.kind]]({status:'idle',mode:'create',revision:0},form());assert.equal(created.status,'success',spec.kind+': '+created.message);controls++;
+  assert.equal(created.editHref,spec.route+'/'+created.entityId);const saved=memory.get(spec.table).find(row=>row.id===created.entityId);assert.ok(saved);assert.equal(saved.status,'unpublished');
+  assert.equal(spec.project(JSON.parse(JSON.stringify(saved))).variant??'default',variant);
+  assert.deepEqual(spec.searchProjection(JSON.parse(JSON.stringify(memory.get(spec.table))),fields.name).flat(),[saved.id]);
+  const update=form();update.set('id',String(saved.id));update.set('name',fields.name+' edited');
+  await assert.rejects(()=>actions[updateNames[spec.kind]](update),error=>error.href===spec.route+'/'+saved.id+'?saved=1');controls++;
+  const reloaded=JSON.parse(JSON.stringify(memory.get(spec.table).find(row=>row.id===saved.id)));
+  assert.equal(reloaded.name,fields.name+' edited');assert.equal(spec.project(reloaded).variant??'default',variant);assert.equal(moduleIdentity.resolveModuleProductKind(spec.kind,reloaded.slug,reloaded.variant),spec.kind);
+  assert.deepEqual(spec.searchProjection([reloaded],reloaded.name).flat(),[saved.id]);
+  blockRoundTrips.push({kind:spec.kind,variant,table:spec.table,id:saved.id,status:'pass'});
+ }
+ const invalid=new FormData();const before=JSON.stringify([...memory]);const rejected=await actions[createNames[spec.kind]]({status:'idle',mode:'create',revision:0},invalid);assert.equal(rejected.status,'error');assert.equal(JSON.stringify([...memory]),before);controls++;
+ memoryState.denyActor=true;await assert.rejects(()=>actions[createNames[spec.kind]]({revision:0},invalid),/isolated_permission_rejected/);memoryState.denyActor=false;assert.equal(JSON.stringify([...memory]),before);controls++;
+ const rejectedForm=new FormData();for(const[key,value]of Object.entries(lastFields))rejectedForm.set(key,String(value));rejectedForm.set('name','Rejected synthetic '+spec.kind);rejectedForm.set('slug','isolated-rejected-'+spec.kind);
+ if(spec.kind==='hero')rejectedForm.set('variant','internal-page');
+ memoryState.failWrite=true;
+ const failedCreate=await actions[createNames[spec.kind]]({revision:0},rejectedForm);assert.equal(failedCreate.status,'error');assert.match(failedCreate.message,/isolated_write_rejected/);assert.equal(JSON.stringify([...memory]),before);controls++;
+ const last=memory.get(spec.table).at(-1);rejectedForm.set('id',String(last.id));rejectedForm.set('slug',last.slug);
+ rejectedForm.set('variant',lastFields.variant);
+ await assert.rejects(()=>actions[updateNames[spec.kind]](rejectedForm),/isolated_write_rejected/);assert.equal(JSON.stringify([...memory]),before);controls++;
+ memoryState.failWrite=false;
+}
+for(const slug of moduleIdentity.STRUCTURAL_CONTENT_TEMPLATE_SLUGS){const expected=slug==='projects-hub-hero'?'hero':'content';positive(()=>assert.equal(moduleIdentity.resolveModuleProductKind('content',slug,'default'),expected));positive(()=>assert.equal(moduleIdentity.resolveModuleProductKind('content','legacy-renamed-'+slug,slug),expected));}
+const slotRegistry=await product('../src/lib/page-composition/slot-module-registry.ts');
+for(const kind of ['gallery','faq','slider','__proto__'])positive(()=>assert.equal(slotRegistry.resolveSlotModuleRegistration(kind),null));
+const retired=await product('../src/lib/page-blocks/deprecated-block-modules.ts');
+const contentActions=ownerHarness.load(resolve(projectDirectory,'src/app/admin/pages-blocks/blocks/content/actions.ts'),['createContentBlock']);
+for(const slug of [...retired.RETIRED_MEDIA_CENTER_LISTING_SHELL_TEMPLATE_SLUGS,...retired.RETIRED_PROJECT_LOCATION_PRESENTATION_TEMPLATE_SLUGS]){
+ const before=JSON.stringify([...memory]),form=new FormData();form.set('name','Retired identity');form.set('slug',slug);
+ const result=await contentActions.createContentBlock({revision:0},form);assert.equal(result.status,'error');assert.equal(result.focusTarget,'slug');assert.equal(JSON.stringify([...memory]),before);controls++;
+}
+console.log(JSON.stringify({status:'pass',controls,libraries:plan.length,declaredVisibleSortKeys:plan.reduce((sum,spec)=>sum+spec.sorts.length,0),searchCases:plan.length*coreTemplateSearchCases('qa-library-presentation-abcdef012345-controlled').length,blockRoundTrips,proofBoundary:'Canonical source-derived list projection and actual create/update Action owners on memory-only Supabase/RPC ports; verifier SQL on controlled PGlite. No real database writes, authenticated Browser or native PostgreSQL claim.',globalClosed:false}));

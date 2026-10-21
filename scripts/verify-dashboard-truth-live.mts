@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { assertWholeFileMigrationProvenance } from "./lib/migration-provenance.mjs";
 // @ts-expect-error The pg runtime package has no declarations in this workspace.
 import pg from "pg";
 
@@ -9,6 +10,7 @@ const connectionString = process.env.SUPABASE_DB_URL;
 if (!connectionString) throw new Error("SUPABASE_DB_URL is required.");
 
 const migrationVersion = "20260807120000";
+const migrationName = "system_publication_summary_cards_closure";
 const canonicalizeMigrationSql = (source: string) =>
   source.replace(/^\uFEFF/u, "").replace(/\r\n?/g, "\n");
 const migrationSource = canonicalizeMigrationSql(readFileSync(
@@ -27,19 +29,18 @@ await client.connect();
 try {
   await client.query("begin read only");
   const registry = (await client.query(
-    `select version,name,cardinality(statements) as statement_count,statements[1] as statement
+    `select version,name,cardinality(statements) as statement_count,statements
      from supabase_migrations.schema_migrations where version=$1`,
     [migrationVersion],
   )).rows;
   assert.equal(registry.length, 1, "Dashboard migration must be registered exactly once");
-  assert.equal(registry[0]?.name, "system_publication_summary_cards_closure");
+  assert.equal(registry[0]?.name, migrationName);
   assert.equal(Number(registry[0]?.statement_count), 1);
-  assert.equal(
-    createHash("sha256")
-      .update(canonicalizeMigrationSql(String(registry[0]?.statement ?? "")))
-      .digest("hex"),
-    migrationHash,
-    "live registry SQL must match the repository migration",
+  // Normalize checkout line endings, but preserve the actual registry receipt:
+  // only the canonical owner's frozen current/historical revision is valid.
+  const provenance = assertWholeFileMigrationProvenance(
+    { version: registry[0]?.version, name: registry[0]?.name, statements: registry[0]?.statements },
+    { version: migrationVersion, name: migrationName, sql: migrationSource, sha256: migrationHash },
   );
 
   const signatures = Number((await client.query(`
@@ -121,7 +122,7 @@ try {
 
   await client.query("rollback");
   console.log(
-    `OK: live Dashboard Truth proof passed (migration sha256 ${migrationHash}, topics ${model.kpis.topics.total}, projects ${model.kpis.projects.total}).`,
+    `OK: live Dashboard Truth proof passed (migration ${provenance.revision}, recorded sha256 ${provenance.sourceSha256}, canonical sha256 ${migrationHash}, topics ${model.kpis.topics.total}, projects ${model.kpis.projects.total}).`,
   );
 } catch (error) {
   await client.query("rollback").catch(() => undefined);

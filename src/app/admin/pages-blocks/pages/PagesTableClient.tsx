@@ -21,6 +21,7 @@ import {
 import {
   ADMIN_DATA_GRID_COMPACT_COUNT_COLUMN_WIDTH,
   ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH,
+  AdminDataGridDateTimeCell,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import AdminSeoScorePill from "../../../../components/admin/seo/AdminSeoScorePill";
 import {
@@ -32,7 +33,6 @@ import {
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { getContentStatusMetadata } from "../../../../lib/admin/content/content-status-metadata";
-import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import {
@@ -319,16 +319,16 @@ function createPageColumns(
       width: PAGE_UPDATED_AT_COLUMN_WIDTH,
       align: "center",
       renderCell: ({ row }) => (
-        <span
+        <AdminDataGridDateTimeCell
+          value={row.updatedAt}
           className="font-en whitespace-nowrap text-xs tabular-nums text-white/58"
-          title={
+          fallback={row.updatedAt ? "—" : "غير متاح"}
+          fallbackTitle={
             row.updatedAt
               ? undefined
               : PAGES_READ_MODEL_TRANSITION_NOTICE.message
           }
-        >
-          {row.updatedAt ? formatAdminDateTime(row.updatedAt) : "غير متاح"}
-        </span>
+        />
       ),
     },
     {

@@ -11,6 +11,8 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    // Preserved historical QA evidence and temporary fixtures.
+    ".tmp/**",
     ".tmp-qa/**",
     "next-env.d.ts",
   ]),

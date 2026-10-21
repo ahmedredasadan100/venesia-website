@@ -7,6 +7,7 @@ export type TopicsInsightCtaContent = {
   description: string;
   buttonLabel: string;
   buttonHref: string;
+  ctaBold?: boolean;
 };
 
 export function mapTopicsInsightCtaBlock(
@@ -15,6 +16,7 @@ export function mapTopicsInsightCtaBlock(
   const config = block.template.config as CtaBlockConfig;
 
   return {
+    ...(config.ctaBold === undefined ? {} : { ctaBold: config.ctaBold }),
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: config.description ?? "",

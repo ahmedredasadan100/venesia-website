@@ -18,7 +18,7 @@ const {richTextHtmlToMarkdown}=await jiti.import<typeof import("../src/lib/rich-
 const ownerFile=resolve(root,"src/components/admin/AdminRichTextEditor.tsx"),source=readFileSync(ownerFile,"utf8"),tree=ts.createSourceFile(ownerFile,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 let expression:ts.Expression|undefined;function visit(node:ts.Node){if(ts.isPropertyAssignment(node)&&node.name.getText(tree)==="extensions")expression=node.initializer;ts.forEachChild(node,visit);}visit(tree);assert.ok(expression);
 // Evaluate the actual installed owner's extension expression with its current Article settings.
-const extensions=new Function("StarterKit","Underline","Link","TextAlign","Placeholder","enableArticleStructure","isMinimal","withTextAlign","placeholder","return "+expression.getText(tree))(StarterKit,Underline,Link,TextAlign,Placeholder,true,false,true,"QA");
+const extensions=new Function("StarterKit","Underline","Link","TextAlign","Placeholder","enableArticleStructure","isMinimal","withTextAlign","placeholder","legacyAlignment","return "+expression.getText(tree))(StarterKit,Underline,Link,TextAlign,Placeholder,true,false,true,"QA",undefined);
 const schema=getSchema(extensions),pluginFactory=TrailingNode.config.addProseMirrorPlugins;assert.ok(pluginFactory);
 const plugins=pluginFactory.call({name:TrailingNode.name,options:TrailingNode.options,editor:{schema}} as never);
 const body="Authored core paragraph.",heading=schema.node("heading",{level:2},schema.text("Authored core paragraph"));

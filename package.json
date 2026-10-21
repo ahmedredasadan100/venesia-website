@@ -161,6 +161,7 @@
     "verify:global-truth-atomic-closure": "node --experimental-strip-types scripts/verify-global-truth-atomic-closure.mts",
     "verify:global-truth-atomic-postgres": "node --experimental-strip-types scripts/verify-global-truth-atomic-postgres.mts",
     "verify:dashboard-truth": "node --experimental-strip-types scripts/verify-dashboard-truth-closure.mts",
+    "verify:dashboard-thumbnails": "node --experimental-strip-types scripts/verify-dashboard-thumbnails.mts",
     "verify:dashboard-truth-postgres": "node --experimental-strip-types scripts/verify-dashboard-truth-postgres.mts",
     "verify:dashboard-truth-live": "node --experimental-strip-types scripts/verify-dashboard-truth-live.mts",
     "verify:reports-analytics": "node --experimental-strip-types scripts/verify-reports-analytics-closure.mts",

@@ -231,10 +231,27 @@ export function resolvePageBlockTextFormattingMap(
   ) as PageBlockTextFormattingMap;
 }
 
-export function pageBlockTextAlignClass(alignment: PageBlockTextAlignment) {
+export function pageBlockTextAlignClass(
+  alignment: PageBlockTextAlignment,
+  scope: "subtree" | "container" = "subtree",
+) {
+  // Rich text can inherit the field alignment without overriding authored paragraphs.
+  if (scope === "container") {
+    if (alignment === "center") return "!text-center";
+    if (alignment === "left") return "!text-left";
+    return "!text-right";
+  }
   if (alignment === "center") return "!text-center [&_*]:!text-center";
   if (alignment === "left") return "!text-left [&_*]:!text-left";
   return "!text-right [&_*]:!text-right";
+}
+
+export function pageBlockCtaFontWeightClass(
+  bold: boolean | undefined,
+  legacyClass: "font-medium" | "font-semibold",
+) {
+  if (bold === undefined) return legacyClass;
+  return bold ? "font-bold" : "font-normal";
 }
 
 export function pageBlockTextPlacementClass(alignment: PageBlockTextAlignment) {
@@ -612,6 +629,8 @@ export type VisionGoalsModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   intro?: string[];
+  /** Missing means legacy literal paragraphs; set only by the rich text editor. */
+  introContentFormat?: "markdown";
   image?: string;
   imageAlt?: string;
   vision?: VisionGoalsColumnConfig;
@@ -1238,6 +1257,7 @@ export function asVisionGoalsConfig(raw: unknown): VisionGoalsModuleConfig {
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     intro,
+    ...(config.introContentFormat === "markdown" ? { introContentFormat: "markdown" as const } : {}),
     image,
     imageAlt: readText(config.imageAlt ?? config.image_alt) || undefined,
     vision: readVisionGoalsColumn(config.vision),
@@ -1483,7 +1503,7 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
 
 export function asCtaConfig(raw: unknown): CtaBlockConfig {
   const config = (raw ?? {}) as CtaBlockConfig;
-  return {
+  const resolved: CtaBlockConfig = {
     ...config,
     ...resolvePageBlockTextFormattingConfig(config, [
       { field: "eyebrow", defaults: { bold: true } },
@@ -1493,6 +1513,12 @@ export function asCtaConfig(raw: unknown): CtaBlockConfig {
       { field: "cta" },
     ]),
   };
+  const rawFormatting = config as Record<string, unknown>;
+  // Unset CTA weight keeps each existing public renderer's legacy appearance.
+  if (rawFormatting.ctaBold == null && rawFormatting.cta_bold == null) {
+    delete resolved.ctaBold;
+  }
+  return resolved;
 }
 
 export function asCardsConfig(raw: unknown): CardsBlockConfig {

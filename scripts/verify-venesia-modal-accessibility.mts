@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as jsxRuntime from "react/jsx-runtime";
+import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const normalizePath = (value: string) => value.replaceAll("\\", "/");
 const read = (sourceFile: string) =>
-  readFileSync(join(ROOT, sourceFile), "utf8");
+  readFileSync(join(ROOT, sourceFile), "utf8").replaceAll("\r\n", "\n");
 
 function collectTsxFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -40,7 +42,7 @@ const pendingConsumer = read(
 
 const keyDownSection = modal.slice(
   modal.indexOf("function handleKeyDown"),
-  modal.indexOf('document.addEventListener("keydown", handleKeyDown)'),
+  modal.indexOf('window.addEventListener("keydown", handleKeyDown)'),
 );
 const emptyFocusablesSection = keyDownSection.slice(
   keyDownSection.indexOf("if (!focusable.length)"),
@@ -193,11 +195,11 @@ check(
   cleanupSection.includes("window.cancelAnimationFrame(focusFrame)") &&
     occurrenceCount(
       modal,
-      /document\.addEventListener\("keydown", handleKeyDown\)/g,
+      /window\.addEventListener\("keydown", handleKeyDown\)/g,
     ) === 1 &&
     occurrenceCount(
       modal,
-      /document\.removeEventListener\("keydown", handleKeyDown\)/g,
+      /window\.removeEventListener\("keydown", handleKeyDown\)/g,
     ) === 1,
 );
 check(
@@ -293,6 +295,509 @@ check(
       (sourceFile, index) => sourceFile === expectedConsumers[index],
     ),
 );
+
+// This bounded inventory makes exclusions explicit without changing the shared
+// Modal default. A newly registered mount must receive its own close-path review.
+const excludedMounts = new Map([
+  ["src/app/admin/users-roles/AdminUserFormModal.tsx", "sensitive status confirmation"],
+  ["src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx", "raw form close without Runtime protection"],
+  ["src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx", "raw assignment pending boundary"],
+  ["src/components/admin/ui/AdminDuplicateResourceModal.tsx", "dormant raw one-shot close"],
+]);
+const ordinaryMounts = new Set([
+  "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+  "src/components/admin/media/AdminMediaImageField.tsx",
+  "src/components/admin/ui/AdminLinkPicker.tsx",
+  "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
+  "src/components/admin/media/AdminMediaPickerModal.tsx",
+]);
+function assertMountPolicies(overrides: Record<string, string> = {}) {
+  let total = 0, enabled = 0, excluded = 0, guarded = 0;
+  for (const path of expectedConsumers) {
+    const file = ts.createSourceFile(path, overrides[path] ?? read(path), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let mounts = 0;
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(file) === "VenesiaModal") {
+        mounts += 1; total += 1;
+        const attr = (name: string, element = node) => element.attributes.properties.find(value => ts.isJsxAttribute(value) && value.name.getText(file) === name) as ts.JsxAttribute | undefined;
+        const escape = attr("closeOnEscape");
+        const optedIn = Boolean(escape && (!escape.initializer || ts.isJsxExpression(escape.initializer) && escape.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword));
+        if (excludedMounts.has(path)) {
+          assert.ok(!escape, `${path}: ${excludedMounts.get(path)} retains the shared default`); excluded += 1;
+        } else {
+          assert.ok(optedIn, `${path}: reviewed mount explicitly opts into Escape`); enabled += 1;
+          if (!ordinaryMounts.has(path)) {
+            guarded += 1;
+            const onClose = attr("onClose");
+            assert.ok(onClose?.initializer && ts.isJsxExpression(onClose.initializer) && onClose.initializer.expression, `${path}: actual close binding exists`);
+            let callback: ts.Node = onClose.initializer.expression;
+            if (ts.isIdentifier(callback)) {
+              const name = callback.text;
+              let scope: ts.Node = node;
+              while (scope.parent && !ts.isFunctionDeclaration(scope)) scope = scope.parent;
+              let declaration: ts.Node | undefined;
+              const find = (candidate: ts.Node) => {
+                if (ts.isFunctionDeclaration(candidate) && candidate.name?.text === name) declaration = candidate;
+                if (ts.isVariableDeclaration(candidate) && ts.isIdentifier(candidate.name) && candidate.name.text === name) declaration = candidate.initializer;
+                ts.forEachChild(candidate, find);
+              };
+              find(scope); assert.ok(declaration, `${path}: close callback resolves within its component`); callback = declaration;
+            }
+            const calls: ts.CallExpression[] = [];
+            const findCalls = (candidate: ts.Node) => { if (ts.isCallExpression(candidate)) calls.push(candidate); ts.forEachChild(candidate, findCalls); };
+            findCalls(callback);
+            assert.equal(calls.length, 1, `${path}: Escape routes only to the Runtime close owner`);
+            const call = calls[0], member = call.expression;
+            assert.ok(ts.isPropertyAccessExpression(member) && member.name.text === "requestClose" && ts.isPropertyAccessExpression(member.expression) && member.expression.name.text === "current" && ts.isIdentifier(member.expression.expression) && call.arguments.length === 0, `${path}: close invokes its Runtime ref`);
+            const refName = member.expression.expression.text;
+            let boundRuntime = false;
+            const findRuntime = (candidate: ts.Node) => {
+              if (ts.isJsxOpeningElement(candidate) && candidate.tagName.getText(file) === "AdminFormRuntime") {
+                const ref = attr("runtimeRef", candidate)?.initializer;
+                if (ref && ts.isJsxExpression(ref) && ref.expression?.getText(file) === refName) boundRuntime = true;
+              }
+              ts.forEachChild(candidate, findRuntime);
+            };
+            findRuntime(node.parent); assert.ok(boundRuntime, `${path}: the same Runtime ref owns the nested form`);
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert.equal(mounts, path.endsWith("/TrackingForms.tsx") ? 4 : 1, `${path}: every actual mount is classified`);
+  }
+  assert.deepEqual({ total, enabled, excluded, guarded }, { total: 20, enabled: 16, excluded: 4, guarded: 11 });
+}
+assertMountPolicies();
+check("AST classifies all 20 mounts: 16 explicit opt-ins including 11 bound Runtime forms, four exclusions", true);
+for (const [label, path, source] of [
+  ["lost reviewed opt-in", "src/components/admin/entity-list/AdminEntityListFilters.tsx", read("src/components/admin/entity-list/AdminEntityListFilters.tsx").replace("        closeOnEscape\n", "")],
+  ["unsafe excluded adoption", "src/components/admin/ui/AdminDuplicateResourceModal.tsx", read("src/components/admin/ui/AdminDuplicateResourceModal.tsx").replace("<VenesiaModal", "<VenesiaModal closeOnEscape")],
+  ["orphan guarded-close tokens", "src/app/admin/seo/redirects/RedirectFormModal.tsx", redirectModal.replace("onClose={requestClose}", "onClose={() => onClose()}")],
+] as const) {
+  assert.ok(source !== read(path), `Policy mutation applied: ${label}`);
+  assert.throws(() => assertMountPolicies({ [path]: source }), { name: "AssertionError" });
+  check(`negative rejects ${label}`, true);
+}
+
+// Execute the existing owners, not a second dismissal implementation. The ports
+// model event phase order, connected focus targets and RAF cleanup; actual browser
+// focus, geometry and RTL remain separate Local Product Review evidence.
+type Props = Record<string, unknown>;
+type Tree = { type: unknown; props: Props };
+type Component = (props: Props) => unknown;
+type Effect = () => void | (() => void);
+type Slot = { value?: unknown; current?: unknown; deps?: unknown[]; effect?: Effect; cleanup?: () => void; pending?: boolean };
+
+function loadModule<T>(path: string, source: string, ports: Props, globals: Props = {}): T {
+  const output = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const commonJsModule = { exports: {} };
+  Function("exports", "module", "require", ...Object.keys(globals), output)(commonJsModule.exports, commonJsModule, (name: string) => {
+    if (name === "react/jsx-runtime") return jsxRuntime;
+    assert.ok(Object.hasOwn(ports, name), `Unexpected lifecycle fixture import ${name} in ${path}`);
+    return ports[name];
+  }, ...Object.values(globals));
+  return commonJsModule.exports as T;
+}
+
+function trees(value: unknown): Tree[] {
+  if (Array.isArray(value)) return value.flatMap(trees);
+  if (!value || typeof value !== "object" || !("props" in value)) return [];
+  const tree = value as Tree;
+  return [tree, ...trees(tree.props.children)];
+}
+
+function controlledHooks() {
+  let active: { slots: Slot[]; index: number };
+  const equal = (left: unknown[] | undefined, right: unknown[] | undefined) => left && right && left.length === right.length && left.every((value, index) => Object.is(value, right[index]));
+  const effect = (callback: Effect, deps?: unknown[]) => {
+    const index = active.index++, previous = active.slots[index];
+    if (!previous || !equal(previous.deps, deps)) active.slots[index] = { effect: callback, deps, cleanup: previous?.cleanup, pending: true };
+  };
+  const hooks = {
+    useRef(value: unknown) { return active.slots[active.index++] ??= { current: value }; },
+    useId() { return `modal-fixture-${active.index++}`; },
+    useState(initial: unknown) {
+      const owner = active, index = owner.index++;
+      const slot = owner.slots[index] ??= { value: typeof initial === "function" ? initial() : initial };
+      return [slot.value, (update: unknown) => { slot.value = typeof update === "function" ? update(slot.value) : update; }];
+    },
+    useMemo(factory: () => unknown, deps?: unknown[]) {
+      const index = active.index++, previous = active.slots[index];
+      if (!previous || !equal(previous.deps, deps)) active.slots[index] = { value: factory(), deps };
+      return active.slots[index].value;
+    },
+    useCallback(callback: unknown, deps?: unknown[]) { return hooks.useMemo(() => callback, deps); },
+    useEffect: effect,
+    useLayoutEffect: effect,
+    createContext: () => ({ Provider: Symbol("fixture-context") }),
+  };
+  return {
+    hooks,
+    runner(component: Component) {
+      const state = { slots: [] as Slot[], index: 0 };
+      return {
+        render(props: Props) { const previous = active; active = state; state.index = 0; try { return component(props); } finally { active = previous; } },
+        effects() { for (const slot of state.slots) if (slot?.pending) { slot.pending = false; slot.cleanup?.(); const cleanup = slot.effect?.(); slot.cleanup = typeof cleanup === "function" ? cleanup : undefined; } },
+        cleanup() { for (const slot of state.slots) { slot?.cleanup?.(); if (slot) slot.cleanup = undefined; } },
+      };
+    },
+  };
+}
+
+class LocalEventTarget extends EventTarget {
+  listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: AddEventListenerOptions | boolean) {
+    super.addEventListener(type, listener, options);
+    if (listener) { const set = this.listeners.get(type) ?? new Set(); set.add(listener); this.listeners.set(type, set); }
+  }
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: EventListenerOptions | boolean) {
+    super.removeEventListener(type, listener, options);
+    if (listener) this.listeners.get(type)?.delete(listener);
+  }
+  count(type: string) { return this.listeners.get(type)?.size ?? 0; }
+}
+
+function domPorts() {
+  const document = new LocalEventTarget();
+  const window = new LocalEventTarget();
+  const frames = new Map<number, () => void>();
+  let frame = 0;
+  const connected: FixtureElement[] = [];
+  class FixtureElement extends LocalEventTarget {
+    tagName: string;
+    attrs: Record<string, string>;
+    children: FixtureElement[] = [];
+    parent: FixtureElement | null = null;
+    style = { overflow: "auto", display: "block", visibility: "visible" };
+    isConnected = true;
+    tabIndex = 0;
+    disabled = false;
+    textContent = "";
+    value = "seed";
+    constructor(tagName = "button", attrs: Record<string, string> = {}) { super(); this.tagName = tagName.toUpperCase(); this.attrs = attrs; connected.push(this); }
+    get id() { return this.attrs.id ?? ""; }
+    get ownerDocument() { return document; }
+    getAttribute(name: string) { return this.attrs[name] ?? null; }
+    hasAttribute(name: string) { return Object.hasOwn(this.attrs, name); }
+    contains(value: unknown): boolean { return this === value || this.children.some(child => child.contains(value)); }
+    append(child: FixtureElement) { child.parent = this; this.children.push(child); }
+    matches(selector: string) { return selector === ":disabled" ? this.disabled : false; }
+    closest(selector: string): FixtureElement | null {
+      if (selector === "form") return this instanceof FixtureForm ? this : this.parent?.closest(selector) ?? null;
+      if (selector.includes("[hidden]")) return this.hasAttribute("hidden") || this.attrs["aria-hidden"] === "true" || this.hasAttribute("inert") ? this : this.parent?.closest(selector) ?? null;
+      return null;
+    }
+    getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 30 }; }
+    getClientRects() { return this.isConnected && this.style.display !== "none" ? [this.getBoundingClientRect()] : []; }
+    querySelectorAll(): FixtureElement[] { return this.children.flatMap(child => [child, ...child.querySelectorAll()]); }
+    querySelector(selector: string) { return this.querySelectorAll().find(child => selector.startsWith("[") ? child.hasAttribute(selector.slice(1, -1)) : true) ?? null; }
+    focus() { doc.activeElement = this; }
+    remove() { this.isConnected = false; this.children.forEach(child => child.remove()); }
+  }
+  class FixtureForm extends FixtureElement {
+    constructor() { super("form"); }
+    get elements() { return this.children; }
+  }
+  class FixtureFormData {
+    form: FixtureForm;
+    constructor(form: FixtureForm) { this.form = form; }
+    entries() { return this.form.elements.filter(element => element.hasAttribute("name") && !element.disabled).map(element => [element.getAttribute("name")!, element.value] as [string, string]).values(); }
+  }
+  const body = new FixtureElement("body"), root = new FixtureElement("html");
+  body.tabIndex = root.tabIndex = -1;
+  const scrolling = { scrollTop: 37, scrollLeft: 4, scrollTo(position: { top: number; left: number }) { this.scrollTop = position.top; this.scrollLeft = position.left; } };
+  const doc = Object.assign(document, {
+    body, documentElement: root, activeElement: body, scrollingElement: scrolling,
+    querySelectorAll(selector: string) { return connected.filter(element => element.isConnected && (selector.includes('[role="dialog"]') ? element.attrs.role === "dialog" && element.attrs["aria-modal"] === "true" : element !== body && element !== root && element.tabIndex >= 0 && element.attrs.role !== "dialog" && !(element instanceof FixtureForm))); },
+    getElementById(id: string) { return connected.find(element => element.isConnected && element.id === id) ?? null; },
+  });
+  const win = Object.assign(window, {
+    getComputedStyle: (element: FixtureElement) => element.style,
+    requestAnimationFrame(callback: () => void) { frames.set(++frame, callback); return frame; },
+    cancelAnimationFrame(id: number) { frames.delete(id); },
+    location: { href: "http://fixture.local/admin/content/topics", origin: "http://fixture.local", assign() { throw new Error("Navigation outside fixture callback scope"); } },
+  });
+  return {
+    document: doc, window: win, FixtureElement, FixtureForm,
+    globals: { document: doc, window: win, Node: FixtureElement, Element: FixtureElement, HTMLElement: FixtureElement, HTMLFormElement: FixtureForm, FormData: FixtureFormData },
+    frames,
+    flushFrames() { const queued = [...frames.values()]; frames.clear(); queued.forEach(callback => callback()); },
+    key(key = "Escape", options: { prevented?: boolean; shift?: boolean; targetHandler?: (event: Event) => void } = {}) {
+      const event = new Event("keydown", { bubbles: true, cancelable: true });
+      Object.defineProperties(event, { key: { value: key }, shiftKey: { value: options.shift ?? false } });
+      if (options.prevented) event.preventDefault();
+      options.targetHandler?.(event);
+      // Native EventTarget preserves registration order and removals in-flight.
+      // Browser target/React handlers precede document bubble, then window bubble.
+      doc.dispatchEvent(event);
+      if (!event.cancelBubble) win.dispatchEvent(event);
+      return event;
+    },
+    input(target: FixtureElement) { const event = new Event("input"); Object.defineProperty(event, "target", { value: target }); doc.dispatchEvent(event); },
+  };
+}
+
+function lifecycleFixture(modalSource = modal, runtimeSource = formRuntime) {
+  const dom = domPorts(), controlled = controlledHooks();
+  const empty = () => null;
+  const buttons = { AdminModalCancelButton: empty, AdminModalDangerButton: empty, AdminModalPrimaryButton: empty };
+  const stylePorts = { ADMIN_FORM: {}, ADMIN_MODAL: {}, ADMIN_MODAL_COMPACT: {}, ADMIN_MODAL_SIZES: { md: "" } };
+  const commonPorts = { react: controlled.hooks, "react-dom": { createPortal: (tree: unknown) => tree }, "../../../hooks/use-client-mounted": { useClientMounted: () => true }, "../../../lib/admin/admin-ui-styles": stylePorts, "./AdminModalButtons": buttons };
+  const Confirm = loadModule<{ default: Component }>("AdminConfirmDialog.tsx", confirmDialog, commonPorts, dom.globals).default;
+  const Modal = loadModule<{ default: Component }>("VenesiaModal.tsx", modalSource, {
+    react: controlled.hooks, "react-dom": { createPortal: (tree: unknown) => tree },
+    "../../lib/admin/admin-ui-styles": stylePorts, "./ui/AdminModalButtons": buttons,
+    "../../hooks/use-client-mounted": { useClientMounted: () => true },
+    "../venesia-scrollbar-styles": { VENESIA_SCROLLBAR_VISUAL_CLASSES: "" },
+    "./AdminFeedbackProvider": { useAdminFeedbackModalHost: () => ({ current: null }) },
+  }, dom.globals).default;
+  const pure = <T,>(path: string, ports: Props = {}) => loadModule<T>(path, read(path), ports, dom.globals);
+  const safe = pure<Props>("src/lib/security/safe-internal-path.ts");
+  const formDecision = pure<Props>("src/lib/admin/form-runtime.ts", { "../security/safe-internal-path.ts": safe });
+  const formDom = pure<Props>("src/lib/admin/form-dom-preservation.ts");
+  type Guard = { isDirty: boolean; dialog: unknown; requestCallback: (callback: () => void) => void };
+  const Runtime = loadModule<{ useAdminUnsavedChangesGuard: (props: Props) => Guard }>("AdminFormRuntime.tsx", runtimeSource, {
+    react: controlled.hooks, "react-dom": {}, "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected fixture navigation"); } }) },
+    "@tanstack/react-query": {}, "../../../lib/admin/form-dom-preservation": formDom,
+    "../../../lib/admin/form-runtime": formDecision,
+    "../../../lib/admin/entity-list/data-engine/instant-mutation-cache": {},
+    "../../../lib/security/safe-internal-path": safe,
+    "../AdminFeedbackProvider": {}, "./AdminConfirmDialog": { default: Confirm }, "./AdminForm": {},
+  }, dom.globals);
+  const Listbox = loadModule<{ default: Component }>("AdminListboxSelect.tsx", read("src/components/admin/ui/AdminListboxSelect.tsx"), {
+    react: controlled.hooks, "react-dom": { createPortal: (tree: unknown) => tree },
+    "../../../hooks/use-client-mounted": { useClientMounted: () => true },
+    "./admin-filter-styles": { ADMIN_FILTER_MENU_ATTR: "data-filter-menu", isInsideAdminFilterMenu: () => false },
+    "./useAdminFloatingMenuPosition": { useAdminFloatingMenuPosition: () => ({ style: {}, placement: "bottom" }) },
+  }, dom.globals).default;
+  function mount(props: Props, component = Modal, panelAttribute = "data-venesia-modal") {
+    const runner = controlled.runner(component);
+    const panel = new dom.FixtureElement("section", { role: "dialog", "aria-modal": "true" });
+    panel.tabIndex = -1;
+    const first = new dom.FixtureElement("button", { "data-admin-confirm-cancel": "" }), last = new dom.FixtureElement("button");
+    panel.append(first); panel.append(last);
+    let current = props;
+    const render = () => {
+      const tree = runner.render({ open: true, title: "اختبار دورة الحياة", ...current });
+      const ref = trees(tree).find(node => Object.hasOwn(node.props, panelAttribute))?.props.ref as { current: unknown } | undefined;
+      if (current.open === false) {
+        assert.equal(tree, null); panel.isConnected = false;
+      } else {
+        assert.ok(ref, "Actual owner panel ref exists"); ref.current = panel;
+        panel.isConnected = true; panel.children.forEach(child => { child.isConnected = true; });
+      }
+      runner.effects(); return tree;
+    };
+    render();
+    return { panel, first, last, render, update(next: Props) { current = { ...current, ...next }; return render(); }, close() { runner.cleanup(); panel.remove(); } };
+  }
+  return { ...dom, controlled, Confirm, Modal, Listbox, Runtime, mount };
+}
+
+function execute(label: string, proof: () => void) { proof(); check(label, true); }
+
+function ordinaryClose(source = modal) {
+  const fixture = lifecycleFixture(source);
+  let closed = 0;
+  const opener = new fixture.FixtureElement("button", { id: "opener" }); opener.focus();
+  const modal = fixture.mount({ closeOnEscape: true, onClose() { closed += 1; modal.close(); } });
+  fixture.flushFrames();
+  assert.equal(fixture.document.activeElement, modal.first);
+  assert.equal(fixture.window.count("keydown"), 1);
+  assert.equal(fixture.document.count("keydown"), 0);
+  const event = fixture.key();
+  assert.equal(closed, 1); assert.equal(event.defaultPrevented, true);
+  assert.equal(fixture.window.count("keydown"), 0);
+  fixture.flushFrames();
+  assert.equal(fixture.document.activeElement, opener);
+  assert.equal(fixture.document.documentElement.style.overflow, "auto");
+  assert.equal(fixture.document.body.style.overflow, "auto");
+  assert.deepEqual([fixture.document.scrollingElement.scrollTop, fixture.document.scrollingElement.scrollLeft], [37, 4]);
+  fixture.key(); assert.equal(closed, 1);
+}
+execute("actual Modal opt-in Escape consumes once, cleans listeners, restores opener and scroll", ordinaryClose);
+
+execute("actual Modal default and explicit false preserve existing Escape retention", () => {
+  for (const props of [{}, { closeOnEscape: false }]) {
+    const fixture = lifecycleFixture(); let closed = 0;
+    const modal = fixture.mount({ ...props, onClose() { closed += 1; } });
+    assert.equal(fixture.key().defaultPrevented, false); assert.equal(closed, 0);
+    modal.close(); fixture.flushFrames();
+  }
+});
+
+function consumedEscape(source = modal) {
+  const fixture = lifecycleFixture(source); let closed = 0;
+  const modal = fixture.mount({ closeOnEscape: true, onClose() { closed += 1; } });
+  fixture.key("Escape", { prevented: true });
+  fixture.key("Escape", { targetHandler: event => event.preventDefault() });
+  assert.equal(closed, 0); modal.close();
+}
+execute("actual Modal respects already-consumed native and target-handler Escape", consumedEscape);
+
+execute("actual Modal uses latest close callback without reinstalling the lifecycle listener", () => {
+  const fixture = lifecycleFixture(); let stale = 0, latest = 0;
+  const modal = fixture.mount({ closeOnEscape: true, onClose() { stale += 1; } });
+  modal.update({ onClose() { latest += 1; } });
+  fixture.key(); assert.deepEqual([stale, latest], [0, 1]);
+  assert.equal(fixture.window.count("keydown"), 1); modal.close();
+});
+
+execute("actual Modal cancels initial and obsolete return frames on a rapid reopen", () => {
+  const fixture = lifecycleFixture();
+  const modal = fixture.mount({ onClose() {} });
+  assert.equal(fixture.frames.size, 1);
+  modal.update({ open: false });
+  assert.equal(fixture.window.count("keydown"), 0); assert.equal(fixture.frames.size, 1);
+  modal.update({ open: true });
+  assert.equal(fixture.frames.size, 1); fixture.flushFrames();
+  assert.equal(fixture.document.activeElement, modal.first);
+  modal.close(); fixture.flushFrames(); assert.equal(fixture.frames.size, 0);
+});
+
+execute("actual Modal recalculates Tab recovery for disabled, outside and empty descendants", () => {
+  const fixture = lifecycleFixture();
+  const modal = fixture.mount({ onClose() {} }); fixture.flushFrames();
+  modal.last.focus(); fixture.key("Tab"); assert.equal(fixture.document.activeElement, modal.first);
+  modal.first.focus(); fixture.key("Tab", { shift: true }); assert.equal(fixture.document.activeElement, modal.last);
+  modal.last.disabled = true; fixture.key("Tab"); assert.equal(fixture.document.activeElement, modal.first);
+  fixture.document.body.focus(); fixture.key("Tab", { shift: true }); assert.equal(fixture.document.activeElement, modal.first);
+  modal.first.disabled = true; fixture.key("Tab"); assert.equal(fixture.document.activeElement, modal.panel);
+  modal.close();
+});
+
+function nestedClose(source = modal) {
+  for (const childListenerFirst of [false, true]) {
+    const fixture = lifecycleFixture(source); let parentCloses = 0, childCloses = 0;
+    const parent = fixture.mount({ closeOnEscape: true, onClose() { parentCloses += 1; } });
+    const child = fixture.mount({ closeOnEscape: true, onClose() { childCloses += 1; child.close(); } });
+    if (childListenerFirst) { parent.update({ open: false }); parent.update({ open: true }); }
+    fixture.key(); assert.deepEqual([parentCloses, childCloses], [0, 1]);
+    fixture.key(); assert.deepEqual([parentCloses, childCloses], [1, 1]);
+    parent.close(); fixture.flushFrames();
+  }
+}
+execute("actual nested Modals close only the topmost in either listener order with synchronous removal", nestedClose);
+
+function listboxFirst(source = modal) {
+  const fixture = lifecycleFixture(source); let closed = 0;
+  const modal = fixture.mount({ closeOnEscape: true, onClose() { closed += 1; } });
+  const runner = fixture.controlled.runner(fixture.Listbox);
+  let layer: string | null = "inner";
+  const trigger = new fixture.FixtureElement("button"), search = new fixture.FixtureElement("input");
+  modal.panel.append(trigger);
+  const props: Props = { layerId: "inner", value: "one", searchable: true, options: [{ value: "one", label: "الأول" }], onChange() {}, onOpenLayer(next: string | null) { layer = next; render(); } };
+  function render() {
+    const tree = runner.render({ ...props, openLayerId: layer });
+    for (const node of trees(tree)) {
+      const ref = node.props.ref as { current: unknown } | undefined;
+      if (ref && node.type === "button") ref.current = trigger;
+      if (ref && node.type === "input") ref.current = search;
+    }
+    runner.effects(); return tree;
+  }
+  let tree = render();
+  assert.equal(fixture.document.count("keydown"), 1);
+  fixture.key(); assert.equal(layer, null); assert.equal(closed, 0); assert.equal(fixture.document.activeElement, trigger);
+  assert.equal(fixture.document.count("keydown"), 0);
+  layer = "inner"; tree = render();
+  const onKeyDown = trees(tree).find(node => node.type === "input")?.props.onKeyDown as (event: Event) => void;
+  assert.equal(typeof onKeyDown, "function");
+  fixture.key("Escape", { targetHandler: onKeyDown });
+  assert.equal(layer, null); assert.equal(closed, 0);
+  fixture.key(); assert.equal(closed, 1);
+  runner.cleanup(); modal.close();
+}
+execute("actual Listbox document and search-target Escape close the inner layer before its Modal", listboxFirst);
+
+function requestCloseFromSource(source: string, bindings: Props) {
+  const file = ts.createSourceFile("AdminFormRuntime.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const runtime = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "AdminFormRuntimeInstance");
+  assert.ok(runtime, "Actual AdminFormRuntimeInstance declaration exists");
+  assert.ok(source.includes("<AdminFormRuntimeInstance"), "Default Runtime mounts the tested instance owner");
+  let callback: ts.Expression | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "requestClose" && node.initializer && ts.isCallExpression(node.initializer)) callback = node.initializer.arguments[0];
+    ts.forEachChild(node, visit);
+  };
+  visit(runtime); assert.ok(callback, "Actual Runtime requestClose callback exists");
+  return loadModule<{ close: () => void }>("requestClose.ts", `exports.close = ${callback.getText(file)};`, {}, bindings).close;
+}
+
+function runtimeDismissal(runtimeSource = formRuntime, modalSource = modal) {
+  for (const state of ["clean", "dirty", "pending"] as const) {
+    const fixture = lifecycleFixture(modalSource, runtimeSource);
+    const form = new fixture.FixtureForm(), field = new fixture.FixtureElement("input", { name: "title" }); form.append(field);
+    const rootRef = { current: form };
+    const runner = fixture.controlled.runner(props => fixture.Runtime.useAdminUnsavedChangesGuard(props));
+    const options = { rootRef, pending: state === "pending" };
+    const readGuard = () => { const result = runner.render(options) as ReturnType<typeof fixture.Runtime.useAdminUnsavedChangesGuard>; runner.effects(); return result; };
+    let guard = readGuard();
+    if (state === "dirty") { field.value = "edited retained value"; fixture.input(field); guard = readGuard(); assert.equal(guard.isDirty, true); }
+    let closed = 0;
+    const requestClose = requestCloseFromSource(runtimeSource, { onClose() { closed += 1; }, closeHref: undefined, requestCallback: (callback: () => void) => guard.requestCallback(callback), requestNavigation() { throw new Error("Close callback must not navigate"); } });
+    const modal = fixture.mount({ closeOnEscape: true, onClose: requestClose });
+    fixture.key(); guard = readGuard();
+    if (state === "clean") { assert.equal(closed, 1); assert.equal(guard.dialog, null); }
+    if (state === "pending") {
+      assert.equal(closed, 0); assert.equal(guard.dialog, null);
+      options.pending = false; guard = readGuard();
+      fixture.key(); assert.equal(closed, 1);
+    }
+    if (state === "dirty") {
+      assert.equal(closed, 0); assert.equal(field.value, "edited retained value");
+      let confirmProps = trees(guard.dialog).find(node => node.type === fixture.Confirm)?.props;
+      assert.ok(confirmProps, "Actual Runtime asks its existing confirmation owner");
+      const cancelConfirmation = confirmProps.onCancel as () => void;
+      const confirmation = fixture.mount({ ...confirmProps, onCancel() { cancelConfirmation(); confirmation.close(); } }, fixture.Confirm, "data-admin-confirm-dialog");
+      fixture.key(); // actual document confirmation cancellation, then window Modal
+      guard = readGuard();
+      assert.equal(closed, 0); assert.equal(guard.dialog, null); assert.equal(field.value, "edited retained value");
+      fixture.key(); guard = readGuard();
+      confirmProps = trees(guard.dialog).find(node => node.type === fixture.Confirm)?.props;
+      assert.ok(confirmProps); (confirmProps.onConfirm as () => void)(); guard = readGuard();
+      assert.equal(closed, 1); assert.equal(guard.dialog, null);
+    }
+    modal.close(); runner.cleanup(); fixture.flushFrames();
+    assert.equal(fixture.document.count("input"), 0);
+    assert.equal(fixture.document.count("click"), 0);
+    assert.equal(fixture.window.count("beforeunload"), 0);
+  }
+}
+execute("actual Runtime requestClose and unsaved guard preserve clean, dirty cancellation/confirmation and pending paths", runtimeDismissal);
+
+execute("actual confirmation Escape cancels when editable and protects pending actions", () => {
+  for (const pending of [false, true]) {
+    const fixture = lifecycleFixture(); let cancelled = 0;
+    const confirmation = fixture.mount({ pending, onCancel() { cancelled += 1; }, onConfirm() {} }, fixture.Confirm, "data-admin-confirm-dialog");
+    fixture.key(); assert.equal(cancelled, pending ? 0 : 1);
+    confirmation.close(); fixture.flushFrames();
+  }
+});
+
+const modalMutants = [
+  { name: "old document ordering", source: modal.replaceAll('window.addEventListener("keydown", handleKeyDown)', 'document.addEventListener("keydown", handleKeyDown)').replaceAll('window.removeEventListener("keydown", handleKeyDown)', 'document.removeEventListener("keydown", handleKeyDown)'), probe: listboxFirst },
+  { name: "ignoring consumed Escape", source: modal.replace("if (event.defaultPrevented) return;", ""), probe: consumedEscape },
+  { name: "missing topmost ownership", source: modal.replace("if (!panel || !isTopmostDialog(panel)) return;", "if (!panel) return;"), probe: nestedClose },
+  { name: "closing before event consumption", source: modal.replace("event.preventDefault();\n        closeRef.current();", "closeRef.current();"), probe: nestedClose },
+  { name: "default dismissal expansion", source: modal.replace("closeOnEscape = false", "closeOnEscape = true"), probe(source: string) { const fixture = lifecycleFixture(source); let closed = false; const modal = fixture.mount({ onClose() { closed = true; } }); fixture.key(); assert.equal(closed, false); modal.close(); } },
+];
+for (const mutant of modalMutants) {
+  assert.notEqual(mutant.source, modal, `Mutation applied: ${mutant.name}`);
+  execute(`negative rejects ${mutant.name}`, () => assert.throws(() => mutant.probe(mutant.source), { name: "AssertionError" }));
+}
+for (const [name, source] of [
+  ["pending bypass", formRuntime.replaceAll('if (decision === "blocked_pending") return;', "")],
+  ["dirty confirmation bypass", formRuntime.replace('setPendingNavigation({ kind: "callback", callback });', "completeCallback(callback);")],
+  ["Runtime close bypass", formRuntime.replace("requestCallback(onClose);", "onClose();")],
+] as const) {
+  assert.notEqual(source, formRuntime, `Mutation applied: ${name}`);
+  execute(`negative rejects ${name}`, () => assert.throws(() => runtimeDismissal(source), { name: "AssertionError" }));
+}
 
 console.log(
   `VenesiaModal accessibility verifier passed (${passed} assertions, ${actualConsumers.length} consumers).`,

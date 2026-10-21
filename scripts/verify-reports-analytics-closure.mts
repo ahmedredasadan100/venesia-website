@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { basename, dirname, resolve } from "node:path";
+import * as ts from "typescript";
 
 import { buildAdminAuditReport } from "../src/lib/admin/audit/audit-report.ts";
 import type { AuditLogRecord } from "../src/lib/admin/audit/audit-types.ts";
@@ -24,6 +26,7 @@ import {
   ADMIN_REPORT_IDS,
   REPORT_EXPERIENCE_CAPABILITIES,
   buildAdminReportHref,
+  getAdminReportDefinition,
   resolveAdminReportQuery,
 } from "../src/lib/admin/reports/reports-information-architecture.ts";
 
@@ -397,5 +400,128 @@ assert.match(workflow, /Reports Analytics · PostgreSQL 17/);
 const runtimeSources = `${page}\n${reportPage}\n${exportRoute}\n${loader}\n${analyticsRoot}\n${view}\n${detailView}\n${informationArchitecture}\n${overviewPresentation}\n${reportPresentation}`;
 assert.doesNotMatch(runtimeSources, /\b(?:mock|placeholder|dummy|fake)\b/i);
 assert.doesNotMatch(runtimeSources, /unstable_cache|revalidatePath|revalidateTag|router\.refresh/);
+
+// Execute the existing presentation/export owners and the route's pure CSV
+// fragment. Authentication, privileged reads and audit writes are never invoked.
+function loadReportPureModule<T>(text: string, ports: Record<string, unknown> = {}): T {
+  const compiled = ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const loaded = { exports: {} };
+  Function("exports", "module", "require", compiled)(loaded.exports, loaded, (name: string) => {
+    assert.ok(Object.hasOwn(ports, name), `Unexpected pure Reports dependency ${name}`);
+    return ports[name];
+  });
+  return loaded.exports as T;
+}
+type DateOwner = typeof import("../src/lib/content-dates.ts");
+type ReportPresentationOwner = typeof import("../src/lib/admin/reports/reports-presentation.ts");
+const dateOwnerPath = "src/lib/content-dates.ts";
+const presentationOwnerPath = "src/lib/admin/reports/reports-presentation.ts";
+const dateSource = source(dateOwnerPath);
+const dates = loadReportPureModule<DateOwner>(dateSource);
+const loadPresentation = (text: string, datePort: unknown) => loadReportPureModule<ReportPresentationOwner>(text, {
+  "../../content-dates": datePort,
+  "./reports-information-architecture": { getAdminReportDefinition },
+});
+const currentPresentation = loadPresentation(reportPresentation, dates);
+const rtlBaselineArgument = process.argv.find((argument) => argument.startsWith("--date-rtl-baseline-file="));
+const originalDateBaselineArgument = process.argv.find((argument) => argument.startsWith("--date-original-baseline-file="));
+let originalDateSource: string | null = null;
+let originalPresentationSource = reportPresentation;
+if (rtlBaselineArgument) {
+  assert.ok(originalDateBaselineArgument, "Captured serialization proof requires the earliest pre-format date baseline, not numeric intermediate output");
+  const captured = (receiptPath: string, path: string) => {
+    const receipt: { entries: { path: string; sha256: string; snapshot?: string }[] } | { path: string; sha256: string; snapshot?: string }[] = JSON.parse(readFileSync(receiptPath, "utf8").replace(/^\uFEFF/u, ""));
+    const entries = Array.isArray(receipt) ? receipt : receipt.entries;
+    const entry = entries.find((item) => item.path === path);
+    assert.ok(entry, `Captured original serialization source ${path}`);
+    const snapshot = entry.snapshot ? resolve(root, entry.snapshot) : resolve(dirname(receiptPath), basename(receiptPath, ".json"), path);
+    const bytes = readFileSync(snapshot);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.sha256.toLowerCase());
+    return bytes.toString("utf8");
+  };
+  originalDateSource = captured(resolve(root, originalDateBaselineArgument.slice("--date-original-baseline-file=".length)), dateOwnerPath);
+  originalPresentationSource = captured(resolve(root, rtlBaselineArgument.slice("--date-rtl-baseline-file=".length)), presentationOwnerPath);
+}
+assert.ok(!originalDateBaselineArgument || rtlBaselineArgument, "Captured original date proof also requires the original Reports owner snapshot");
+const originalCases = new Map<string, string>([
+  ["2026-12-01T12:53:00.000Z", "01 Dec 2026, 02:53 PM"],
+  ["2026-04-23T22:30:00.000Z", "24 Apr 2026, 01:30 AM"],
+  ["+010000-12-01T12:53:00.000Z", "01 Dec 10000, 02:53 PM"],
+  ["2026-12-01", "01 Dec 2026"],
+  ["invalid", "—"],
+]);
+const literalOriginalDatePort = {
+  ADMIN_DATE_TIME_PATTERN: "DD MMM YYYY, hh:mm A",
+  formatAdminDateTime(value: string) { assert.ok(originalCases.has(value), "Explicit original month-name export vector"); return originalCases.get(value)!; },
+  serializeAdminDateTimeDisplay: (value: string) => value,
+};
+const originalDates = originalDateSource ? loadReportPureModule<DateOwner>(originalDateSource) : literalOriginalDatePort;
+assert.equal(originalDates.ADMIN_DATE_TIME_PATTERN, "DD MMM YYYY, hh:mm A", "Export comparison must bind the original month-name contract");
+const previousPresentation = loadPresentation(originalPresentationSource, originalDates);
+const unrelatedDirections = '\u2066unrelated Latin\u2069 · \u2067عربي\u2069 · \u200E · 09/10/2026, 06:26 PM';
+const rtlEvents = [...originalCases.keys()].map((createdAt, index) => ({
+  id: index + 1, action: 'تحديث "خاص"\nسطر جديد', actor: `مدير ${unrelatedDirections}`, entityLabel: 'عنصر "مهم", عربي', entityType: "topic", createdAt,
+}));
+const rtlModel = {
+  dashboard: { status: "ready", data: { kpis: { projects: { total: rtlEvents.length, published: 1, unpublished: 3 } }, recentProjects: rtlEvents.map((event) => ({ id: event.id, arabicName: event.entityLabel, code: `J"${event.id}",\n${unrelatedDirections}`, updatedAt: event.createdAt, publicationStatus: "published" })) } },
+  reports: { status: "ready", data: parseReportsReadModel(rawReadModel()) },
+  audit: { status: "ready", message: "نشاط عربي", data: { total: rtlEvents.length, sampled: rtlEvents.length, entityActivity: [{ entityType: "topic", count: rtlEvents.length }], userActivity: [{ actor: unrelatedDirections, count: rtlEvents.length }], recentActivity: rtlEvents, publishingHistory: rtlEvents } },
+} as unknown as Parameters<ReportPresentationOwner["buildAdminReportPresentation"]>[0];
+const rtlContext = { filter: "all", period: "current", compare: "none" } as const;
+const routeTree = ts.createSourceFile("reports-export-route.ts", exportRoute, ts.ScriptTarget.Latest, true);
+function matchingNodes(node: ts.Node, predicate: (node: ts.Node) => boolean) {
+  const matches: ts.Node[] = [];
+  const visit = (value: ts.Node) => { if (predicate(value)) matches.push(value); ts.forEachChild(value, visit); };
+  visit(node); return matches;
+}
+const csvCells = matchingNodes(routeTree, (node) => ts.isFunctionDeclaration(node) && node.name?.text === "csvCell");
+const csvDeclarations = matchingNodes(routeTree, (node) => ts.isVariableDeclaration(node) && node.name.getText(routeTree) === "csv");
+const csvResponses = matchingNodes(routeTree, (node) => ts.isNewExpression(node) && node.expression.getText(routeTree) === "Response");
+assert.equal(csvCells.length, 1); assert.equal(csvDeclarations.length, 1); assert.equal(csvResponses.length, 1);
+const csvResponse = csvResponses[0] as ts.NewExpression;
+assert.ok(csvResponse.arguments?.[0] && ts.isTemplateExpression(csvResponse.arguments[0]) && csvResponse.arguments[0].head.text === "\uFEFF", "Actual success response owns BOM-prefixed CSV");
+const csvOwner = loadReportPureModule<{ bytes(rows: ReturnType<ReportPresentationOwner["buildAdminReportExportRows"]>): string }>(
+  `${csvCells[0].getText(routeTree)}\nexport function bytes(rows){const ${csvDeclarations[0].getText(routeTree)};return ${csvResponse.arguments[0].getText(routeTree)};}`,
+);
+const rtlCsvProof = (["projects", "audit"] as const).map((reportId) => {
+  const current = currentPresentation.buildAdminReportPresentation(rtlModel, reportId, rtlContext);
+  const before = previousPresentation.buildAdminReportPresentation(rtlModel, reportId, rtlContext);
+  const rows = currentPresentation.buildAdminReportExportRows(current);
+  const expectedRows = previousPresentation.buildAdminReportExportRows(before);
+  assert.deepEqual(rows, expectedRows, `Actual ${reportId} export rows preserve the exact original month-name serialization`);
+  assert.ok(expectedRows.some((row) => row.context.includes("01 Dec 2026, 02:53 PM")), "Expected export is original month-name text, never numeric intermediate text");
+  const actualBytes = Buffer.from(csvOwner.bytes(rows), "utf8"), expectedBytes = Buffer.from(csvOwner.bytes(expectedRows), "utf8");
+  assert.deepEqual(actualBytes, expectedBytes, `Actual ${reportId} csvCell/CSV/BOM bytes remain exact`);
+  assert.ok(actualBytes.toString("utf8").includes(unrelatedDirections), "Unrelated directionality marks survive export unchanged");
+  assert.ok(current.recordGroups.some((group) => group.items.some((item) => item.meta.includes("\u206601/12/2026, 02:53 PM\u2069"))), "Actual UI presentation retains isolated timestamps inside Arabic metadata");
+  assert.ok(rows.every((row) => !row.context.includes("\u206601/12/2026, 02:53 PM\u2069")), "New timestamp envelopes do not leak into CSV context");
+  return { reportId, rows: rows.length, byteLength: actualBytes.length, sha256: createHash("sha256").update(actualBytes).digest("hex") };
+});
+if (originalDateSource) {
+  for (const value of ["2026-12-01T12:53:00.000Z", "2026-04-23T22:30:00.000Z", "2026-12-01T12:53:00", "0001-12-01T12:53:00.000Z", "+010000-12-01T12:53:00.000Z", "2026-12-01", "invalid", ""]) {
+    assert.equal(dates.serializeAdminDateTimeDisplay(dates.formatAdminDateTime(value)), originalDates.formatAdminDateTime(value), "Parsing/timezone/fallback/date-only serialization equals the earliest captured owner");
+  }
+}
+const bypassedExport = reportPresentation.replace("context: serializeAdminDateTimeDisplay(item.meta)", "context: item.meta");
+assert.notEqual(bypassedExport, reportPresentation, "Negative mutates the actual export inverse call");
+const bypassOwner = loadPresentation(bypassedExport, dates);
+const expectedAuditRows = previousPresentation.buildAdminReportExportRows(previousPresentation.buildAdminReportPresentation(rtlModel, "audit", rtlContext));
+assert.notDeepEqual(bypassOwner.buildAdminReportExportRows(bypassOwner.buildAdminReportPresentation(rtlModel, "audit", rtlContext)), expectedAuditRows, "Bypassing the inverse leaks marks and fails byte parity");
+const dateTree = ts.createSourceFile("content-dates.ts", dateSource, ts.ScriptTarget.Latest, true);
+const inverseNodes = matchingNodes(dateTree, (node) => ts.isFunctionDeclaration(node) && node.name?.text === "serializeAdminDateTimeDisplay");
+assert.equal(inverseNodes.length, 1);
+const inverseBody = (inverseNodes[0] as ts.FunctionDeclaration).body!;
+const serializerReturn = inverseBody.statements.find(ts.isReturnStatement);
+assert.ok(serializerReturn?.expression);
+const broadDateSource = dateSource.slice(0, serializerReturn.expression.getStart(dateTree)) + `(${serializerReturn.expression.getText(dateTree)}).replace(/[\\u2066\\u2069]/gu, "")` + dateSource.slice(serializerReturn.expression.end);
+const broadDates = loadReportPureModule<DateOwner>(broadDateSource), broadOwner = loadPresentation(reportPresentation, broadDates);
+assert.notDeepEqual(broadOwner.buildAdminReportExportRows(broadOwner.buildAdminReportPresentation(rtlModel, "audit", rtlContext)), expectedAuditRows, "A broad bidi stripper corrupts unrelated content and fails parity");
+const rtlOutputArgument = process.argv.find((argument) => argument.startsWith("--date-rtl-output-file="));
+if (rtlOutputArgument) writeFileSync(resolve(root, rtlOutputArgument.slice("--date-rtl-output-file=".length)), JSON.stringify({
+  status: "PASS", basis: originalDateSource ? "earliest captured month-name date owner and original Reports owner" : "explicit original month-name export vectors through actual Reports owners", cases: rtlCsvProof, negatives: ["bypassed export serializer", "overbroad bidi stripping after correct serialization"], capturedParseParityCases: originalDateSource ? 8 : 0,
+  sourceHashes: [dateOwnerPath, presentationOwnerPath, "src/app/admin/reports/export/route.ts"].map((path) => ({ path, sha256: createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex") })),
+  limitations: ["Pure actual report builders/export rows and actual route CSV fragment only; no authenticated HTTP route, DB read or audit mutation was executed.", "DOM visual order, font geometry and screen-reader/browser behavior require separate live RTL evidence."],
+}, null, 2) + "\n");
+console.log(`OK: Admin RTL timestamp/original export parity (${rtlCsvProof.length} reports, 2 negatives, ${originalDateSource ? 8 : 0} captured parsing cases).`);
 
 console.log("OK: Reports & Analytics capability behavior and ownership guards passed.");

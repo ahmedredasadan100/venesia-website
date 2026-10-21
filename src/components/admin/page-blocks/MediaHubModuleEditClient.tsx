@@ -4,7 +4,8 @@ import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
 import { useState } from "react";
 
-import { AdminFormListboxSelect } from "../ui";
+import { AdminFormControlHeader, AdminFormListboxSelect } from "../ui";
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 import {
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -24,6 +25,7 @@ import {
 import CollectionModuleEditor, {
   CollectionModuleDisplayFormattingFields,
 } from "./editors/CollectionModuleEditor";
+import { getSlotModuleSlugMetadata } from "../../../lib/page-composition/module-registry-metadata";
 import type { Json } from "../../../lib/database.types";
 import { MEDIA_HUB_SECTION_LABELS } from "../../../lib/media-hub-modules/admin-present";
 import {
@@ -80,15 +82,19 @@ function readInitialSectionKey(value: string): MediaHubSectionKey {
 function ListingPresentationFields({
   config,
   mediaType,
+  section = "all",
 }: {
   config: MediaListingPresentationConfig;
   mediaType: MediaHubMediaType;
+  section?: "all" | "configuration";
 }) {
   return (
     <>
       <input type="hidden" name="placement" value="listing" />
 
       <CollectionModuleEditor
+        surfacePresentation="premium"
+        section={section}
         selection={{
           name: "content_type",
           label: "نوع المحتوى",
@@ -137,8 +143,13 @@ export default function MediaHubModuleEditClient({
   const initialSectionKey = readInitialSectionKey(block.section_key);
   const parsedInitial = parseMediaHubModuleConfig(block.config ?? {}, initialSectionKey);
   const isListing = parsedInitial.placement === "listing" && Boolean(parsedInitial.listing && parsedInitial.type);
+  const splitListingTabs = isListing && Boolean(
+    getSlotModuleSlugMetadata(block.slug)?.editorSections?.presentation,
+  );
 
   const [sectionKey, setSectionKey] = useState<MediaHubSectionKey>(initialSectionKey);
+  const isActiveHub = !isListing && sectionKey !== "featured";
+  const HubTextSection = isActiveHub ? "div" : ModuleEditorSection;
   const [eyebrow, setEyebrow] = useState(parsedInitial.presentation.eyebrow);
   const [title, setTitle] = useState(parsedInitial.presentation.title);
   const [description, setDescription] = useState(parsedInitial.presentation.description);
@@ -219,7 +230,8 @@ export default function MediaHubModuleEditClient({
             {isListing ? null : (
               <AdminFormListboxSelect
                 name="section_key"
-                label="نوع السكشن"
+                label={isActiveHub ? <AdminFormControlHeader title="نوع السكشن" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" /> : "نوع السكشن"}
+                sizing={isActiveHub ? "full" : undefined}
                 value={sectionKey}
                 onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
                 options={SECTION_KEYS.map((key) => ({
@@ -232,26 +244,29 @@ export default function MediaHubModuleEditClient({
 
           <ModuleEditorTabs
             moduleKind="media-hub"
+            moduleSlug={splitListingTabs ? block.slug : undefined}
             activePanelContext={
               <ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/media-hub" saved={saved} />
             }
             tabs={[
               {
                 id: "content",
+                sectionHeaderPresentation: isListing || isActiveHub ? "control" : undefined,
                 content: (
                   isListing && parsedInitial.listing && parsedInitial.type ? (
                     <ListingPresentationFields
                       config={parsedInitial.listing}
                       mediaType={parsedInitial.type}
+                      section={splitListingTabs ? "configuration" : "all"}
                     />
                   ) : (
-                    <ModuleEditorSection>
-                      <ModuleEditorSectionHeading intent="domain">
+                    <HubTextSection className={isActiveHub ? "space-y-4" : undefined}>
+                      {!isActiveHub ? <ModuleEditorSectionHeading intent="domain">
                         محتوى السكشن
-                      </ModuleEditorSectionHeading>
-                      <ModuleEditorFieldGrid className="mt-4">
-                        <ModuleEditorField nature="short-text" span={4}>
-                          <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+                      </ModuleEditorSectionHeading> : null}
+                      <ModuleEditorFieldGrid className={isActiveHub ? undefined : "mt-4"}>
+                        <ModuleEditorField nature="short-text" span={isActiveHub ? 6 : 4}>
+                          <ModuleEditorVisibilityAlignRow presentation={isActiveHub ? "premium" : "card"} icon={isActiveHub ? <AdminModuleTabIcon name="content" /> : undefined} label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
                             <input
                               name="eyebrow"
                               aria-label="النص التمهيدي"
@@ -262,8 +277,8 @@ export default function MediaHubModuleEditClient({
                           </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
-                        <ModuleEditorField nature="short-text" span={4}>
-                          <ModuleEditorVisibilityAlignRow label="عنوان السكشن" showName="show_section_title" boldName="section_title_bold" alignmentName="section_title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+                        <ModuleEditorField nature="short-text" span={isActiveHub ? 6 : 4}>
+                          <ModuleEditorVisibilityAlignRow presentation={isActiveHub ? "premium" : "card"} icon={isActiveHub ? <AdminModuleTabIcon name="content" /> : undefined} label="عنوان السكشن" showName="show_section_title" boldName="section_title_bold" alignmentName="section_title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
                             <input
                               name="title"
                               aria-label="عنوان السكشن"
@@ -274,8 +289,8 @@ export default function MediaHubModuleEditClient({
                           </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
-                        <ModuleEditorField nature="short-description" span={4}>
-                          <ModuleEditorVisibilityAlignRow label="وصف السكشن" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+                        <ModuleEditorField nature="short-description" span={isActiveHub ? 6 : 4}>
+                          <ModuleEditorVisibilityAlignRow presentation={isActiveHub ? "premium" : "card"} icon={isActiveHub ? <AdminModuleTabIcon name="content" /> : undefined} label="وصف السكشن" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
                             <input
                               name="presentation_description"
                               aria-label="وصف السكشن"
@@ -286,8 +301,8 @@ export default function MediaHubModuleEditClient({
                           </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
-                        <ModuleEditorField nature="short-text" span={4}>
-                          <ModuleEditorVisibilityAlignRow label="نص زر الاستكشاف" showName="show_cta" boldName="cta_bold" alignmentName="cta_alignment" showDefault={ctaFormat.visible} boldDefault={ctaFormat.bold} alignmentDefault={ctaFormat.alignment}>
+                        <ModuleEditorField nature="short-text" span={isActiveHub ? 6 : 4}>
+                          <ModuleEditorVisibilityAlignRow presentation={isActiveHub ? "premium" : "card"} icon={isActiveHub ? <AdminModuleTabIcon name="publish" /> : undefined} label="نص زر الاستكشاف" showName="show_cta" boldName="cta_bold" alignmentName="cta_alignment" showDefault={ctaFormat.visible} boldDefault={ctaFormat.bold} alignmentDefault={ctaFormat.alignment}>
                             <input
                               name="cta_text"
                               aria-label="نص زر الاستكشاف"
@@ -298,11 +313,21 @@ export default function MediaHubModuleEditClient({
                           </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
                       </ModuleEditorFieldGrid>
-                    </ModuleEditorSection>
+                    </HubTextSection>
                   )
                 ),
               },
-              ...(!isListing
+              ...(splitListingTabs && parsedInitial.listing
+                ? [{
+                    id: "presentation",
+                    content: (
+                      <CollectionModuleDisplayFormattingFields
+                        display={parsedInitial.listing.display}
+                        surfacePresentation="premium"
+                      />
+                    ),
+                  }]
+                : !isListing
                 ? [
                     {
                       id: "presentation",
@@ -313,6 +338,7 @@ export default function MediaHubModuleEditClient({
                           data-media-hub-editor-presentation=""
                         >
                           <CollectionPresentationFields
+                            surfacePresentation={isActiveHub ? "premium" : "default"}
                             hierarchy={activeHierarchy}
                             hierarchyCapabilities={activeCapabilities.hierarchy}
                             view={activeCollectionView}
@@ -323,6 +349,7 @@ export default function MediaHubModuleEditClient({
                           <CollectionModuleDisplayFormattingFields
                             display={activeDisplay}
                             heading="تنسيق عناصر المحتوى"
+                            surfacePresentation={isActiveHub ? "premium" : "default"}
                           />
                         </div>
                       ),
@@ -331,10 +358,12 @@ export default function MediaHubModuleEditClient({
                 : []),
               {
                 id: "pages",
+                sectionHeaderPresentation: isListing || isActiveHub ? "control" : undefined,
                 content: (
                   <ModuleEditorPagesTab
                     moduleName={block.name}
                     assignmentContext={assignmentContext}
+                    presentation={isListing || isActiveHub ? "premium" : "default"}
                   />
                 ),
               },

@@ -8,6 +8,8 @@ import vm from "node:vm";
 import { PGlite } from "@electric-sql/pglite";
 import { createJiti } from "jiti";
 import ts from "typescript";
+import { createElement, type ComponentType, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import type {
   FeedModuleConfig,
@@ -187,6 +189,41 @@ assert.deepEqual(
   ["buying-guide", "district-guide"],
 );
 assert.deepEqual(filterSeriesSlugsForCategories(seriesFilterFixture, [], ["district-guide"]), []);
+
+// Exercise the existing editor's pure filter helpers against the save-owner contract.
+const editorFilterHelpers = loadTranspiledModule(
+  "src/components/admin/page-blocks/FeedModuleFilterFields.tsx",
+  {},
+  (source) => {
+    const tree = ts.createSourceFile("FeedModuleFilterFields.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const names = ["getSeriesOptions", "getInitialSeriesSlugs"];
+    const declarations = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && Boolean(node.name && names.includes(node.name.text)));
+    assert.equal(declarations.length, names.length, "Use both actual editor filter helpers, never a copied filtering implementation");
+    return declarations.map(node => node.getText(tree)).join("\n") + "\nexport { getSeriesOptions, getInitialSeriesSlugs };";
+  },
+);
+const editorSeriesOptions = editorFilterHelpers.getSeriesOptions as (
+  selectedCategories: readonly string[],
+  seriesByCategorySlug: typeof seriesFilterFixture.seriesByCategorySlug,
+) => Array<{ id: number; slug: string }>;
+const editorInitialSeries = editorFilterHelpers.getInitialSeriesSlugs as (
+  config: { query: { categorySlugs: string[]; seriesSlugs: string[] } },
+  options: typeof seriesFilterFixture,
+) => string[];
+for (const selectedCategories of [[], ["bait-al-watan"], ["real-estate"], ["bait-al-watan", "real-estate"], ["missing"], ["real-estate", "bait-al-watan", "real-estate"]]) {
+  assert.deepEqual(
+    editorSeriesOptions(selectedCategories, seriesFilterFixture.seriesByCategorySlug),
+    getSeriesOptionsForCategories(seriesFilterFixture, selectedCategories),
+    "Editor category-to-series scope must preserve canonical ordering, ID deduplication and empty/unknown category semantics",
+  );
+  const selectedSeries = ["buying-guide", "district-guide", "missing"];
+  assert.deepEqual(
+    editorInitialSeries({ query: { categorySlugs: selectedCategories, seriesSlugs: selectedSeries } }, seriesFilterFixture),
+    filterSeriesSlugsForCategories(seriesFilterFixture, selectedCategories, selectedSeries),
+    "Editor initial scope must retain only selected series permitted by the save owner",
+  );
+}
+assert.deepEqual(editorInitialSeries({ query: { categorySlugs: ["bait-al-watan"], seriesSlugs: [] } }, seriesFilterFixture), [], "All-series state remains an empty selection");
 
 const checkedStatusForm = new FormData();
 checkedStatusForm.append("status", "unpublished");
@@ -432,6 +469,80 @@ assert.deepEqual(
 );
 assert.equal(latestConfigReparsedAsSeries.presentation.showExcerpt, true);
 
+// Cover every supported layout with boundary capacities while inactive variant drafts remain serialized.
+const adoptionLayouts: Record<TopicsFeedType, readonly string[]> = {
+  latest: ["slider", "grid", "list"],
+  popular: ["grid", "list"],
+  categories: ["grid", "list"],
+  series: ["slider", "grid", "list"],
+};
+let adoptionRoundTrips = 0;
+for (const feedType of Object.keys(adoptionLayouts) as TopicsFeedType[]) {
+  for (const layout of adoptionLayouts[feedType]) {
+    for (const limit of [1, 9, collectionItemLimitMax]) {
+      const authored = new FormData();
+      for (const [name, value] of preservedVariantForm.entries()) authored.append(name, value);
+      authored.set("widget_title", "عنوان *حرفي* <tag> &\nفقرة ثانية");
+      authored.set("eyebrow", "تمهيد <literal> *علامة*");
+      authored.set("link_text", "رابط & نص *حرفي*");
+      authored.set("limit", String(limit));
+      authored.set(feedType + "_layout", layout);
+      authored.append("category_slugs", "bait-al-watan");
+      authored.append("series_slugs", "district-guide");
+      const built = buildFeedModuleConfig(authored, feedType);
+      const reloaded = parseFeedModuleConfig(JSON.parse(JSON.stringify(built)), feedType);
+      assert.deepEqual(reloaded, built, feedType + "/" + layout + " must retain exact configuration through serialization and readback");
+      assert.equal(reloaded.presentation.variants[feedType].layout, layout);
+      assert.equal(reloaded.query.limit, limit);
+      assert.deepEqual(reloaded.query.categorySlugs, ["bait-al-watan"]);
+      assert.deepEqual(reloaded.query.seriesSlugs, ["district-guide"]);
+      assert.equal(reloaded.presentation.title, authored.get("widget_title"));
+      assert.equal(reloaded.presentation.eyebrow, authored.get("eyebrow"));
+      assert.equal(reloaded.presentation.linkText, authored.get("link_text"));
+      for (const inactiveType of Object.keys(adoptionLayouts) as TopicsFeedType[]) {
+        if (inactiveType !== feedType) assert.deepEqual(reloaded.presentation.variants[inactiveType], latestVariantConfig.presentation.variants[inactiveType]);
+      }
+      for (const card of ["articleCard", "categoryCard", "seriesCard"] as const) assert.deepEqual(reloaded.presentation[card], latestVariantConfig.presentation[card]);
+      adoptionRoundTrips += 1;
+    }
+  }
+  for (const invalidLimit of ["", "-1", "0", "1.5", "NaN", String(collectionItemLimitMax + 1)]) {
+    const invalid = createFeedForm();
+    invalid.set("limit", invalidLimit);
+    assert.throws(() => buildFeedModuleConfig(invalid, feedType), /عدد العناصر المعروضة/u, feedType + " rejects invalid capacity " + invalidLimit);
+  }
+  for (const boundary of [1, 3]) {
+    const boundaryForm = createFeedForm();
+    boundaryForm.set(feedType === "latest" ? "latest_density" : feedType + "_columns", String(boundary));
+    boundaryForm.set(feedType + "_list_items_per_group", String(boundary));
+    boundaryForm.set(feedType + "_list_interval_seconds", boundary === 1 ? "3" : "60");
+    const config = buildFeedModuleConfig(boundaryForm, feedType);
+    const variant = config.presentation.variants[feedType];
+    assert.equal("density" in variant ? variant.density : variant.columns, boundary);
+    assert.equal(variant.list.itemsPerGroup, boundary);
+    assert.equal(variant.list.intervalSeconds, boundary === 1 ? 3 : 60);
+  }
+  const invalidVariantForm = createFeedForm();
+  invalidVariantForm.set(feedType + "_layout", "unsupported");
+  invalidVariantForm.set(feedType === "latest" ? "latest_density" : feedType + "_columns", "4");
+  invalidVariantForm.set(feedType + "_list_items_per_group", "0");
+  invalidVariantForm.set(feedType + "_list_interval_seconds", "61");
+  const normalized = buildFeedModuleConfig(invalidVariantForm, feedType).presentation.variants[feedType];
+  const defaults = (feedTypes.DEFAULT_FEED_PRESENTATION_VARIANTS as FeedModuleConfig["presentation"]["variants"])[feedType];
+  assert.equal(normalized.layout, defaults.layout);
+  assert.equal("density" in normalized ? normalized.density : normalized.columns, "density" in defaults ? defaults.density : defaults.columns);
+  assert.deepEqual(normalized.list, { itemsPerGroup: 3, showDots: true, intervalSeconds: 8 });
+}
+assert.equal(adoptionRoundTrips, 30);
+for (const count of [1, 9, collectionItemLimitMax]) {
+  const items = Array.from({ length: count }, (_, index) => index + 1);
+  for (const groupSize of [1, 2, 3, collectionItemLimitMax + 1]) {
+    const groups = chunkFeedListItems(items, groupSize);
+    assert.deepEqual(groups.flat(), items, "Grouped presentation must retain every permitted item in order");
+    assert.equal(groups.length, Math.ceil(count / groupSize));
+  }
+}
+
 const multiCategoryForm = createFeedForm();
 multiCategoryForm.append("category_slugs", "bait-al-watan");
 multiCategoryForm.append("category_slugs", "real-estate");
@@ -575,6 +686,20 @@ assert.deepEqual(productionPartialVariants.presentation.variants.popular.list, {
   showDots: true,
   intervalSeconds: 8,
 });
+// A pre-existing over-limit row already reads canonically; adoption must not silently raise the shared limit.
+const legacyOverLimitRaw = { query: { limit: 94 }, presentation: { title: "تصنيفات قديمة", variants: { categories: { layout: "list", columns: 1 } } } };
+const legacyOverLimitRead = parseFeedModuleConfig(legacyOverLimitRaw, "categories");
+assert.equal(legacyOverLimitRaw.query.limit, 94, "Reading must not mutate legacy stored data");
+assert.equal(legacyOverLimitRead.query.limit, collectionItemLimitMax);
+assert.deepEqual(legacyOverLimitRead.presentation.variants.categories.list, { itemsPerGroup: collectionItemLimitMax, showDots: true, intervalSeconds: 8 });
+const legacyCanonicalSaveForm = createFeedForm();
+legacyCanonicalSaveForm.set("widget_title", legacyOverLimitRead.presentation.title);
+legacyCanonicalSaveForm.set("limit", String(legacyOverLimitRead.query.limit));
+legacyCanonicalSaveForm.set("categories_layout", legacyOverLimitRead.presentation.variants.categories.layout);
+const legacyCanonicalSave = buildFeedModuleConfig(legacyCanonicalSaveForm, "categories");
+assert.equal(legacyCanonicalSave.query.limit, collectionItemLimitMax, "Saving the displayed canonical legacy capacity retains the established boundary");
+assert.deepEqual(legacyCanonicalSave.presentation.variants.categories.list, legacyOverLimitRead.presentation.variants.categories.list);
+
 assert.equal(isPersistedFeedModuleConfigEqual(disabledConfig, disabledConfig), true);
 assert.equal(
   isPersistedFeedModuleConfigEqual(
@@ -962,6 +1087,126 @@ assert.deepEqual(
   [1, 2, 3, 4, 5, 6, 7],
 );
 
+// Execute all ten public branches with the real widgets/grouped-list owner.
+// Only external visual shells and the timer hook are probed; layout/timing decisions stay in product code.
+type FeedCarouselProbeOptions = { itemCount: number; intervalMs?: number; enabled?: boolean; autoplay?: boolean };
+const feedCarouselProbeInputs: FeedCarouselProbeOptions[] = [];
+const feedCarouselProbeHook = {
+  useAutoCarousel(options: FeedCarouselProbeOptions) {
+    feedCarouselProbeInputs.push(options);
+    return { activeIndex: 0, canAdvance: options.enabled !== false && options.itemCount > 1, containerRef: { current: null }, swipeHandlers: {}, goTo() {}, goToNext() {}, goToPrevious() {} };
+  },
+};
+const probeDots = { __esModule: true, default: ({ count }: { count: number }) => createElement("nav", { "data-feed-probe-dots": count }) };
+const probeNavigation = { __esModule: true, default: () => createElement("nav", { "data-feed-probe-arrows": "" }) };
+const groupedListRuntime = loadTranspiledModule("src/components/feed-modules/FeedGroupedList.tsx", {
+  "../../hooks/use-auto-carousel": feedCarouselProbeHook,
+  "./FeedCarouselDots": probeDots,
+  "./feed-grouped-list-contract": groupedListContract,
+});
+const feedPublicProbeOverrides = {
+  "../public/PublicMediaImage": { __esModule: true, default: () => null },
+  "next/link": { __esModule: true, default: ({ children, scroll, ...props }: { children?: ReactNode; scroll?: boolean; [name: string]: unknown }) => {
+    void scroll;
+    return createElement("a", props, children);
+  } },
+  "../../hooks/use-auto-carousel": feedCarouselProbeHook,
+  "../../lib/feed-modules/types": feedTypes,
+  "../../lib/page-blocks/configs": pageBlockConfigs,
+  "../feed-modules/FeedCarouselDots": probeDots,
+  "../feed-modules/FeedCarouselNavigation": probeNavigation,
+  "../feed-modules/FeedGroupedList": groupedListRuntime,
+  "../feed-modules/feed-grouped-list-contract": groupedListContract,
+  "../feed-modules/feed-presentation-layout": presentationLayoutContract,
+  "./SidebarFeedPanel": { SidebarFeedPanel: ({ children }: { children?: ReactNode }) => createElement("section", null, children) },
+};
+const feedPublicProbeFiles: Record<TopicsFeedType, string> = {
+  latest: "SidebarLatestArticlesWidget",
+  popular: "SidebarMostReadWidget",
+  categories: "SidebarCategoriesWidget",
+  series: "SidebarSeriesWidget",
+};
+const feedPublicProbeWidgets = Object.fromEntries(Object.entries(feedPublicProbeFiles).map(([feedType, filename]) => [
+  feedType,
+  loadTranspiledModule("src/components/sidebar-feeds/" + filename + ".tsx", feedPublicProbeOverrides).default,
+])) as Record<TopicsFeedType, ComponentType<Record<string, unknown>>>;
+const feedPublicProbeItems = Array.from({ length: 9 }, (_, index) => ({
+  id: index + 1, title: "عنوان " + index, name: "تصنيف " + index, subtitle: "وصف " + index,
+  excerpt: "مقتطف " + index, date: "2026-10-18", count: 260 + index, viewsCount: 90 - index,
+  slug: "item-" + index, href: "/topics/item-" + index, image: "", imageAlt: "",
+}));
+const feedPublicCardMarkers: Record<TopicsFeedType, string> = {
+  latest: 'data-feed-article-card="latest"', popular: 'data-feed-article-card="popular"',
+  categories: 'data-feed-category-card=""', series: 'data-feed-series-card=""',
+};
+let feedPublicRuntimeCases = 0;
+for (const feedType of Object.keys(adoptionLayouts) as TopicsFeedType[]) {
+  for (const layout of adoptionLayouts[feedType]) {
+    for (const seconds of [3, 60]) {
+      const authored = createFeedForm();
+      authored.set("limit", "9");
+      authored.set(feedType + "_layout", layout);
+      authored.set(feedType === "latest" ? "latest_density" : feedType + "_columns", "3");
+      authored.set(feedType + "_list_items_per_group", "4");
+      authored.set(feedType + "_list_interval_seconds", String(seconds));
+      authored.set(feedType + "_list_show_dots", String(seconds === 3));
+      authored.set(feedType + "_show_dots", String(seconds === 3));
+      authored.set(feedType + "_show_arrows", String(seconds === 3));
+      const config = parseFeedModuleConfig(JSON.parse(JSON.stringify(buildFeedModuleConfig(authored, feedType))), feedType);
+      feedCarouselProbeInputs.length = 0;
+      const html = renderToStaticMarkup(createElement(feedPublicProbeWidgets[feedType], {
+        items: feedPublicProbeItems, title: config.presentation.title, eyebrow: "", linkText: "التفاصيل", showImage: false,
+        presentationVariant: config.presentation.variants[feedType],
+      }));
+      const context = feedType + "/" + layout + "/" + seconds;
+      const visibleItems = layout === "list" ? 4 : layout === "grid" ? 9 : feedType === "latest" ? 3 : 1;
+      assert.equal(html.split(feedPublicCardMarkers[feedType]).length - 1, visibleItems, context + " must render the mode's actual visible capacity");
+      assert.ok(html.includes('data-feed-presentation="' + layout + '"'), context);
+      assert.equal(html.includes("data-feed-probe-dots"), seconds === 3 && (layout === "list" || (feedType === "latest" && layout === "slider")), context + " dots applicability");
+      assert.equal(html.includes("data-feed-probe-arrows"), seconds === 3 && layout === "slider", context + " arrows applicability");
+      const activeTimers = feedCarouselProbeInputs.filter(options => options.enabled !== false);
+      assert.equal(activeTimers.length, layout === "grid" ? 0 : 1, context + " active timer count");
+      if (layout === "list") {
+        assert.deepEqual(activeTimers[0], { itemCount: 3, intervalMs: seconds * 1000, autoplay: true }, context + " list duration/grouping reaches the canonical carousel hook");
+      } else if (layout === "slider") {
+        assert.deepEqual(activeTimers[0], { itemCount: feedType === "latest" ? 3 : 9, intervalMs: feedType === "latest" ? 7600 : 8200, enabled: true }, context + " slider retains its existing fixed timing independent of hidden list duration");
+      }
+      feedPublicRuntimeCases += 1;
+    }
+  }
+}
+assert.equal(feedPublicRuntimeCases, 20);
+let categoryFormattingRuntimeCases = 0;
+for (const layout of adoptionLayouts.categories) {
+  for (const showName of [false, true]) {
+    for (const showCount of [false, true]) {
+      const authored = createFeedForm();
+      authored.set("categories_layout", layout);
+      authored.set("show_category", String(showName));
+      authored.set("show_count", String(showCount));
+      authored.set("category_bold", "true");
+      authored.set("category_alignment", "center");
+      authored.set("count_bold", "true");
+      authored.set("count_alignment", "left");
+      const config = parseFeedModuleConfig(JSON.parse(JSON.stringify(buildFeedModuleConfig(authored, "categories"))), "categories");
+      const html = renderToStaticMarkup(createElement(feedPublicProbeWidgets.categories, {
+        items: [feedPublicProbeItems[0]], title: config.presentation.title, eyebrow: "",
+        presentationVariant: config.presentation.variants.categories, cardFormatting: config.presentation.categoryCard,
+      }));
+      assert.equal(html.includes('data-feed-category-name=""'), showName);
+      assert.equal(html.includes('data-feed-category-count=""'), showCount);
+      if (showName) assert.match(html, /class="font-bold !text-center[^"]*" data-feed-category-name=""/u);
+      if (showCount) {
+        assert.match(html, /font-bold !text-left[^"]*" data-feed-category-count=""/u);
+        assert.ok(html.includes(">260</span>"), "Category topic count is source data, not query limit or group size");
+      }
+      if (!showName && !showCount) assert.equal(html, "");
+      categoryFormattingRuntimeCases += 1;
+    }
+  }
+}
+assert.equal(categoryFormattingRuntimeCases, 8);
+
 const mediaSidebarContract = loadTranspiledModule(
   "src/components/media-center/MediaSidebar.tsx",
   {
@@ -1184,9 +1429,206 @@ const legacyStack = readFileSync(
   "utf8",
 );
 
+// The approved family composition moves section headings into the existing metadata owner.
+const feedMetadataOwner = await jiti.import<typeof import("../src/lib/page-composition/module-registry-metadata.ts")>("../src/lib/page-composition/module-registry-metadata.ts");
+const feedSections = feedMetadataOwner.MODULE_KIND_METADATA.feed.editorSections!;
+const adoptedFeedTabIds = ["content", "text", "presentation", "formatting", "pages"];
+for (const [id, label] of [["content", "مصدر المحتوى"], ["text", feedMetadataOwner.MODULE_EDITOR_TAB_LABELS.text], ["presentation", "إعدادات العرض"], ["formatting", "تنسيق عناصر المحتوى"], ["pages", feedMetadataOwner.MODULE_EDITOR_TAB_LABELS.visibility]]) {
+  assert.equal(feedSections[id].navigationLabelAr, label);
+  const resolveTabId = adminUtils.resolveModuleEditorTabId as (value: string, ids: string[]) => string;
+  assert.equal(resolveTabId(id, adoptedFeedTabIds), id);
+}
+for (const id of ["content", "presentation", "formatting", "pages"]) assert.ok(feedSections[id].sectionHeadingAr && feedSections[id].icon);
+for (const id of ["content", "presentation", "formatting"]) assert.ok(feedSections[id].sectionDescriptionAr);
+assert.equal(feedSections.text.sectionChrome, "implicit");
+assert.equal(feedSections.text.sectionHeadingAr, null);
+assert.equal(feedSections.text.sectionDescriptionAr, null);
+for (const name of ["Feed محفوظ", "اسم محدّث"]) assert.equal(feedMetadataOwner.getModuleEditorHeaderMetadata("feed", undefined, name)?.titleAr, name);
+
+function feedJsxSurface(source: string) {
+  const tree = ts.createSourceFile("Feed.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const nodes: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) nodes.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  const tagged = (tag: string) => nodes.filter(node => node.tagName.getText(tree) === tag);
+  const attr = (node: ts.JsxOpeningElement | ts.JsxSelfClosingElement, name: string) => node.attributes.properties.find((prop): prop is ts.JsxAttribute => ts.isJsxAttribute(prop) && prop.name.getText(tree) === name);
+  const value = (node: ts.JsxOpeningElement | ts.JsxSelfClosingElement, name: string) => attr(node, name)?.initializer?.getText(tree);
+  return { tree, tagged, attr, value };
+}
+const feedEditorJsx = feedJsxSurface(editor);
+assert.equal(feedEditorJsx.tagged("ModuleEditorTabs").length, 1);
+const feedTabsInitializer = feedEditorJsx.attr(feedEditorJsx.tagged("ModuleEditorTabs")[0], "tabs")?.initializer;
+assert.ok(feedTabsInitializer && ts.isJsxExpression(feedTabsInitializer) && feedTabsInitializer.expression && ts.isArrayLiteralExpression(feedTabsInitializer.expression));
+const feedTabs = feedTabsInitializer.expression.elements.map(node => {
+  assert.ok(ts.isObjectLiteralExpression(node));
+  const id = node.properties.find((prop): prop is ts.PropertyAssignment => ts.isPropertyAssignment(prop) && prop.name.getText(feedEditorJsx.tree) === "id");
+  assert.ok(id && ts.isStringLiteral(id.initializer));
+  return { id: id.initializer.text, source: node.getText(feedEditorJsx.tree) };
+});
+assert.deepEqual(feedTabs.map(tab => tab.id), adoptedFeedTabIds);
+const feedPanel = (id: string) => feedTabs.find(tab => tab.id === id)!.source;
+for (const id of ["content", "presentation", "formatting", "pages"]) assert.ok(feedPanel(id).includes('sectionHeaderPresentation: "control"'));
+assert.ok(feedPanel("content").includes('name="feed_type"') && feedPanel("content").includes("<FeedModuleFilterFields"));
+assert.equal(feedEditorJsx.tagged("FeedModuleFilterFields").length, 1);
+assert.equal(feedEditorJsx.tagged("FeedPresentationVariantFields").length, 1);
+assert.ok(feedPanel("presentation").includes("<FeedPresentationVariantFields") && feedPanel("presentation").includes("variants={config.presentation.variants}") && feedPanel("presentation").includes("limit={config.query.limit}") && feedPanel("presentation").includes("maxLimit={COLLECTION_ITEM_LIMIT_MAX}"));
+for (const field of ["widget_title", "eyebrow"]) assert.ok(feedPanel("text").includes('name="' + field + '"'));
+assert.ok(feedPanel("text").includes("<AdminFormGrid columns={2}>"));
+assert.ok(feedPanel("formatting").includes("<AdminFormGrid columns={2}>") && feedPanel("formatting").includes('name="link_text"'));
+const feedFormatRows = feedEditorJsx.tagged("ModuleEditorVisibilityAlignRow");
+assert.equal(feedFormatRows.length, 11);
+assert.deepEqual(feedFormatRows.map(row => feedEditorJsx.value(row, "showName")), ["show_title", "show_eyebrow", "show_image", "show_article_title", "show_article_excerpt", "show_article_date", "show_category", "show_count", "show_series", "show_description", "show_details"].map(name => '"' + name + '"'));
+for (const row of feedFormatRows) {
+  assert.equal(feedEditorJsx.value(row, "presentation"), '"premium"');
+  assert.ok(feedEditorJsx.attr(row, "icon"));
+}
+const feedImageRow = feedFormatRows.find(row => feedEditorJsx.value(row, "showName") === '"show_image"')!;
+assert.equal(feedEditorJsx.value(feedImageRow, "controlMode"), '"visibility-only"');
+assert.equal(feedEditorJsx.attr(feedImageRow, "boldName"), undefined);
+assert.equal(feedEditorJsx.attr(feedImageRow, "alignmentName"), undefined);
+for (const [name, expected] of [["id", "{block.id}"], ["slug", "{block.slug}"], ["description", '{block.description ?? ""}']]) {
+  const input = feedEditorJsx.tagged("input").filter(node => feedEditorJsx.value(node, "name") === '"' + name + '"');
+  assert.equal(input.length, 1);
+  assert.equal(feedEditorJsx.value(input[0], "type"), '"hidden"');
+  assert.equal(feedEditorJsx.value(input[0], "value"), expected);
+}
+const widgetTitle = feedEditorJsx.tagged("input").find(node => feedEditorJsx.value(node, "name") === '"widget_title"')!;
+assert.ok(feedEditorJsx.attr(widgetTitle, "required"));
+for (const owner of ["ModuleEditorHeader", "ModuleEditorIdentitySection", "ModuleEditorSaveArea", "AdminFormPendingFields", "ModuleEditorPagesTab", "form"]) assert.equal(feedEditorJsx.tagged(owner).length, 1);
+assert.equal(feedEditorJsx.value(feedEditorJsx.tagged("form")[0], "action"), "{updateAction}");
+assert.equal(feedEditorJsx.value(feedEditorJsx.tagged("ModuleEditorHeader")[0], "entityName"), "{block.name}");
+assert.equal(feedEditorJsx.attr(feedEditorJsx.tagged("ModuleEditorHeader")[0], "moduleSlug"), undefined);
+const feedPages = feedEditorJsx.tagged("ModuleEditorPagesTab")[0];
+assert.equal(feedEditorJsx.value(feedPages, "presentation"), '"premium"');
+assert.equal(feedEditorJsx.value(feedPages, "assignmentContext"), "{assignmentContext}");
+assert.equal(feedEditorJsx.attr(feedPages, "showUsageBanner"), undefined, "Feed must retain multi-page warning and position details");
+const feedSharedPresentation = readFileSync("src/components/admin/page-blocks/ModuleEditorPresentation.tsx", "utf8");
+const feedSharedTabs = readFileSync("src/components/admin/ui/AdminModuleTabs.tsx", "utf8");
+assert.ok(feedSharedPresentation.includes("showUsageBanner = true") && feedSharedPresentation.includes("assignments={assignmentContext.assignments}"));
+assert.ok(feedSharedTabs.includes("hidden={tab.id !== activeId}") && feedSharedTabs.includes("{tab.content}"));
+assert.equal(/block\.(?:id|slug)\s*={2,3}|\.module\.css|AdminRichTextEditor|AdminMediaImageField|AdminLinkField/.test(editor), false);
+assert.equal(editor.includes("<ModuleEditorSectionHeading"), false, "Metadata owns the source, presentation and item-formatting headers once");
+assert.equal(presentationEditor.includes("ModuleEditorSectionHeading"), false, "Presentation tab owns its section header once");
+assert.equal(filters.includes('id="feed-content-scope-title"'), false, "The source tab replaces the duplicated local scope heading");
+
+const filterJsx = feedJsxSurface(filters);
+assert.equal(filterJsx.tagged("AdminCard").length, 2);
+assert.equal(filterJsx.tagged("AdminFormControlHeader").length, 2);
+assert.equal(filterJsx.tagged("AdminFormGrid").length, 2);
+for (const card of filterJsx.tagged("AdminCard")) assert.equal(filterJsx.value(card, "presentation"), '"premium"');
+for (const grid of filterJsx.tagged("AdminFormGrid")) assert.equal(filterJsx.value(grid, "columns"), "{4}");
+assert.deepEqual(filterJsx.tagged("AdminFormControlHeader").map(header => filterJsx.value(header, "title")), ['{<span role="heading" aria-level={3}>التصنيفات</span>}', '{<span role="heading" aria-level={3}>السلاسل</span>}']);
+for (const header of filterJsx.tagged("AdminFormControlHeader")) {
+  assert.equal(filterJsx.value(header, "presentation"), '"leading-icon"');
+  assert.ok(filterJsx.attr(header, "icon"));
+}
+assert.equal(filterJsx.tagged("AdminFormSwitch").length, 1);
+assert.equal(filterJsx.tagged("AdminCheckbox").length, 2);
+assert.ok(filters.includes('adminChoiceButtonClassName(seriesSlugs.length === 0, "gap-2 focus-within:ring-2') && filters.includes('adminChoiceButtonClassName(selected, "gap-2 focus-within:ring-2'));
+assert.ok(filters.includes("onChange={(event) => toggleCategory(category.slug, event.currentTarget.checked)}"));
+assert.ok(filters.includes("onChange={(event) => toggleSeries(event.currentTarget.value)}"));
+assert.ok(filters.includes("seriesSlugs: current.seriesSlugs.filter((slug) => allowedSeriesSlugs.has(slug))"));
+assert.ok(filters.includes("seriesSlugs: []"));
+const variantJsx = feedJsxSurface(presentationEditor);
+assert.equal(variantJsx.tagged("AdminCard").length, 6, "Each existing setting template owns one premium leaf card");
+assert.equal(variantJsx.tagged("AdminFormControlHeader").length, 6, "Every setting card delegates its sole title to the shared header owner");
+for (const card of variantJsx.tagged("AdminCard")) assert.equal(variantJsx.value(card, "presentation"), '"premium"');
+for (const header of variantJsx.tagged("AdminFormControlHeader")) assert.equal(variantJsx.value(header, "presentation"), '"leading-icon"');
+const settingTemplateControls = {
+  NumberField: "input",
+  DensityField: "AdminFormListboxSelect",
+  SwitchField: "AdminFormSwitch",
+  LatestFields: "AdminFormListboxSelect",
+  StaticFields: "AdminFormListboxSelect",
+  SeriesFields: "AdminFormListboxSelect",
+} as const;
+for (const [templateName, controlTag] of Object.entries(settingTemplateControls)) {
+  const declaration = variantJsx.tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === templateName);
+  assert.ok(declaration, "Existing setting template retained: " + templateName);
+  const template = feedJsxSurface(declaration.getText(variantJsx.tree));
+  const cards = template.tagged("AdminCard");
+  const headers = template.tagged("AdminFormControlHeader");
+  const controls = template.tagged(controlTag);
+  assert.equal(cards.length, 1, templateName + " has one leaf card rather than nested surfaces");
+  assert.equal(headers.length, 1, templateName + " has one visual title owner");
+  assert.equal(controls.length, 1, templateName + " retains its original control");
+  assert.equal(template.tagged("AdminFormGrid").length, 0, templateName + " leaves responsive placement to the shared master grid");
+  assert.equal(template.tagged("label").length, templateName === "NumberField" ? 1 : 0, templateName + " must not wrap an already-labelled shared control in another label");
+  for (const tag of ["h1", "h2", "h3", "h4"]) assert.equal(template.tagged(tag).length, 0, "The tab owns the section heading; setting titles remain label-safe");
+  const assertNoDuplicateTitle = (node: ts.Node) => {
+    if (ts.isJsxText(node)) assert.equal(node.text.trim(), "", templateName + " must not add a second text title outside the shared header");
+    if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression) && node.expression.text === "label" && ts.isJsxElement(node.parent)) {
+      assert.fail(templateName + " duplicates its title outside the header/control label property");
+    }
+    ts.forEachChild(node, assertNoDuplicateTitle);
+  };
+  assertNoDuplicateTitle(template.tree);
+  if (controlTag === "AdminFormListboxSelect") {
+    const label = template.attr(controls[0], "label")?.initializer;
+    assert.ok(label && ts.isJsxExpression(label) && label.expression === headers[0], templateName + " passes the single header through the existing accessible label slot");
+    assert.equal(template.value(headers[0], "title"), templateName === "DensityField" ? "{label}" : '"النمط"');
+  } else if (controlTag === "AdminFormSwitch") {
+    const label = template.attr(controls[0], "label")?.initializer;
+    assert.ok(label && ts.isJsxExpression(label) && label.expression === headers[0], "Embedded switch owns the single clickable label supplied by the shared header");
+    assert.equal(template.value(headers[0], "title"), "{label}");
+    assert.ok(template.attr(controls[0], "embedded"));
+    assert.equal(template.attr(controls[0], "embedded")?.initializer, undefined, "Feed opts into the existing switch owner without changing its boolean contract");
+    assert.equal(template.attr(controls[0], "className"), undefined, "No local switch frame or size override");
+    assert.equal(template.attr(controls[0], "surface"), undefined, "Embedded appearance is explicit and leaves legacy surface defaults alone");
+    assert.equal(template.value(cards[0], "className"), '"h-full p-3"');
+    assert.equal(template.value(template.tagged("span")[0], "aria-hidden"), '"true"', "Helper description remains explicitly referenced without duplicating the switch accessible name");
+    assert.equal(template.value(controls[0], "name"), "{name}");
+    assert.equal(template.value(controls[0], "defaultChecked"), "{defaultChecked}");
+    assert.equal(template.value(controls[0], "uncheckedValue"), '"false"');
+    assert.equal(template.value(controls[0], "value"), '"true"');
+    assert.equal(template.value(controls[0], "describedBy"), '{description ? `${name}-description` : undefined}');
+  } else {
+    assert.equal(template.value(headers[0], "title"), "{label}");
+    for (const [name, expected] of Object.entries({ name: "{name}", "aria-label": "{label}", type: '"number"', min: "{min}", max: "{max}", defaultValue: "{defaultValue}" })) {
+      assert.equal(template.value(controls[0], name), expected, "Number control preserves " + name);
+    }
+    assert.equal(template.value(controls[0], "aria-describedby"), '{description ? `${name}-description` : undefined}');
+  }
+  if (templateName === "NumberField" || templateName === "SwitchField") {
+    assert.equal(template.tagged("span").length, 1);
+    assert.equal(template.value(template.tagged("span")[0], "id"), '{`${name}-description`}', "Description association follows the existing unique field name");
+  }
+}
+const headerPresentationOwner = readFileSync("src/components/admin/ui/AdminForm.tsx", "utf8");
+const headerPresentationTree = feedJsxSurface(headerPresentationOwner).tree;
+const sharedHeaderDeclaration = headerPresentationTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormControlHeader");
+assert.ok(sharedHeaderDeclaration);
+assert.equal(feedJsxSurface(sharedHeaderDeclaration.getText(headerPresentationTree)).tagged("label").length, 0, "Shared header stays label-safe when used by native or shared controls");
+assert.equal(variantJsx.tagged("AdminFormGrid").length, 1, "All currently applicable controls share one responsive layout owner");
+const presentationMasterGrid = variantJsx.tagged("AdminFormGrid")[0];
+assert.equal(variantJsx.value(presentationMasterGrid, "columns"), "{3}");
+for (let ancestor: ts.Node | undefined = presentationMasterGrid.parent; ancestor; ancestor = ancestor.parent) {
+  if (ts.isJsxElement(ancestor)) assert.notEqual(ancestor.openingElement.tagName.getText(variantJsx.tree), "AdminCard", "Do not restore an unnecessary outer card around premium setting cards");
+}
+const presentationMasterGridSource = presentationMasterGrid.parent.getText(variantJsx.tree);
+for (const tag of ["NumberField", "LatestFields", "StaticFields", "SeriesFields"]) assert.ok(presentationMasterGridSource.includes("<" + tag));
+assert.ok(presentationMasterGridSource.includes('name="limit"'));
+assert.equal(presentationEditor.includes("ModuleEditorField"), false, "Implicit 12-column spans must not create holes in the three-column control grid");
+assert.equal(/(?:grid-cols-|col-span-|span=)/u.test(presentationEditor), false, "No parallel grid or inherited span overrides inside the shared control grid");
+for (const select of variantJsx.tagged("AdminFormListboxSelect")) assert.equal(variantJsx.value(select, "sizing"), '"full"');
+assert.equal(variantJsx.tagged("LatestFields").length, 1);
+assert.equal(variantJsx.tagged("StaticFields").length, 2);
+assert.equal(variantJsx.tagged("SeriesFields").length, 1);
+assert.ok(presentationEditor.includes('className={active ? "contents" : "hidden"}') && presentationEditor.includes("{children}"));
+assert.ok(presentationEditor.includes('className={visible ? "contents" : "hidden"}'));
+assert.ok(presentationEditor.includes('className={layout !== "list" ? "contents" : "hidden"}'));
+assert.ok(presentationEditor.includes('className={layout === "slider" ? "contents" : "hidden"}'));
+assert.ok(presentationEditor.includes('className={layout === "grid" ? "contents" : "hidden"}'));
+assert.equal(presentationEditor.includes("disabled="), false, "Inactive variants remain mounted and enabled in native FormData");
+assert.ok(presentationEditor.includes('uncheckedValue="false"') && presentationEditor.includes('value="true"'));
+assert.ok(presentationEditor.includes("min = 1") && presentationEditor.includes("min={3}") && presentationEditor.includes("max={60}") && presentationEditor.includes("max={maxLimit}"));
+assert.ok(presentationEditor.includes("[1, 2, 3].map"));
+
 for (const label of [
   "نوع موديول المحتوى",
-  "تنسيق عناصر الـFeed",
   "الصورة",
   "عنوان الموضوع",
   "المقتطف",
@@ -1203,7 +1645,6 @@ for (const label of [
 assert.ok(editor.includes("FEED_MODULE_DISPLAY_FORMATTING_CAPABILITY.variants[feedType]"));
 assert.ok(editor.includes("<FeedPresentationVariantFields"));
 for (const label of [
-  "شكل العرض",
   "عدد العناصر المعروضة",
   "عدد العناصر في المجموعة",
   "مدة الانتقال بالثواني",
@@ -1271,7 +1712,7 @@ for (const staleLabel of ["Show Image", "Show Date", "Show Excerpt", "Feed Type"
 }
 assert.ok(presentationEditor.includes("عدد العناصر المعروضة"));
 assert.equal(editor.includes("عدد النتائج"), false);
-for (const label of ["نطاق المحتوى", "التصنيفات", "السلاسل", "كل السلاسل"]) {
+for (const label of ["التصنيفات", "السلاسل", "كل السلاسل"]) {
   assert.ok(filters.includes(label), `missing Feed content-scope label: ${label}`);
 }
 for (const removedCopy of [
@@ -1286,7 +1727,7 @@ assert.ok(filters.includes('name="series_slugs"'));
 assert.ok(filters.includes("AdminFormSwitch"));
 assert.ok(filters.includes("AdminCheckbox"));
 assert.equal(filters.includes('type="checkbox"'), false);
-assert.ok(filters.includes("lg:grid-cols-4"));
+assert.equal(filters.includes("lg:grid-cols-4"), false, "The canonical AdminFormGrid columns=4 owns filter responsiveness");
 assert.ok(filters.includes("checked={seriesSlugs.length === 0}"));
 assert.equal(filters.includes('type="hidden" name="series_slugs"'), false);
 assert.equal(filters.includes("AdminFormListboxSelect"), false);

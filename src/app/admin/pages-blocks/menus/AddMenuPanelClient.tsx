@@ -47,6 +47,7 @@ export default function AddMenuPanelClient() {
       </AdminActionButton>
 
       <VenesiaModal
+        closeOnEscape
         open={open}
         title="إضافة قائمة جديدة"
         description="اعمل قائمة فاضية الآن، وافتحها بعد الإنشاء لإضافة عناصرها."

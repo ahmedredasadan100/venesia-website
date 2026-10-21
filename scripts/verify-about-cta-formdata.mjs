@@ -1,90 +1,59 @@
 /**
- * Prevent about-cta FormData name collisions between public config.description
- * and content_block_templates.description (internal metadata).
+ * Public About CTA copy and internal module metadata must remain separate.
+ * The current shared form preserves internal_description as one hidden field.
  */
-import { existsSync, readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
+import { createJiti } from "jiti";
 
-const root = resolve(process.cwd());
-const failures = [];
-
-function read(relPath) {
-  const full = resolve(root, relPath);
-  if (!existsSync(full)) {
-    failures.push(`Missing file: ${relPath}`);
-    return "";
-  }
-  return readFileSync(full, "utf8");
-}
-
-function assert(condition, message) {
-  if (!condition) failures.push(message);
-}
-
+const read = (path) => readFileSync(resolve(process.cwd(), path), "utf8");
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
 const editor = read("src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 
-assert(client.includes('name="internal_description"'), "Settings must post internal_description");
-assert(
-  client.includes("usesInternalDescriptionField"),
-  "about-cta path must use dedicated internal description field flag",
-);
-assert(
-  client.includes("isAboutCta") && client.includes("usesInternalDescriptionField"),
-  "about-cta must be covered by internal description settings",
-);
-assert(
-  /name=["']description["']/.test(editor),
-  "About CTA content editor must keep public config field name=description",
-);
-assert(
-  !/name=["']description["']/.test(
-    client.slice(
-      client.indexOf("usesInternalDescriptionField ?"),
-      client.indexOf("usesInternalDescriptionField ?") + 500,
-    ),
-  ) || client.includes('name="internal_description"'),
-  "Structured settings branch must not collide on description",
-);
-
-// Ensure settings branch for structured modules does not emit name="description"
-const settingsStart = client.indexOf("const settingsTab =");
-const settingsChunk = client.slice(settingsStart, settingsStart + 3500);
-assert(
-  settingsChunk.includes('name="internal_description"'),
-  "settingsTab must include internal_description",
-);
-assert(
-  settingsChunk.includes("usesInternalDescriptionField ?"),
-  "settingsTab must gate internal_description for structured modules",
-);
-
-assert(
-  actions.includes("formData.has(\"internal_description\")"),
-  "Server must prefer internal_description",
-);
-assert(
-  actions.includes('schema === "about-cta"'),
-  "Server must refuse falling back to public description for about-cta",
-);
-assert(
-  actions.includes("description: cleanText(formData.get(\"description\"))"),
-  "About CTA config builder must still read public description into config",
-);
-
-// Detect duplicate name=\"description\" risk inside AboutCtaModuleEditor + settings together:
-// Editor may have description; settings must not when about-cta is active.
-assert(
-  !settingsChunk.includes('name="description"') ||
-    settingsChunk.includes("usesInternalDescriptionField ?"),
-  "settingsTab must not blindly emit name=description for about-cta",
-);
-
-if (failures.length) {
-  console.error("verify-about-cta-formdata FAILED:");
-  for (const item of failures) console.error(` - ${item}`);
-  process.exit(1);
+function inputFields(source) {
+  const tree = ts.createSourceFile("editor.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const fields = [];
+  const visit = (node) => {
+    if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && ["input", "textarea"].includes(node.tagName.getText(tree))) {
+      const props = Object.fromEntries(node.attributes.properties.filter(ts.isJsxAttribute).map(p => [p.name.getText(tree), p.initializer]));
+      const name = props.name && ts.isStringLiteral(props.name) ? props.name.text : null;
+      fields.push({ name, tag: node.tagName.getText(tree), type: props.type?.getText(tree), value: props.value?.getText(tree) });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  return fields;
 }
+const internal = inputFields(client).filter(f => f.name === "internal_description");
+assert.equal(internal.length, 1, "One metadata field, independent of the active tab");
+assert.equal(internal[0].type, '"hidden"');
+assert.equal(internal[0].value, '{block.description ?? ""}');
+assert.equal(inputFields(client).filter(f => f.name === "description").length, 0, "The shell must not collide with public description");
+const copy = inputFields(editor).filter(f => f.name === "description");
+assert.equal(copy.length, 1, "One public description field");
+assert.equal(copy[0].tag, "textarea", "About CTA retains its plain text storage contract");
+assert.ok(client.includes('usesAboutCtaConfig ? <input type="hidden" name="config_schema" value="about-cta" />'));
+assert.ok(actions.includes('description: cleanText(formData.get("description"))'));
 
-console.log("verify-about-cta-formdata OK");
+const tree = ts.createSourceFile("actions.ts", actions, ts.ScriptTarget.Latest, true);
+const node = tree.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "readTemplateInternalDescription");
+assert.ok(node);
+const compiled = ts.transpileModule(node.getText(tree), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const { cleanText } = await createJiti(import.meta.url).import("../src/lib/page-blocks/admin-utils.ts");
+const readInternal = new Function("cleanText", compiled + "\nreturn readTemplateInternalDescription;")(cleanText);
+const data = new FormData();
+data.set("config_schema", "about-cta");
+data.set("description", "وصف عام *حرفي* <tag>\nفقرة ثانية");
+data.set("internal_description", "بيانات داخلية محفوظة");
+assert.equal(readInternal(data), "بيانات داخلية محفوظة");
+assert.equal(data.get("description"), "وصف عام *حرفي* <tag>\nفقرة ثانية");
+data.set("internal_description", "");
+assert.equal(readInternal(data), null);
+data.delete("internal_description");
+assert.equal(readInternal(data), null, "A missing internal field must not fall back to About CTA public copy");
+data.set("config_schema", "generic");
+assert.equal(readInternal(data), data.get("description"), "Unrelated legacy fallback remains supported");
+console.log("verify-about-cta-formdata OK: shell/consumer field uniqueness and actual internal-description reader isolation");

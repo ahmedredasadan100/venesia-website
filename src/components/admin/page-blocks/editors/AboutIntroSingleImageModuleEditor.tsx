@@ -6,8 +6,6 @@ import {
   ModuleEditorFieldGrid,
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
-  ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
@@ -15,8 +13,9 @@ import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormGrid } from "../../ui";
-import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
+import { AdminCard, AdminFormControlHeader, AdminFormGrid } from "../../ui";
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { ADMIN_FORM, adminChoiceButtonClassName } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   resolvePageBlockTextFormat,
@@ -25,6 +24,7 @@ import {
 
 type AboutIntroSingleImageModuleEditorProps = {
   config: AboutIntroSingleImageModuleConfig;
+  section?: "all" | "text" | "images" | "cards";
 };
 
 function padBeats(beats: AboutIntroSingleImageModuleConfig["beats"]) {
@@ -35,6 +35,7 @@ function padBeats(beats: AboutIntroSingleImageModuleConfig["beats"]) {
 
 export default function AboutIntroSingleImageModuleEditor({
   config,
+  section = "all",
 }: AboutIntroSingleImageModuleEditorProps) {
   const beats = padBeats(config.beats);
   const [imagePosition, setImagePosition] = useState<"left" | "right">(
@@ -46,57 +47,71 @@ export default function AboutIntroSingleImageModuleEditor({
   const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
   const subtitleFormat = resolvePageBlockTextFormat(config, "subtitle");
   const descriptionFormat = resolvePageBlockTextFormat(config, "description");
+  const showText = section === "all" || section === "text";
+  const showImages = section === "all" || section === "images";
+  const showCards = section === "all" || section === "cards";
 
   return (
     <div className="space-y-4">
       {/* config_schema is owned by ContentModuleEditClient — avoid duplicate FormData names */}
-      <input type="hidden" name="image_position" value={imagePosition} />
-
-      <ModuleEditorSection>
+      {showText ? (
+      <div>
         <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={6}>
-          <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
             <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="short-text" span={6}>
-          <ModuleEditorVisibilityAlignRow label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
             <input name="title" aria-label="العنوان" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="short-text" span={12}>
-          <ModuleEditorVisibilityAlignRow label="العنوان الفرعي" showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="العنوان الفرعي" showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
             <input name="subtitle" aria-label="العنوان الفرعي" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="long-content" span={12}>
-          <ModuleEditorVisibilityAlignRow label="الوصف" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="الوصف" showName="show_description" showDefault={descriptionFormat.visible} controlMode="visibility-only">
           <AdminRichTextEditor
             name="body"
             label="الوصف"
+            showLabel={false}
             defaultValue={config.body ?? ""}
-            toolbarMode="none"
-            minHeight={72}
+            toolbarMode="full"
+            enableArticleStructure
+            enableTextAlign
+            legacyHtmlFormatting={{ boldName: "description_bold", bold: descriptionFormat.bold, alignmentName: "description_alignment", alignment: descriptionFormat.alignment }}
+            helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
-      </ModuleEditorSection>
+      </div>
+      ) : null}
 
-      <ModuleEditorSection>
-        <AdminFormGrid columns={2} presentation="control-cards">
+      {showImages ? (
+        <AdminFormGrid columns={2}>
+          <input type="hidden" name="image_position" value={imagePosition} />
+          <AdminCard presentation="premium" className="flex min-w-0 flex-col gap-3 p-3">
+          <AdminFormControlHeader title="الصورة" presentation="leading-icon" icon={<AdminModuleTabIcon name="media" />} />
           <AdminMediaImageField
             mediaSlot={contentModuleMediaSlot("about-intro-single-image")}
             name="image_main"
             label="الصورة"
+            variant="card"
+            showLabel={false}
             defaultValue={mainSrc}
             altName="image_main_alt"
             defaultAlt={mainAlt}
+            altLabel="النص البديل للصورة (Alt Text)"
             browseFolder="images/about"
           />
-          <div className={ADMIN_FORM.labelStack}>
-            <span className="text-xs font-semibold text-white/55">موضع الصورة (سطح المكتب)</span>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="موضع الصورة">
+          </AdminCard>
+          <AdminCard presentation="premium" className="h-full space-y-3 p-3">
+            <AdminFormControlHeader title="موضع الصورة (سطح المكتب)" presentation="leading-icon" icon={<AdminModuleTabIcon name="settings" />} />
+            <div className={ADMIN_FORM.choiceGroup} role="radiogroup" aria-label="موضع الصورة">
               {(
                 [
                   { value: "right" as const, label: "الصورة يمين" },
@@ -111,27 +126,21 @@ export default function AboutIntroSingleImageModuleEditor({
                     role="radio"
                     aria-checked={active}
                     onClick={() => setImagePosition(option.value)}
-                    className={[
-                      "cursor-pointer rounded-xl border px-3 py-2 text-xs font-semibold transition",
-                      active
-                        ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
-                        : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
-                    ].join(" ")}
+                    className={adminChoiceButtonClassName(active, "", "compact")}
                   >
                     {option.label}
                   </button>
                 );
               })}
             </div>
-          </div>
+          </AdminCard>
         </AdminFormGrid>
-      </ModuleEditorSection>
+      ) : null}
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="repeater">البطاقات (3 كحد أقصى)</ModuleEditorSectionHeading>
-        <ModuleEditorRepeaterGrid>
+      {showCards ? (
+        <ModuleEditorRepeaterGrid presentation="premium">
           {beats.map((beat, index) => (
-            <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`}>
+            <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`} presentation="premium" icon={<AdminModuleTabIcon name="section" />}>
               <label className={ADMIN_FORM.labelStack}>
                 <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
                 <input
@@ -161,7 +170,7 @@ export default function AboutIntroSingleImageModuleEditor({
             </ModuleEditorRepeaterCard>
           ))}
         </ModuleEditorRepeaterGrid>
-      </ModuleEditorSection>
+      ) : null}
     </div>
   );
 }

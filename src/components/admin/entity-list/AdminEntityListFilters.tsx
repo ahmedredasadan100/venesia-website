@@ -61,6 +61,13 @@ export type AdminEntityListFiltersProps = {
   contextOverrideActive?: boolean;
   /** Standalone owns its card boundary; embedded delegates it to a parent surface. */
   surface?: "standalone" | "embedded";
+  /** Opt-in layout and decoration only; filter values and selection contracts stay unchanged. */
+  filterPanelPresentation?: {
+    variant: "premium";
+    fullWidthFilterIds?: readonly string[];
+    fieldIcons?: Readonly<Record<string, ReactNode>>;
+    optionIcons?: Readonly<Record<string, Readonly<Record<string, ReactNode>>>>;
+  };
   /** Temporary compatibility slots removed from eligible adopters in this pass. */
   trailing?: ReactNode;
   searchSlot?: ReactNode;
@@ -125,11 +132,26 @@ function AdminFilterOptionButton({
   option,
   selected,
   onSelect,
+  premium = false,
+  icon,
 }: {
   option: AdminEntityFilterOption;
   selected: boolean;
   onSelect: () => void;
+  premium?: boolean;
+  icon?: ReactNode;
 }) {
+  const optionText = (
+    <>
+      <span className={premium ? "block whitespace-normal break-words font-semibold" : "block truncate font-semibold"} style={{ paddingInlineStart: option.depth ? `${option.depth * 14}px` : undefined }}>
+        {option.label}
+      </span>
+      {option.secondaryLabel ? (
+        <span className="mt-1 block truncate text-xs text-white/38">{option.secondaryLabel}</span>
+      ) : null}
+    </>
+  );
+
   return (
     <button
       type="button"
@@ -137,18 +159,18 @@ function AdminFilterOptionButton({
       aria-selected={selected}
       disabled={option.disabled}
       onClick={onSelect}
-      className={`min-w-0 rounded-[11px] border px-3 py-2.5 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45 ${
+      className={`${premium ? "flex min-w-0 items-center justify-between gap-2 rounded-[11px] border px-3 py-2.5 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45" : "min-w-0 rounded-[11px] border px-3 py-2.5 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"} ${
         selected
           ? "border-[#D8B87A]/55 bg-[#D8B87A]/16 text-[#F4E7C5]"
           : "border-white/9 bg-black/18 text-white/64 hover:border-[#D8B87A]/28 hover:bg-white/[0.04] hover:text-white/85"
       }`}
     >
-      <span className="block truncate font-semibold" style={{ paddingInlineStart: option.depth ? `${option.depth * 14}px` : undefined }}>
-        {option.label}
-      </span>
-      {option.secondaryLabel ? (
-        <span className="mt-1 block truncate text-xs text-white/38">{option.secondaryLabel}</span>
-      ) : null}
+      {premium ? (
+        <>
+          <span className="min-w-0 flex-1">{optionText}</span>
+          {icon ? <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center">{icon}</span> : null}
+        </>
+      ) : optionText}
     </button>
   );
 }
@@ -157,10 +179,12 @@ function AdminFilterField({
   filter,
   value,
   onChange,
+  presentation,
 }: {
   filter: AdminEntityFilterDef;
   value: string;
   onChange: (value: string) => void;
+  presentation?: AdminEntityListFiltersProps["filterPanelPresentation"];
 }) {
   const [optionQuery, setOptionQuery] = useState("");
   const allValue = filter.allValue ?? filter.defaultValue ?? "all";
@@ -175,14 +199,27 @@ function AdminFilterField({
       )
     : allOptions;
   const isDate = filter.type === "date" || filter.type === "date_range";
+  const premium = presentation?.variant === "premium";
+  const fullWidth = presentation?.fullWidthFilterIds?.includes(filter.id) ?? false;
+  const fieldIcon = presentation?.fieldIcons?.[filter.id];
+  const optionIcons = presentation?.optionIcons?.[filter.id];
+  const premiumOptionColumns = allOptions.length + 1 === 2
+    ? "grid-cols-2"
+    : allOptions.length + 1 === 3
+      ? fullWidth ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-3"
+      : "grid-cols-2 sm:grid-cols-4";
 
   return (
     <fieldset
       disabled={filter.disabled}
-      className={`min-w-0 rounded-[15px] border border-white/8 bg-black/16 p-3.5 ${searchable || isDate ? "md:col-span-2" : ""}`}
+      className={premium
+        ? `min-w-0 rounded-[15px] border border-white/10 bg-black/16 p-3 ${fullWidth ? "md:col-span-2" : ""}`
+        : `min-w-0 rounded-[15px] border border-white/8 bg-black/16 p-3.5 ${searchable || isDate ? "md:col-span-2" : ""}`}
       data-admin-filter-field={filter.id}
+      data-admin-filter-field-width={premium ? fullWidth ? "full" : "half" : undefined}
     >
-      <legend className="px-1 text-sm font-semibold text-white/82">
+      <legend className={premium ? "flex items-center gap-2 px-1 text-sm font-semibold text-white/88" : "px-1 text-sm font-semibold text-white/82"}>
+        {premium && fieldIcon ? <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center text-[#D8B87A]">{fieldIcon}</span> : null}
         {filter.label ?? filter.placeholder}
       </legend>
 
@@ -202,6 +239,7 @@ function AdminFilterField({
               value={optionQuery}
               onChange={(event) => setOptionQuery(event.currentTarget.value)}
               placeholder={filter.optionSearchPlaceholder ?? `ابحث داخل ${filter.label ?? filter.placeholder}...`}
+              aria-label={premium ? filter.optionSearchPlaceholder ?? `ابحث داخل ${filter.label ?? filter.placeholder}...` : undefined}
               className="mt-2 h-10 w-full rounded-[10px] border border-white/10 bg-[#080B10] px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#D8B87A]/45"
             />
           ) : null}
@@ -209,12 +247,14 @@ function AdminFilterField({
           <div
             role="listbox"
             aria-label={filter.label ?? filter.placeholder}
-            className={`mt-2 grid gap-2 ${searchable ? `max-h-52 overflow-y-auto pe-1 ${ADMIN_SCROLLBAR_VISUAL_CLASSES}` : "sm:grid-cols-2"}`}
+            className={`mt-2 grid gap-2 ${searchable ? `${premium ? "max-h-40" : "max-h-52"} overflow-y-auto pe-1 ${ADMIN_SCROLLBAR_VISUAL_CLASSES}` : premium ? premiumOptionColumns : "sm:grid-cols-2"}`}
           >
             <AdminFilterOptionButton
               option={{ value: allValue, label: "الكل" }}
               selected={value === allValue}
               onSelect={() => onChange(allValue)}
+              premium={premium}
+              icon={optionIcons?.[allValue]}
             />
             {visibleOptions.map((option) => (
               <AdminFilterOptionButton
@@ -222,6 +262,8 @@ function AdminFilterField({
                 option={option}
                 selected={value === option.value}
                 onSelect={() => onChange(option.value)}
+                premium={premium}
+                icon={optionIcons?.[option.value]}
               />
             ))}
           </div>
@@ -250,6 +292,7 @@ export default function AdminEntityListFilters({
   contextOverride,
   contextOverrideActive = false,
   surface = "standalone",
+  filterPanelPresentation,
   className = "",
 }: AdminEntityListFiltersProps) {
   const router = useRouter();
@@ -670,11 +713,14 @@ export default function AdminEntityListFilters({
       {suggestionsLayer}
 
       <VenesiaModal
+        closeOnEscape
         open={filterModalOpen}
         eyebrow="FILTERS"
         title="الفلاتر"
         description="خصّص النتائج التي تريد ظهورها في الجدول."
-        size="lg"
+        size={filterPanelPresentation?.variant === "premium" && filters.length <= 2 ? "md" : "lg"}
+        density={filterPanelPresentation?.variant === "premium" ? "compact" : undefined}
+        headerIcon={filterPanelPresentation?.variant === "premium" ? <FilterIcon className="size-5" /> : undefined}
         onClose={cancelFilters}
         footer={
           <div className="flex w-full flex-wrap items-center gap-2">
@@ -694,11 +740,12 @@ export default function AdminEntityListFilters({
           </div>
         }
       >
-        <div className="grid gap-3 md:grid-cols-2" data-admin-filter-modal-fields="">
+        <div className={filterPanelPresentation?.variant === "premium" ? "grid gap-2 md:grid-cols-2" : "grid gap-3 md:grid-cols-2"} data-admin-filter-modal-fields="" data-admin-filter-panel-presentation={filterPanelPresentation?.variant}>
           {filters.map((filter) => (
             <AdminFilterField
               key={filter.id}
               filter={filter}
+              presentation={filterPanelPresentation}
               value={activeFilterValue(filter, draftFilters)}
               onChange={(value) =>
                 setDraftFilters((current) => ({ ...current, [filter.paramKey]: value }))

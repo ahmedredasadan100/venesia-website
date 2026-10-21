@@ -10,6 +10,7 @@ import type {
   ResolvedAdminCompanyConfig,
 } from "../../lib/admin/shell/contracts";
 import { isAdminNavigationItemActive } from "../../lib/admin/shell/navigation";
+import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
 import AdminPageContextHeader from "./ui/AdminPageContextHeader";
 import AdminPageExperience from "./ui/AdminPageExperience";
 
@@ -171,7 +172,8 @@ export default function AdminShell({
     return (
       <aside
         className={[
-          "admin-sidebar-shell relative flex h-full flex-col bg-transparent transition-[width] duration-300 ease-out",
+          "admin-sidebar-shell relative flex flex-col bg-transparent transition-[width] duration-300 ease-out",
+          forceExpanded ? "h-full" : "min-h-screen",
           compact ? "w-[92px]" : "w-[304px]",
         ].join(" ")}
         data-admin-navigation
@@ -217,7 +219,7 @@ export default function AdminShell({
           ) : null}
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label="الإدارة">
+        <nav className={`flex-1 px-3 py-3 ${forceExpanded ? "overflow-y-auto " : ""}${VENESIA_SCROLLBAR_VISUAL_CLASSES}`} aria-label="الإدارة">
           <div className="space-y-1">
             {navigation.map((item) => {
               const active = activeGroupIds.has(item.id);
@@ -378,7 +380,8 @@ export default function AdminShell({
       </div>
 
       <div className="relative flex min-h-screen flex-row items-start bg-transparent">
-        <div className="sticky top-0 hidden h-screen shrink-0 bg-transparent lg:block">
+        {/* Desktop navigation grows with the document; the mobile drawer stays bounded. */}
+        <div className="hidden shrink-0 bg-transparent lg:block">
           {renderSidebar()}
         </div>
 
@@ -389,8 +392,8 @@ export default function AdminShell({
           </div>
         ) : null}
 
-        <main className="flex min-h-screen min-w-0 flex-1 flex-col gap-7 px-4 py-4 sm:px-6 lg:px-7">
-          <header className="admin-premium-card rounded-[28px] p-4" data-admin-shell-header>
+        <main className="flex min-h-screen min-w-0 flex-1 flex-col gap-6 px-4 py-4 sm:px-6 lg:px-7">
+          <header className="admin-premium-card rounded-[28px] px-4 py-3" data-admin-shell-header>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => setMobileState({ pathname, open: true })} className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.045] text-white/70 lg:hidden" aria-label="فتح القائمة">☰</button>

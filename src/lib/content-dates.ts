@@ -62,12 +62,13 @@ export function resolveTopicPublishedAt(options: {
 }
 
 export const ADMIN_TIME_ZONE = "Africa/Cairo";
-export const ADMIN_DATE_TIME_PATTERN = "DD MMM YYYY, hh:mm A";
+export const ADMIN_DATE_TIME_PATTERN = "DD/MM/YYYY, hh:mm AM/PM";
 export const ADMIN_DATE_ONLY_PATTERN = "DD MMM YYYY";
 
 const ADMIN_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  numberingSystem: "latn",
   day: "2-digit",
-  month: "short",
+  month: "2-digit",
   year: "numeric",
   hour: "2-digit",
   minute: "2-digit",
@@ -89,7 +90,11 @@ function adminDateTimePart(
   return parts.find((part) => part.type === type)?.value ?? "";
 }
 
-export function formatAdminDateTime(value?: string | null) {
+/** Display text: isolate the ASCII timestamp from surrounding Admin RTL text. */
+export function formatAdminDateTime(
+  value?: string | null,
+  precision: "date-time" | "date" = "date-time",
+) {
   if (!value) return "—";
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatAdminDateOnly(value);
   const date = new Date(value);
@@ -105,7 +110,24 @@ export function formatAdminDateTime(value?: string | null) {
 
   if (!day || !month || !year || !hour || !minute || !dayPeriod) return "—";
 
-  return `${day} ${month} ${year}, ${hour}:${minute} ${dayPeriod}`;
+  if (precision === "date") return `\u2066${day}/${month}/${year}\u2069`;
+
+  return `\u2066${day}/${month}/${year}, ${hour}:${minute} ${dayPeriod}\u2069`;
+}
+
+/** Preserve the original export text; only the display owner's timestamp envelope is serialized. */
+export function serializeAdminDateTimeDisplay(value: string) {
+  return value.replace(
+    /\u2066(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/(\d+), (0[1-9]|1[0-2]):([0-5]\d) (AM|PM)\u2069/gu,
+    (match, day: string, month: string, year: string, hour: string, minute: string, dayPeriod: string) => {
+      // Reuse the date-only owner's month token, without reparsing the stored instant.
+      const monthName = adminDateTimePart(
+        ADMIN_DATE_ONLY_FORMATTER.formatToParts(new Date(Date.UTC(2000, Number(month) - 1, 1))),
+        "month",
+      );
+      return monthName ? `${day} ${monthName} ${year}, ${hour}:${minute} ${dayPeriod}` : match;
+    },
+  );
 }
 
 export function formatAdminDateOnly(value?: string | null) {

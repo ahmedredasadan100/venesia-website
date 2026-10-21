@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 import { createJiti } from "jiti";
 import { verifyFeaturedReferenceReadContract } from "./fixtures/page-block-performance-harness.mjs";
+import { verifyFeaturedPremiumOffline } from "./qa-featured-editor-preservation.mts";
 
 const ROOT = process.cwd();
 const read = (path: string) =>
@@ -291,7 +292,9 @@ check(
     'className="mt-3 grid justify-items-center gap-3 [&>div]:mt-0"',
   ) &&
     component.includes('className="relative pb-6 pt-12"') &&
-    component.includes('className="relative pb-4 pt-8"'),
+    component.includes('className="relative pb-4 pt-8"') &&
+    carousel.includes('from "../feed-modules/feed-grouped-list-contract"') &&
+    carousel.includes("maxVisible={FEED_MAX_VISIBLE_DOTS}"),
 );
 
 check(
@@ -353,7 +356,8 @@ check(
   editor.includes('data-featured-manual-items-scroll=""') &&
     editor.includes('<legend className="sr-only">') &&
     editor.includes('data-featured-manual-heading=""') &&
-    editor.includes('className="mb-2 text-sm font-semibold text-white"') &&
+    editor.includes('<AdminFormControlHeader') &&
+    editor.includes('title="العناصر اليدوية"') &&
     editor.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES") &&
     editor.includes("max-h-[28rem]") &&
     editor.includes("overflow-y-auto") &&
@@ -899,7 +903,7 @@ check(
     editor.includes("FEATURED_PRESENTATION_LABELS_AR[value]"),
 );
 const featuredDisplaySettingsIndex = editor.indexOf(
-  'data-featured-display-settings=""',
+  "const displayControls =",
 );
 const featuredDisplayCardIndexes = [
   'showName="show_title_on_page"',
@@ -913,22 +917,20 @@ const featuredDisplayCardIndexes = [
 check(
   "CMS editor separates profile controls, module heading, and seven ordered payload controls",
   [
-    "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME",
+    '<AdminCard presentation="premium"',
+    "<AdminFormControlHeader",
+    "embedded",
     "<AdminFormGrid columns={4}",
     "مصدر المحتوى",
     "طريقة العرض",
     "العدد المسموح به",
     "إعدادات النمط المختار",
-    "عنوان الموديول",
     "تنسيق عناصر المحتوى",
     'name="presentation_variant"',
     'data-featured-variant-settings={presentationVariant}',
     'data-featured-items-per-view-control={',
     'name="items_per_view"',
     'aria-label="العناصر الظاهرة"',
-    "ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME",
-    'className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4"',
-    'className="min-h-16"',
     "presentationProfile.supportsNavigation",
     'name="show_navigation_arrows"',
     'name="show_navigation_dots"',
@@ -967,6 +969,9 @@ check(
     'name="cta_text"',
   ].every((token) => editor.includes(token)) &&
     featuredDisplaySettingsIndex >= 0 &&
+    editor.includes('data-featured-display-settings=""') &&
+    editor.includes('<AdminFormGrid columns={3}>{displayControls}</AdminFormGrid>') &&
+    editor.includes('<AdminFormGrid columns={4}>{variantControls}</AdminFormGrid>') &&
     featuredDisplayCardIndexes.every(
       (index, position, indexes) =>
         index > featuredDisplaySettingsIndex &&
@@ -1061,9 +1066,9 @@ check(
   "CMS editor keeps Featured quantity labels concise and removes redundant source-limit guidance",
   editor.includes("العناصر الظاهرة") &&
     editor.includes("العدد المسموح به") &&
-    editor.includes("whitespace-nowrap text-sm font-medium") &&
+    editor.includes('<AdminFormControlHeader title="العناصر الظاهرة"') &&
     editor.includes("[color-scheme:dark]") &&
-    editor.includes('className="block text-sm font-medium text-white/70"') &&
+    editor.includes('<AdminFormControlHeader title="العدد المسموح به"') &&
     !editor.includes("العناصر الظاهرة في كل مرة") &&
     !editor.includes("يحدد حد الاختيار من المصدر") &&
     !editor.includes("هذه الحقول تخص حمولة الخبر أو المادة نفسها"),
@@ -1152,9 +1157,9 @@ check(
     !mediaEditor.includes('name="media_type"'),
 );
 check(
-  "Media Hub mutation boundary rejects the retired Featured section",
+  "Media Hub mutation boundary rejects retired non-listing Featured and retains News Listing",
   read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts").includes(
-    'sectionKey === "featured"',
+    'sectionKey === "featured" && placement !== "listing"',
   ),
 );
 check(
@@ -1209,7 +1214,7 @@ check(
     migration.includes("template.config ? 'placement'"),
 );
 
-await import("./qa-featured-editor-preservation.mts");
+await verifyFeaturedPremiumOffline();
 
 await verifyFeaturedReferenceReadContract(ROOT);
 check("Featured references preserve category/series semantics and start independent item reads together without unused series", true);

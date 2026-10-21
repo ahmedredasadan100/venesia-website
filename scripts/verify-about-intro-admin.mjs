@@ -42,17 +42,25 @@ assert(
   "legacy ModuleDependencyHintsPanel must remain retired",
 );
 assert(
-  presentation.includes('mode: "editable" | "hidden"') &&
-    presentation.includes('if (mode === "hidden") return <input type="hidden"'),
-  "shared structural slug helper missing",
+  (client.match(/<input type="hidden" name="slug" value=\{block.slug\}/g) ?? []).length === 1 &&
+    !client.includes('name="slug" defaultValue='),
+  "the stored structural slug must remain one hidden field, never an editable identity control",
 );
 assert(
-  client.includes("usesLockedInternalSlug"),
+  client.includes("<ModuleEditorIdentitySection") && !client.includes("ModuleEditorSlugField"),
   "about-intro slug must be read-only like home modules",
 );
 assert(client.includes('saveLabel="حفظ التعديلات"'), "about-intro save label missing");
 
-assert(editor.includes('toolbarMode="minimal"'), "AdminRichTextEditor minimal toolbar missing");
+assert(
+  client.includes('editorMode="about-intro" section={section} presentation="premium" descriptionToolbar="full"') &&
+    editor.includes('descriptionToolbar = "limited"') &&
+    editor.includes('const fullDescriptionEditor = isHomeStory || descriptionToolbar === "full"') &&
+    editor.includes('toolbarMode={fullDescriptionEditor ? "full" : "none"}') &&
+    editor.includes('enableArticleStructure={fullDescriptionEditor}') &&
+    editor.includes('legacyHtmlFormatting={fullDescriptionEditor ?'),
+  "About Intro must opt into the full shared HTML editor while preserving legacy defaults and formatting",
+);
 assert(editor.includes("enableTextAlign"), "AdminRichTextEditor text align missing");
 assert(
   !editor.includes("toolbarPlacement=") &&
@@ -68,7 +76,7 @@ assert(editor.includes('subtitle: "العنوان الفرعي"'), "Arabic subti
 assert(actions.includes("normalizeRichTextContent"), "actions must normalize rich text body");
 assert(actions.includes("slugLocked"), "actions must lock structured about module slugs");
 assert(
-  actions.includes("isStructuralContentTemplateSlug(existing.slug, existing.variant)") &&
+  /isStructuralContentTemplateSlug\(\s*existing\.slug,\s*existing\.variant,?\s*\)/.test(actions) &&
     actions.includes("slugLocked ? existing.slug : requestedSlug"),
   "about-intro slug must not be overwritten from request",
 );

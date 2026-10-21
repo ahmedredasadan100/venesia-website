@@ -2,6 +2,11 @@
 
 import { useState, type ReactNode } from "react";
 
+import { PlusIcon, TrashIcon } from "../../AdminRowActions";
+import AdminActionButton from "../../ui/AdminActionButton";
+import { AdminFormControlHeader } from "../../ui/AdminForm";
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { CardsBlockItem } from "../../../../lib/page-blocks/configs";
 import {
@@ -13,6 +18,7 @@ import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-ed
 type AdminCardsItemsFieldProps = {
   items: CardsBlockItem[];
   label?: string;
+  presentation?: "default" | "premium";
   minItems?: number;
   maxItems?: number;
   showIcon?: boolean;
@@ -32,11 +38,13 @@ function padItems(items: CardsBlockItem[], minItems: number): CardsEditorItem[] 
 export default function AdminCardsItemsField({
   items,
   label = "البطاقات",
+  presentation = "default",
   minItems = 1,
   maxItems = 12,
   showIcon = true,
   renderHref,
 }: AdminCardsItemsFieldProps) {
+  const premium = presentation === "premium";
   const [rows, setRows] = useState<CardsEditorItem[]>(() =>
     padItems(items, minItems).slice(0, maxItems),
   );
@@ -73,7 +81,21 @@ export default function AdminCardsItemsField({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-white">{label}</h3>
+        {premium ? (
+          <AdminFormControlHeader
+            presentation="leading-icon"
+            title={<span role="heading" aria-level={3}>{label}</span>}
+            icon={<AdminModuleTabIcon name="section" />}
+          />
+        ) : (
+          <h3 className="text-sm font-semibold text-white">{label}</h3>
+        )}
+        {premium ? (
+          <AdminActionButton variant="gold" onClick={addItem} disabled={rows.length >= maxItems}>
+            <PlusIcon className="size-5" />
+            إضافة بطاقة
+          </AdminActionButton>
+        ) : (
         <button
           type="button"
           onClick={addItem}
@@ -82,14 +104,23 @@ export default function AdminCardsItemsField({
         >
           إضافة بطاقة
         </button>
+        )}
       </div>
 
-      <ModuleEditorRepeaterGrid>
+      <ModuleEditorRepeaterGrid presentation={presentation} columns={3}>
         {rows.map((item, index) => (
           <ModuleEditorRepeaterCard
             key={item.clientKey}
+            presentation={presentation}
+            icon={premium ? <AdminModuleTabIcon name="section" /> : undefined}
             title={`بطاقة ${index + 1}`}
-            actions={(
+            actions={premium ? (
+              <>
+                <AdminActionButton size="icon" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك البطاقة ${index + 1} لأعلى`}>↑</AdminActionButton>
+                <AdminActionButton size="icon" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك البطاقة ${index + 1} لأسفل`}>↓</AdminActionButton>
+                <AdminActionButton size="icon" variant="danger" onClick={() => removeItem(index)} disabled={rows.length <= minItems} aria-label={`حذف البطاقة ${index + 1}`}><TrashIcon className="size-5" /></AdminActionButton>
+              </>
+            ) : (
               <>
                 <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك البطاقة ${index + 1} لأعلى`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↑</button>
                 <button type="button" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك البطاقة ${index + 1} لأسفل`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↓</button>

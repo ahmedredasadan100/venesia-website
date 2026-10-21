@@ -105,6 +105,7 @@ type AdminFormControlHeaderProps = {
   title: ReactNode;
   description?: ReactNode;
   icon?: ReactNode;
+  presentation?: "default" | "leading-icon" | "compact-inline";
 };
 
 /** Label-safe presentation; the field owner supplies the accessible association. */
@@ -112,23 +113,47 @@ export function AdminFormControlHeader({
   title,
   description,
   icon,
+  presentation = "default",
 }: AdminFormControlHeaderProps) {
+  const compact = presentation === "compact-inline";
+  const leadingIcon = presentation === "leading-icon" || compact;
+  const iconFrame = icon ? (
+    <span
+      aria-hidden="true"
+      className={compact
+        ? "inline-flex size-6 shrink-0 items-center justify-center rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] [&>svg]:size-4"
+        : leadingIcon
+        ? "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] [&>svg]:size-5"
+        : "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.045] text-white/85 [&>svg]:size-5"}
+    >
+      {icon}
+    </span>
+  ) : null;
+
   return (
-    <span data-admin-form-control-header="" className="flex min-w-0 items-start justify-between gap-3">
+    <span
+      data-admin-form-control-header=""
+      data-admin-form-control-presentation={leadingIcon ? presentation : undefined}
+      className={compact
+        ? "flex min-w-0 items-center gap-1"
+        : leadingIcon
+        ? "flex min-w-0 items-center gap-3"
+        : "flex min-w-0 items-start justify-between gap-3"}
+    >
+      {leadingIcon ? iconFrame : null}
+      {leadingIcon && icon ? (
+        <span
+          aria-hidden="true"
+          className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent"
+        />
+      ) : null}
       <span className="flex min-w-0 flex-col gap-1">
-        <span className="text-sm font-semibold text-white">{title}</span>
+        <span className={`${compact ? "break-words " : ""}text-sm font-semibold text-white`}>{title}</span>
         {description ? (
           <span className="text-xs leading-5 text-white/55">{description}</span>
         ) : null}
       </span>
-      {icon ? (
-        <span
-          aria-hidden="true"
-          className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.045] text-white/85 [&>svg]:size-5"
-        >
-          {icon}
-        </span>
-      ) : null}
+      {!leadingIcon ? iconFrame : null}
     </span>
   );
 }

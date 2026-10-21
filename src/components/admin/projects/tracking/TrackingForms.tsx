@@ -56,6 +56,7 @@ export function TrackingProfileFormModal({
 
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title="تعديل بيانات ملف المتابعة"
       description="هذه البيانات تخص Tracking Domain فقط، ولا تُنسخ إلى بيانات المشروع."
@@ -126,6 +127,7 @@ export function TrackingStageFormModal({
   const mode = stage ? ("edit" as const) : ("create" as const);
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title={stage ? "تعديل مرحلة التنفيذ" : "إضافة مرحلة تنفيذ"}
       description={
@@ -239,6 +241,7 @@ export function TrackingItemFormModal({
   const mode = item ? ("edit" as const) : ("create" as const);
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title={item ? "تعديل بند التنفيذ" : "إضافة بند تنفيذ"}
       description={
@@ -356,6 +359,7 @@ export function TrackingUpdateFormModal({
   const mode = update ? ("edit" as const) : ("create" as const);
   return (
     <VenesiaModal
+      closeOnEscape
       open={open}
       title={update ? "تعديل تحديث التنفيذ" : "إضافة تحديث تاريخي"}
       description="كل حفظ ينشئ أو يعدل سجل Update محددًا؛ إضافة تحديث جديد لا تستبدل التاريخ السابق."

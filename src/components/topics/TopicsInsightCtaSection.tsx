@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { pageBlockCtaFontWeightClass } from "../../lib/page-blocks/configs";
 
 import type { TopicsInsightCtaContent } from "./topics-cms-mappers";
 
@@ -32,7 +33,7 @@ export default function TopicsInsightCtaSection({ cmsContent }: TopicsInsightCta
       {cta.buttonLabel ? (
         <Link
           href={cta.buttonHref}
-          className="mt-5 inline-flex rounded-full bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] transition hover:bg-[#c9a762]"
+          className={`mt-5 inline-flex rounded-full bg-[#D8B87A] px-5 py-3 text-sm ${pageBlockCtaFontWeightClass(cta.ctaBold, "font-medium")} text-[#06101C] transition hover:bg-[#c9a762]`}
         >
           {cta.buttonLabel}
         </Link>

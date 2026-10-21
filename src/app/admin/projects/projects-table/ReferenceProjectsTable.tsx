@@ -11,6 +11,7 @@ import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  AdminDataGridDateTimeCell,
 } from "../../../../components/admin/ui/AdminDataGrid";
 import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
@@ -357,7 +358,13 @@ export function createProjectColumns(
       align: "center",
       minWidth: 145,
       width: 150,
-      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.published_at), "font-en text-center tabular-nums"),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.published_at}
+          fallbackTitle="—"
+          className="block text-sm text-white/65 font-en text-center tabular-nums"
+        />
+      ),
     },
     {
       key: "updated_at",
@@ -369,7 +376,13 @@ export function createProjectColumns(
       align: "center",
       minWidth: 140,
       width: 150,
-      renderCell: ({ row }) => singleLine(formatAdminDateTime(row.updated_at), "font-en text-center tabular-nums"),
+      renderCell: ({ row }) => (
+        <AdminDataGridDateTimeCell
+          value={row.updated_at}
+          fallbackTitle="—"
+          className="block text-sm text-white/65 font-en text-center tabular-nums"
+        />
+      ),
     },
     {
       key: "actions",

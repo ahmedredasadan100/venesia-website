@@ -10,6 +10,7 @@ import type { AdminLinkDisplay, AdminLinkValue } from "../../../lib/admin/links/
 import { adminFormFieldClassName, adminFormLabelClassName } from "../VenesiaModal";
 import AdminActionButton from "./AdminActionButton";
 import AdminLinkPicker from "./AdminLinkPicker";
+import { AdminDataGridActionIcon } from "./AdminDataGrid";
 
 type AdminLinkFieldProps = {
   prefix: string;
@@ -22,6 +23,8 @@ type AdminLinkFieldProps = {
   chooseLinkLabel?: string;
   clearLinkLabel?: string;
   presentation?: "card" | "inline";
+  /** Opt-in unframed actions; the shared button retains its full hit area and focus. */
+  actionPresentation?: "default" | "bare";
   /** When set, skips hidden form inputs and uses callback state (Footer Builder, etc.). */
   onControlledChange?: (value: AdminLinkValue) => void;
   controlledValue?: AdminLinkValue;
@@ -53,6 +56,7 @@ export default function AdminLinkField({
   chooseLinkLabel = "اختيار الرابط",
   clearLinkLabel = "مسح الرابط",
   presentation = "card",
+  actionPresentation = "default",
   onControlledChange,
   controlledValue,
 }: AdminLinkFieldProps) {
@@ -139,6 +143,29 @@ export default function AdminLinkField({
     </>
   );
 
+  const linkActions = (
+    <>
+      <AdminActionButton variant={actionPresentation === "bare" ? "gold-ghost" : "gold"} size="icon" onClick={() => setPickerOpen(true)}>
+        {actionPresentation === "bare" ? <AdminDataGridActionIcon action="copy-link" size="lg" /> : (
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7" />
+          </svg>
+        )}
+        <span className="sr-only">{chooseLinkLabel}</span>
+      </AdminActionButton>
+      {value.link_kind !== "none" ? (
+        <AdminActionButton variant={actionPresentation === "bare" ? "danger-ghost" : "danger"} size="icon" onClick={() => setLink(emptyAdminLink())}>
+          {actionPresentation === "bare" ? <AdminDataGridActionIcon action="delete" size="lg" /> : (
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7" />
+            </svg>
+          )}
+          <span className="sr-only">{clearLinkLabel}</span>
+        </AdminActionButton>
+      ) : null}
+    </>
+  );
+
   return (
     <div data-admin-link-field={presentation} className={`min-w-0 w-full space-y-3 ${presentation === "card" ? "rounded-2xl border border-white/10 bg-[#05070B] p-3" : ""} ${className}`.trim()}>
       <div className="min-w-0 space-y-2">
@@ -151,20 +178,11 @@ export default function AdminLinkField({
               <p className="truncate text-left font-en text-xs text-white/50" dir="ltr" title={previewDisplay?.publicPath ?? value.href ?? "—"}>{previewDisplay?.publicPath ?? value.href ?? "—"}</p>
             </> : <p className="text-sm text-white/40">لم يتم اختيار رابط بعد.</p>}
           </div>
-          <AdminActionButton variant="gold" size="icon" onClick={() => setPickerOpen(true)}>
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7" />
-            </svg>
-            <span className="sr-only">{chooseLinkLabel}</span>
-          </AdminActionButton>
-          {value.link_kind !== "none" ? (
-            <AdminActionButton variant="danger" size="icon" onClick={() => setLink(emptyAdminLink())}>
-              <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7" />
-              </svg>
-              <span className="sr-only">{clearLinkLabel}</span>
-            </AdminActionButton>
-          ) : null}
+          {actionPresentation === "bare" ? (
+            <span data-admin-link-actions="" className="inline-flex shrink-0 items-center gap-1">
+              {linkActions}
+            </span>
+          ) : linkActions}
         </div>
       </div>
       {canEditAnchor ? (

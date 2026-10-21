@@ -11,6 +11,8 @@ import {
   AdminStatusPill,
   type AdminMetricCardsGridItem,
 } from "../../../../components/admin/ui";
+import { AdminDataGridActionIcon } from "../../../../components/admin/ui/AdminDataGrid";
+import { AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { loadProjectTrackingHub } from "../../../../lib/admin/projects/tracking-hub";
 
@@ -24,6 +26,7 @@ export default async function ConstructionUpdatesPage() {
       label: "المشروعات المتاحة",
       value: projects.length,
       tone: "blue",
+      icon: <AdminModuleTabIcon name="plans" />,
       align: "start",
     },
     {
@@ -33,6 +36,7 @@ export default async function ConstructionUpdatesPage() {
         0,
       ),
       tone: "gold",
+      icon: <AdminModuleTabIcon name="specifications" />,
       align: "start",
     },
     {
@@ -42,6 +46,7 @@ export default async function ConstructionUpdatesPage() {
         0,
       ),
       tone: "green",
+      icon: <AdminDataGridActionIcon action="activity" size="lg" />,
       align: "start",
     },
   ];

@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import {
   ADMIN_FORM,
   ADMIN_MODAL,
+  ADMIN_MODAL_COMPACT,
   ADMIN_MODAL_SIZES,
   adminFormFieldClassName,
   adminFormHintClassName,
@@ -25,6 +26,9 @@ export type VenesiaModalProps = {
   description?: string;
   eyebrow?: string;
   size?: VenesiaModalSize;
+  density?: "default" | "compact";
+  headerIcon?: ReactNode;
+  /** Opt in through the existing cancel/guarded close path; consumed child-layer Escape takes priority. */
   closeOnEscape?: boolean;
   bodyClassName?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
@@ -267,6 +271,8 @@ export default function VenesiaModal({
   description,
   eyebrow = "VENESIA CMS",
   size = "md",
+  density = "default",
+  headerIcon,
   closeOnEscape = false,
   bodyClassName = "",
   initialFocusRef,
@@ -333,6 +339,7 @@ export default function VenesiaModal({
       const panel = panelRef.current;
       if (!panel || !isTopmostDialog(panel)) return;
       if (event.key === "Escape" && closeOnEscape) {
+        if (event.defaultPrevented) return;
         event.preventDefault();
         closeRef.current();
         return;
@@ -372,12 +379,12 @@ export default function VenesiaModal({
       }
     }
 
-    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
       const focusReturnSnapshot = focusReturnSnapshotRef.current;
       focusReturnSnapshotRef.current = null;
       window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
       root.style.overflow = previousRootOverflow;
       document.body.style.overflow = previousBodyOverflow;
       document.scrollingElement?.scrollTo({ top: scrollTop, left: scrollLeft });
@@ -416,6 +423,21 @@ export default function VenesiaModal({
 
   if (!open || !mounted) return null;
 
+  const densityStyles = density === "compact" ? ADMIN_MODAL_COMPACT : ADMIN_MODAL;
+  const headerText = (
+    <>
+      <p className={densityStyles.eyebrow}>{eyebrow}</p>
+      <h2 id={titleId} className={densityStyles.title}>
+        {title}
+      </h2>
+      {description ? (
+        <p id={descriptionId} className={densityStyles.description}>
+          {description}
+        </p>
+      ) : null}
+    </>
+  );
+
   return createPortal(
     <div
       className={`fixed inset-0 ${ADMIN_MODAL.zIndex} flex items-center justify-center px-4 py-6`}
@@ -437,34 +459,32 @@ export default function VenesiaModal({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         data-venesia-modal=""
+        data-venesia-modal-density={density === "compact" ? "compact" : undefined}
         className={`${ADMIN_MODAL.panel} ${ADMIN_MODAL_SIZES[size]} flex max-h-[calc(100dvh-3rem)] flex-col`}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className={`${ADMIN_MODAL.header} shrink-0`}>
-          <div className="text-right">
-            <p className={ADMIN_MODAL.eyebrow}>{eyebrow}</p>
-            <h2 id={titleId} className={ADMIN_MODAL.title}>
-              {title}
-            </h2>
-            {description ? (
-              <p id={descriptionId} className={ADMIN_MODAL.description}>
-                {description}
-              </p>
-            ) : null}
-          </div>
+        <header className={`${densityStyles.header} shrink-0`}>
+          {headerIcon ? (
+            <div className="flex min-w-0 items-start gap-3">
+              <span aria-hidden="true" className={ADMIN_MODAL_COMPACT.headerIcon}>{headerIcon}</span>
+              <div className="min-w-0 text-right">{headerText}</div>
+            </div>
+          ) : (
+            <div className="text-right">{headerText}</div>
+          )}
           <button type="button" onClick={onClose} className={ADMIN_MODAL.closeButton} aria-label="إغلاق">
             ×
           </button>
         </header>
 
         <div
-          className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES} ${bodyClassName}`.trim()}
+          className={`${densityStyles.body} min-h-0 flex-1 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES} ${bodyClassName}`.trim()}
         >
           <div ref={feedbackHostRef} data-admin-feedback-modal-host="" />
           {children}
         </div>
 
-        {footer ? <footer className={`${ADMIN_MODAL.footer} shrink-0`}>{footer}</footer> : null}
+        {footer ? <footer className={`${densityStyles.footer} shrink-0`}>{footer}</footer> : null}
       </section>
     </div>,
     document.body,

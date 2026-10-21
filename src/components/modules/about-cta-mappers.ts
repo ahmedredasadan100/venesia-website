@@ -20,6 +20,7 @@ export type AboutCtaModuleContent = {
   title: string;
   description: string;
   formatting: PageBlockTextFormattingMap;
+  ctaBold?: boolean;
   button: {
     label: string;
     href: string;
@@ -81,6 +82,7 @@ export function mapLegacyProjectsCtaBlock(block: ResolvedPageBlock): AboutCtaMod
   const config = block.template.config as CtaBlockConfig;
 
   return {
+    ...(config.ctaBold === undefined ? {} : { ctaBold: config.ctaBold }),
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: config.description ?? "",

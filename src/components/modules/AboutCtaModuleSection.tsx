@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import type { AboutCtaContact, AboutCtaModuleContent } from "./about-cta-mappers";
 import { isContactIconKey, renderContactIcon } from "../page-blocks/contact-icons";
-import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
+import { pageBlockCtaFontWeightClass, pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
 
 export type AboutCtaModuleSectionProps = {
   cmsContent: AboutCtaModuleContent | null;
@@ -118,7 +118,7 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
                 {content.button.label.trim() ? (
                   <Link
                     href={content.button.href || "#"}
-                    className="mt-7 inline-flex h-12 items-center justify-center rounded-full bg-[#D8B87A] px-8 text-sm font-medium text-[#06101C] transition-[background-color,transform,box-shadow] duration-300 hover:-translate-y-px hover:bg-[#cca85a] hover:shadow-[0_10px_32px_rgba(216,184,122,0.18)] active:translate-y-px"
+                    className={`mt-7 inline-flex h-12 items-center justify-center rounded-full bg-[#D8B87A] px-8 text-sm ${pageBlockCtaFontWeightClass(content.ctaBold, "font-medium")} text-[#06101C] transition-[background-color,transform,box-shadow] duration-300 hover:-translate-y-px hover:bg-[#cca85a] hover:shadow-[0_10px_32px_rgba(216,184,122,0.18)] active:translate-y-px`}
                   >
                     {content.button.label}
                   </Link>

@@ -1,6 +1,6 @@
 import { verifyMediaGuidanceBrowser } from "./media-guidance-browser.mjs";
 import { strict as assert } from "node:assert";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -9,12 +9,22 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 const require = createRequire(import.meta.url);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-function load(relative, ports = {}) {
-  const output = ts.transpileModule(readFileSync(resolve(root, relative), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+function load(relative, ports = {}, modules = new Map()) {
+  const filename = resolve(root, relative);
+  if (modules.has(filename)) return modules.get(filename).exports;
+  const output = ts.transpileModule(readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const m = { exports: {} };
+  modules.set(filename, m);
   Function("module", "exports", "require", output)(m, m.exports, key => {
     if (key in ports) return ports[key];
     if (key === "server-only") return {};
+    if (key.startsWith(".")) {
+      const base = resolve(dirname(filename), key);
+      const dependency = [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, resolve(base, "index.ts"), resolve(base, "index.tsx")]
+        .find(candidate => /\.(tsx?|js)$/.test(candidate) && existsSync(candidate));
+      assert(dependency, `Missing fixture dependency: ${base}`);
+      return load(dependency, ports, modules);
+    }
     return require(key);
   });
   return m.exports;

@@ -7,13 +7,14 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
+import { AdminActionButton, AdminCard, AdminFormControlHeader, AdminFormGrid } from "../../ui";
+import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
 import {
@@ -63,20 +64,24 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
       <input type="hidden" name="pin_count" value={String(pins.length)} />
 
       <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="domain">خريطة المشروعات</ModuleEditorSectionHeading>
+        <AdminFormControlHeader title="خريطة المشروعات" icon={<AdminModuleTabIcon name="location" />} />
 
         <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="short-text" span={6}><ModuleEditorVisibilityAlignRow label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+        <ModuleEditorField nature="short-text" span={6}><ModuleEditorVisibilityAlignRow label="العنوان" presentation="premium" icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
           <input name="title" aria-label="العنوان" defaultValue={config.title} className={fieldClassName()} />
         </ModuleEditorVisibilityAlignRow></ModuleEditorField>
 
-        <ModuleEditorField nature="short-text" span={6}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">نص زر الاستكشاف</span>
+        <ModuleEditorField nature="short-text" span={6}><AdminCard presentation="premium" className="self-start space-y-3 p-3"><label className="block space-y-3">
+          <AdminFormControlHeader presentation="compact-inline" title="نص زر الاستكشاف" icon={<AdminModuleTabIcon name="section" />} />
           <input name="explore_button_label" defaultValue={config.exploreButtonLabel} className={fieldClassName()} />
-        </label></ModuleEditorField>
+        </label></AdminCard></ModuleEditorField>
 
         <ModuleEditorField nature="media">
+        <AdminCard presentation="premium" className="space-y-3 p-3">
+        <AdminFormControlHeader title="صورة الخريطة" icon={<AdminModuleTabIcon name="media" />} />
         <AdminMediaImageField
+          variant="card"
+          showLabel={false}
                   mediaSlot={contentModuleMediaSlot("projects-hub-map")}
 name="map_image"
           label="صورة الخريطة"
@@ -84,59 +89,61 @@ name="map_image"
           browseFolder="images/projects"
           allowRemove={false}
         />
+        </AdminCard>
         </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <ModuleEditorSectionHeading intent="repeater">دبابيس الخريطة</ModuleEditorSectionHeading>
-          <button
+          <AdminFormControlHeader title="دبابيس الخريطة" icon={<AdminModuleTabIcon name="location" />} />
+          <AdminActionButton
             type="button"
             onClick={addPin}
             disabled={pins.length >= 30}
-            className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15 disabled:cursor-not-allowed disabled:opacity-40"
+            variant="gold"
           >
             إضافة دبوس
-          </button>
+          </AdminActionButton>
         </div>
 
-        <ModuleEditorRepeaterGrid>
+        <ModuleEditorRepeaterGrid presentation="premium">
           {pins.map((pin, index) => (
             <ModuleEditorRepeaterCard
               key={index}
+              presentation="premium"
               title={`دبوس ${index + 1}`}
               actions={(
                 <>
-                  <button
+                  <AdminActionButton
                     type="button"
                     onClick={() => movePin(index, -1)}
                     disabled={index === 0}
-                    className="rounded-xl border border-white/10 px-3 py-1 text-xs text-white/60 disabled:opacity-30"
+                    aria-label={`تحريك الدبوس ${index + 1} لأعلى`}
                   >
                     أعلى
-                  </button>
-                  <button
+                  </AdminActionButton>
+                  <AdminActionButton
                     type="button"
                     onClick={() => movePin(index, 1)}
                     disabled={index === pins.length - 1}
-                    className="rounded-xl border border-white/10 px-3 py-1 text-xs text-white/60 disabled:opacity-30"
+                    aria-label={`تحريك الدبوس ${index + 1} لأسفل`}
                   >
                     أسفل
-                  </button>
-                  <button
+                  </AdminActionButton>
+                  <AdminActionButton
                     type="button"
                     onClick={() => removePin(index)}
                     disabled={pins.length <= 1}
-                    className="rounded-xl border border-red-400/30 px-3 py-1 text-xs text-red-300 disabled:opacity-30"
+                    variant="danger"
                   >
                     حذف
-                  </button>
+                  </AdminActionButton>
                 </>
               )}
             >
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <AdminFormGrid columns={2}>
                 <label className="block space-y-2">
                   <span className="text-xs font-semibold text-white/55">كود المشروع</span>
                   <input
@@ -178,7 +185,7 @@ name="map_image"
                     className={fieldClassName()}
                   />
                 </label>
-              </div>
+              </AdminFormGrid>
             </ModuleEditorRepeaterCard>
           ))}
         </ModuleEditorRepeaterGrid>

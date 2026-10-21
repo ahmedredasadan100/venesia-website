@@ -191,7 +191,8 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
             {descriptionFormat.visible ? <RichTextContent
               value={resolved.body}
               mode="rich"
-              className={`mt-6 max-w-xl text-base leading-8 text-white/60 ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"} [&_strong]:text-inherit [&_b]:text-inherit`}
+              demoteHeadings
+              className={`article-rich-text mt-6 max-w-xl text-base leading-8 text-white/60 ${pageBlockTextAlignClass(descriptionFormat.alignment, "container")} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"} [&_strong]:text-inherit [&_b]:text-inherit`}
             /> : null}
 
             <div className={`mt-8 flex max-w-xl ${BUTTON_ALIGN_CLASS[resolved.button.alignment]}`} dir="rtl">
