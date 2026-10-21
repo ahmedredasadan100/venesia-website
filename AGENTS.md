@@ -42,3 +42,13 @@ Production deployment. Do not run a Full Quality Gate after each small change.
 Evidence validity and affected reruns follow `docs/QA_RELEASE_CLOSURE.md`.
 This timing follows Constitution Section 25.4 and ADR-028; the dynamic adoption
 contract remains unchanged.
+
+## Local development verification maintenance
+
+Every local development task must discover, test, and maintain all affected
+consumers, Product Tests, Guards, test scripts, Fixtures, and CI Workflows within
+the same task. Follow `docs/AI_WORKING_RULES.md` Section 10.1.2 and the detailed
+verification contract in `docs/QA_RELEASE_CLOSURE.md` Section 3.2.2 for failure
+classification and correction of proven stale expectations. Do not weaken
+assertions or defer affected maintenance to release. Existing ownership,
+contracts, Stop Conditions, authorizations, and batch-gate timing remain intact.
