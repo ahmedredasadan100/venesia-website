@@ -521,7 +521,7 @@ check("Header semantic negatives reject wrong direction, dropped actions, fixed 
 
 // Narrow compiled-property checks complement (and never claim) Browser geometry.
 const layoutCompiler = await compile('@import "tailwindcss" source(none);', { base: root, onDependency() {} });
-function layoutProperties(className, width) {
+function layoutProperties(className, width, descendant = null) {
   const candidates = new Set(className.split(/\s+/u).filter(Boolean));
   const properties = {};
   const important = {};
@@ -530,7 +530,9 @@ function layoutProperties(className, width) {
     const ancestors = [];
     for (let parent = decl.parent; parent; parent = parent.parent) ancestors.push(parent);
     const rules = ancestors.filter(parent => parent.type === "rule");
-    if (rules.length !== 1 || !candidates.has(unescape(rules[0].selector).slice(1))) return;
+    if (descendant === null) {
+      if (rules.length !== 1 || !candidates.has(unescape(rules[0].selector).slice(1))) return;
+    } else if (rules.length !== 2 || rules[0].selector !== `&>${descendant}` || !candidates.has(unescape(rules[1].selector).slice(1))) return;
     if (!ancestors.some(parent => parent.type === "atrule" && parent.name === "layer" && parent.params === "utilities")) return;
     for (const media of ancestors.filter(parent => parent.type === "atrule" && parent.name === "media")) {
       const minimum = /^\(width >= ([\d.]+)(rem|px)\)$/u.exec(media.params);
@@ -545,6 +547,526 @@ function layoutProperties(className, width) {
   });
   return properties;
 }
+
+function verifyMetricIconPresentation(source) {
+  const Metric = loadHeader(source);
+  const elements = node => Array.isArray(node) ? node.flatMap(elements)
+    : React.isValidElement(node) ? [node, ...elements(node.props.children)] : [];
+  const icon = React.createElement("svg", { "data-metric-test-glyph": "", viewBox: "0 0 24 24" });
+  let cases = 0;
+  for (const compact of [false, true]) {
+    const props = { label: "مؤشر اختبار", value: 0, suffix: "%", compact, icon };
+    const defaultMarkup = renderToStaticMarkup(React.createElement(Metric, props));
+    assert.equal(defaultMarkup, renderToStaticMarkup(React.createElement(Metric, { ...props, iconSize: "default" })), "Omitting iconSize must preserve the shared default presentation");
+    for (const iconSize of [undefined, "default", "prominent"]) {
+      const tree = Metric({ ...props, iconSize });
+      const glyph = elements(tree).find(node => Object.hasOwn(node.props, "data-admin-metric-icon"));
+      assert.ok(glyph, "The shared owner must retain its semantic glyph slot");
+      assert.equal(glyph.props["aria-hidden"], "true", "Metric glyphs remain decorative");
+      assert.equal(glyph.props.children, icon, "Consumer glyph identity must pass through unchanged");
+      const iconRow = elements(tree).find(node => node.type === "div" && node.props.dir === "rtl");
+      assert.ok(iconRow, "The shared metric retains its content/icon row");
+      for (const width of [390, 1536]) {
+        const css = layoutProperties(glyph.props.className, width);
+        const expected = iconSize === "prominent" ? 9 : width < 768 ? 5.5 : 6;
+        for (const property of ["width", "height"]) assert.equal(css[property], `calc(var(--spacing) * ${expected})`, `${iconSize ?? "omitted"} glyph sizing at ${width}px`);
+        assert.equal(css["flex-shrink"], "0", "Glyph size must not collapse beside content");
+        const svg = layoutProperties(glyph.props.className, width, "svg");
+        for (const property of ["width", "height"]) assert.equal(svg[property], css[property], "Consumer SVG must fill the same shared glyph frame");
+        assert.equal(svg["stroke-width"], iconSize === "prominent" ? "2" : undefined, "The heavier SVG stroke is opt-in; existing consumers keep their authored stroke");
+        const card = layoutProperties(tree.props.className, width);
+        assert.equal(card["min-height"], compact ? "80px" : "96px", "The existing metric card minimum heights must remain");
+        assert.equal(card.padding, `calc(var(--spacing) * ${iconSize === "prominent" ? 2.5 : 3})`, "Only prominent icons reclaim internal card padding");
+        assert.equal(layoutProperties(iconRow.props.className, width).gap, `calc(var(--spacing) * ${iconSize === "prominent" ? 1 : 2})`, "Only prominent icons reclaim internal content/icon spacing");
+        cases += 1;
+      }
+      const markup = renderToStaticMarkup(tree);
+      assert.match(markup, /0.*%/u, "Zero-valued metrics and suffixes must remain visible");
+      assert.match(markup, /مؤشر اختبار/u);
+      assert.equal(tree.type, "div");
+    }
+    const bare = { label: "مؤشر بلا أيقونة", value: 42, compact };
+    assert.equal(renderToStaticMarkup(React.createElement(Metric, bare)), renderToStaticMarkup(React.createElement(Metric, { ...bare, iconSize: "prominent" })), "The opt-in icon size must not affect consumers without icons");
+    const onClick = () => {};
+    const button = Metric({ ...props, iconSize: "prominent", onClick, active: true, ariaLabel: "فتح تفاصيل المؤشر" });
+    assert.equal(button.type, "button");
+    assert.equal(button.props.type, "button");
+    assert.equal(button.props.onClick, onClick);
+    assert.equal(button.props["aria-pressed"], true);
+    assert.equal(button.props["aria-label"], "فتح تفاصيل المؤشر");
+  }
+  return cases;
+}
+const metricCard = read("src/components/admin/ui/AdminMetricCard.tsx");
+check("Actual Metric Card preserves default sizes/strokes and semantics while prominent glyphs opt in to 36px and stroke 2", verifyMetricIconPresentation(metricCard) === 12);
+const metricMutants = [
+  metricCard.replaceAll("size-5.5", "size-9"),
+  metricCard.replaceAll("md:size-6", "md:size-9"),
+  metricCard.replaceAll("size-9", "size-7"),
+  metricCard.replace("[&>svg]:stroke-2", "[&>svg]:stroke-1"),
+  metricCard.replace('"size-5.5 md:size-6', '"[&>svg]:stroke-2 size-5.5 md:size-6'),
+  metricCard.replace('"p-2.5" : "p-3"', '"p-3" : "p-3"'),
+  metricCard.replace('"p-2.5" : "p-3"', '"p-2.5" : "p-2.5"'),
+  metricCard.replace('"gap-1" : "gap-2"', '"gap-2" : "gap-2"'),
+  metricCard.replace('"gap-1" : "gap-2"', '"gap-1" : "gap-1"'),
+  metricCard.replace('iconSize = "default"', 'iconSize = "prominent"'),
+  metricCard.replace('iconSize === "prominent"', 'iconSize === "default"'),
+  metricCard.replaceAll('aria-hidden="true"', 'aria-hidden="false"'),
+  metricCard.replace('"aria-pressed": active', '"aria-pressed": false'),
+];
+check("Metric Card negatives reject default size/stroke drift, undersized prominence, ignored opt-in, exposed glyphs and changed interaction semantics", metricMutants.every(source => {
+  if (source === metricCard) return false;
+  try { verifyMetricIconPresentation(source); return false; } catch { return true; }
+}));
+
+function verifyDashboardThumbnailPresentation(source) {
+  const ast = ts.createSourceFile("AdminDashboardView.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = ast.statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === "DashboardThumbnail");
+  assert.equal(declarations.length, 1, "One existing Dashboard thumbnail presentation owner must remain");
+  const code = ts.transpileModule(declarations[0].getText(ast), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const Image = () => null;
+  const Icon = () => null;
+  const Thumbnail = Function("require", "exports", "PublicMediaImage", "AdminModuleTabIcon", code + ";return DashboardThumbnail;")(() => jsxRuntime, {}, Image, Icon);
+  const mounts = [];
+  function collectMounts(node) {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === "DashboardThumbnail") {
+      mounts.push(Object.fromEntries(node.attributes.properties.map(property => {
+        assert.ok(ts.isJsxAttribute(property), "Thumbnail mounts cannot spread a parallel presentation");
+        const value = property.initializer;
+        return [property.name.getText(ast), value && ts.isJsxExpression(value) ? value.expression?.getText(ast) : value?.text];
+      })));
+    }
+    ts.forEachChild(node, collectMounts);
+  }
+  collectMounts(ast);
+  assert.deepEqual(mounts, [
+    { image: "topic.image", imageAlt: "topic.imageAlt", icon: "media" },
+    { image: "project.image", imageAlt: "project.imageAlt", icon: "plans" },
+  ], "Both original sources and alt text must use the one shared Dashboard thumbnail owner without per-consumer dimensions");
+  let cases = 0;
+  let commonReservedClass;
+  for (const icon of ["media", "plans"]) {
+    const expectedWidths = [112, 128];
+    let reservedClass;
+    for (const image of [undefined, null, "", "/images/original-project.webp", "https://dashboard-fixture.supabase.co/storage/v1/object/public/dashboard-fixture-images/images/original.png"]) {
+      const props = { image, imageAlt: "وصف الصورة الأصلي", icon };
+      const tree = Thumbnail(props);
+      assert.equal(tree.type, "span");
+      assert.ok(Object.hasOwn(tree.props, "data-dashboard-thumbnail"));
+      reservedClass ??= tree.props.className;
+      commonReservedClass ??= tree.props.className;
+      assert.equal(tree.props.className, reservedClass, "The reserved landscape frame must remain identical with and without an image");
+      assert.equal(tree.props.className, commonReservedClass, "Content and Project thumbnails must retain equal visual dimensions");
+      for (const [index, width] of [390, 1536].entries()) {
+        const css = layoutProperties(tree.props.className, width);
+        assert.equal(css.width, `calc(var(--spacing) * ${expectedWidths[index] / 4})`);
+        assert.equal(css["aspect-ratio"], "var(--aspect-video)", "Both thumbnail consumers reserve the landscape ratio");
+        assert.equal(css["flex-shrink"], "0");
+        assert.equal(css.overflow, "hidden");
+      }
+      const children = React.Children.toArray(tree.props.children);
+      const fallback = children[0];
+      assert.equal(fallback.props["aria-hidden"], "true", "The reserved fallback stays decorative");
+      assert.equal(fallback.props.children.props.children.type, Icon);
+      assert.equal(fallback.props.children.props.children.props.name, props.icon);
+      const fallbackCss = layoutProperties(fallback.props.children.props.className, 390);
+      for (const property of ["width", "height"]) assert.equal(fallbackCss[property], "calc(var(--spacing) * 7)", "Both consumers retain a visible 28px fallback in the reserved frame");
+      const renderedImage = children.find(child => child.type === Image);
+      if (image) {
+        assert.ok(renderedImage);
+        assert.equal(renderedImage.props.src, image, "The authored source must reach the existing renderer unchanged");
+        assert.equal(renderedImage.props.alt, props.imageAlt);
+        assert.equal(renderedImage.props.fill, true);
+        assert.equal(renderedImage.props.composition, "cover-center");
+        assert.equal(renderedImage.props.fallbackSrc, null, "Fallback must not substitute another photo");
+        assert.equal(renderedImage.props.sizes, `(min-width: 640px) ${expectedWidths[1]}px, ${expectedWidths[0]}px`);
+      } else assert.equal(renderedImage, undefined, "Absent source must retain the icon without an image request");
+      cases += 1;
+    }
+    const withoutAlt = Thumbnail({ image: "/images/original-project.webp", icon });
+    assert.equal(React.Children.toArray(withoutAlt.props.children).find(child => child.type === Image).props.alt, "");
+  }
+  return cases;
+}
+const dashboardView = read("src/components/admin/dashboard/AdminDashboardView.tsx");
+check("Actual Dashboard thumbnails unify responsive landscape frames while preserving authored sources, alt text and 28px decorative fallback", verifyDashboardThumbnailPresentation(dashboardView) === 10);
+const thumbnailMutants = [
+  dashboardView.replace("aspect-video", "aspect-square"),
+  dashboardView.replace("w-28", "w-20"),
+  dashboardView.replace("sm:w-32", "sm:w-24"),
+  dashboardView.replace('className="relative block aspect-video w-28 shrink-0 overflow-hidden rounded-xl border border-[#D8B87A]/20 bg-[#D8B87A]/8 sm:w-32"', 'className={`relative block aspect-video shrink-0 overflow-hidden ${icon === "plans" ? "w-28 sm:w-32" : "w-20 sm:w-24"}`}'),
+  dashboardView.replace('image={topic.image}', 'image={project.image}'),
+  dashboardView.replace('className="size-7"', 'className="size-6"'),
+  dashboardView.replace("src={image}", 'src="/replacement.webp"'),
+  dashboardView.replace("fallbackSrc={null}", 'fallbackSrc="/replacement.webp"'),
+  dashboardView.replace('composition="cover-center"', 'composition="contain-center"'),
+  dashboardView.replace("          fill\n", "          fill={false}\n").replace("          fill\r\n", "          fill={false}\r\n"),
+  dashboardView.replace("128px, 112px", "128px, 40px"),
+];
+check("Dashboard thumbnail negatives reject unequal/undersized frames, small fallbacks, substituted sources, wrong crop/fill and stale sizes", thumbnailMutants.every(source => {
+  if (source === dashboardView) return false;
+  try { verifyDashboardThumbnailPresentation(source); return false; } catch { return true; }
+}));
+
+function dashboardContentFlowClasses(source) {
+  const ast = ts.createSourceFile("AdminDashboardView.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let primary;
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "AdminDataGridPrimaryCell") primary ??= node;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(primary, "Dashboard recent content retains the shared primary cell");
+  const wrapper = primary.children.find(ts.isJsxElement);
+  const text = wrapper?.children.find(node => ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "div");
+  const classes = element => {
+    const attribute = element?.openingElement.attributes.properties.find(node => ts.isJsxAttribute(node) && node.name.getText(ast) === "className");
+    assert.ok(attribute?.initializer && ts.isStringLiteral(attribute.initializer));
+    return attribute.initializer.text;
+  };
+  return { wrapper: classes(wrapper), text: classes(text) };
+}
+function verifyDashboardContentFlow(source) {
+  const classes = dashboardContentFlowClasses(source);
+  const length = value => {
+    const spacing = /^calc\(var\(--spacing\) \* ([\d.]+)\)$/u.exec(value ?? "");
+    if (spacing) return Number(spacing[1]) * 4;
+    const pixels = /^([\d.]+)px$/u.exec(value ?? "");
+    assert.ok(pixels, `Expected a compiled spacing length, received ${value}`);
+    return Number(pixels[1]);
+  };
+  // These are the corrected usable primary-track bounds at 320/390/1510px,
+  // measured in the focused Browser review after unifying thumbnail widths.
+  // Compiled properties establish the wrapping envelope; Browser evidence is
+  // still required for actual line lengths, geometry and visual approval.
+  for (const [viewport, available, imageWidth, shouldWrap] of [[320, 142, 112, true], [390, 212, 112, true], [1510, 293.1875, 128, false]]) {
+    const wrapper = layoutProperties(classes.wrapper, viewport);
+    const text = layoutProperties(classes.text, viewport);
+    assert.equal(wrapper.display, "flex");
+    assert.equal(wrapper["flex-wrap"], "wrap", "Narrow primary tracks must let the title flow below its image");
+    assert.equal(text["min-width"], "calc(var(--spacing) * 0)");
+    assert.equal(text["flex-grow"], "1", "A wrapped title must reclaim the full primary track");
+    const basis = length(text["flex-basis"]);
+    const gap = length(wrapper.gap);
+    assert.ok(basis >= 112, "The text preference must preserve a readable title column");
+    assert.equal(gap, 8, "The thumbnail/text gap retains the approved compact spacing");
+    assert.equal(imageWidth + gap + basis > available, shouldWrap, `Content flow must fit its measured ${viewport}px primary track`);
+  }
+  return true;
+}
+check("Compiled actual Dashboard content flow protects narrow title width and keeps image/text inline where space allows", verifyDashboardContentFlow(dashboardView));
+const contentFlowClasses = dashboardContentFlowClasses(dashboardView);
+const contentFlowMutants = [
+  dashboardView.replace(contentFlowClasses.wrapper, contentFlowClasses.wrapper.replace("flex-wrap", "flex-nowrap")),
+  dashboardView.replace(contentFlowClasses.text, contentFlowClasses.text.replace(/basis-[\d.]+/u, "basis-0")),
+  dashboardView.replace(contentFlowClasses.text, contentFlowClasses.text.replace(/\bgrow\b/u, "grow-0")),
+  dashboardView.replace(contentFlowClasses.wrapper, contentFlowClasses.wrapper.replace(/gap-[\d.]+/u, "gap-3")),
+];
+check("Dashboard content flow negatives reject nowrap, zero title basis, lost growth and changed thumbnail/text spacing", contentFlowMutants.every(source => {
+  if (source === dashboardView) return false;
+  try { verifyDashboardContentFlow(source); return false; } catch { return true; }
+}));
+
+function verifyDashboardRecentDensity(source) {
+  const ast = ts.createSourceFile("AdminDashboardView.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const attribute = (element, name) => element.openingElement.attributes.properties.find(property => ts.isJsxAttribute(property) && property.name.getText(ast) === name)?.initializer;
+  const textAttribute = (element, name) => {
+    const value = attribute(element, name);
+    assert.ok(value === undefined || ts.isStringLiteral(value), `Expected a literal ${name} in the Dashboard composition`);
+    return value?.text ?? "";
+  };
+  let summary, content, projectList, projectRow;
+  function visit(node) {
+    if (ts.isJsxElement(node)) {
+      const tag = node.openingElement.tagName.getText(ast);
+      if (tag === "section" && textAttribute(node, "aria-label") === "ملخص المحتوى والمشاريع") summary = node;
+      if (tag === "AdminDataGrid" && textAttribute(node, "scrollLabel") === "آخر المحتويات") content = node;
+      if (tag === "Link") {
+        const href = attribute(node, "href");
+        if (href && ts.isJsxExpression(href) && href.expression?.getText(ast) === "`/admin/projects/${project.id}`") projectRow = node;
+      }
+    }
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === "truth.recentProjects.map") {
+      let parent = node.parent;
+      while (parent && !ts.isJsxElement(parent)) parent = parent.parent;
+      assert.ok(parent); projectList = parent;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(summary && content && projectList && projectRow, "Existing Dashboard summary/Grid/Project composition owners must remain");
+  const summaryClasses = textAttribute(summary, "className");
+  assert.equal(layoutProperties(summaryClasses, 1510)["grid-template-columns"], "minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1fr)", "Desktop reserves the wider content track required by the unified thumbnail");
+  const contentClasses = textAttribute(content, "className");
+  const projectClasses = textAttribute(projectList, "className");
+  for (const viewport of [320, 390, 1510]) {
+    const grid = layoutProperties(contentClasses, viewport);
+    assert.equal(grid.flex, undefined, "Embedded content rows cannot stretch to fill a neighboring panel");
+    assert.equal(grid.height, undefined);
+    assert.equal(layoutProperties(contentClasses, viewport, "div").height, undefined, "The embedded scroll region keeps natural content height");
+    const projects = layoutProperties(projectClasses, viewport);
+    assert.equal(projects.display, "grid");
+    assert.equal(projects.flex, undefined, "Project rows keep their natural height");
+    assert.ok(projects["grid-auto-rows"] === undefined || projects["grid-auto-rows"] === "auto", "Project rows must not distribute surplus panel height equally");
+    assert.equal(layoutProperties(textAttribute(projectRow, "className"), viewport)["padding-block"], "calc(var(--spacing) * 3)", "Project row spacing is 12px between natural records");
+  }
+  assert.equal(textAttribute(content, "surface"), "embedded", "The existing parent Panel remains the visual surface owner");
+  assert.match(source, /const RECENT_CONTENT_COLUMNS = `minmax\(0,1fr\) \$\{adminDataGridActionsColumn\(2, "compact"\)\}`/u, "The canonical two-action track must remain readable");
+  return { contentClasses, projectClasses, projectRowClasses: textAttribute(projectRow, "className"), summaryClasses };
+}
+check("Compiled Dashboard composition keeps natural recent-row density and a readable wider Desktop content track", Boolean(verifyDashboardRecentDensity(dashboardView)));
+const recentDensity = verifyDashboardRecentDensity(dashboardView);
+const recentDensityMutants = [
+  dashboardView.replace('scrollLabel="آخر المحتويات"', 'scrollLabel="آخر المحتويات" className="flex-1 [&>div]:h-full"'),
+  dashboardView.replace(recentDensity.projectClasses, `${recentDensity.projectClasses} flex-1 auto-rows-fr`),
+  dashboardView.replace(recentDensity.projectRowClasses, recentDensity.projectRowClasses.replace("py-3", "py-4")),
+  dashboardView.replace(recentDensity.summaryClasses, recentDensity.summaryClasses.replace("xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)]", "xl:grid-cols-3")),
+  dashboardView.replace('adminDataGridActionsColumn(2, "compact")', 'adminDataGridActionsColumn(1, "compact")'),
+];
+check("Dashboard density negatives reject forced row filling, equal-height distribution, old spacing and a narrowed action/content budget", recentDensityMutants.every(source => {
+  if (source === dashboardView) return false;
+  try { verifyDashboardRecentDensity(source); return false; } catch { return true; }
+}));
+
+function verifyDashboardRecentTopicDatePresentation(source) {
+  const ast = ts.createSourceFile("AdminDashboardView.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let topicRenderer, statusOwner;
+  function visit(node) {
+    if (ts.isArrowFunction(node) && node.parameters.length === 1 && node.parameters[0].name.getText(ast) === "topic") {
+      assert.equal(topicRenderer, undefined, "Recent Topic rendering must have one existing callback owner");
+      topicRenderer = node;
+    }
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "statusLabel") statusOwner = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(topicRenderer && statusOwner);
+  const code = ts.transpileModule(`${statusOwner.getText(ast)}\nconst renderRecentTopic = ${topicRenderer.getText(ast)};`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const Row = props => React.createElement("article", null, props.children);
+  const Primary = props => React.createElement("div", null, props.children);
+  const Actions = () => React.createElement("button", { type: "button" }, "إجراءات الاختبار");
+  const Thumbnail = props => React.createElement("span", { "data-original-image": props.image, "aria-label": props.imageAlt });
+  const date = value => `QA-DATE:${value}`;
+  const bindings = { RECENT_CONTENT_COLUMNS: "existing-shared-two-action-track", AdminDataGridRow: Row,
+    AdminDataGridPrimaryCell: Primary, AdminDataGridRowActions: Actions, DashboardThumbnail: Thumbnail,
+    formatAdminDateTime: date, getContentTypeLabel: value => `QA-TYPE:${value}` };
+  const render = Function("require", "exports", ...Object.keys(bindings), code + ";return renderRecentTopic;")(() => jsxRuntime, {}, ...Object.values(bindings));
+  for (const status of ["published", "draft"]) {
+    const topic = { id: 271, title: "عنوان المحتوى الأصلي", category: "تصنيف المحتوى الأصلي", contentType: "article", status,
+      image: "/images/unchanged-original.webp", imageAlt: "الوصف الأصلي", updatedAt: "2026-10-21T17:00:00.000Z", createdAt: "2020-01-01T00:00:00.000Z" };
+    const tree = render(topic);
+    assert.equal(tree.type, Row); assert.equal(tree.props.divided, true); assert.equal(tree.props.stickyActions, false);
+    const children = React.Children.toArray(tree.props.children);
+    const primary = children.find(child => child.type === Primary), actions = children.find(child => child.type === Actions);
+    assert.ok(primary && actions, "Recent Content retains the canonical Primary Cell and Row Actions owners");
+    const primaryMarkup = renderToStaticMarkup(primary), visible = primaryMarkup.replace(/<[^>]+>/gu, "");
+    assert.equal((primaryMarkup.match(/<time\b/gu) ?? []).length, 0, "The recent-content primary cell no longer exposes a visible timestamp");
+    assert.ok(!visible.includes(date(topic.updatedAt)) && !visible.includes(topic.updatedAt), "Changing a time element to another visible wrapper cannot restore the removed date");
+    for (const text of [topic.title, topic.category, `QA-TYPE:${topic.contentType}`, status === "published" ? "منشور" : "غير منشور"]) assert.ok(visible.includes(text), "Existing visible identity/type/category/status metadata remains");
+    assert.ok(primaryMarkup.includes(topic.image) && primaryMarkup.includes(topic.imageAlt), "The original thumbnail binding remains");
+    assert.equal(actions.props.size, "compact"); assert.equal(actions.props.iconSize, "lg");
+    const capability = actions.props.capability;
+    assert.equal(capability.entityType, "dashboard_recent_topic"); assert.equal(capability.entityId, topic.id); assert.equal(capability.entityLabel, topic.title);
+    assert.deepEqual(capability.actions.edit, { access: "allowed", href: `/admin/content/topics/${topic.id}` });
+    assert.equal(capability.actions.information.access, "allowed");
+    assert.deepEqual(capability.actions.information.items, [
+      { label: "النوع", value: `QA-TYPE:${topic.contentType}` },
+      { label: "التصنيف", value: topic.category },
+      { label: "الحالة", value: status === "published" ? "منشور" : "غير منشور" },
+      { label: "آخر تحديث", value: date(topic.updatedAt) },
+    ], "The original updatedAt remains available through Information without changing its data source");
+    for (const name of ["preview", "copyPublicLink", "visibility", "featured", "duplicate", "archive", "delete"]) assert.equal(capability.actions[name].access, "hidden");
+  }
+  return true;
+}
+check("Actual recent-topic SSR hides only the visible date while retaining original metadata, image, actions and Information updatedAt", verifyDashboardRecentTopicDatePresentation(dashboardView));
+const recentTopicDateMutants = [
+  dashboardView.replace(/\{topic\.title\}(\s*<\/p>)/u, "{topic.title}<time dateTime={topic.updatedAt}>{formatAdminDateTime(topic.updatedAt)}</time>$1"),
+  dashboardView.replace(/\{topic\.title\}(\s*<\/p>)/u, "{topic.title}<span>{formatAdminDateTime(topic.updatedAt)}</span>$1"),
+  dashboardView.replace('label: "آخر تحديث"', 'label: "بدون تحديث"'),
+  dashboardView.replace("formatAdminDateTime(topic.updatedAt)", "formatAdminDateTime(topic.createdAt)"),
+];
+check("Recent-topic date negatives reject a restored visible time/span and missing or changed Information updatedAt", recentTopicDateMutants.every(source => {
+  if (source === dashboardView) return false;
+  try { verifyDashboardRecentTopicDatePresentation(source); return false; } catch { return true; }
+}));
+
+function verifyDashboardDistributionNaturalFlow(source) {
+  const ast = ts.createSourceFile("AdminDashboardView.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = new Map();
+  let panel;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && ["distributions", "distributionTotal", "circumference"].includes(node.name.text)) {
+      assert.equal(declarations.has(node.name.text), false); declarations.set(node.name.text, node);
+    }
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "Panel") {
+      const title = node.openingElement.attributes.properties.find(property => ts.isJsxAttribute(property) && property.name.getText(ast) === "title")?.initializer;
+      if (title && ts.isStringLiteral(title) && title.text === "توزيع الحالات") panel = node;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(panel && declarations.size === 3);
+  const branch = panel.children.find(ts.isJsxExpression)?.expression;
+  assert.ok(branch && ts.isConditionalExpression(branch));
+  let wrapper = branch.whenTrue;
+  while (ts.isParenthesizedExpression(wrapper)) wrapper = wrapper.expression;
+  assert.ok(ts.isJsxElement(wrapper));
+  const code = ts.transpileModule([...declarations.values()].map(node => `const ${node.getText(ast)};`).join("\n")
+    + `\nfunction renderDistribution(){return (${wrapper.getText(ast)});}`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const labels = ["محتوى منشور", "محتوى غير منشور", "مشاريع منشورة", "مشاريع غير منشورة", "صفحات منشورة"];
+  const colors = ["#D8B87A", "#B99AE9", "#64A5E8", "#4EC6B4", "#E8C785"];
+  let layout;
+  for (const values of [[11, 3, 5, 2, 7], [0, 0, 0, 0, 0]]) {
+    const truth = { kpis: { topics: { published: values[0], unpublished: values[1] }, projects: { published: values[2], unpublished: values[3] }, pages: { published: values[4] } } };
+    const render = Function("require", "exports", "truth", "AdminModuleTabIcon", code + ";return renderDistribution;")(() => jsxRuntime, {}, truth, () => null);
+    const tree = render(), children = React.Children.toArray(tree.props.children);
+    const disk = children.find(child => child.type === "div"), legend = children.find(child => child.type === "dl");
+    assert.ok(disk && legend);
+    const svg = React.Children.toArray(disk.props.children).find(child => child.type === "svg");
+    assert.ok(svg); assert.equal(svg.props.viewBox, "0 0 100 100"); assert.equal(svg.props["aria-hidden"], "true"); assert.equal(svg.props.focusable, "false");
+    for (const viewport of [320, 390, 1510]) {
+      const flow = layoutProperties(tree.props.className, viewport);
+      assert.equal(flow.display, "flex"); assert.equal(flow["flex-direction"], "column"); assert.equal(flow.gap, "calc(var(--spacing) * 6)");
+      assert.equal(flow.flex, undefined, "The chart no longer grows to fill another Panel's height");
+      assert.equal(flow["justify-content"], undefined, "The chart cannot distribute artificial surplus space between disk and legend");
+      for (const property of ["height", "min-height", "max-height", "padding", "padding-block"]) assert.equal(flow[property], undefined, "The chart wrapper retains natural height without artificial vertical spacing");
+      const frame = layoutProperties(disk.props.className, viewport);
+      assert.equal(frame["aspect-ratio"].replace(/\s/gu, ""), "1/1"); assert.equal(frame.width, "100%");
+      assert.equal(frame["max-width"], "calc(var(--spacing) * 56)", "The original 224px disk cap cannot shrink with the natural-flow correction");
+      assert.equal(frame["margin-inline"], "auto"); assert.equal(frame.height, undefined);
+      const svgCss = layoutProperties(svg.props.className, viewport);
+      assert.equal(svgCss.width, "100%"); assert.equal(svgCss.height, "100%"); assert.equal(svgCss.rotate, "calc(90deg * -1)");
+    }
+    const circles = React.Children.toArray(svg.props.children), total = values.reduce((sum, value) => sum + value, 0), circumference = 2 * Math.PI * 42;
+    assert.equal(circles.length, values.length + 1);
+    for (const circle of circles) {
+      assert.equal(circle.type, "circle"); assert.equal(circle.props.cx, "50"); assert.equal(circle.props.cy, "50");
+      assert.equal(circle.props.r, "42"); assert.equal(circle.props.fill, "none"); assert.equal(circle.props.strokeWidth, "13");
+    }
+    assert.equal(circles[0].props.stroke, "rgba(255,255,255,0.06)");
+    let offset = 0;
+    for (const [index, circle] of circles.slice(1).entries()) {
+      assert.equal(circle.props.stroke, colors[index]);
+      assert.equal(circle.props.strokeDasharray, `${total ? values[index] / total * circumference : 0} ${circumference}`);
+      assert.equal(circle.props.strokeDashoffset, total ? -offset / total * circumference : 0); offset += values[index];
+    }
+    const items = React.Children.toArray(legend.props.children);
+    assert.equal(items.length, values.length); assert.equal(legend.props.className, "space-y-4");
+    for (const [index, item] of items.entries()) {
+      const pair = React.Children.toArray(item.props.children), label = pair.find(child => child.type === "dt"), value = pair.find(child => child.type === "dd");
+      assert.ok(label && value); assert.equal(renderToStaticMarkup(label).replace(/<[^>]+>/gu, ""), labels[index]); assert.equal(value.props.children, values[index]);
+      assert.equal(React.Children.toArray(label.props.children).find(React.isValidElement).props.style.backgroundColor, colors[index]);
+    }
+    layout = { wrapperClasses: tree.props.className, diskClasses: disk.props.className };
+  }
+  return layout;
+}
+check("Actual chart SSR and compiled CSS use natural flow while preserving disk geometry, all arcs, legend data and zero counts", Boolean(verifyDashboardDistributionNaturalFlow(dashboardView)));
+const distributionLayout = verifyDashboardDistributionNaturalFlow(dashboardView);
+const distributionMutants = [
+  dashboardView.replace(distributionLayout.wrapperClasses, `${distributionLayout.wrapperClasses} flex-1 justify-evenly`),
+  dashboardView.replace(distributionLayout.wrapperClasses, `${distributionLayout.wrapperClasses} h-[480px]`),
+  dashboardView.replace(distributionLayout.wrapperClasses, `${distributionLayout.wrapperClasses} py-2`),
+  dashboardView.replace(distributionLayout.diskClasses, distributionLayout.diskClasses.replace("max-w-56", "max-w-48")),
+  dashboardView.replace(distributionLayout.diskClasses, distributionLayout.diskClasses.replace("aspect-square", "aspect-video")),
+  dashboardView.replace(/(label:\s*"محتوى منشور",\s*value:\s*)truth\.kpis\.topics\.published/u, "$1truth.kpis.topics.unpublished"),
+  dashboardView.replace('strokeWidth="13"', 'strokeWidth="9"'),
+];
+check("Chart negatives reject restored stretch/distribution, fixed height or padding, a smaller disk and changed read-model arcs/data", distributionMutants.every(source => {
+  if (source === dashboardView) return false;
+  try { verifyDashboardDistributionNaturalFlow(source); return false; } catch { return true; }
+}));
+
+function verifySidebarGlyphPresentation(source) {
+  const ast = ts.createSourceFile("AdminShell.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let sidebar;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "renderSidebar") sidebar = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(sidebar);
+  const code = ts.transpileModule(sidebar.getText(ast), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const elements = node => Array.isArray(node) ? node.flatMap(elements)
+    : React.isValidElement(node) ? [node, ...elements(node.props.children)] : [];
+  const navigation = [
+    { id: "glyph-leaf", href: "/admin/glyph-leaf", label: "عنصر اختبار", icon: "◉" },
+    { id: "glyph-group", href: "/admin/glyph-group", label: "مجموعة اختبار", icon: "▣", children: [{ id: "glyph-child", href: "/admin/glyph-child", label: "فرع اختبار" }] },
+  ];
+  const Nav = () => null, Link = () => null;
+  let cases = 0;
+  for (const collapsed of [false, true]) for (const forceExpanded of [false, true]) {
+    const compact = collapsed && !forceExpanded, groups = [];
+    let toggles = 0;
+    const toggleCollapsed = () => { toggles += 1; };
+    const bindings = { collapsed, company: { name: "اختبار", cmsLabel: "TEST", publicWebsiteUrl: "/public-glyph-fixture" },
+      navigation, activeGroupIds: new Set(), openGroupId: null, pathname: "/admin/glyph-leaf", onNavigateStart() {},
+      toggleCollapsed, setGroupOverride: value => groups.push(value), isAdminNavigationItemActive: () => false,
+      CompanyMark: () => null, Link, AdminNavLink: Nav, VENESIA_SCROLLBAR_VISUAL_CLASSES: "venesia-scrollbar" };
+    const render = Function("require", "exports", ...Object.keys(bindings), code + ";return renderSidebar;")(() => jsxRuntime, {}, ...Object.values(bindings));
+    const tree = render(forceExpanded), all = elements(tree);
+    for (const item of navigation) {
+      const glyphs = all.filter(node => node.type === "span" && node.props.children === item.icon);
+      assert.equal(glyphs.length, 1, "Leaf and group retain their supplied Unicode glyph instead of a replacement owner");
+      for (const width of [390, 1536]) {
+        const css = layoutProperties(glyphs[0].props.className, width);
+        assert.equal(css["font-size"], "28px"); assert.equal(css["line-height"], "1");
+        for (const dimension of ["width", "height"]) assert.equal(css[dimension], "calc(var(--spacing) * 9)", "The original 36px navigation frame must contain the larger glyph");
+        assert.equal(css["flex-shrink"], "0"); assert.equal(css.display, "grid");
+      }
+    }
+    const collapse = all.find(node => node.type === "button" && node.props.onClick === toggleCollapsed);
+    if (forceExpanded) assert.equal(collapse, undefined, "The Mobile drawer retains its existing separate close control");
+    else {
+      assert.ok(collapse); assert.equal(collapse.props.type, "button"); assert.equal(collapse.props["aria-expanded"], !compact);
+      const css = layoutProperties(collapse.props.className, 1536);
+      assert.equal(css["font-size"], "var(--text-2xl)"); assert.equal(css["line-height"], "1");
+      for (const dimension of ["width", "height"]) assert.equal(css[dimension], "calc(var(--spacing) * 9)");
+      collapse.props.onClick(); assert.equal(toggles, 1, "Glyph refinement preserves the existing collapse handler");
+    }
+    const group = all.find(node => node.type === "button" && node !== collapse && Object.hasOwn(node.props, "aria-expanded"));
+    if (compact) assert.equal(group, undefined);
+    else {
+      assert.ok(group); assert.equal(group.props["aria-expanded"], false);
+      const disclosure = React.Children.toArray(group.props.children).find(node => React.isValidElement(node) && typeof node.props.children === "string");
+      assert.ok(disclosure);
+      const css = layoutProperties(disclosure.props.className, 390);
+      assert.equal(css["font-size"], "var(--text-base)"); assert.equal(css["line-height"], "1");
+      group.props.onClick(); assert.deepEqual(groups, [{ pathname: bindings.pathname, id: "glyph-group" }]);
+    }
+    const publicLink = all.find(node => node.type === Link && node.props.href === bindings.company.publicWebsiteUrl);
+    assert.ok(publicLink);
+    const publicGlyph = React.Children.toArray(publicLink.props.children).find(node => React.isValidElement(node) && node.type === "span");
+    assert.ok(publicGlyph && typeof publicGlyph.props.children === "string");
+    const css = layoutProperties(publicGlyph.props.className, 390);
+    assert.equal(css["font-size"], "var(--text-xl)"); assert.equal(css["line-height"], "1");
+    for (const dimension of ["width", "height"]) assert.equal(css[dimension], "calc(var(--spacing) * 8)");
+    const leaf = all.find(node => node.type === Nav && node.props.href === navigation[0].href);
+    assert.ok(leaf); assert.equal(leaf.props.onNavigateStart, bindings.onNavigateStart);
+    cases += 1;
+  }
+  return cases;
+}
+check("Actual Sidebar retains Unicode ownership, 36px frames and navigation behavior with larger leaf/group/control glyphs", verifySidebarGlyphPresentation(shell) === 4);
+const sidebarGlyphClass = "font-en text-[28px] leading-none";
+const finalSidebarGlyph = shell.lastIndexOf(sidebarGlyphClass);
+assert.ok(finalSidebarGlyph >= 0);
+const sidebarGlyphMutants = [
+  shell.replace(sidebarGlyphClass, "font-en text-base leading-none"),
+  shell.slice(0, finalSidebarGlyph) + shell.slice(finalSidebarGlyph).replace(sidebarGlyphClass, "font-en text-base leading-none"),
+  shell.replaceAll("size-9 shrink-0 place-items-center rounded-2xl", "size-7 shrink-0 place-items-center rounded-2xl"),
+  shell.replaceAll("{item.icon}", '{"replacement"}'),
+  shell.replace("text-2xl font-bold leading-none", "text-sm font-bold leading-none"),
+  shell.replace("text-base leading-none transition", "text-xs leading-none transition"),
+  shell.replace("text-xl leading-none", "text-sm leading-none"),
+];
+check("Sidebar glyph negatives reject a small leaf or group hidden by its valid sibling, narrowed frames, replacements and undersized controls", sidebarGlyphMutants.every(source => {
+  if (source === shell) return false;
+  try { verifySidebarGlyphPresentation(source); return false; } catch { return true; }
+}));
+
 function sidebarLayout(source) {
   const ast = ts.createSourceFile("AdminShell.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let sidebar;
@@ -585,6 +1107,8 @@ function sidebarLayout(source) {
   }
   const { desktop, mobile } = result;
   assert.equal(desktop.wrapper.display, "block");
+  assert.equal(desktop.wrapper["background-color"], "transparent", "The Desktop sidebar keeps its existing transparent composition");
+  assert.equal(desktop.aside["background-color"], "transparent");
   for (const node of [desktop.wrapper, desktop.aside]) {
     assert.ok(!["fixed", "sticky", "absolute"].includes(node.position), "Desktop navigation must participate in normal document flow");
     assert.ok(!node.height || node.height === "auto");
@@ -594,6 +1118,7 @@ function sidebarLayout(source) {
   assert.ok(!desktop.nav["overflow-y"] || desktop.nav["overflow-y"] === "visible");
   assert.equal(mobile.dialog.position, "fixed");
   assert.equal(mobile.wrapper.height, "100%");
+  assert.equal(mobile.wrapper["background-color"], "var(--admin-surface)", "The Mobile overlay must paint the canonical surface so underlying Dashboard text cannot bleed through its transparent sidebar");
   assert.equal(mobile.aside.height, "100%");
   assert.equal(mobile.nav["overflow-y"], "auto");
   return result;
@@ -621,14 +1146,16 @@ function dockLayout(source) {
   assert.equal(outer["margin-inline-start"], "auto", "Wrapped default outer dock must align externally left in RTL");
   return { inner, outer };
 }
-check("Compiled actual desktop Sidebar grows with the document while the mobile drawer retains bounded native scroll", Boolean(sidebarLayout(shell)));
+check("Compiled actual desktop Sidebar keeps its transparent document flow while the bounded Mobile drawer paints the canonical surface", Boolean(sidebarLayout(shell)));
 const sidebarMutants = [
   shell.replace('className="hidden shrink-0 bg-transparent lg:block"', 'className="hidden shrink-0 bg-transparent lg:block [position:sticky] [height:100vh]"'),
   shell.replace('forceExpanded ? "h-full" : "min-h-screen"', 'forceExpanded ? "h-full" : "[height:100vh] min-h-screen"'),
   shell.replace('forceExpanded ? "overflow-y-auto " : ""', 'forceExpanded ? "overflow-y-auto " : "[overflow-y:auto] "'),
   shell.replace('forceExpanded ? "overflow-y-auto " : ""', 'forceExpanded ? "[overflow-y:visible] " : ""'),
+  shell.replace('className="absolute right-0 top-0 h-full bg-[var(--admin-surface)]"', 'className="absolute right-0 top-0 h-full"'),
+  shell.replace('className="absolute right-0 top-0 h-full bg-[var(--admin-surface)]"', 'className="absolute right-0 top-0 h-full bg-transparent"'),
 ];
-check("Equivalent-property negatives reject desktop sticky/viewport/nav scrolling and loss of mobile native scroll", sidebarMutants.every(source => {
+check("Equivalent-property negatives reject desktop sticky/viewport/nav scrolling, lost Mobile scroll and missing or transparent drawer fill", sidebarMutants.every(source => {
   if (source === shell) return false;
   try { sidebarLayout(source); return false; } catch { return true; }
 }));
@@ -689,6 +1216,7 @@ async function verifyGlobalHeader(source) {
     const menuStyle = layoutProperties(menu.props.className, width);
     assert.equal(menuStyle.display, width < 1024 ? "grid" : "none");
     assert.equal(menuStyle.width, "calc(var(--spacing) * 11)"); assert.equal(menuStyle.height, "calc(var(--spacing) * 11)");
+    assert.equal(menuStyle["font-size"], "var(--text-2xl)"); assert.equal(menuStyle["line-height"], "1", "The Mobile menu keeps its larger glyph inside the existing 44px button");
     menu.props.onClick(); assert.deepEqual(state, [{ pathname: "/admin/content/topics", open: true }]);
     assert.equal(logout.props.type, "button"); assert.equal(logout.props.children.trim(), "خروج");
     const statuses = controls.filter(node => node.props.role === "status");
@@ -716,6 +1244,7 @@ const globalHeaderMutants = [
   shell.replace('gap-6 px-4 py-4 sm:px-6 lg:px-7', 'gap-7 px-4 py-4 sm:px-6 lg:px-7'),
   shell.replace('method: "POST", credentials: "same-origin"', 'method: "GET", credentials: "same-origin"'),
   shell.replace('method: "POST", credentials: "same-origin"', 'method: "POST", credentials: "omit"'),
+  shell.replace("text-2xl leading-none text-white/70 lg:hidden", "text-base leading-none text-white/70 lg:hidden"),
 ];
 check("Global Header negatives reject former padding/cadence and changed logout method or credentials", (await Promise.all(globalHeaderMutants.map(async source => {
   if (source === shell) return false;

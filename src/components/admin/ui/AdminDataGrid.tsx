@@ -66,6 +66,8 @@ export type AdminDataGridAction =
   | "restore"
   | "visibility";
 
+export type AdminDataGridActionIconSize = "sm" | "md" | "lg";
+
 type ActionButtonProps = {
   children?: ReactNode;
   title?: string;
@@ -90,6 +92,8 @@ type ActionButtonProps = {
   active?: boolean;
   buttonRef?: Ref<HTMLButtonElement>;
   size?: "default" | "compact" | "inline";
+  /** Opt-in glyph scale; button and column geometry remain unchanged. */
+  iconSize?: AdminDataGridActionIconSize;
 };
 
 type CheckboxProps = {
@@ -470,7 +474,7 @@ export function AdminDataGridActionIcon({
   isCurrentlyHidden?: boolean;
   active?: boolean;
   /** Shared glyph scales: 16px default, 18px form controls, 22px prominent actions. */
-  size?: "sm" | "md" | "lg";
+  size?: AdminDataGridActionIconSize;
 }) {
   const iconClassName = size === "lg" ? "size-5.5 shrink-0" : size === "md" ? "size-4.5 shrink-0" : ADMIN_DATA_GRID_RULES.actionIcon;
   if (action === "edit") {
@@ -952,6 +956,7 @@ export function AdminDataGridActionButton({
   active = false,
   buttonRef,
   size = "default",
+  iconSize = "sm",
 }: ActionButtonProps) {
   const visibilityPresentation =
     action === "visibility"
@@ -979,6 +984,7 @@ export function AdminDataGridActionButton({
       action={action}
       isCurrentlyHidden={isCurrentlyHidden}
       active={active}
+      size={iconSize}
     />
   ) : (
     children

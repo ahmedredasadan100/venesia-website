@@ -15,6 +15,8 @@ export type AdminMetricCardProps = {
   ariaLabel?: string;
   /** Decorative semantic glyph supplied by the consumer's existing icon owner. */
   icon?: ReactNode;
+  /** Opt-in prominence; existing metric consumers retain their default sizing. */
+  iconSize?: "default" | "prominent";
 };
 
 const TONE_STYLES: Record<
@@ -76,13 +78,17 @@ export default function AdminMetricCard({
   active = false,
   ariaLabel,
   icon,
+  iconSize = "default",
 }: AdminMetricCardProps) {
   const styles = TONE_STYLES[tone];
   const alignClasses = align === "center" ? "items-center text-center" : "items-start text-right";
   const sizeClasses = icon
-    ? `${compact ? "min-h-[80px]" : "min-h-[96px]"} gap-2 p-3`
+    ? `${compact ? "min-h-[80px]" : "min-h-[96px]"} gap-2 ${iconSize === "prominent" ? "p-2.5" : "p-3"}`
     : compact ? "min-h-[84px] gap-1.5 px-4 py-3" : "min-h-[96px] gap-2 p-4";
   const valueSizeClass = icon ? "text-[22px] md:text-2xl" : compact ? "text-2xl" : "text-3xl";
+  const iconSizeClass = iconSize === "prominent"
+    ? "size-9 [&>svg]:size-9 [&>svg]:stroke-2"
+    : "size-5.5 md:size-6 [&>svg]:size-5.5 md:[&>svg]:size-6";
 
   const Component = onClick ? "button" : "div";
   const content = (
@@ -124,11 +130,11 @@ export default function AdminMetricCard({
         aria-hidden="true"
       />
       {icon ? (
-        <div className="flex w-full min-w-0 items-center justify-between gap-2" dir="rtl">
+        <div className={`flex w-full min-w-0 items-center justify-between ${iconSize === "prominent" ? "gap-1" : "gap-2"}`} dir="rtl">
           <div data-admin-metric-content="" className={`flex min-w-0 flex-1 flex-col gap-1 ${alignClasses}`}>
             {content}
           </div>
-          <span data-admin-metric-icon="" aria-hidden="true" className={`inline-flex size-5.5 shrink-0 items-center justify-center md:size-6 [&>svg]:size-5.5 md:[&>svg]:size-6 ${styles.valueClass}`}>
+          <span data-admin-metric-icon="" aria-hidden="true" className={`inline-flex shrink-0 items-center justify-center ${iconSizeClass} ${styles.valueClass}`}>
             {icon}
           </span>
         </div>

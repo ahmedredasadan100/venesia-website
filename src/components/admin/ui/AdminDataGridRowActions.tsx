@@ -34,6 +34,7 @@ import {
   AdminDataGridActionIcon,
   AdminDataGridActionsCell,
   type AdminDataGridAction,
+  type AdminDataGridActionIconSize,
 } from "./AdminDataGrid";
 import { AdminActivityContent } from "./AdminActivityPopover";
 import AdminConfirmDialog from "./AdminConfirmDialog";
@@ -62,6 +63,8 @@ export type {
 export type AdminDataGridRowActionsProps = {
   capability: AdminRowActionsCapability;
   size?: "default" | "compact";
+  /** Opt-in primary/status glyph scale; existing consumers retain 16px icons. */
+  iconSize?: AdminDataGridActionIconSize;
   display?: "menu" | "visibility" | "featured";
   sticky?: boolean;
   moreButtonRef?: RefObject<HTMLButtonElement | null>;
@@ -406,6 +409,7 @@ function restoreResolvedFocus(
 export default function AdminDataGridRowActions({
   capability,
   size = "default",
+  iconSize = "sm",
   display = "menu",
   sticky = false,
   moreButtonRef,
@@ -783,6 +787,7 @@ export default function AdminDataGridRowActions({
           disabled={!enabled}
           pending={target.pending}
           size={size}
+          iconSize={iconSize}
           onClick={
             enabled && target.onSelect ? () => target.onSelect?.() : undefined
           }
@@ -847,6 +852,7 @@ export default function AdminDataGridRowActions({
           action={isVisibility ? "visibility" : "feature"}
           buttonRef={setTriggerNode}
           size="inline"
+          iconSize={iconSize}
           tone={isVisibility ? undefined : active ? "gold" : "dark"}
           isCurrentlyHidden={isVisibility ? !active : false}
           visibilityEntityLabel={capability.entityLabel}
@@ -1014,6 +1020,7 @@ export default function AdminDataGridRowActions({
             action="more"
             buttonRef={setTriggerNode}
             size={size}
+            iconSize={iconSize}
             title="المزيد"
             ariaLabel={`المزيد من إجراءات ${capability.entityLabel}`}
             ariaHasPopup="menu"

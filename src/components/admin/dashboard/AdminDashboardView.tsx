@@ -52,17 +52,17 @@ function DashboardThumbnail({
   return (
     <span
       data-dashboard-thumbnail
-      className="relative block h-12 w-10 shrink-0 overflow-hidden rounded-lg border border-[#D8B87A]/20 bg-[#D8B87A]/8"
+      className="relative block aspect-video w-28 shrink-0 overflow-hidden rounded-xl border border-[#D8B87A]/20 bg-[#D8B87A]/8 sm:w-32"
     >
       <span className="absolute inset-0 grid place-items-center text-[#D8B87A]/65" aria-hidden="true">
-        <span className="size-5"><AdminModuleTabIcon name={icon} /></span>
+        <span className="size-7"><AdminModuleTabIcon name={icon} /></span>
       </span>
       {image ? (
         <PublicMediaImage
           src={image}
           alt={imageAlt ?? ""}
           fill
-          sizes="40px"
+          sizes="(min-width: 640px) 128px, 112px"
           composition="cover-center"
           fallbackSrc={null}
         />
@@ -312,7 +312,7 @@ export default function AdminDashboardView({
             title={action.hint}
             variant="gold-ghost"
           >
-            <span className="size-4 shrink-0" aria-hidden="true">
+            <span className="size-5 shrink-0" aria-hidden="true">
               <AdminModuleTabIcon name={action.icon} />
             </span>
             {action.label}
@@ -331,12 +331,13 @@ export default function AdminDashboardView({
             value={value ?? "غير متاح"}
             align="start"
             icon={<AdminModuleTabIcon name={icon} />}
+            iconSize="prominent"
           />
         ))}
       </section>
 
       <section
-        className="grid min-w-0 gap-4 lg:grid-cols-2 xl:grid-cols-3"
+        className="grid min-w-0 gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)]"
         aria-label="ملخص المحتوى والمشاريع"
       >
         <Panel
@@ -350,7 +351,6 @@ export default function AdminDashboardView({
               <AdminDataGrid
                 surface="embedded"
                 scrollLabel="آخر المحتويات"
-                className="flex-1 [&>div]:h-full"
               >
                 {truth.recentTopics
                   .slice(0, DASHBOARD_EXCERPT_SIZE)
@@ -398,9 +398,9 @@ export default function AdminDashboardView({
                         stickyActions={false}
                       >
                         <AdminDataGridPrimaryCell className="pe-2">
-                          <div className="flex items-start gap-3">
+                          <div className="flex flex-wrap items-start gap-2">
                             <DashboardThumbnail image={topic.image} imageAlt={topic.imageAlt} icon="media" />
-                            <div className="min-w-0 flex-1 space-y-1">
+                            <div className="min-w-0 grow basis-28 space-y-0.5">
                               <p className="break-words text-sm font-semibold leading-6 text-white/85 [overflow-wrap:anywhere]">
                                 {topic.title}
                               </p>
@@ -414,18 +414,13 @@ export default function AdminDashboardView({
                                   {statusLabel(topic.status)}
                                 </span>
                               </div>
-                              <time
-                                dateTime={topic.updatedAt}
-                                className="block text-[11px] text-white/45"
-                              >
-                                {formatAdminDateTime(topic.updatedAt)}
-                              </time>
                             </div>
                           </div>
                         </AdminDataGridPrimaryCell>
                         <AdminDataGridRowActions
                           capability={capability}
                           size="compact"
+                          iconSize="lg"
                         />
                       </AdminDataGridRow>
                     );
@@ -441,7 +436,7 @@ export default function AdminDashboardView({
 
         <Panel title="توزيع الحالات" subtitle="حالات النشر من القراءة الحالية">
           {truth ? (
-            <div className="flex flex-1 flex-col justify-evenly gap-6 py-2">
+            <div className="flex flex-col gap-6">
               <div className="relative mx-auto aspect-square w-full max-w-56">
                 <svg
                   viewBox="0 0 100 100"
@@ -525,15 +520,15 @@ export default function AdminDashboardView({
         >
           {truth ? (
             truth.recentProjects.length ? (
-              <div className="grid flex-1 auto-rows-fr divide-y divide-white/8">
+              <div className="grid divide-y divide-white/8">
                 {truth.recentProjects.map((project) => (
                   <Link
                     key={project.id}
                     href={`/admin/projects/${project.id}`}
-                    className="flex min-w-0 items-center gap-3 rounded-lg px-1 py-4 transition hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D8B87A] first:pt-0 last:pb-0"
+                    className="flex min-w-0 items-center gap-3 rounded-lg px-1 py-3 transition hover:bg-white/[0.025] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D8B87A] first:pt-0 last:pb-0"
                   >
                     <DashboardThumbnail image={project.image} imageAlt={project.imageAlt} icon="plans" />
-                    <div className="min-w-0 flex-1 space-y-2">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="flex items-center gap-2 text-[#D8B87A]">
                           <span

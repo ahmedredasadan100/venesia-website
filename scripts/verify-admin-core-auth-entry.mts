@@ -2,9 +2,9 @@ import{verifyCoreMaintenanceTransportControl,verifyCoreLoginHydrationControl}fro
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
-import { chromium } from 'playwright/test';
+import { chromium,expect } from 'playwright/test';
 import { CORE_AUTH_ENTRY_PHASES,assertCoreAuthEntryTransition,validateCoreAuthEntryRequest } from './verify-admin-core-auth-entry-isolated.mts';
-import { buildCoreAuthEntryPlan,assertCoreAuthCookieMetadata,coreAuthEntryBrowserOptions,assertCoreDashboardEntry } from './fixtures/admin-core-auth-entry-journeys.mjs';
+import { buildCoreAuthEntryPlan,assertCoreAuthCookieMetadata,coreAuthEntryBrowserOptions,assertCoreDashboardEntry,coreDashboardEntryReadinessCriteria } from './fixtures/admin-core-auth-entry-journeys.mjs';
 const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import<{ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:Array<Record<string,unknown>>}>('../src/lib/admin/form-system/adoption-manifest.ts');
 const cases:string[]=[];const pass=(name:string,fn:()=>void)=>{fn();cases.push(name);};
 pass('Actual Auth manifest derives its two existing session entry surfaces',()=>assert.equal(buildCoreAuthEntryPlan(manifest).surfaces.length,2));
@@ -38,10 +38,22 @@ pass('Only Maintenance transport fixture blocks service workers',()=>{assert.dee
 const dashboardBrowser=await chromium.launch({headless:true});
 try{
  const page=await dashboardBrowser.newPage();
+ const assertMeasurementReadiness=async(state:string)=>{
+  for(const criterion of coreDashboardEntryReadinessCriteria(state)){
+   const target=page.locator(criterion.target.css);
+   if(criterion.count!==undefined)await expect(target).toHaveCount(criterion.count,{timeout:100});
+   if(criterion.visible===true)await expect(target).toBeVisible({timeout:100});
+   if(criterion.attribute)await expect(target).toHaveAttribute(criterion.attribute.name,criterion.attribute.value,{timeout:100});
+  }
+ };
  const dashboard=(state:string)=>{const labels:Record<string,string>={ready:'قراءة المصادر ناجحة',partial:'قراءة جزئية',unavailable:'القراءة غير متاحة'},receipts:Record<string,string>={ready:'Dashboard جاهزة',partial:'Dashboard جزئية',unavailable:'Dashboard غير متاحة'};return `<main dir="rtl"><h1>لوحة التحكم</h1><section data-dashboard-panel="حالة النظام"><h2>حالة النظام</h2><span role="status" data-dashboard-readiness-summary="${state}">${labels[state]}</span></section>${state==='ready'?'':`<section data-dashboard-state-banner="${state}"><h2>${receipts[state]}</h2></section>`}</main>`;};
- for(const [state,receipt]of [['ready','Dashboard جاهزة'],['partial','Dashboard جزئية'],['unavailable','Dashboard غير متاحة']]){await page.setContent(dashboard(state));assert.equal(await assertCoreDashboardEntry(page,{timeout:100}),receipt);cases.push('Dashboard exact current title and actual '+state+' summary accepted');}
- for(const [name,html]of [
-  ['old readiness heading',dashboard('partial').replace('<h1>لوحة التحكم</h1>','<h1>Dashboard جزئية</h1>')],
+ for(const [state,receipt]of [['ready','Dashboard جاهزة'],['partial','Dashboard جزئية'],['unavailable','Dashboard غير متاحة']]){
+  await page.setContent(dashboard(state));assert.equal(await assertCoreDashboardEntry(page,{timeout:100}),receipt);await assertMeasurementReadiness(state);cases.push('Dashboard exact current title and actual '+state+' summary accepted by Auth and measurement');
+  for(const other of ['ready','partial','unavailable'].filter(value=>value!==state)){await assert.rejects(()=>assertMeasurementReadiness(other));cases.push('Measurement '+other+' expectation rejects actual '+state);}
+ }
+ for(const invalid of ['invented','toString','__proto__'])pass('Unknown measurement state '+invalid+' rejected',()=>assert.throws(()=>coreDashboardEntryReadinessCriteria(invalid)));
+ for(const [name,html,state='ready']of [
+  ['old readiness heading',dashboard('partial').replace('<h1>لوحة التحكم</h1>','<h1>Dashboard جزئية</h1>'),'partial'],
   ['foreign title',dashboard('ready').replace('لوحة التحكم','Public')],
   ['wrong heading level',dashboard('ready').replace('<h1>لوحة التحكم</h1>','<h2>لوحة التحكم</h2>')],
   ['missing summary',dashboard('ready').replace(/<span role="status"[\s\S]*?<\/span>/u,'')],
@@ -50,10 +62,10 @@ try{
   ['unknown state',dashboard('ready').replace('summary="ready"','summary="invented"')],
   ['incorrect summary label',dashboard('ready').replace('قراءة المصادر ناجحة','قراءة جزئية')],
   ['success banner',dashboard('ready').replace('</main>','<section data-dashboard-state-banner="ready"><h2>Dashboard جاهزة</h2></section></main>')],
-  ['missing warning banner',dashboard('partial').replace(/<section data-dashboard-state-banner[\s\S]*?<\/section>/u,'')],
-  ['wrong banner state',dashboard('partial').replace('banner="partial"','banner="unavailable"')],
-  ['wrong warning title',dashboard('partial').replace('Dashboard جزئية','Dashboard غير متاحة')],
- ]){await page.setContent(html);await assert.rejects(()=>assertCoreDashboardEntry(page,{timeout:100}));cases.push('Dashboard rejects '+name);}
+  ['missing warning banner',dashboard('partial').replace(/<section data-dashboard-state-banner[\s\S]*?<\/section>/u,''),'partial'],
+  ['wrong banner state',dashboard('partial').replace('banner="partial"','banner="unavailable"'),'partial'],
+  ['wrong warning title',dashboard('partial').replace('Dashboard جزئية','Dashboard غير متاحة'),'partial'],
+ ]){await page.setContent(html);await assert.rejects(()=>assertCoreDashboardEntry(page,{timeout:100}));await assert.rejects(()=>assertMeasurementReadiness(state));cases.push('Dashboard Auth and measurement reject '+name);}
 }finally{await dashboardBrowser.close();}
 const mounted=await verifyCoreMaintenanceTransportControl();
 const hydration=await verifyCoreLoginHydrationControl();

@@ -5,6 +5,7 @@ import { resolve, join, sep } from "node:path";
 import { chromium } from "playwright";
 import sharp from "sharp";
 import { browserAtomicReadiness } from "./fixtures/admin-atomic-readiness.mjs";
+import { coreDashboardEntryReadinessCriteria } from "./fixtures/admin-core-auth-entry-journeys.mjs";
 import { assertFreshMeasurementControl, createAdminMeasurementRestoreTransition, readCompletedRestoreReceipt } from "./fixtures/admin-measurement-restore-transition.mjs";
 
 const origin = process.env.E2E_BASE_URL;
@@ -216,12 +217,12 @@ const act = async action => {
     try {await page.locator('input[name="username"]').fill(localAuth.username);await page.locator('input[name="password"]').fill(action.value==="next"?localAuth.next:localAuth.password);
       await Promise.all([page.waitForURL(url=>url.pathname==="/admin"),page.locator('button[type="submit"]').click()]);
       await ready(action.dashboardState==="partial-media-warning"?[
-        {target:{css:'main h1:text-is("Dashboard جزئية")'},visible:true},
+        ...coreDashboardEntryReadinessCriteria("partial"),
         {target:{text:'تشخيص الميديا متاح، لكنه لا يثبت تزامنًا كاملًا مع البيئة الحالية.',exact:true},visible:true},
         ...['public.admin_dashboard_truth_v1()','admin_audit_logs via listAdminAuditLogs','Next.js force-dynamic request-time rendering'].map(source=>({target:{css:`main div:has(> p:text-is("${source}")) > div > span:text-is("جاهز")`},visible:true})),
         {target:{css:'main div:has(> p:text-is("media.catalog_state via getMediaCatalogRuntimeState")) > div > span:text-is("تحذير")'},visible:true},
         ...['/admin/content/topics/new','/admin/content/categories/new','/admin/settings/general'].map(path=>({target:{css:`main a[href="${path}"]`},visible:true,enabled:true})),
-      ]:[{target:{css:'main h1:has-text("Dashboard جاهزة")'},visible:true}]);if(action.value==="next")localAuth.password=localAuth.next;
+      ]:coreDashboardEntryReadinessCriteria("ready"));if(action.value==="next")localAuth.password=localAuth.next;
     }catch(error){throw new Error(sanitize(error.message));}
   }
   else if (action.op === "assert") await ready([action]);
@@ -306,7 +307,7 @@ try {
   const loginEventsStart=trustedEvents.length,loginAutomationStart=performance.now();
   await Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 45_000 }), page.locator('button[type="submit"]').click()]);
   let loginReadinessFailure=null;
-  try {await ready([{target:{css:'main h1:has-text("Dashboard جاهزة")'},visible:true}]);}
+  try {await ready(coreDashboardEntryReadinessCriteria("ready"));}
   catch(error) {loginReadinessFailure={name:error.name,message:error.message};}
   const loginFinished=await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(performance.timeOrigin+performance.now())))));
   const loginAction=trustedEvents.slice(loginEventsStart).find(event=>event.type==="click");
