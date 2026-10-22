@@ -82,7 +82,7 @@ Required only when Production behavior is part of the closure claim and a safe t
 
 Constitution Section 25.4 and ADR-028 define the Owner-approved sequence:
 
-`Local Implementation -> Impact-Based Targeted QA -> Owner Visual Approval -> Local Commits -> Batch Final Quality Gate -> Push -> PR -> Required GitHub CI -> Ready -> Standard Merge -> Automatic Production`
+`Local Implementation -> Impact-Based Targeted QA -> Owner Visual Approval -> Local Commits -> Risk-Selected Batch Local Verification -> Push -> PR -> Required GitHub CI -> Ready -> Standard Merge -> Automatic Production`
 
 Development Verification and Batch Release Verification are distinct. A small
 change does not trigger the full release suite. Vercel Preview is not required
@@ -206,16 +206,74 @@ Documentation-only work uses the applicable consistency checks in Section 15.
 At completion of the group of changes:
 
 1. Freeze the committed Final HEAD and inventory the combined release scope, including QA fixes already in the branch.
-2. Run one Full Quality Gate on that state using the existing release commands. Include the required Final Build and Public E2E; when the gate already runs them, do not run them again. `package.json` and the existing CI contract define the executable requirements.
+2. Complete the risk-selected local release profile under Constitution Section 25.4 and Section 3.3.1 below. Bounded A/B do not automatically require Full Local Gate; C/D require Full Local Gate plus affected specialized proof, and unresolved/unbounded E requires Full Local Gate. Use existing commands and owners. Include Final Build, Product Surface, Platform Contracts, Public E2E, and cleanup for A/B Product batches; when the selected gate already runs a required step, do not run it again. `package.json` and the existing CI contract remain the executable authorities.
 3. Prove cleanup of owned fixtures/processes, preservation of original resources, and environment integrity; retain evidence under Section 8.
 4. Perform authorized Push, prove branch alignment, and create the authorized PR with the evidence.
-5. Require existing GitHub CI, including Admin Runtime verification, on the current PR head before Ready. Do not change required checks, branch protection, or Vercel settings.
-6. Obtain separate Ready and Standard Merge authorizations. The existing integration deploys Production automatically after merge; Section 12 governs Production closure.
+5. Require complete existing GitHub CI, including Admin Runtime verification, on Exact HEAD before Ready. Required checks, Branch Protection, Post-Merge CI, and Vercel deployment policy remain unchanged; do not skip or weaken a required check to obtain PASS.
+6. Obtain separate Ready and Standard Merge authorizations. Standard Merge Commit retains Expected Head SHA protection. The existing integration deploys Production automatically after merge; Section 12 governs Production closure.
 
-The full gate is a batch release requirement, not a prerequisite for each small
-local commit. A stopped or incomplete gate is never a pass; record
+The selected profile is a batch release requirement, not a prerequisite for each
+small local commit or permission to cross an authorized Local-only stop. The
+documentation-only exception in Section 15 remains applicable. A stopped or
+incomplete required gate is never a pass; record
 `Stopped by Owner — Not Passed` when stopped by the Owner. Completed targeted
-checks remain scoped evidence, not a replacement for unexecuted release checks.
+development checks remain scoped evidence, not a replacement for unexecuted
+requirements of the selected release profile.
+
+### 3.3.1 Risk and impact-based check selection
+
+Constitution Section 25.4 owns classes A–E. Classify the combined batch, including
+QA changes, against the actual behavior and contracts rather than its label or
+file count. A/B eligibility requires positive proof of bounded presentation
+impact and unchanged behavior/contracts. C/D require Full Local Gate. Mixed E
+takes the highest constituent risk; unknown/conflicting dependencies or inability
+to prove bounded impact require Full Local Gate. Architecture or verification-
+execution code changes are high risk and require Full Local Gate; they cannot
+be relabeled A/B because the diff is small. Documentation-only work retains
+Section 15's applicable checks.
+
+Record this decision in the existing QA evidence, not a new registry, manifest,
+runner, or source of truth:
+
+1. Baseline and final SHA/tree, all changed files, combined risk class and rationale, boundedness proof, and any unknowns.
+2. Canonical owners, affected contracts, direct and indirect consumers, routes, and affected Tests/Guards/Fixtures/scripts/workflows; cite the existing manifests, registries, executable graph, and relevant non-import dependencies.
+3. Selected existing commands and proof obligations, each linked to its affected owner/consumer/contract. For a declared unaffected boundary, record why its inputs and contracts are unchanged; absence from the import graph alone is never that proof, especially for CSS, images, SQL, fixtures, configuration, and dynamic reads.
+4. Executed checks and receipts, mandatory visual/behavior coverage, failures and cleanup, plus any retained evidence with input/contract equivalence under Section 3.4. Never use a prior PASS solely because its SHA, path, or timestamp looks suitable.
+
+Operationally, provide this reviewed batch record through the existing
+`PublicGateRequest.localVerification` in `scripts/lib/isolated-public-verification.mts`.
+Its typed contract and `planLocalVerification` bind the actual source delta to
+existing named npm checks, followed by the four canonical Public gates above.
+This is reviewed classification with conservative risk floors, not an automatic
+semantic classifier. Affected Test/Guard/Fixture execution needs a positive
+binding to a current command and executable graph; missing or conflicting edges
+expand verification or block the unsupported claim, never prove exclusion.
+The existing focused contract guard is
+`node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
+
+Run every affected check in the same task and maintain proven stale expectations
+under Section 3.2.2. A changed Test/Guard/Fixture invalidates its affected proof
+and dependent coverage; do not leave it outside the selected set. Use current
+supported command boundaries. If an aggregate cannot be safely scoped, run the
+existing aggregate; do not manufacture narrower coverage or a parallel engine.
+Conflicting or incomplete mappings expand verification safely, including Full
+Local Gate when the impact cannot be bounded.
+
+For A, retain affected targeted tests/guards, TypeScript, ESLint, affected
+Desktop/Mobile/RTL, image/fallback and interaction proof, plus Final Build,
+Product Surface, Platform Contracts, Public E2E, and cleanup. For B, add canonical
+owner proof, direct/indirect consumer verification, applicable Adoption and
+Source Proof, and affected contracts/failure paths. Shared UI visual proof still
+follows Section 3.2.1; source guards do not substitute for it. C/D retain Full
+Local Gate and affected domain/data/integration or positive/negative security
+checks. Classification does not authorize Auth, permission, data, or migration
+changes.
+
+Preserve all assertions, positive/negative/boundary and security coverage,
+failure propagation, process/fixture cleanup, and original resource integrity.
+An affected mandatory failure, Skip, blocked/unverified check, missing proof, or
+unproven cleanup blocks local completion of that boundary and release readiness.
+Local selection never waives complete required Exact-HEAD CI or Post-Merge CI.
 
 ## 3.4 Evidence validity after a HEAD change
 
@@ -224,8 +282,8 @@ changed files, affected owners/consumers, relevant test/build inputs and
 environment, retained receipts, and the checks to rerun with a reason.
 
 - A documentation-only change can retain runtime evidence when the relevant source, dependency/configuration, test, and environment inputs are unchanged; verify the documentation delta separately.
-- Product, shared-owner, contract, dependency/configuration, or QA-script changes invalidate the corresponding proof and affected consumer coverage. Rerun those checks and any affected build/E2E steps.
-- Rerun the full gate when a material impact or contract requirement cannot be bounded and covered by valid retained proof plus affected reruns. Do not repeat successful unaffected checks merely because a SHA changed.
+- Product, shared-owner, contract, dependency/configuration, or QA-script changes invalidate the corresponding proof and affected consumer coverage. Changes to a Test/Guard/Fixture also invalidate its affected proof and dependents. Maintain and rerun those checks in the same task, and rerun any affected build/E2E steps.
+- Reclassify the combined scope under Section 3.3.1 after a material change; C/D and high-risk architecture/verification-execution changes require Full Local Gate. Rerun the full gate when a material impact or contract requirement cannot be bounded and covered by valid retained proof plus affected reruns. Do not repeat successful unaffected checks merely because a SHA changed.
 - Required GitHub CI must still pass on the current PR head; local evidence reuse does not waive remote required checks.
 - Report executed-on-HEAD evidence separately from retained evidence with proven input equivalence. Never rewrite an old receipt or relabel an older gate as a fresh exact-head run.
 - Release readiness requires complete valid coverage for the final state and successful cleanup. An old, failed, stopped, or incomplete gate alone cannot establish that coverage.
@@ -421,7 +479,7 @@ Ready requires:
 - targeted checks pass;
 - failure paths pass;
 - required Browser QA passes;
-- batch Final Quality Gate coverage is valid for Final HEAD, with any retained evidence and affected reruns explicitly justified under Section 3.4;
+- the risk-selected batch local release profile under Sections 3.3/3.3.1 is complete and valid for Final HEAD, with any retained evidence and affected reruns explicitly justified under Section 3.4;
 - required GitHub CI passes on the current PR head;
 - Owner Local Visual Approval is recorded for UI changes;
 - fixtures and processes are cleaned;

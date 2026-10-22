@@ -15,6 +15,7 @@ import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
 import { selectSourceInventory, sourceIncluded } from "./verification-source-inventory.mts";
+import { collectExecutableSourceGraph } from "./typescript-executable-graph.mts";
 import type { TopicSeoSource } from "../../src/lib/admin/seo/entity-seo-persistence.ts";
 import type { OwnedLocalHandle } from "./isolated-supabase.mts";
 
@@ -49,6 +50,156 @@ export function finalQualityScriptNames(scripts: Readonly<Record<string, string>
   const prefix = names.slice(0, -tail.length);
   assert.ok(prefix.length > 0 && !prefix.some(name => tail.includes(name) || name === "ci:check"), "Build/Public gates must execute exactly once.");
   return prefix;
+}
+
+export type LocalVerificationChange = {
+  file: string; beforeSha256: string | null; afterSha256: string | null;
+  risk: "A" | "B" | "C" | "D" | "E";
+  owner: string; reviewedBy: string; rationale: string;
+  bounded: boolean; nonImportImpactReviewed: boolean;
+  contracts: readonly string[]; consumers: readonly string[]; checks: readonly string[];
+  /** Existing named checks freshly executed in this plan, never retained PASS artifact paths. */
+  adoption?: { applicabilityEvidence: string; sourceProofEvidence: string; consumerEvidence: string };
+};
+export type LocalVerificationInputs = {
+  baselineHead: string; finalHead: string; sourceSha256: string;
+  changes: readonly Pick<LocalVerificationChange, "file" | "beforeSha256" | "afterSha256">[];
+  verificationCoverage?: readonly { file: string; checks: readonly string[] }[];
+};
+/** A reviewed batch evidence record, not an owner/dependency/test registry. */
+export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage"> & {
+  changes: readonly LocalVerificationChange[];
+  verificationEntries?: readonly { check: string; entry: string }[];
+};
+
+/** Select existing named checks; unresolved impact widens to the unchanged full gate. */
+export function planLocalVerification(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact, actual: LocalVerificationInputs) {
+  const fullPrefix = finalQualityScriptNames(scripts);
+  for (const input of [impact, actual]) {
+    assert.match(input.baselineHead, /^[a-f0-9]{40}$/u); assert.match(input.finalHead, /^[a-f0-9]{40}$/u);
+    assert.match(input.sourceSha256, /^[a-f0-9]{64}$/u);
+    assert.ok(Array.isArray(input.changes) && input.changes.length > 0, "A risk record must cover a nonempty batch.");
+    assert.equal(new Set(input.changes.map(row => row.file)).size, input.changes.length, "Changed files must be unique.");
+  }
+  assert.equal(impact.baselineHead, actual.baselineHead); assert.equal(impact.finalHead, actual.finalHead);
+  assert.equal(impact.sourceSha256, actual.sourceSha256, "Risk evidence must bind the actual source snapshot.");
+  const bindings = (rows: LocalVerificationInputs["changes"]) => rows.map(({ file, beforeSha256, afterSha256 }) =>
+    ({ file, beforeSha256, afterSha256 })).sort((a, b) => a.file.localeCompare(b.file));
+  assert.deepEqual(bindings(impact.changes), bindings(actual.changes), "Risk evidence must cover every actual changed file and byte identity.");
+  const present = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+  const risks = ["A", "B", "C", "D", "E"] as const;
+  let rank = 0, bounded = true;
+  const selected = new Set<string>(["lint", "typecheck"]);
+  const unresolvedVerificationInputs: string[] = [];
+  for (const row of impact.changes) {
+    assert.ok(sourceIncluded(row.file), "Risk evidence cannot include private or generated source.");
+    for (const sha of [row.beforeSha256, row.afterSha256]) if (sha !== null) assert.match(sha, /^[a-f0-9]{64}$/u);
+    assert.notEqual(row.beforeSha256, row.afterSha256, "A changed file must have different before/after bytes.");
+    const level = risks.indexOf(row.risk); assert.ok(level >= 0, "Unknown risk class cannot select a bounded gate.");
+    rank = Math.max(rank, level);
+    // Conservative floors only raise risk. They are not a complete semantic/dependency classifier.
+    if (/(?:^|\/)(?:sql|migrations)(?:\/|$)|\.sql$/iu.test(row.file) ||
+      /(?:^|[\/._-])(?:auth|authentication|authorization|rls|permissions?)(?:[\/._-]|$)/iu.test(row.file)) rank = Math.max(rank, 3);
+    if (/^\.github\//u.test(row.file) || /^(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json|(?:next|eslint|postcss|tailwind)\.config\.[^/]+|vercel\.json)$/u.test(row.file) ||
+      /^scripts\/(?:lib\/(?:isolated-|verification-|typescript-executable-graph)|verify-(?:isolated-supabase|verification-infrastructure)\.)/u.test(row.file)) rank = 4;
+    assert.ok([row.owner, row.reviewedBy, row.rationale].every(present), "Every change requires an explicit owner review.");
+    for (const list of [row.contracts, row.consumers, row.checks]) {
+      assert.ok(Array.isArray(list) && list.length > 0 && list.every(present), "Every changed input requires contracts, consumers and fresh covering checks.");
+      assert.equal(new Set(list).size, list.length);
+    }
+    bounded &&= row.bounded === true && row.nonImportImpactReviewed === true;
+    if (row.risk === "B") bounded &&= Boolean(row.adoption &&
+      [row.adoption.applicabilityEvidence, row.adoption.sourceProofEvidence, row.adoption.consumerEvidence]
+        .every(check => present(check) && check !== "lint" && check !== "typecheck" && row.checks.includes(check)));
+    for (const check of row.checks) {
+      assert.ok(/^(?:lint|typecheck|(?:verify|qa):[a-zA-Z0-9:_-]+)$/u.test(check) && Object.hasOwn(scripts, check),
+        "Covering checks must be existing named verification commands.");
+      assert.ok(!["build", "verify:product-surface-identity-build", "verify:platform-contracts", "test:e2e:public"].includes(check),
+        "Canonical Public gates belong to the unchanged tail.");
+      selected.add(check);
+    }
+    if (/^(?:scripts|tests)\//u.test(row.file)) {
+      assert.ok(row.checks.some(check => check !== "lint" && check !== "typecheck"), "Changed verification inputs require a fresh executable check.");
+      const covered = Boolean(actual.verificationCoverage?.some(coverage => coverage.file === row.file &&
+        coverage.checks.some(check => row.checks.includes(check) || check === "test:e2e:public")));
+      if (!covered) unresolvedVerificationInputs.push(row.file);
+      bounded &&= covered;
+    }
+  }
+  assert.ok(Object.hasOwn(scripts, "lint") && Object.hasOwn(scripts, "typecheck"));
+  const mode = rank <= 1 && bounded ? "bounded" : "full";
+  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...selected])];
+  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs };
+}
+
+/** Bounded requests cannot borrow an older subset/retained/measurement admission. */
+export function assertLocalVerificationRequest(request: PublicGateRequest, plan: ReturnType<typeof planLocalVerification>) {
+  assert.ok(request.localVerification);
+  assert.deepEqual(plan.unresolvedVerificationInputs, [],
+    "Full Gate selection alone cannot prove an affected verification input executes; supply positive coverage or stop.");
+  if (plan.mode === "full") {
+    assert.equal(request.finalQualityGate, true, "Unbounded/high-risk impact requires the existing Full Local Gate admission.");
+    return;
+  }
+  for (const key of ["finalQualityGate", "selection", "retainedAdminBehaviorAdmissionSha256", "heroCompatibilityFinalHead",
+    "adoptionScope", "adoptionCohort", "adoptionJourneySelection", "adminMeasurement"] as const)
+    assert.equal(request[key], undefined, "Bounded verification cannot combine with a legacy subset or retained evidence mode.");
+}
+
+/** Bind reviewed impact to Git's actual delta and source bytes; Git remains the membership owner. */
+function readLocalVerificationInputs(context: PrivatePublicVerificationContext, impact: LocalVerificationImpact,
+  manifest: readonly { file: string; sha256: string }[], additionalSourceFiles: readonly string[], previous?: LocalVerificationInputs): LocalVerificationInputs {
+  assert.match(impact.baselineHead, /^[a-f0-9]{40}$/u);
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(),
+    windowsHide: true, timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
+  const finalHead = git("rev-parse", "HEAD").toString("utf8").trim();
+  if (!previous) {
+    assert.equal(git("rev-parse", "--verify", impact.baselineHead + "^{commit}").toString("utf8").trim(), impact.baselineHead);
+    git("merge-base", "--is-ancestor", impact.baselineHead, finalHead);
+  }
+  const baselineFiles = previous ? undefined : new Set(git("ls-tree", "-r", "--name-only", "-z", impact.baselineHead).toString("utf8").split("\0").filter(Boolean));
+  const changed = new Set([...git("diff", "--no-renames", "--name-only", "-z", impact.baselineHead, "--").toString("utf8").split("\0").filter(Boolean), ...additionalSourceFiles]);
+  if (previous) assert.deepEqual([...changed].sort(), previous.changes.map(row => row.file));
+  const changes = [...changed].sort().map(file => {
+    const source = safeSourcePath(file), exists = existsSync(source);
+    if (exists) {
+      assert.ok(lstatSync(source).isFile() && realpathSync(source) === source, "Changed source cannot traverse a symlink or junction.");
+    }
+    const afterSha256 = exists ? digest(readFileSync(source)) : null;
+    if (exists) assert.equal(manifest.find(row => row.file === file)?.sha256, afterSha256, "The source snapshot omits or differs from changed source.");
+    return { file, beforeSha256: previous ? previous.changes.find(row => row.file === file)!.beforeSha256 : baselineFiles!.has(file) ? digest(git("show", impact.baselineHead + ":" + file)) : null,
+      afterSha256 };
+  });
+  const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest);
+  return { baselineHead: impact.baselineHead, finalHead, sourceSha256: digest(JSON.stringify(manifest)), changes, verificationCoverage };
+}
+
+/** Positive executable proof only; dynamic/non-import fixture use cannot authorize a bounded gate. */
+export function localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact,
+  manifest: readonly { file: string; sha256: string }[]) {
+  const coverage = new Map(impact.changes.filter(row => /^(?:scripts|tests)\//u.test(row.file)).map(row => [row.file, new Set<string>()]));
+  const sourceOverrides = impact.verificationEntries?.length ? new Map(manifest.filter(row => /\.(?:[cm]?[jt]sx?)$/u.test(row.file))
+    .map(row => [row.file, readFileSync(safeSourcePath(row.file), "utf8")])) : undefined;
+  for (const binding of impact.verificationEntries ?? []) {
+    assert.ok(/^(?:verify|qa):[a-zA-Z0-9:_-]+$/u.test(binding.check) && Object.hasOwn(scripts, binding.check));
+    assert.ok(/^scripts\/[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)$/u.test(binding.entry) && sourceIncluded(binding.entry));
+    assert.ok(manifest.some(row => row.file === binding.entry), "A verification entry must belong to the bound source snapshot.");
+    assert.ok(impact.changes.some(row => row.checks.includes(binding.check)), "An executable binding must be a selected fresh check.");
+    const invocation = new RegExp("^node (?:--experimental-strip-types )?" + binding.entry.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&") + "(?: |$)", "u");
+    assert.ok(scripts[binding.check].split(/\s*&&\s*/u).some(step => invocation.test(step)),
+      "Use an existing directly registered Node entry/aggregate; npm wrapper reachability is not inferred.");
+    const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [binding.entry], symbolAware: false, sourceOverrides });
+    for (const [file, checks] of coverage) if (graph.has(file)) checks.add(binding.check);
+  }
+  for (const [file, checks] of coverage) if (GATES.some(gate => gate.name === "public-e2e" && (gate.args as readonly string[]).includes(file))) checks.add("test:e2e:public");
+  return [...coverage].map(([file, checks]) => ({ file, checks: [...checks] }));
+}
+
+const activeLocalVerifications = new WeakSet<PrivatePublicVerificationContext>();
+/** Only a validated, source-bound active job may renew the existing control lease. */
+export function isOwnedLocalVerificationActive(context: PrivatePublicVerificationContext) {
+  return activeLocalVerifications.has(context);
 }
 
 /** An owned build-only configuration; Product config remains byte-for-byte source evidence. */
@@ -1431,6 +1582,8 @@ export async function loadRetainedFinalQualityAdmissionAsync(admissionSha256: st
 
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
+  /** Reviewed batch-local impact evidence; this creates no persistent impact registry. */
+  localVerification?: LocalVerificationImpact;
   /** Full ci:check prefix, followed once by the existing build/Public/Admin gates. */
   finalQualityGate?: true;
   /** Explicit retained Final27 admission from the existing accounting owner; no Admin replay. */
@@ -1744,6 +1897,9 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
 
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
   await context.assertOwned();
+  const localImpact = request.localVerification;
+  if (localImpact !== undefined) assert.ok(localImpact && typeof localImpact === "object", "Invalid local verification impact record.");
+  const localImpactSha256 = localImpact ? digest(JSON.stringify(localImpact)) : undefined;
   const readiness = prepared.get(context); assert.ok(readiness, "Public fixture readiness must precede gates.");
   assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit" || request.selection === "hero-compatibility", "Unknown fixed Public gate selection.");
   const measurement = request.selection === "admin-interactions" ? request.adminMeasurement : undefined;
@@ -1863,6 +2019,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     if (frozenManifest) assert.equal(sha256, frozenManifest.find(row => row.file === file)!.sha256);
     return { file, sha256 };
   });
+  const localInputs = localImpact ? readLocalVerificationInputs(context, localImpact, manifest, request.additionalSourceFiles) : undefined;
+  const localPlan = localImpact ? planLocalVerification(JSON.parse(readFileSync(sourcePath("package.json"), "utf8")).scripts, localImpact, localInputs!) : undefined;
+  if (localPlan) assertLocalVerificationRequest(request, localPlan);
   const sourceConfig = manifest.find(row => row.file === "next.config.ts");
   assert.ok(sourceConfig, "The isolated image environment must derive from the canonical Product config.");
   assert.equal(manifest.some(row => /^next\.config\.(?:js|mjs|mts|cts)$/u.test(row.file)), false,
@@ -1885,6 +2044,11 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;
   const downloadFixture = adoption && (request.adoptionCohort === undefined || ["template-controls", "navigation-settings"].includes(request.adoptionCohort)) ? createCoreDownloadPdfFixture() : null;
   const verifySource = () => {
+    if (localImpact) {
+      assert.equal(digest(JSON.stringify(request.localVerification)), localImpactSha256, "Reviewed risk evidence changed during verification.");
+      assert.deepEqual(readLocalVerificationInputs(context, localImpact, manifest, request.additionalSourceFiles, localInputs), localInputs,
+        "Risk evidence no longer matches the actual Git/source delta.");
+    }
     if (downloadFixture) assert.equal(digest(readFileSync(join(sourceDirectory, "public", CORE_DOWNLOAD_MEDIA_KEY))), digest(downloadFixture));
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
     assert.equal(digest(readFileSync(join(sourceDirectory, imageConfig.file))), imageConfig.sha256,
@@ -1960,14 +2124,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     let qualityScripts: string[] = [];
     let qualityEnvironment = context.cleanEnvironment();
     let npmCli: string | undefined;
-    if (request.finalQualityGate) {
-      assert.equal(request.additionalSourceFiles.length, 0, "Final Quality Gate requires committed source membership.");
+    if (request.finalQualityGate || localPlan) {
+      assert.equal(request.additionalSourceFiles.length, 0, "Final batch verification requires committed source membership.");
       const gitOptions = { cwd: ROOT, env: context.cleanEnvironment(), encoding: "utf8" as const, windowsHide: true, timeout: 30_000, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"] };
       execFileSync("git", ["diff", "--quiet", "HEAD", "--"], gitOptions);
       const gitDirectory = realpathSync(execFileSync("git", ["rev-parse", "--absolute-git-dir"], gitOptions).trim());
       assert.ok(lstatSync(gitDirectory).isDirectory(), "Final gate requires canonical read-only Git provenance.");
       const scripts = JSON.parse(readFileSync(join(sourceDirectory, "package.json"), "utf8")).scripts as Record<string, string>;
-      qualityScripts = finalQualityScriptNames(scripts);
+      qualityScripts = localPlan?.prefix ?? finalQualityScriptNames(scripts);
       if (retainedQuality) {
         retainedAdmission = await loadRetainedFinalQualityAdmissionAsync(request.retainedAdminBehaviorAdmissionSha256!,
           { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest }, signal);
@@ -1981,11 +2145,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       for (const file of [npmUserConfig, npmGlobalConfig]) writeFileSync(file, "", { flag: "wx", mode: 0o600 });
       qualityEnvironment = { ...context.cleanEnvironment(), GIT_DIR: gitDirectory, GIT_WORK_TREE: sourceDirectory,
         GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", npm_config_userconfig: npmUserConfig, npm_config_globalconfig: npmGlobalConfig };
-      receipt(context, "final-quality-plan.json", { headSha, sourceSha256: digest(JSON.stringify(manifest)),
+      receipt(context, localPlan?.mode === "bounded" ? "local-verification-plan.json" : "final-quality-plan.json", { headSha, sourceSha256: digest(JSON.stringify(manifest)),
         prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: adoption,
+        ...(localPlan ? { localVerification: { impact: localImpact, impactSha256: localImpactSha256, inputs: localInputs, plan: localPlan },
+          fullQualityGateClaimed: localPlan.mode === "full", retainedPassReused: false } : {}),
         ...(heroCompatibility ? { mode: "hero-compatibility", targetedBrowserBeforeQuality: true, expectedHead: request.heroCompatibilityFinalHead } : {}),
         ...(retainedAdmission ? { mode: "retained-admin-behavior", retainedAdminBehavior: retainedAdmission.receipt } : {}),
         privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
+      if (localPlan?.mode === "bounded") { await drainControlPulse(); verifySource(); assert.equal(localInputs!.finalHead, headSha); activeLocalVerifications.add(originalContext); }
     }
     const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 }));
     const executionGates = heroCompatibility && request.finalQualityGate
@@ -2108,6 +2275,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
     else completed.add(originalContext);
   } finally {
+    activeLocalVerifications.delete(originalContext);
     const [workerCleanup, childCleanup] = await Promise.all([
       Promise.allSettled(retainedAdmission ? [retainedAdmission.close()] : []),
       Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment()))),
@@ -2127,6 +2295,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     for (const settled of workerCleanup) if (settled.status === "rejected") throw settled.reason;
   }
   const result = { status: "pass", gates: reports, buildIdSha256, isolatedImageConfigurationSha256: imageConfig.sha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
+  if (localPlan?.mode === "bounded") {
+    assert.deepEqual(reports.map(report => report.name), localPlan.tail);
+    assert.deepEqual(qualityReports.map(report => report.script), localPlan.prefix);
+    const value = { ...result, localVerification: { impactSha256: localImpactSha256, inputs: localInputs, plan: localPlan,
+      freshChecks: qualityReports }, fullQualityGateClaimed: false, retainedPassReused: false, globalClosedClaimed: false };
+    receipt(context, "local-verification-gates.json", value); return value;
+  }
   if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, ...(measurement.study ? { study: measurement.study } : {}), priorQualityGatesRerun: false };
     receipt(context, "admin-measurement-lifecycle.json", value); return value; }
   if (adoption) {

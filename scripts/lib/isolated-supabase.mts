@@ -11,7 +11,7 @@ import { assertApplicationMigrationTool, selectApplicationMigrationTool, Isolate
   type ApplicationMigrationStage, type ApplicationMigrationTool, type EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 import { proveHostBoundary, startHostAccessBridge, waitForOwnedDatabaseCapacity } from "./isolated-supabase-transport.mjs";
-import { prepareOwnedPublicVerification, registerOwnedAdminMeasurement, runOwnedPublicVerification,
+import { prepareOwnedPublicVerification, registerOwnedAdminMeasurement, runOwnedPublicVerification, isOwnedLocalVerificationActive,
   type PrivatePublicVerificationContext, type PublicFixtureReadiness, type PublicGateRequest } from "./isolated-public-verification.mts";
 import { prepareOwnedAdminMeasurementAccount } from "../fixtures/admin-interaction-fixtures.mts";
 
@@ -1447,7 +1447,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               try {
                 // This timer has no application transaction or concurrent SQL
                 // operation: only this serialized ownership/heartbeat pulse.
-                await applicationLease.renewIfDue(request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit" || request.selection === "hero-compatibility"
+                await applicationLease.renewIfDue(isOwnedLocalVerificationActive(publicContext) || request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit" || request.selection === "hero-compatibility"
                   || (request.finalQualityGate === true && request.selection === undefined
                     && typeof request.retainedAdminBehaviorAdmissionSha256 === "string"
                     && /^[a-f0-9]{64}$/u.test(request.retainedAdminBehaviorAdmissionSha256)
