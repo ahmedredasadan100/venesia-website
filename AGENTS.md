@@ -35,13 +35,26 @@ visual proof and exact live routes needing manual review. Code/source guards
 alone are not visual proof. Preserve behavior and reuse valid unaffected evidence;
 this requirement does not add a Full Quality Gate or expand the feature scope.
 
-At batch completion: freeze Final HEAD, run one Full Quality Gate including the
-required Final Build/Public E2E and cleanup, then authorized Push/PR, required
-GitHub CI, separately authorized Ready and Standard Merge, and automatic
-Production deployment. Do not run a Full Quality Gate after each small change.
-Evidence validity and affected reruns follow `docs/QA_RELEASE_CLOSURE.md`.
-This timing follows Constitution Section 25.4 and ADR-028; the dynamic adoption
-contract remains unchanged.
+At batch completion: freeze Final HEAD and the combined scope, then select the
+local release verification under Constitution Section 25.4 and
+`docs/QA_RELEASE_CLOSURE.md` Section 3.3. Proven bounded A (UI/CSS/Presentation)
+and B (Shared Presentation) changes use affected checks, TypeScript, ESLint,
+required visual/behavior proof, Final Build, Product Surface, Platform Contracts,
+Public E2E, and cleanup; B also requires owner, direct/indirect consumers,
+Adoption/Source Proof, and affected contract/failure-path proof. C (Domain /
+Contracts / Data) and D (Auth / RLS / Permissions / Migrations) require Full
+Local Gate plus their affected specialized checks. E (Unknown / Mixed /
+Architecture / Verification Infrastructure) follows the highest risk; unknown
+or unbounded impact requires Full Local Gate, as do architecture or verification-
+execution code changes. Documentation-only work retains QA Section 15. Do not
+infer unaffected behavior from a missing import-graph edge. Record impact and
+evidence validity in the existing QA evidence; affected Tests/Guards/Fixtures
+must be maintained and run.
+Then follow authorized Push/PR, full required GitHub CI on Exact HEAD,
+separately authorized Ready and Standard Merge with Expected Head SHA, and
+automatic Production deployment. Do not run a Full Quality Gate after each
+small change. ADR-028, the dynamic adoption contract, release authorizations,
+Branch Protection, Post-Merge CI, and deployment policy remain authoritative.
 
 ## Local development verification maintenance
 

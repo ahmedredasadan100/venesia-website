@@ -304,10 +304,14 @@ Section 3.4 إلزاميان؛ لا نظام QA موازٍ ولا Full QA متك
 ### 10.2 Batch Release Verification — عند اكتمال المجموعة
 
 1. تثبيت Final HEAD المجمعة بعد الـLocal Commits ومراجعة نطاق الإصدار كله، بما فيه أي إصلاحات QA مضمنة.
-2. Full Quality Gate مرة واحدة على النسخة المجمعة، مع Final Build وPublic E2E حسب عقد الإصدار الحالي دون تكرار خطوات يشملها الأمر نفسه.
+2. تحديد مخاطر النطاق المجمّع وفق Constitution Section 25.4 وعقد QA Section 3.3.1. النطاق A (UI/CSS/Presentation) أو B (Shared Presentation) المثبت الحصر يستخدم الفحوص المتأثرة وTypeScript وESLint والإثبات البصري/السلوكي المتأثر، مع Final Build وProduct Surface وPlatform Contracts وPublic E2E؛ لا Full Local Gate تلقائية له. يضيف B إثبات المالك والمستهلكين المباشرين وغير المباشرين وAdoption وSource Proof والعقود وFailure Paths المتأثرة. C (Domain/Contracts/Data) وD (Auth/RLS/Permissions/Migrations) يلزمان Full Local Gate والفحوص المتخصصة المتأثرة. E (Unknown/Mixed/Architecture/Verification Infrastructure) يتبع أعلى خطر؛ تعذر الحصر أو تعارض الاعتماد، وتغيير كود المعمارية أو آلية التحقق، يلزم Full Local Gate. لا تكرار لخطوة يشملها الأمر نفسه.
 3. Cleanup وإثبات سلامة البيئة والموارد الأصلية مع الاحتفاظ بأدلة الاختبار.
 4. Push ثم PR عند التصريح، ثم Required GitHub CI على رأس الـPR الحالي.
 5. Ready وStandard Merge بتفويض مستقل لكل منهما، ثم Automatic Production عبر الربط الحالي.
+
+يُسجّل التصنيف وإثبات الحصر والـOwners والعقود والمستهلكون والفحوص المختارة وأسباب إعادة استخدام الأدلة داخل أدلة QA القائمة، لا Registry أو QA Engine موازية. تستخدم Manifests وRegistries وExecutable Graph الحالية؛ غياب رابط لا يثبت عدم التأثر، خصوصًا CSS والصور وSQL والـFixtures. كل Test/Guard/Fixture متأثر يُصان ويُنفذ ضمن المهمة، وتغييره يبطل الأدلة المتأثرة؛ PASS سابق لا يُعاد استخدامه دون إثبات صلاحية المدخلات والعقود. إذا لم يملك الفحص مدخلًا موثوقًا لحصر أثره، تُشغّل المجموعة القائمة كاملة.
+
+التغيير يخص اختيار التحقق المحلي فقط: Required GitHub CI كاملة على Exact HEAD وBranch Protection وPost-Merge CI وسياسة Vercel وAssertions وSecurity Coverage وFailure Paths وحدود Ready/Merge دون تغيير. يبقى Standard Merge Commit محميًا بـExpected Head SHA. لا Skip أو نجاح شكلي لعبور بوابة مطلوبة. يظل استثناء الوثائق فقط في QA Section 15 قائمًا؛ تصنيف المخاطر لا يوسّع تفويض المهمة المحلية إلى إصدار.
 
 إذا تغير Final HEAD، يسجل الفرق ومدى صلاحية الأدلة ويعاد ما تأثر فقط وفق `docs/QA_RELEASE_CLOSURE.md` Section 3.4؛ يعاد Full Gate عندما يتعذر تغطية الأثر بالأدلة السارية والفحوص المتأثرة. لا تُنسب أدلة SHA قديمة إلى HEAD جديدة، ولا تعتبر البوابة المتوقفة Passed.
 
@@ -412,7 +416,7 @@ Section 3.4 إلزاميان؛ لا نظام QA موازٍ ولا Full QA متك
 2. Impact-Based Targeted QA والتصحيح المحدود عند الحاجة
 3. Owner Visual Approval على Local
 4. Local Commits
-5. Batch Final Quality Gate وFinal Build/Public E2E حسب العقد ثم Cleanup
+5. Risk-Selected Local Release Verification حسب Section 10.2، مع البوابات المحلية المطلوبة ثم Cleanup
 6. Push ثم PR بتفويض يشملهما
 7. Required GitHub CI على الـPR HEAD الحالية وتقرير أدلة الإصدار
 8. Ready بتصريح مستقل بعد استيفاء عقد الإصدار

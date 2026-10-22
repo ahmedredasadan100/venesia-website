@@ -12,6 +12,8 @@ import ts from "typescript";
 import sharp from "sharp";
 import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application-cli-pulse.mjs";
 import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
+import { sourceIncluded } from "./lib/verification-source-inventory.mts";
+import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -502,19 +504,19 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
   assert.equal(args.length, 4); assert.deepEqual(args.slice(0, 3).map(node => node.getText(lifecycle)), ["publicContext", "request", "publicJobAbort.signal"]);
   assert.ok(ts.isArrowFunction(args[3])); assert.equal(run.parameters[3].name.getText(publicFile), "drainControlPulse");
   const sourceCalls = all(run, node => ts.isCallExpression(node) && node.expression.getText(publicFile) === "verifySource") as ts.CallExpression[];
-  assert.equal(sourceCalls.length, 2);
+  assert.equal(sourceCalls.length, 3);
   for (const call of sourceCalls) {
     assert.ok(ts.isExpressionStatement(call.parent) && ts.isBlock(call.parent.parent));
     const statements = call.parent.parent.statements, index = statements.indexOf(call.parent);
     assert.equal(statements[index - 1].getText(publicFile), "await drainControlPulse();", "Every source pass must immediately follow the completed control drain.");
   }
-  assert.equal(all(run, node => ts.isCallExpression(node) && node.expression.getText(publicFile) === "drainControlPulse").length, 2);
-  cases.push("both per-gate and final source passes await the private pulse drain immediately; context/request/signal identities stay unchanged");
+  assert.equal(all(run, node => ts.isCallExpression(node) && node.expression.getText(publicFile) === "drainControlPulse").length, 3);
+  cases.push("admission, per-gate and final source passes await the private pulse drain immediately; context/request/signal identities stay unchanged");
   const verify = all(run, node => ts.isVariableDeclaration(node) && node.name.getText(publicFile) === "verifySource")[0] as ts.VariableDeclaration;
   const timer = all(lifecycle, node => ts.isCallExpression(node) && node.expression.getText(lifecycle) === "setInterval" && node.getText(lifecycle).includes("public-job-heartbeat")) as ts.CallExpression[];
   assert.equal(timer.length, 1); assert.equal(timer[0].arguments[1].getText(lifecycle), "20_000");
   const transpile = (code: string) => ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const factory = new Function("applicationLease", "request", "publicContext", "handle", "safeRecord", "publicJobAbort", "asSafeError",
+  const factory = new Function("applicationLease", "request", "publicContext", "handle", "safeRecord", "publicJobAbort", "asSafeError", "isOwnedLocalVerificationActive",
     transpile(`let heartbeatActive=true, heartbeatBusy=false, heartbeatFailure; let pulse=Promise.resolve(); const tick=${timer[0].arguments[0].getText(lifecycle)}; const drain=${args[3].getText(lifecycle)}; return {tick,drain,pending:()=>pulse};`));
   function setup(connectFailure?: Error, scheduled = false) {
     let time = 0, connections = 0, heartbeats = 0, sourceReads = 0, connectStarted = false, oldClosed = false;
@@ -530,11 +532,11 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
         return second;
       } });
     time = 240_000;
-    const control = factory(lease, { selection: "admin-adoption" }, { async assertOwned() {} }, { async query() { heartbeats++; events.push("heartbeat"); } }, () => {}, abort, (error: unknown) => error) as { tick(): void; drain(): Promise<void>; pending(): Promise<void> };
+    const control = factory(lease, { selection: "admin-adoption" }, { async assertOwned() {} }, { async query() { heartbeats++; events.push("heartbeat"); } }, () => {}, abort, (error: unknown) => error, () => false) as { tick(): void; drain(): Promise<void>; pending(): Promise<void> };
     const bytes = Buffer.from("exact-source"), digest = sha256(bytes), manifest = [{ file: "owner.mts", sha256: digest }];
     let stall = false;
-    const sourceGuard = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture",
-      transpile(`return ${verify.initializer!.getText(publicFile)};`))(manifest, sha256, () => { sourceReads++; events.push("source-read"); if (stall) { stall = false; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60); } return bytes; }, (file: string) => file, path.join, "owned", { file: "next.config.mjs", sha256: digest }, () => ["next.config.ts", "next.config.mjs"], assert, null) as () => void;
+    const sourceGuard = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture", "localImpact",
+      transpile(`return ${verify.initializer!.getText(publicFile)};`))(manifest, sha256, () => { sourceReads++; events.push("source-read"); if (stall) { stall = false; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60); } return bytes; }, (file: string) => file, path.join, "owned", { file: "next.config.mjs", sha256: digest }, () => ["next.config.ts", "next.config.mjs"], assert, null, undefined) as () => void;
     return { control, abort, events, sourceGuard, setStall: () => { stall = true; }, release: () => { assert.ok(release); release(); }, started: () => connectStarted,
       state: () => ({ connections, heartbeats, sourceReads, oldClosed }) };
   }
@@ -1283,6 +1285,375 @@ function verifyFinalQualityGatePlan() {
   cases.push("Hero prerequisite build and journey precede the complete unchanged canonical Quality prefix and Public tail");
 }
 
+/** Execute the canonical local-risk planner without starting its owned lifecycle. */
+function verifyLocalRiskVerificationPlan() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const statement = (name: string) => {
+    const found = file.statements.find(node => (ts.isFunctionDeclaration(node) && node.name?.text === name)
+      || (ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name)));
+    assert.ok(found, `Missing canonical local verification declaration: ${name}`);
+    return found.getText(file).replace(/^export /u, "");
+  };
+  const declarations = ["GATES", "finalQualityScriptNames", "planLocalVerification", "assertLocalVerificationRequest", "localVerificationCoverage"];
+  const code = ts.transpileModule(declarations.map(statement).join("\n"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  type Change = import("./lib/isolated-public-verification.mts").LocalVerificationChange;
+  type Impact = { baselineHead: string; finalHead: string; sourceSha256: string; changes: Change[];
+    verificationEntries?: Array<{ check: string; entry: string }> };
+  type Actual = import("./lib/isolated-public-verification.mts").LocalVerificationInputs & {
+    changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
+  type Plan = { risk: string; mode: "bounded" | "full"; prefix: string[]; tail: string[]; unresolvedVerificationInputs?: string[] };
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", code + ";return {planLocalVerification,assertLocalVerificationRequest,localVerificationCoverage};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name)) as {
+    planLocalVerification(scripts: Readonly<Record<string, string>>, impact: Impact, actual: Actual): Plan;
+    assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
+    localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: Impact, manifest: Array<{ file: string; sha256: string }>): NonNullable<Actual["verificationCoverage"]>;
+  };
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const fullPrefix = new Function("assert", ts.transpileModule(statement("GATES") + "\n" + statement("finalQualityScriptNames"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText + ";return finalQualityScriptNames;")(assert)(scripts) as string[];
+  const fixture = (): { impact: Impact; actual: Actual } => {
+    const impact: Impact = { baselineHead: "a".repeat(40), finalHead: "b".repeat(40), sourceSha256: "c".repeat(64), changes: [{
+      file: "src/components/admin/dashboard/AdminDashboardView.tsx", beforeSha256: "d".repeat(64), afterSha256: "e".repeat(64),
+      risk: "A", owner: "src/components/admin/dashboard/AdminDashboardView.tsx", reviewedBy: "local-impact-review",
+      rationale: "Bounded Dashboard presentation; canonical data contract and behavior unchanged.", bounded: true,
+      nonImportImpactReviewed: true, contracts: ["src/lib/admin/dashboard/dashboard-contract.ts"],
+      consumers: ["src/app/admin/page.tsx"], checks: ["verify:dashboard-truth"],
+    }] };
+    return { impact, actual: { baselineHead: impact.baselineHead, finalHead: impact.finalHead, sourceSha256: impact.sourceSha256,
+      changes: impact.changes.map(({ file: name, beforeSha256, afterSha256 }) => ({ file: name, beforeSha256, afterSha256 })) } };
+  };
+  const run = (value = fixture(), commandScripts = scripts) => api.planLocalVerification(commandScripts, value.impact, value.actual);
+  const rejects = (name: string, mutate: (value: ReturnType<typeof fixture>) => void) => check("local risk rejects " + name, () => {
+    const value = fixture(); mutate(value); assert.throws(() => run(value));
+  });
+  const requiresFull = (name: string, mutate: (value: ReturnType<typeof fixture>) => void) => check("local risk requires full for " + name, () => {
+    const value = fixture(); mutate(value); const plan = run(value);
+    assert.equal(plan.mode, "full"); assert.deepEqual(plan.prefix.slice(0, fullPrefix.length), fullPrefix);
+    for (const row of value.impact.changes) for (const check of row.checks) assert.ok(plan.prefix.includes(check), "Full Gate must also retain fresh affected specialized checks.");
+  });
+  check("bounded A includes selected affected checks, TypeScript, ESLint and every canonical Public tail", () => {
+    const plan = run(); assert.equal(plan.risk, "A"); assert.equal(plan.mode, "bounded");
+    assert.ok(plan.prefix.includes("lint") && plan.prefix.includes("typecheck") && plan.prefix.includes("verify:dashboard-truth"));
+    assert.deepEqual(plan.tail, ["normal-build", "product-surface-build", "platform-contracts", "public-e2e"]);
+    assert.ok(plan.prefix.length < fullPrefix.length, "A bounded change must not silently expand to the Full Gate prefix.");
+  });
+  check("bounded B retains shared owner, consumer, adoption and source-proof requirements", () => {
+    const value = fixture(); Object.assign(value.impact.changes[0], { risk: "B", file: "src/components/admin/ui/AdminMetricCardsGrid.tsx",
+      owner: "src/components/admin/ui/AdminMetricCardsGrid.tsx", consumers: ["src/app/admin/content/categories/CategoriesListClient.tsx", "src/app/admin/content/series/SeriesTableClient.tsx"],
+      checks: ["verify:consumer-capability-adoption", "verify:dashboard-truth"],
+      adoption: { applicabilityEvidence: "verify:consumer-capability-adoption", sourceProofEvidence: "verify:consumer-capability-adoption", consumerEvidence: "verify:dashboard-truth" } });
+    value.actual.changes[0].file = value.impact.changes[0].file;
+    const plan = run(value); assert.equal(plan.risk, "B"); assert.equal(plan.mode, "bounded");
+    assert.ok(plan.prefix.includes("verify:dashboard-truth"));
+  });
+  for (const risk of ["C", "D", "E"] as const) requiresFull("declared " + risk, value => { value.impact.changes[0].risk = risk; });
+  requiresFull("unbounded impact", value => { value.impact.changes[0].bounded = false; });
+  requiresFull("unreviewed non-import dependencies", value => { value.impact.changes[0].nonImportImpactReviewed = false; });
+  requiresFull("mixed A and C changes", value => {
+    const change = { ...value.impact.changes[0], file: "src/lib/admin/dashboard/dashboard-contract.ts", risk: "C" as const };
+    value.impact.changes.push(change); value.actual.changes.push({ file: change.file, beforeSha256: change.beforeSha256, afterSha256: change.afterSha256 });
+  });
+  for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const) rejects("stale " + key, value => { value.actual[key] = "f".repeat(key === "sourceSha256" ? 64 : 40); });
+  rejects("omitted actual changed file", value => { value.impact.changes = []; });
+  rejects("invented changed file", value => { value.impact.changes[0].file = "src/components/admin/ui/AdminMetricCardsGrid.tsx"; });
+  rejects("changed prior bytes", value => { value.impact.changes[0].beforeSha256 = "f".repeat(64); });
+  rejects("changed current bytes", value => { value.impact.changes[0].afterSha256 = "f".repeat(64); });
+  rejects("duplicate changed file", value => { value.impact.changes.push({ ...value.impact.changes[0] }); });
+  rejects("missing owner", value => { value.impact.changes[0].owner = ""; });
+  rejects("missing impact reviewer", value => { value.impact.changes[0].reviewedBy = ""; });
+  rejects("missing rationale", value => { value.impact.changes[0].rationale = ""; });
+  rejects("missing affected contracts", value => { value.impact.changes[0].contracts = []; });
+  rejects("missing direct and indirect consumer review", value => { value.impact.changes[0].consumers = []; });
+  rejects("missing affected checks", value => { value.impact.changes[0].checks = []; });
+  rejects("unknown check", value => { value.impact.changes[0].checks = ["verify:nonexistent-pretend-check"]; });
+  rejects("shell injection instead of a named check", value => { value.impact.changes[0].checks = ["verify:dashboard-truth && echo skipped"]; });
+  rejects("Public subset instead of an affected check", value => { value.impact.changes[0].checks = ["build"]; });
+  for (const field of ["applicabilityEvidence", "sourceProofEvidence", "consumerEvidence"] as const) requiresFull("B missing " + field, value => {
+    const adoption = { applicabilityEvidence: "verify:consumer-capability-adoption", sourceProofEvidence: "verify:consumer-capability-adoption", consumerEvidence: "verify:dashboard-truth" };
+    adoption[field] = ""; Object.assign(value.impact.changes[0], { risk: "B", checks: ["verify:consumer-capability-adoption", "verify:dashboard-truth"], adoption });
+  });
+  const commandMutations: Array<Record<string, string>> = [
+    { "ci:check": scripts["ci:check"] + " && npm run lint" },
+    { "ci:check": scripts["ci:check"].replace("npm run lint", "npm run lint; echo bypass") },
+    { "test:e2e:public": "echo skipped" },
+  ];
+  for (const patch of commandMutations)
+    check("bounded plan rejects changed canonical CI/Public command contract", () => assert.throws(() => run(fixture(), { ...scripts, ...patch })));
+  const boundedPlan = run();
+  check("the actual release path selects the bounded prefix and preserves the existing full fallback", () => {
+    const assignments: ts.ExpressionStatement[] = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isExpressionStatement(node) && ts.isBinaryExpression(node.expression)
+        && node.expression.left.getText(file) === "qualityScripts") assignments.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(file); assert.equal(assignments.length, 1);
+    const choose = new Function("localPlan", "finalQualityScriptNames", "scripts", ts.transpileModule(
+      "let qualityScripts;" + assignments[0].getText(file) + ";return qualityScripts;",
+      { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText) as (plan: Plan | undefined, fallback: () => string[], scripts: object) => string[];
+    assert.deepEqual(choose(boundedPlan, () => { assert.fail("A bounded path must not select the full prefix."); }, scripts), boundedPlan.prefix);
+    assert.deepEqual(choose(undefined, () => fullPrefix, scripts), fullPrefix);
+  });
+  check("bounded request accepts only the complete canonical Public path", () => api.assertLocalVerificationRequest({ localVerification: {} }, boundedPlan));
+  for (const patch of [{ finalQualityGate: true }, { selection: "build-contracts" }, { selection: "admin-adoption" },
+    { selection: "media-upload-limit" }, { selection: "hero-compatibility" }, { selection: "admin-interactions" },
+    { retainedAdminBehaviorAdmissionSha256: "f".repeat(64) }, { adoptionScope: "core-closure" }, { adoptionCohort: "domain-forms" },
+    { adoptionJourneySelection: "foreign" }, { adminMeasurement: {} }, { heroCompatibilityFinalHead: "b".repeat(40) }]) {
+    check("bounded request rejects incompatible mode " + Object.keys(patch)[0] + ":" + String(Object.values(patch)[0]),
+      () => assert.throws(() => api.assertLocalVerificationRequest({ localVerification: {}, ...patch }, boundedPlan)));
+  }
+  const highRisk = fixture(); highRisk.impact.changes[0].risk = "D"; const fullPlan = run(highRisk);
+  check("high-risk request cannot omit Full Gate", () => assert.throws(() => api.assertLocalVerificationRequest({ localVerification: {} }, fullPlan)));
+  check("high-risk request keeps the existing full Admin mode", () => api.assertLocalVerificationRequest({ localVerification: {}, finalQualityGate: true, selection: "admin-adoption", adoptionScope: "core-closure" }, fullPlan));
+  for (const name of ["sql/migrations/20261022000000_review.sql", "src/lib/admin/auth/session.ts", "src/lib/admin/permissions/access.ts",
+    ".github/workflows/quality-gate.yml", "package-lock.json", "next.config.ts", "scripts/lib/isolated-public-verification.mts",
+    "scripts/lib/typescript-executable-graph.mts", "scripts/verify-isolated-supabase.mts"]) {
+    requiresFull("low-risk label cannot override protected path " + name, value => {
+      value.impact.changes[0].file = name; value.actual.changes[0].file = name;
+    });
+  }
+  for (const name of ["scripts/verify-admin-core-residual-search.mjs", "scripts/fixtures/admin-core-residual-search.mjs"]) {
+    rejects("changed Test/Guard/Fixture cannot omit its fresh covering check: " + name, value => {
+      value.impact.changes[0].file = name; value.actual.changes[0].file = name; value.impact.changes[0].checks = [];
+    });
+    rejects("changed Test/Guard/Fixture cannot substitute lint-only evidence: " + name, value => {
+      value.impact.changes[0].file = name; value.actual.changes[0].file = name; value.impact.changes[0].checks = ["lint"];
+    });
+    requiresFull("changed Test/Guard/Fixture cannot substitute an unrelated real check: " + name, value => {
+      value.impact.changes[0].file = name; value.actual.changes[0].file = name; value.impact.changes[0].checks = ["verify:dashboard-truth"];
+    });
+    check("actual executable graph proves the selected fresh guard reaches " + name, () => {
+      const value = fixture(); value.impact.changes[0].file = name; value.actual.changes[0].file = name;
+      value.impact.changes[0].owner = "scripts/verify-admin-core-residual-search.mjs";
+      value.impact.changes[0].contracts = ["scripts/fixtures/admin-core-residual-search.mjs"];
+      value.impact.changes[0].consumers = ["scripts/verify-admin-core-residual-search.mjs"];
+      value.impact.changes[0].checks = ["verify:admin-core-residual-search"];
+      value.impact.verificationEntries = [{ check: "verify:admin-core-residual-search", entry: "scripts/verify-admin-core-residual-search.mjs" }];
+      value.actual.verificationCoverage = api.localVerificationCoverage(scripts, value.impact,
+        [{ file: "scripts/verify-admin-core-residual-search.mjs", sha256: sha256(readSource("scripts/verify-admin-core-residual-search.mjs")) }]);
+      assert.ok(value.actual.verificationCoverage.some(row => row.file === name && row.checks.includes("verify:admin-core-residual-search")));
+      const plan = run(value); assert.equal(plan.mode, "bounded"); assert.ok(plan.prefix.includes("verify:admin-core-residual-search"));
+    });
+  }
+  check("verification coverage rejects an entry not registered by its claimed package command", () => {
+    const value = fixture(); value.impact.verificationEntries = [{ check: "verify:dashboard-truth", entry: "scripts/verify-admin-core-residual-search.mjs" }];
+    assert.throws(() => api.localVerificationCoverage(scripts, value.impact, [{ file: "scripts/verify-admin-core-residual-search.mjs", sha256: "a".repeat(64) }]));
+  });
+  check("verification coverage rejects an entry absent from the bound snapshot", () => {
+    const value = fixture(); value.impact.changes[0].checks = ["verify:admin-core-residual-search"];
+    value.impact.verificationEntries = [{ check: "verify:admin-core-residual-search", entry: "scripts/verify-admin-core-residual-search.mjs" }];
+    assert.throws(() => api.localVerificationCoverage(scripts, value.impact, []));
+  });
+  check("an unrelated registered graph provides no credit for a changed fixture", () => {
+    const value = fixture(), name = "scripts/fixtures/admin-core-residual-search.mjs";
+    value.impact.changes[0].file = name; value.actual.changes[0].file = name;
+    value.impact.verificationEntries = [{ check: "verify:dashboard-truth", entry: "scripts/verify-dashboard-truth-closure.mts" }];
+    value.actual.verificationCoverage = api.localVerificationCoverage(scripts, value.impact,
+      [{ file: "scripts/verify-dashboard-truth-closure.mts", sha256: sha256(readSource("scripts/verify-dashboard-truth-closure.mts")) }]);
+    assert.equal(run(value).mode, "full");
+  });
+  check("an unresolved changed fixture cannot borrow a Full Gate admission as executable proof", () => {
+    const value = fixture(), changed = "scripts/fixtures/admin-core-residual-search.mjs";
+    value.impact.changes[0].file = changed; value.actual.changes[0].file = changed;
+    value.actual.verificationCoverage = [{ file: changed, checks: [] }];
+    const plan = run(value); assert.equal(plan.mode, "full"); assert.ok(plan.unresolvedVerificationInputs?.includes(changed));
+    assert.throws(() => api.assertLocalVerificationRequest({ localVerification: value.impact, finalQualityGate: true,
+      selection: "admin-adoption", adoptionScope: "core-closure" }, plan));
+  });
+  check("future verification inputs require positive reachability rather than a fixed fixture allowlist", () => {
+    const value = fixture(), entry = "scripts/verify-future-owner-coverage.mts", changed = "scripts/fixtures/future-owner-specific-case.mts";
+    const commandScripts = { ...scripts, "verify:future-owner-coverage": "node --experimental-strip-types " + entry };
+    value.impact.changes[0].file = changed; value.actual.changes[0].file = changed;
+    value.impact.changes[0].checks = ["verify:future-owner-coverage"];
+    value.impact.verificationEntries = [{ check: "verify:future-owner-coverage", entry }];
+    const graphPort = ({ entrySourceFiles }: { entrySourceFiles: string[] }) => { assert.deepEqual(entrySourceFiles, [entry]); return new Map([[entry, {}], [changed, {}]]); };
+    const controlled = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", code + ";return localVerificationCoverage;")(
+      assert, sourceIncluded, graphPort, root, () => "controlled future source", (name: string) => name) as typeof api.localVerificationCoverage;
+    value.actual.verificationCoverage = controlled(commandScripts, value.impact, [{ file: entry, sha256: "a".repeat(64) }]);
+    assert.equal(api.planLocalVerification(commandScripts, value.impact, value.actual).mode, "bounded");
+    value.actual.verificationCoverage = [{ file: changed, checks: [] }];
+    assert.equal(api.planLocalVerification(commandScripts, value.impact, value.actual).mode, "full");
+  });
+  rejects("invalid byte hash", value => { value.impact.changes[0].beforeSha256 = "not-a-hash"; value.actual.changes[0].beforeSha256 = "not-a-hash"; });
+  rejects("unchanged byte identity labelled as a delta", value => { value.impact.changes[0].afterSha256 = value.impact.changes[0].beforeSha256; value.actual.changes[0].afterSha256 = value.actual.changes[0].beforeSha256; });
+  rejects("private/generated file admission", value => { value.impact.changes[0].file = ".tmp-qa/private-source.ts"; value.actual.changes[0].file = ".tmp-qa/private-source.ts"; });
+  return boundedPlan;
+}
+
+/** Execute the existing driver/report/finally slices with controlled child and filesystem ports. */
+async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const run = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification") as ts.FunctionDeclaration;
+  assert.ok(run?.body);
+  const body = run.body.statements.find(ts.isTryStatement); assert.ok(body?.finallyBlock);
+  const declaration = (name: string, nodes: ts.NodeArray<ts.Statement>) => {
+    const result = nodes.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
+    assert.ok(result, "Missing canonical execution declaration: " + name); return result.getText(file);
+  };
+  const loop = body.tryBlock.statements.find(node => ts.isForOfStatement(node) && node.expression.getText(file) === "executionGates") as ts.ForOfStatement;
+  assert.ok(loop && ts.isBlock(loop.statement));
+  const gateStatements = loop.statement.statements;
+  const begin = gateStatements.findIndex(node => node.getText(file).startsWith('context.record("public-gate-start"'));
+  const end = gateStatements.findIndex(node => ts.isIfStatement(node) && node.expression.getText(file) === 'heroCompatibility && request.finalQualityGate && gate.name === "hero-compatibility"');
+  assert.ok(begin >= 0 && end > begin);
+  const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "GATES")); assert.ok(gates);
+  const compile = (value: string) => ts.transpileModule(value, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const factory = new Function("ports", compile(`return async () => {
+    const { assert, join, sep, digest, context, runChild, receipt, children, retainedAdmission,
+      stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext } = ports;
+    const request = {}, heroCompatibility = false, measurement = undefined, ROOT = "controlled-root";
+    const qualityScripts = ports.prefix, npmCli = "controlled-npm-cli", env = {};
+    const reports = [], qualityReports = []; let buildIdSha256 = null, appPort = null, appFailed = false;
+    ${gates.getText(file)}
+    const gates = GATES;
+    ${declaration("heroGate", run.body.statements)}
+    ${declaration("qualityPrefix", body.tryBlock.statements)}
+    ${declaration("executionGates", body.tryBlock.statements)}
+    try {
+      for (const gate of executionGates) {
+        const gateApp = undefined;
+        ${gateStatements.slice(begin, end).map(node => node.getText(file)).join("\n")}
+      }
+    } finally ${body.finallyBlock.getText(file)}
+    return { reports, qualityReports, buildIdSha256 };
+  };`)) as (ports: Record<string, unknown>) => () => Promise<{ reports: Array<{ name: string; code: number }>; qualityReports: Array<{ script: string; code: number }> }>;
+  const fixture = (options: { failedChild?: string; skippedE2E?: boolean; failedCleanup?: boolean; failedWorker?: boolean } = {}) => {
+    const events: string[] = [], launched: string[] = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
+    let removed = false, stopped = false, workerStopped = false;
+    const sourceDirectory = path.join("owned", "source");
+    const retainedAdmission = { get workerStopped() { return workerStopped; }, async close() {
+      await Promise.resolve(); workerStopped = true; events.push("worker-stopped");
+      if (options.failedWorker) throw Error("controlled worker cleanup failure");
+    } };
+    const context = { runDirectory: "owned", cleanEnvironment: () => ({}), record: (event: string, data: { gate: string }) => events.push(event + ":" + data.gate) };
+    const activeLocalVerifications = new WeakSet([context]);
+    const ports = { assert, join: path.join, sep: path.sep, digest: sha256, prefix,
+      context, originalContext: context, activeLocalVerifications,
+      async runChild(_args: string[], _env: object, name: string) {
+        launched.push(name); return { code: options.failedChild === name ? 1 : 0, stdout: options.skippedE2E && name === "public-e2e" ? "1 skipped\n" : "", stderr: "" };
+      },
+      receipt: (_context: unknown, name: string, value: Record<string, unknown>) => receipts.push({ name, value }),
+      children: new Set([{}]), retainedAdmission,
+      async stopChild() { await Promise.resolve(); stopped = true; events.push("child-stopped"); if (options.failedCleanup) throw Error("controlled child cleanup failure"); },
+      sourceDirectory, realpathSync: (value: string) => value,
+      rmSync: (value: string, settings: unknown) => { assert.equal(value, sourceDirectory); assert.deepEqual(settings, { recursive: true, force: false }); removed = true; events.push("workspace-removed"); },
+      existsSync: (value: string) => { assert.equal(value, sourceDirectory); return !removed; },
+      readFileSync: (value: string) => { assert.equal(value, path.join(sourceDirectory, ".next/BUILD_ID")); return Buffer.from("controlled-build-id"); },
+    };
+    return { execute: factory(ports), events, launched, receipts, stopped: () => stopped, workerStopped: () => workerStopped, removed: () => removed,
+      active: () => activeLocalVerifications.has(context) };
+  };
+  const control = async (name: string, operation: () => Promise<void>) => { await operation(); cases.push(name); };
+  await control("bounded prefix and every canonical Public tail use the unchanged generic driver and awaited cleanup", async () => {
+    const value = fixture(), result = await value.execute();
+    assert.deepEqual(result.qualityReports.map(row => row.script), ["lint", "typecheck", "verify:dashboard-truth"]);
+    assert.deepEqual(result.reports.map(row => row.name), ["normal-build", "product-surface-build", "platform-contracts", "public-e2e"]);
+    assert.ok(value.stopped() && value.workerStopped() && value.removed()); assert.equal(value.active(), false);
+    const cleanup = value.receipts.find(row => row.name === "public-process-cleanup.json"); assert.ok(cleanup);
+    assert.deepEqual(cleanup.value, { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: true,
+      otherResourcesTouched: false, retainedEvidenceWorkerStopped: true });
+  });
+  await control("a failed affected check aborts later checks and Public gates while awaiting original cleanup", async () => {
+    const value = fixture({ failedChild: "quality-2-typecheck" });
+    await assert.rejects(value.execute(), /Required Final Quality Gate failed: typecheck/u);
+    assert.deepEqual(value.launched, ["quality-1-lint", "quality-2-typecheck"]);
+    assert.ok(value.stopped() && value.workerStopped() && value.removed()); assert.equal(value.active(), false);
+    assert.equal(value.events.includes("public-gate-pass:quality-2-typecheck"), false);
+  });
+  await control("a failed Public gate propagates and prevents later Public gates without bypassing cleanup", async () => {
+    const value = fixture({ failedChild: "product-surface-build" });
+    await assert.rejects(value.execute(), /Required Public gate failed: product-surface-build/u);
+    assert.equal(value.launched.includes("platform-contracts"), false); assert.equal(value.launched.includes("public-e2e"), false);
+    assert.ok(value.stopped() && value.workerStopped() && value.removed()); assert.equal(value.active(), false);
+  });
+  await control("bounded verification still rejects skipped Public E2E coverage", async () => {
+    const value = fixture({ skippedE2E: true }); await assert.rejects(value.execute(), /Public E2E skipped\/flaky coverage cannot pass/u);
+    assert.ok(value.stopped() && value.workerStopped() && value.removed()); assert.equal(value.active(), false);
+  });
+  await control("failed owned-child cleanup cannot become a successful bounded result", async () => {
+    const value = fixture({ failedCleanup: true }); await assert.rejects(value.execute(), /owned Public process could not be stopped/u);
+    assert.ok(value.stopped() && value.workerStopped()); assert.equal(value.active(), false);
+    assert.equal(value.receipts.some(row => row.name === "public-process-cleanup.json"), false);
+  });
+  await control("retained worker cleanup rejection remains fatal after owned workspace removal", async () => {
+    const value = fixture({ failedWorker: true }); await assert.rejects(value.execute(), /controlled worker cleanup failure/u);
+    assert.ok(value.stopped() && value.workerStopped() && value.removed()); assert.equal(value.active(), false);
+  });
+}
+
+async function verifyLocalRiskControlLeaseAdmission() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const statement = (name: string) => {
+    const node = file.statements.find(row => (ts.isFunctionDeclaration(row) && row.name?.text === name)
+      || (ts.isVariableStatement(row) && row.declarationList.declarations.some(declaration => declaration.name.getText(file) === name)));
+    assert.ok(node); return node.getText(file).replace(/^export /u, "");
+  };
+  const run = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification") as ts.FunctionDeclaration;
+  assert.ok(run?.body);
+  const admissions: ts.IfStatement[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
+      && node.thenStatement.statements.some(row => row.getText(file) === "activeLocalVerifications.add(originalContext);")) admissions.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(run); assert.equal(admissions.length, 1);
+  const admission = admissions[0], runText = run.getText(file), admissionText = admission.getText(file);
+  assert.ok(runText.indexOf("assertLocalVerificationRequest(request, localPlan)") < runText.indexOf(admissionText));
+  assert.ok(runText.indexOf('execFileSync("git", ["diff", "--quiet", "HEAD", "--"]') < runText.indexOf(admissionText));
+  assert.ok(admissionText.includes('localPlan?.mode === "bounded"'));
+  assert.ok(admissionText.indexOf("await drainControlPulse()") < admissionText.indexOf("verifySource()"));
+  assert.ok(admissionText.indexOf("verifySource()") < admissionText.indexOf("activeLocalVerifications.add(originalContext)"));
+  const compile = (value: string) => ts.transpileModule(value, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const api = new Function("assert", compile(`${statement("activeLocalVerifications")}
+    ${statement("isOwnedLocalVerificationActive")}
+    return { active:isOwnedLocalVerificationActive,
+      admit:async (ports)=>{const {localPlan,localInputs,headSha,originalContext,verifySource,drainControlPulse}=ports;${admissionText}},
+      clear:(originalContext)=>activeLocalVerifications.delete(originalContext) };`))(assert) as {
+      active(context: object): boolean; admit(ports: Record<string, unknown>): Promise<void>; clear(context: object): void;
+    };
+  const lifecycle = ts.createSourceFile("isolated-supabase.mts", readSource("scripts/lib/isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const renewals: ts.CallExpression[] = [];
+  const findRenewal = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(lifecycle) === "applicationLease.renewIfDue"
+      && node.arguments.some(argument => argument.getText(lifecycle).includes("isOwnedLocalVerificationActive(publicContext)"))) renewals.push(node);
+    ts.forEachChild(node, findRenewal);
+  };
+  findRenewal(lifecycle); assert.equal(renewals.length, 1);
+  const renew = new Function("request", "publicContext", "isOwnedLocalVerificationActive", compile("return (" + renewals[0].arguments[0].getText(lifecycle) + ");")) as
+    (request: object, context: object, active: (context: object) => boolean) => boolean;
+  const context = {}, head = "b".repeat(40), events: string[] = [];
+  const ports = { localPlan: { mode: "bounded" }, localInputs: { finalHead: head }, headSha: head, originalContext: context,
+    verifySource() { events.push("source-verified"); }, async drainControlPulse() { events.push("pulse-drained"); } };
+  const request = { localVerification: { risk: "A", bounded: true }, additionalSourceFiles: [] };
+  assert.equal(api.active(context), false); assert.equal(renew(request, context, api.active), false);
+  assert.equal(api.active({ ...request, admitted: true, active: true }), false);
+  cases.push("forged request presence or active/admitted flags cannot renew the existing control lease");
+  await assert.rejects(api.admit({ ...ports, verifySource() { throw Error("controlled changed source"); } }), /controlled changed source/u);
+  assert.equal(api.active(context), false);
+  await assert.rejects(api.admit({ ...ports, localInputs: { finalHead: "c".repeat(40) } })); assert.equal(api.active(context), false);
+  await api.admit({ ...ports, localPlan: { mode: "full" } }); assert.equal(api.active(context), false);
+  cases.push("failed source/HEAD admission and a full-mode request cannot activate the bounded lease marker");
+  events.length = 0; await api.admit(ports);
+  assert.deepEqual(events, ["pulse-drained", "source-verified"]); assert.equal(api.active(context), true);
+  assert.equal(api.active({}), false); assert.equal(renew(request, context, api.active), true);
+  cases.push("only the validated exact owned context activates bounded renewal after the existing pulse drain");
+  api.clear(context); assert.equal(api.active(context), false); assert.equal(renew(request, context, api.active), false);
+  cases.push("bounded cleanup revokes lease eligibility instead of extending request lifetime or authority");
+}
+
+async function localRiskVerificationOnly() {
+  verifyFinalQualityGatePlan(); const plan = verifyLocalRiskVerificationPlan(); await verifyLocalRiskExecutionControls(plan.prefix);
+  await verifyLocalRiskControlLeaseAdmission(); verifyAdminMeasurementRestartPolicy();
+  console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
+    canonicalPlannerExecuted: true, browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
+    fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
+}
+
 async function verifyMigrationToolPlatforms(lock: StackLock) {
   const cli = await import("./lib/isolated-supabase-cli.mts");
   check("migration tool selection preserves the exact existing Windows lock", () => {
@@ -1367,6 +1738,9 @@ async function main() {
   cases.push(...closure.cases);
   await verifyRestoreAclPolicy();
   verifyFinalQualityGatePlan();
+  const riskPlan = verifyLocalRiskVerificationPlan();
+  await verifyLocalRiskExecutionControls(riskPlan.prefix);
+  await verifyLocalRiskControlLeaseAdmission();
   await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
   verifyScanner();
@@ -1903,9 +2277,10 @@ function verifyRetainedPublicControlEligibility(source: string) {
   };
   visitRenewal(handlers[0]); assert.equal(renewals.length, 1); assert.equal(renewals[0].arguments.length, 1);
   const argument = renewals[0].arguments[0].getText(parsed);
-  const eligible = new Function("request", ts.transpileModule("return (" + argument + ");", {
+  const evaluateEligibility = new Function("request", "publicContext", "isOwnedLocalVerificationActive", ts.transpileModule("return (" + argument + ");", {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText) as (request: Record<string, unknown>) => boolean;
+  }).outputText) as (request: Record<string, unknown>, context: object, active: (context: object) => boolean) => boolean;
+  const eligible = (request: Record<string, unknown>) => evaluateEligibility(request, {}, () => false);
   const valid = { finalQualityGate: true, retainedAdminBehaviorAdmissionSha256: "a".repeat(64), additionalSourceFiles: [] };
   assert.equal(eligible(valid), true); cases.push("retained Quality heartbeat renews only through the existing lease argument");
   for (const selection of ["admin-interactions", "admin-adoption"]) {
@@ -2207,5 +2582,5 @@ async function retainedFinalQualityOnly() {
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
 }
 
-const verification = process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+const verification = process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });

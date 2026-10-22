@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.7.0
-> **Effective date:** 2026-10-14
+> **Version:** 3.8.0
+> **Effective date:** 2026-10-22
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
@@ -3754,7 +3754,7 @@ npm run test:e2e:authenticated
 
 The Project Owner-approved workflow is:
 
-`Local Implementation -> Impact-Based Targeted QA -> Owner Visual Approval -> Local Commits -> Batch Final Quality Gate -> Push -> PR -> Required GitHub CI -> Ready -> Standard Merge -> Automatic Production`
+`Local Implementation -> Impact-Based Targeted QA -> Owner Visual Approval -> Local Commits -> Risk-Selected Batch Local Verification -> Push -> PR -> Required GitHub CI -> Ready -> Standard Merge -> Automatic Production`
 
 **Development Verification**, for each bounded change:
 
@@ -3785,10 +3785,40 @@ architecture, adoption, behavior, or release proof.
 **Batch Release Verification**, when the group of changes is complete:
 
 1. Freeze the committed Final HEAD and combined scope.
-2. Run one Full Quality Gate on that state, including Final Build and Public E2E required by the existing release contract; do not run included steps twice.
+2. Select and complete local release verification on that state under the risk classification below. Proven bounded A/B changes do not automatically require Full Local Gate; C/D require it, and E follows the highest risk with Full Local Gate whenever impact cannot be bounded. Do not run included steps twice.
 3. Prove fixture/process cleanup and environment integrity while preserving retained evidence.
 4. Perform authorized Push and PR, then require the existing GitHub CI on the current PR head.
 5. Proceed to separately authorized Ready and Standard Merge; the existing integration deploys Production automatically, with scoped Production proof before claiming Production closure.
+
+**Risk-Based Local Verification** (Project Owner-approved, 2026-10-22):
+
+| Class | Scope | Required local release verification |
+| --- | --- | --- |
+| A | Proven bounded UI / CSS / Presentation, without behavior or contract changes | All affected targeted Tests/Guards, TypeScript, ESLint, affected Desktop/Mobile/RTL and media/fallback/interaction proof, Final Build, Product Surface, Platform Contracts, Public E2E, and cleanup. |
+| B | Proven bounded Shared Presentation, without behavior or contract changes | All A requirements plus canonical owner proof, direct/indirect consumer verification, applicable Adoption and Source Proof, and affected contract/failure-path checks. |
+| C | Domain / Contracts / Data | Full Local Gate plus affected contract, integration, and data checks. |
+| D | Auth / RLS / Permissions / Migrations | Full Local Gate plus required positive/negative security and integration checks; classification grants no mutation authority. |
+| E | Unknown / Mixed / Architecture / Verification Infrastructure | Apply the highest constituent risk. Unknown/conflicting dependencies or unbounded impact require Full Local Gate. Architecture or verification-execution code changes are high risk and require Full Local Gate; they cannot qualify as A/B merely because the diff is small. |
+
+The combined batch determines risk, not file extension or a self-declared label.
+Use existing owners, manifests, registries, and executable graphs to identify
+affected contracts, consumers, tests, guards, fixtures, scripts, and workflows.
+Missing import-graph edges do not prove absence of impact, including CSS,
+images, SQL, fixtures, and dynamic dependencies. Record the risk, boundedness
+proof, selected checks, and evidence reuse in the existing QA evidence under
+`docs/QA_RELEASE_CLOSURE.md` Section 3.3.1; do not create a parallel QA engine,
+registry, or source of truth. An affected Test/Guard/Fixture MUST be maintained
+and run within the same task; changing it invalidates affected proof. Retained
+PASS requires proven input and contract equivalence under Section 25.5.
+Documentation-only work retains the existing applicable consistency checks in
+the QA contract's Section 15; risk selection does not broaden a Local-only task
+into release authorization.
+
+This changes local selection only. Required GitHub CI remains complete on
+Exact HEAD, with unchanged Branch Protection, Post-Merge CI, security coverage,
+deployment policy, and separate Ready/Merge authorizations. Standard Merge
+Commit retains Expected Head SHA protection. No required check may be skipped,
+weakened, or reported as PASS without proof.
 
 `docs/QA_RELEASE_CLOSURE.md` owns check selection, evidence validity, and reruns.
 This policy changes verification selection, timing, and Local review workflow only. Build Once, Adopt Everywhere and
@@ -3805,10 +3835,13 @@ A green gate on an earlier commit does not prove a later commit.
 If Final HEAD changes, record the old and new SHA, compare all relevant inputs,
 and rerun affected checks under `docs/QA_RELEASE_CLOSURE.md` Section 3.4. Reuse
 unaffected evidence only with an explicit validity record; never relabel an
-older run as executed on the new HEAD. Rerun the full gate only when its scope
-or material risk cannot be covered by affected checks and valid retained proof.
+older run as executed on the new HEAD. The complete risk-selected profile under
+Section 25.4 must remain covered. Rerun the full gate when its scope or material
+risk cannot be covered by affected checks and valid retained proof.
 Required GitHub CI still applies to the current PR head. A stopped gate is not
-a pass, and local targeted success is not a completed batch release gate.
+a pass, and development-only targeted success is not a completed batch release
+gate. A/B release coverage must satisfy the complete selected profile under
+Section 25.4; C/D and unbounded E retain Full Local Gate.
 
 The closure report MUST identify:
 
@@ -3951,7 +3984,7 @@ PR implementation release closure (beyond local development completion under Sec
 
 - scope is satisfied;
 - targeted tests pass;
-- batch Final Quality Gate coverage is valid for Final HEAD under Section 25.5, with retained evidence and affected reruns explicitly recorded;
+- the risk-selected batch local release profile under Section 25.4 is complete and valid for Final HEAD under Section 25.5, with retained evidence and affected reruns explicitly recorded;
 - required GitHub CI passes on the current PR head;
 - Browser QA required by scope passes;
 - cleanup passes;
@@ -4166,7 +4199,7 @@ Copy it into the PR body and answer truthfully.
 - [ ] Browser QA passes on declared routes/viewports.
 - [ ] Console/page/request errors are zero or explicitly explained.
 - [ ] Fixtures, uploads, users, preferences, and audit residue are cleaned.
-- [ ] Batch Final Quality Gate coverage is valid for Final HEAD under Section 25.5; any retained evidence and affected reruns are explicit.
+- [ ] The risk-selected batch local release profile under Section 25.4 is complete and valid for Final HEAD under Section 25.5; any retained evidence and affected reruns are explicit.
 
 ## Delivery State
 
@@ -4371,7 +4404,7 @@ The preferred workflow is:
 3. impact-based targeted verification;
 4. one focused correction pass if real defects are found, then affected reruns;
 5. Owner Visual Approval on Local and authorized local commits;
-6. at batch completion, one final Quality Gate under Section 25.4;
+6. at batch completion, the risk-selected local release verification under Section 25.4, with Full Local Gate for C/D and unbounded E;
 7. Push/PR, required CI, and separate Ready/Merge authorizations.
 
 Do not waste usage by repeatedly asking another agent to “review again” without new code or evidence.
@@ -4665,7 +4698,7 @@ flowchart TD
     LocalReview[Owner Visual Approval on Local]
     Commit[Authorized Local Commit]
     Batch{Batch complete?}
-    Gate[Batch Final Quality Gate on Final HEAD]
+    Gate[Risk-selected local release verification on Final HEAD]
     CI[Authorized Push and PR, then required CI]
     Delivery[Separate Ready and Standard Merge approvals]
     Claim[Make exact closure claim]
@@ -5054,12 +5087,14 @@ That contract is independent of Slugs, page names, Templates, Themes, CSS, and c
 
 **Status:** Accepted by the Project Owner on 2026-10-14.
 **Context:** Running a Full Quality Gate for every small Admin change delays iterative Local review without changing the architectural obligations.
-**Decision:** Section 25.4 separates targeted Development Verification, Owner Visual Approval, and local commits from one Batch Final Quality Gate, authorized Push/PR, required GitHub CI, separate Ready/Merge approvals, and automatic Production deployment. Local review requires no Vercel Preview. Section 25.5 and the existing QA release contract govern evidence validity after a HEAD change.
+**Decision:** Section 25.4 separates targeted Development Verification, Owner Visual Approval, and local commits from risk-selected Batch Release Verification, authorized Push/PR, required GitHub CI, separate Ready/Merge approvals, and automatic Production deployment. Local review requires no Vercel Preview. Section 25.5 and the existing QA release contract govern evidence validity after a HEAD change.
 **Architecture impact:** Verification selection, delivery timing, and Local review workflow only. Existing Systems, Runtimes, Capabilities, manifests, guards, ownership, and contracts remain authoritative. No new QA system or parallel owner is introduced; there is no migration or consumer-code adoption change. No CI, branch-protection, Vercel-setting, Auth, Permission, or Database change is authorized by this decision.
 **Local efficiency refinement (Owner-approved, 2026-10-14):** Section 25.4 defaults to targeted code checks; Browser Automation is limited to explicit requests or the minimum proof of behavior that code checks cannot establish. Screenshots and visual reports require a request. It reuses the running Dev Server and valid QA evidence, leaves final visual review to the Owner, and limits local handoffs to changed files, verification results, local commit, and Git status without repeated localhost links. Required architectural and release proof is unchanged.
-**Consequences:** Local approved work can accumulate safely in commits; targeted success cannot be presented as batch, CI, merge, or Production closure. Discovery and reruns stay proportional to demonstrated impact. Existing test assertions and release requirements are preserved.
+**Risk-based local release refinement (Owner-approved, 2026-10-22):** The Owner approved replacing the automatic Full Local Gate for every bounded low-risk batch with A/B profiles in Section 25.4. C/D retain Full Local Gate and specialized proof; E applies the highest risk and fails closed to Full Local Gate when impact is unresolved or unbounded. The existing QA contract owns the impact/evidence record and check selection using current owners/manifests/graphs; no parallel engine or registry is authorized. Every affected Test/Guard/Fixture remains maintained and executed in the same task, with affected proof invalidated after changes. Full Required GitHub CI, Branch Protection, Post-Merge CI, assertions, security coverage, cleanup, and release/deployment authorizations are unchanged.
+**Consequences:** Local approved work can accumulate safely in commits; development-only targeted success cannot be presented as batch, CI, merge, or Production closure. A/B batch closure requires the complete selected release profile. Discovery and reruns stay proportional to demonstrated impact. Existing test assertions and release requirements are preserved.
 **Evidence:** Explicit Project Owner decision, “Fast Local Development Workflow — One-Shot Policy Update & Safe Handoff”; synchronized `AGENTS.md`, `docs/AI_WORKING_RULES.md`, and `docs/QA_RELEASE_CLOSURE.md` with targeted documentation consistency checks.
-**Supersedes:** Only the CI-before-Local-Product-Review timing in ADR-026 and the per-change final-gate sequence. ADR-025 authorization boundaries and all adoption proof obligations remain in force.
+**Risk refinement evidence:** Explicit Project Owner decision, “Venesia — Risk-Based Local Verification | Final One-Shot”; local selection changes address repeated unaffected local verification, without claiming measured end-to-end savings or changing any remote protection.
+**Supersedes:** The CI-before-Local-Product-Review timing in ADR-026 and the per-change final-gate sequence; the 2026-10-22 refinement also supersedes automatic Full Local Gate for proven bounded A/B batches. ADR-025 authorization boundaries and all adoption proof obligations remain in force.
 
 ---
 
@@ -5276,7 +5311,7 @@ These rules are the fastest summary of the constitution.
 25. **No new Runtime without an ADR and approval.**
 26. **No permission change as incidental cleanup.**
 27. **Accessibility, RTL, mobile, and focus are contract requirements.**
-28. **Final Quality Gate runs at batch completion on Final HEAD; later changes follow Section 25.5 evidence validity.**
+28. **Risk-selected local release verification runs at batch completion on Final HEAD under Section 25.4; later changes follow Section 25.5 evidence validity.**
 29. **Evidence before claims.**
 30. **If architecture is wrong, working code is still wrong.**
 31. **Audit findings do not authorize implementation.**
@@ -5687,6 +5722,11 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.8.0 — 2026-10-22
+
+- Refined Owner-approved ADR-028 and Section 25.4: proven bounded A/B batches use risk-selected local release verification; C/D and unbounded E retain Full Local Gate.
+- Preserved affected verification maintenance, evidence validity, cleanup, full Required GitHub CI, Branch Protection, Post-Merge CI, security coverage, and release/deployment authorizations.
 
 ## 3.7.0 — 2026-10-14
 
