@@ -102,6 +102,8 @@ function sourceFailures(source: string, filename: string): string[] {
 function assertLockedArtifactPath(relative: string) {
   assert.equal(typeof relative, "string");
   assert.ok(!path.isAbsolute(relative) && !relative.includes("\\"));
+  assert.equal(path.posix.parse(relative).root, "");
+  assert.equal(path.win32.parse(relative).root, "");
   assert.ok(!relative.split("/").some(part => part === ".." || part === ".git" || part === "node_modules" || part === ".tmp-qa"));
   assert.ok(!/(^|\/)\.env(?:\.|$)|(^|\/)debug\.log$/i.test(relative));
 }
@@ -129,8 +131,15 @@ function verifyScanner() {
   check("source guard does not execute or classify historical comments as imports", () => {
     assert.deepEqual(sourceFailures('// Historical evidence: .tmp-qa/old/bootstrap.cjs; GRANT CREATE ON DATABASE postgres TO postgres\nconst ownedEvidenceDirectory = ".tmp-qa/current-owned";', "valid.mts"), []);
   });
-  for (const candidate of ["../private.json", "C:/private.json", ".tmp-qa/old/bootstrap.sql", "node_modules/hidden.sql", ".env.local", "debug.log"]) {
+  for (const candidate of ["../private.json", "C:/private.json", ".tmp-qa/old/bootstrap.sql", "node_modules/hidden.sql", ".env.local", "debug.log",
+    "c:/private.json", "C:\\private.json", "C:private.json", "c:private.json",
+    "//server/share/private.json", "\\\\server\\share\\private.json", "/private.json", "\\private.json",
+    "folder/../private.json", "folder\\../private.json", "folder/..\\private.json", ".git/config"]) {
     check(`lock rejects unsafe artifact path ${candidate}`, () => assert.throws(() => assertLockedArtifactPath(candidate)));
+  }
+  const lock: StackLock = JSON.parse(readSource("scripts/fixtures/isolated-supabase/stack.lock.json"));
+  for (const candidate of new Set([lock.compose.path, lock.transport.path, ...lock.files.map(file => file.path)])) {
+    check(`lock allows canonical repository-relative artifact ${candidate}`, () => assertLockedArtifactPath(candidate));
   }
 }
 
