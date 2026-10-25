@@ -120,12 +120,19 @@ function retainedTrackingMediaCases() {
  return [...tracking,...readonly,...confirmation,...readonlyConfirmation,...updateListbox];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
- const additionKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar","form:integrations-server-configuration:capability:feedback","form:projects-create-edit:capability:scrollbar","collection:project-editor-pages:capability:scrollbar"];
+ // Frozen history reconciliation only; current cells still come from the canonical applicability inventory below.
+ const additionKeys=[
+  "form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar","form:integrations-server-configuration:capability:feedback","form:projects-create-edit:capability:scrollbar","collection:project-editor-pages:capability:scrollbar",
+  "form:block-template-feed-editor:capability:scrollbar","form:block-template-media-sidebar-editor:capability:scrollbar","form:block-template-media-hub-editor:capability:scrollbar","form:global-seo-settings:capability:media","form:security-settings:capability:scrollbar","form:integrations-server-configuration:capability:scrollbar","form:activity-sitemap-media-commands:capability:scrollbar",
+  "collection:project-locations-hub:capability:scrollbar","collection:projects-hub:capability:scrollbar","collection:blocks-library-hub:capability:scrollbar","collection:media-recovery-queue:capability:scrollbar","collection:construction-updates-hub:capability:scrollbar","collection:settings-pages:capability:scrollbar","collection:reports-hub:capability:scrollbar","collection:seo-meta-manager:capability:scrollbar","collection:seo-meta-manager:capability:media"
+ ];
  const additions=cases.filter(row=>additionKeys.includes(row.key));
  for(const key of additionKeys){
   const matching=additions.filter(row=>row.key===key);
   assert.equal(matching.length,1,"Retain exactly one newly applicable capability case: "+key);
-  assert.equal(matching[0].declaration,"adopted");
+  const [boundary,consumer,kind,axis]=key.split(":");
+  assert.equal(kind,"capability");
+  for(const [field,value] of Object.entries({boundary,consumer,axis,scenario:"complete_applicable_capability_behavior",declaration:"adopted"}))assert.equal(matching[0][field],value,"Exact post-historical capability identity: "+key+" "+field);
  }
  const historical=cases.filter(row=>!additionKeys.includes(row.key));
  assert.equal(historical.length,959,"The bounded closure ledger must retain every historical case.");
