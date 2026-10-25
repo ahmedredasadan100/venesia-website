@@ -1,14 +1,34 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
-const out = path.join(root, ".tmp-qa/f01-f03-layout");
-await mkdir(out, { recursive: true });
+const requestedOutput = process.env.F01_F03_LAYOUT_OUTPUT;
+const qaRoot = path.join(root, ".tmp-qa");
+const out = requestedOutput === undefined ? path.join(qaRoot, "f01-f03-layout") : path.resolve(root, requestedOutput);
+if (requestedOutput !== undefined) {
+  const relative = path.relative(qaRoot, out);
+  assert.ok(requestedOutput.trim() && relative && !path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep),
+    "Fresh Layout QA output must remain strictly inside the repository .tmp-qa tree.");
+  let ancestor = qaRoot;
+  for (const part of ["", ...relative.split(path.sep).slice(0, -1)]) {
+    ancestor = path.join(ancestor, part);
+    try {
+      const state = await lstat(ancestor);
+      assert.ok(state.isDirectory() && !state.isSymbolicLink(), "Fresh Layout QA output cannot traverse symlinks or junctions.");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  await mkdir(path.dirname(out), { recursive: true });
+  await mkdir(out); // Exclusive target creation preserves every previous receipt.
+} else {
+  await mkdir(out, { recursive: true });
+}
 
 const entry = String.raw`import React,{useLayoutEffect} from 'react';
 import {createRoot} from 'react-dom/client';

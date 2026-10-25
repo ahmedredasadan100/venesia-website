@@ -17,7 +17,7 @@ import ts from "typescript";
 import * as React from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {assertContentScrollFingerprints,assertContentScrollReceipt,validateContentScrollFixture,PRESENTATION_CONTROL_KINDS,PRESENTATION_CONTROL_PHASES,PRESENTATION_CONTROL_ASSETS,buildCorePresentationControlsPlan,validatePresentationControlsRequest,presentationControlForm,loadPresentationControlBuilders,assertPresentationControlsConfig,assertPresentationControlsRow} from "./fixtures/admin-core-presentation-controls-contract.mjs";
-const root=resolve(import.meta.dirname,".."),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false,alias:{"server-only":resolve(root,"node_modules/next/dist/compiled/server-only/empty.js")}});
+const root=resolve(import.meta.dirname,".."),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false,jsx:{runtime:"automatic"},alias:{"server-only":resolve(root,"node_modules/next/dist/compiled/server-only/empty.js")}});
 const{ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>(resolve(root,"src/lib/admin/form-system/adoption-manifest.ts"));
 const fixtures={templates:PRESENTATION_CONTROL_KINDS.map((kind,index)=>({kind,id:index+1,name:"QA "+kind,slug:"qa-admin-page-interaction-"+kind+"-8",editPath:"/admin/pages-blocks/blocks/"+kind+"/"+(index+1)})),assets:PRESENTATION_CONTROL_ASSETS.map(objectKey=>({objectKey,publicUrl:"/"+objectKey}))};
 const cases:string[]=[],test=(name:string,run:()=>unknown)=>{run();cases.push(name);};const builders=await loadPresentationControlBuilders();

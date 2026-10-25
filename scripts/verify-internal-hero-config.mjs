@@ -401,6 +401,90 @@ const mediaGallerySource = readFileSync(
   resolve("src/components/admin/media/AdminMediaGalleryField.tsx"),
   "utf8",
 );
+const mediaImageFieldSource = readFileSync(
+  resolve("src/components/admin/media/AdminMediaImageField.tsx"),
+  "utf8",
+);
+
+// Follow actual JSX ownership rather than the pre-adoption spelling of cards.
+// These predicates also run against deliberate regressions below.
+function heroCompositionAst(source) {
+  const tree = ts.createSourceFile("HeroComposition.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const tags = [];
+  const visit = node => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) tags.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  return {
+    tags: name => tags.filter(node => node.tagName.getText(tree) === name),
+    attr: (node, name) => node.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attr.name.getText(tree) === name)?.initializer?.getText(tree),
+    inside: (node, parent) => node.pos > parent.pos && node.end < (ts.isJsxOpeningElement(parent) ? parent.parent.end : parent.end),
+    canonical: (name, suffix) => tree.statements.some(node => ts.isImportDeclaration(node) &&
+      ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.endsWith(suffix) &&
+      node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+      node.importClause.namedBindings.elements.some(binding => binding.name.text === name && !binding.propertyName)),
+  };
+}
+
+function hasCompactHeroSettings(source) {
+  const row = source.slice(source.indexOf("export function ModuleEditorVisibilityAlignRow("), source.indexOf("export function ModuleEditorIdentitySection("));
+  const ast = heroCompositionAst(row);
+  const root = ast.tags("AdminCard").find(node => ast.attr(node, "presentation") === '"premium"');
+  const header = ast.tags("div").find(node => ast.attr(node, "data-module-editor-settings-header") === '""');
+  const body = ast.tags("div").find(node => ast.attr(node, "data-module-editor-settings-body") === '""');
+  return Boolean(root && header && body && ast.inside(header, root) && ast.inside(body, root) && header.end < body.pos &&
+    ast.tags("AdminFormControlHeader").some(node => ast.inside(node, header) && ast.attr(node, "presentation") === '"compact-inline"') &&
+    ast.attr(header, "className") === '"flex min-w-0 flex-wrap items-center gap-1"' &&
+    row.includes('data-module-editor-settings-composition="compact-inline"') &&
+    row.includes('renderControls(`تنسيق ${label}`, "format", "compact")') &&
+    row.includes('renderControls(`إظهار ${label}`, "visibility", "compact")') &&
+    row.includes("{submittedValues}") && !row.includes("controlsPlacement"));
+}
+
+function hasHeroCtaSections(source) {
+  const ast = heroCompositionAst(source);
+  const row = ast.tags("HeroVisibilityAlignRow").find(node => ast.attr(node, "label") === '"تنسيق الأزرار"');
+  const grid = ast.tags("AdminFormGrid").find(node => ast.attr(node, "columns") === "{2}" && row && ast.inside(node, row));
+  return Boolean(ast.canonical("ModuleEditorSection", "/ModuleEditorPresentation") &&
+    ["AdminFormGrid", "AdminFormField", "AdminLinkField"].every(name => ast.canonical(name, "/ui")) && grid &&
+    ast.attr(row, "showName") === '"show_cta"' && ast.attr(row, "alignmentName") === '"cta_alignment"' && ast.attr(row, "boldName") === '"cta_bold"' &&
+    ["primary", "secondary"].every((kind, index) => {
+      const title = index === 0 ? "الزر الأساسي" : "الزر الثانوي";
+      const section = ast.tags("ModuleEditorSection").find(node => ast.attr(node, "title") === JSON.stringify(title) && ast.inside(node, grid));
+      const field = ast.tags("AdminFormField").find(node => section && ast.inside(node, section) && ast.attr(node, "label") === JSON.stringify(`نص ${title}`));
+      return section && ast.attr(section, "className") === '"h-full"' && field &&
+        ast.tags("AdminFormGrid").some(node => ast.inside(node, section) && ast.attr(node, "columns") === "{1}") &&
+        ast.tags("input").some(node => ast.inside(node, field) && ast.attr(node, "name") === `"${kind}_cta_label"` &&
+          ast.attr(node, "defaultValue") === `{${kind}Label}` && ast.attr(node, "maxLength") === "{100}" && ast.attr(node, "aria-label") === JSON.stringify(`نص ${title}`)) &&
+        ast.tags("AdminLinkField").some(node => ast.inside(node, section) && ast.attr(node, "prefix") === `"${kind}_cta"` &&
+          ast.attr(node, "defaultValue") === `{${kind}Link}` && ast.attr(node, "presentation") === '"inline"' &&
+          ast.attr(node, "actionPresentation") === '"bare"' && ast.attr(node, "chooseLinkLabel") === '"اختيار الرابط"' && ast.attr(node, "clearLinkLabel") === '"مسح"');
+    }));
+}
+
+function hasHeroImageComposition(source) {
+  const ast = heroCompositionAst(source);
+  const container = ast.tags("div").find(node => ast.attr(node, "data-hero-image-composition") === '""');
+  const card = ast.tags("AdminCard").find(node => container && ast.inside(node, container) && ast.attr(node, "presentation") === '"premium"' && ast.attr(node, "className") === '"h-full p-3"');
+  return Boolean(card && ast.tags("AdminFormListboxSelect").some(node => ast.inside(node, card) &&
+    ast.attr(node, "name") === '"image_composition"' && ast.attr(node, "label") === '"تكوين الصورة"' &&
+    ast.attr(node, "sizing") === '"full"' && ast.attr(node, "presentation") === '"panel"' &&
+    ast.attr(node, "defaultValue") === "{imageComposition}" && ast.attr(node, "options") === "{HERO_IMAGE_COMPOSITION_OPTIONS_AR}") &&
+    source.indexOf('data-hero-image-composition=""') < source.indexOf('data-hero-media-section="desktop"'));
+}
+
+function hasGalleryDimensionDelegation(gallerySource, imageSource, guidanceSource) {
+  const gallery = heroCompositionAst(gallerySource);
+  const image = heroCompositionAst(imageSource);
+  return gallery.tags("AdminMediaImageField").some(node => gallery.attr(node, "mediaSlot") === "{mediaSlot}" &&
+    gallery.attr(node, "value") === "{item.url}" && gallery.attr(node, "showGuidance") === "{panel && showGuidance}" &&
+    gallery.attr(node, "dimensionsPresentation") === '{panel ? "disclosure" : "default"}') &&
+    image.tags("AdminMediaOriginalDimensions").some(node => image.attr(node, "value") === "{value}" && image.attr(node, "state") === "{referenceState}") &&
+    image.tags("AdminMediaSlotGuidance").some(node => image.attr(node, "slot") === "{mediaSlot}" && image.attr(node, "presentation") === '"disclosure"') &&
+    guidanceSource.includes('slot.design?.kind !== "recommended"') && guidanceSource.includes("slot.design.width") && guidanceSource.includes("slot.design.height") &&
+    !guidanceSource.includes("slot.display") && !guidanceSource.includes("slot.note");
+}
 const moduleRegistryMetadataSource = readFileSync(
   resolve("src/lib/page-composition/module-registry-metadata.ts"),
   "utf8",
@@ -528,10 +612,11 @@ assert(
   "Every visible Hero presentation control maps through the canonical parser into the shared renderer",
 );
 assert(
-  heroVisibilitySource.includes(
-    "sm:flex-row sm:items-center sm:justify-between",
-  ) && heroVisibilitySource.includes('controlsPlacement === "footer"'),
-  "Hero controls share one dense responsive header/footer owner",
+  hasCompactHeroSettings(heroVisibilitySource) &&
+    !hasCompactHeroSettings(heroVisibilitySource.replace('data-module-editor-settings-header=""', 'data-unowned-header=""')) &&
+    !hasCompactHeroSettings(heroVisibilitySource.replace('renderControls(`تنسيق ${label}`, "format", "compact")', "null")) &&
+    !hasCompactHeroSettings(heroVisibilitySource.replace('renderControls(`إظهار ${label}`, "visibility", "compact")', "null")),
+  "Hero controls retain the actual compact inline shared header, formatting, visibility and content body; missing owners fail",
 );
 assert(
   /<input\s+type="hidden"\s+name="template_description"/.test(heroEditorSource) &&
@@ -558,31 +643,17 @@ assert(
   "Hero compact description retains original rich value until authored text changes and uses the shared Bold control",
 );
 assert(
-  (heroCtaEditorSource.match(/data-hero-cta-row=/g) ?? []).length === 2 &&
-    heroCtaEditorSource.includes('presentation="premium"') &&
-    heroCtaEditorSource.includes('<AdminFormGrid columns={2}>') &&
-    (heroCtaEditorSource.match(/<AdminCard presentation="premium"/g) ?? []).length === 2 &&
-    heroCtaEditorSource.includes('<AdminFormControlHeader title="الزر الأساسي"') &&
-    heroCtaEditorSource.includes('<AdminFormControlHeader title="الزر الثانوي"') &&
-    (heroCtaEditorSource.match(/presentation="inline"/g) ?? []).length === 2 &&
-    (heroCtaEditorSource.match(/actionPresentation="bare"/g) ?? []).length === 2 &&
-    (heroCtaEditorSource.match(/chooseLinkLabel="اختيار الرابط"/g) ?? [])
-      .length === 2 &&
-    heroVisibilitySource.includes('controlsPlacement === "cards"') &&
-    heroVisibilitySource.includes('data-module-editor-cta-grid=""') &&
-    heroVisibilitySource.includes("lg:grid-cols-2") &&
-    heroVisibilitySource.includes("Children.toArray(children)") &&
-    heroVisibilitySource.includes("data-module-editor-cta-card=") &&
+  hasHeroCtaSections(heroCtaEditorSource) &&
+    !hasHeroCtaSections(heroCtaEditorSource.replaceAll("ModuleEditorSection", "UnownedSection")) &&
+    !hasHeroCtaSections(heroCtaEditorSource.replaceAll("AdminFormField", "UnownedField")) &&
+    !hasHeroCtaSections(heroCtaEditorSource.replace('columns={2}', 'columns={1}')) &&
+    !hasHeroCtaSections(heroCtaEditorSource.replace('prefix="secondary_cta"', 'prefix="primary_cta"')) &&
     heroVisibilitySource.includes(
       "value={String(enableVisibility ? show : showDefault)}",
     ) &&
     adminLinkFieldSource.includes('data-admin-link-field={presentation}') &&
-    adminLinkFieldSource.includes('data-admin-link-destination=""') &&
-    heroCtaEditorSource.includes('aria-label="نص الزر الأساسي"') &&
-    heroCtaEditorSource.includes('aria-label="نص الزر الثانوي"') &&
-    !/<span[^>]*>نص الزر (?:الأساسي|الثانوي)<\/span>/.test(heroCtaEditorSource) &&
-    (heroCtaEditorSource.match(/<AdminFormGrid columns=\{1\}>/g) ?? []).length === 2,
-  "Hero CTA shares one canonical formatting row and two balanced premium link cards while the default cards owner remains intact",
+    adminLinkFieldSource.includes('data-admin-link-destination=""'),
+  "Hero CTA retains the canonical formatting row and two balanced Section/Field link groups; unowned fields, collapsed columns and duplicated link tuples fail",
 );
 assert(
   heroOrderEditorSource.includes('data-project-hero-action-cards=""') &&
@@ -666,11 +737,10 @@ assert(
     mediaGallerySource.includes("إضافة صورة") &&
     !mediaGallerySource.includes("تصفح وإضافة") &&
     !mediaGallerySource.includes("لا توجد صور —") &&
-    heroEditorSource.includes('data-hero-image-composition=""') &&
-    heroEditorSource.includes('<AdminCard presentation="premium" className="h-full p-3">') &&
-    heroEditorSource.includes('label={<AdminFormControlHeader title="تكوين الصورة"') &&
-    heroEditorSource.indexOf('data-hero-image-composition=""') <
-      heroEditorSource.indexOf('data-hero-media-section="desktop"'),
+    hasHeroImageComposition(heroEditorSource) &&
+    !hasHeroImageComposition(heroEditorSource.replace('name="image_composition"', 'name="unsubmitted_composition"')) &&
+    !hasHeroImageComposition(heroEditorSource.replace('label="تكوين الصورة"', 'aria-label="تكوين الصورة"')) &&
+    !hasHeroImageComposition(heroEditorSource.replace('options={HERO_IMAGE_COMPOSITION_OPTIONS_AR}', 'options={[]}')),
   "Hero galleries use one equal-size add card and image composition is an independent text-style card",
 );
 assert(
@@ -688,13 +758,11 @@ assert(
   "Hero compact galleries retain distinct desktop and mobile contracts in the shared presentation owner",
 );
 assert(
-  mediaGallerySource.includes("<AdminMediaOriginalDimensions") &&
-    mediaGallerySource.includes("<AdminMediaSlotGuidance slot={mediaSlot}") &&
-    mediaGuidanceSource.includes('slot.design?.kind !== "recommended"') &&
-    mediaGuidanceSource.includes("slot.design.width") &&
-    mediaGuidanceSource.includes("slot.design.height") &&
-    !mediaGuidanceSource.includes("slot.display") &&
-    !mediaGuidanceSource.includes("slot.note"),
+  hasGalleryDimensionDelegation(mediaGallerySource, mediaImageFieldSource, mediaGuidanceSource) &&
+    !hasGalleryDimensionDelegation(mediaGallerySource.replace('mediaSlot={mediaSlot}', 'mediaSlot={undefined}'), mediaImageFieldSource, mediaGuidanceSource) &&
+    !hasGalleryDimensionDelegation(mediaGallerySource, mediaImageFieldSource.replaceAll('AdminMediaOriginalDimensions', 'UnownedDimensions'), mediaGuidanceSource) &&
+    !hasGalleryDimensionDelegation(mediaGallerySource, mediaImageFieldSource.replaceAll('AdminMediaSlotGuidance', 'UnownedGuidance'), mediaGuidanceSource) &&
+    !hasGalleryDimensionDelegation(mediaGallerySource, mediaImageFieldSource, `${mediaGuidanceSource}\nslot.note`),
   "Media cards retain original dimensions and practical recommended sizes while technical guidance stays out of Admin",
 );
 assert(
@@ -855,6 +923,25 @@ const HeroVisibilityAlignRow = new Function(
 assert(
   heroVisibilityAdapterSource.includes("ModuleEditorVisibilityAlignRow as default"),
   "Hero adapter retains the actual shared visibility and text-formatting owner",
+);
+
+const compactHeroMarkup = renderToStaticMarkup(createElement(HeroVisibilityAlignRow, {
+  label: "عنوان الاختبار",
+  showName: "show_title",
+  alignmentName: "title_alignment",
+  boldName: "title_bold",
+  showDefault: true,
+  alignmentDefault: "center",
+}, createElement("input", { name: "authored_title", defaultValue: "نص محفوظ" })));
+assert(
+  compactHeroMarkup.includes('data-module-editor-settings-composition="compact-inline"') &&
+    compactHeroMarkup.includes('aria-label="تنسيق عنوان الاختبار"') &&
+    compactHeroMarkup.includes('aria-label="إظهار عنوان الاختبار"') &&
+    compactHeroMarkup.indexOf('data-module-editor-settings-header=""') < compactHeroMarkup.indexOf('data-admin-text-format-bold=""') &&
+    compactHeroMarkup.indexOf('data-admin-text-format-bold=""') < compactHeroMarkup.indexOf('data-module-editor-settings-body=""') &&
+    compactHeroMarkup.indexOf('data-module-editor-settings-body=""') < compactHeroMarkup.indexOf('name="authored_title"') &&
+    (compactHeroMarkup.match(/name="(?:show_title|title_alignment|title_bold|authored_title)"/gu) ?? []).length === 4,
+  "Actual compact Hero row SSR keeps separate native visibility/format toolbars in the header, authored body and exactly one submitted field per value",
 );
 
   for (const preserveUnsetBold of [false, true]) {
