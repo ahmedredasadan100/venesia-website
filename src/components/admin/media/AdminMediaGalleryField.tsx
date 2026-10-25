@@ -1,19 +1,22 @@
 "use client";
-import { ADMIN_FORM } from "../../../lib/admin/admin-ui-styles";
+import {
+  ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
+} from "../../../lib/admin/admin-ui-styles";
 import type { MediaSlotContract } from "../../../lib/media/media-slot-contract";
 import AdminMediaSlotGuidance from "./AdminMediaSlotGuidance";
-import { adminMediaPresentationState, AdminMediaOriginalDimensions, useAdminMediaReferenceState, AdminMediaPreview, AdminMediaReferenceLabel } from "./AdminDeletedMediaNotice";
+import { useAdminMediaReferenceState } from "./AdminDeletedMediaNotice";
 
-import Image from "next/image";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
 
 import {
   AdminFormError,
   useOptionalAdminFormRuntime,
 } from "../ui/AdminFormRuntime";
-import AdminActionButton from "../ui/AdminActionButton";
-import { AdminDataGridActionIcon } from "../ui/AdminDataGrid";
-import { AdminMediaImageActions } from "./AdminMediaImageField";
+import { AdminDataGridReorderHandle } from "../ui/AdminDataGrid";
+import AdminCard from "../ui/AdminCard";
+import { AdminModuleSectionHeader } from "../ui/AdminModuleTabs";
+import AdminMediaImageField from "./AdminMediaImageField";
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 
 
@@ -24,12 +27,14 @@ export type AdminMediaGalleryItem = {
   caption?: string | null;
 };
 
-type NormalizedGalleryItem = {
+export type AdminMediaGalleryControlledItem = {
   key: string;
   url: string;
   alt: string;
   caption: string;
 };
+
+type NormalizedGalleryItem = AdminMediaGalleryControlledItem;
 
 type AdminMediaGalleryFieldBaseProps = {
   label: string;
@@ -38,8 +43,25 @@ type AdminMediaGalleryFieldBaseProps = {
   showReferenceLabel?: boolean;
   browseFolder?: string;
   density?: "default" | "compact";
+  /** Desktop-only column opt-in; Mobile/Tablet and omitted density defaults stay unchanged. */
+  desktopColumns?: 2 | 3 | 4;
   selectionMode?: "single" | "multiple";
   actionPresentation?: "default" | "bare" | "card";
+  /** Explicit consumer adoption; omitted ports retain Hero/Tracking defaults. */
+  presentation?: "default" | "panel";
+  allowAdd?: boolean;
+  allowReplace?: boolean;
+  allowRemove?: boolean;
+  allowReorder?: boolean;
+  showAlt?: boolean;
+  showCaption?: boolean;
+  /** HTML5 drag plus the existing shared keyboard handle; arrows remain available. */
+  enableDragDrop?: boolean;
+  /** Explicit image-area drag opt-in; omitted consumers keep handle-only dragging. */
+  dragFromImage?: boolean;
+  disabled?: boolean;
+  addLabel?: string;
+  emptyLabel?: string;
 };
 
 type AdminMediaGalleryPathsProps = AdminMediaGalleryFieldBaseProps & {
@@ -58,13 +80,29 @@ type AdminMediaGalleryItemsProps = AdminMediaGalleryFieldBaseProps & {
   valueMode: "items";
   name: string;
   altName: string;
-  captionName: string;
-  defaultItems?: readonly AdminMediaGalleryItem[];
+  captionName?: string;
+  /** Domain identity and persistence remain controlled by the existing consumer. */
+  renderItemProjection?: (item: AdminMediaGalleryControlledItem, index: number) => ReactNode;
+  onRequestAdd?: () => void;
+  onRequestRemove?: (key: string) => void;
+  errorName?: string;
+  altErrorName?: string;
   defaultValue?: never;
   defaultPaths?: never;
   focusTargetId: string;
   altFocusTargetId: string;
-};
+} & (
+  | {
+      controlledItems: readonly AdminMediaGalleryControlledItem[];
+      onItemsChange: (update: (current: AdminMediaGalleryControlledItem[]) => AdminMediaGalleryControlledItem[]) => void;
+      defaultItems?: never;
+    }
+  | {
+      defaultItems?: readonly AdminMediaGalleryItem[];
+      controlledItems?: never;
+      onItemsChange?: never;
+    }
+);
 
 export type AdminMediaGalleryFieldProps =
   | AdminMediaGalleryPathsProps
@@ -120,25 +158,48 @@ export default function AdminMediaGalleryField(
     showReferenceLabel = false,
     browseFolder = "images",
     density = "default",
+    desktopColumns = density === "compact" ? 4 : 2,
     selectionMode = "single",
     actionPresentation = "default",
+    presentation = "default",
+    allowAdd = true,
+    allowReplace = true,
+    allowRemove = true,
+    allowReorder = true,
+    showAlt = true,
+    showCaption = true,
+    enableDragDrop = false,
+    dragFromImage = false,
+    addLabel = "إضافة صورة",
+    emptyLabel,
   } = props;
+  const panel = presentation === "panel";
   const itemsMode = props.valueMode === "items";
+  const controlled = props.valueMode === "items" && props.controlledItems !== undefined;
   const defaultKey = getDefaultKey(props);
-  const [items, setItems] = useState<NormalizedGalleryItem[]>(() =>
-    resolveDefaultItems(props),
+  const [ownedItems, setOwnedItems] = useState<NormalizedGalleryItem[]>(() =>
+    controlled ? [] : resolveDefaultItems(props),
   );
+  const items = props.valueMode === "items" && props.controlledItems !== undefined ? props.controlledItems : ownedItems;
   const referenceState = useAdminMediaReferenceState(items.map(item => item.url));
   const nextItemKeyRef = useRef(items.length);
   const [prevDefaultKey, setPrevDefaultKey] = useState(defaultKey);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
   const [projectionRevision, setProjectionRevision] = useState(0);
+  const draggedItemKeyRef = useRef<string | null>(null);
+  const [draggedItemKey, setDraggedItemKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const projectionSignalRef = useRef<HTMLInputElement>(null);
-  const fieldErrors = useOptionalAdminFormRuntime()?.fieldErrors ?? {};
-  const altName = props.valueMode === "items" ? props.altName : "";
-  const hasUrlError = itemsMode && Boolean(fieldErrors[props.name]?.length);
-  const hasAltError = itemsMode && Boolean(fieldErrors[altName]?.length);
+  const galleryRef = useRef<HTMLDivElement>(null);
+  const runtime = useOptionalAdminFormRuntime();
+  const formStatus = useFormStatus();
+  const disabled = Boolean(props.disabled || runtime?.pending || formStatus.pending);
+  const fieldErrors = runtime?.fieldErrors ?? {};
+  const errorName = props.valueMode === "items" ? props.errorName ?? props.name : props.name;
+  const altErrorName = props.valueMode === "items" ? props.altErrorName ?? props.altName : "";
+  const hasUrlError = itemsMode && Boolean(fieldErrors[errorName]?.length);
+  const hasAltError = itemsMode && Boolean(fieldErrors[altErrorName]?.length);
   const altErrorIndex = Math.max(
     0,
     items.findIndex(
@@ -154,10 +215,10 @@ export default function AdminMediaGalleryField(
         ? "min-h-[330px]"
         : "min-h-[170px]";
 
-  if (defaultKey !== prevDefaultKey) {
+  if (!controlled && defaultKey !== prevDefaultKey) {
     const nextItems = resolveDefaultItems(props);
     setPrevDefaultKey(defaultKey);
-    setItems(nextItems);
+    setOwnedItems(nextItems);
   }
 
   useLayoutEffect(() => {
@@ -167,24 +228,41 @@ export default function AdminMediaGalleryField(
     );
   }, [projectionRevision]);
 
+  function isLocked() {
+    return disabled || Boolean(galleryRef.current?.closest("fieldset:disabled"));
+  }
+
   function commitItems(
     update: (current: NormalizedGalleryItem[]) => NormalizedGalleryItem[],
   ) {
-    setItems(update);
+    if (isLocked()) return;
+    if (props.valueMode === "items" && props.controlledItems !== undefined) {
+      if (!props.onItemsChange) return;
+      props.onItemsChange(update);
+    } else {
+      setOwnedItems(update);
+    }
     setProjectionRevision((current) => current + 1);
   }
 
   function openAdd() {
+    if (isLocked() || !allowAdd) return;
+    if (props.valueMode === "items" && props.onRequestAdd) {
+      props.onRequestAdd();
+      return;
+    }
     setReplaceIndex(null);
     setPickerOpen(true);
   }
 
   function openReplace(index: number) {
+    if (isLocked() || !allowReplace) return;
     setReplaceIndex(index);
     setPickerOpen(true);
   }
 
   function handleSelect(path: string) {
+    if (isLocked() || (replaceIndex === null ? !allowAdd : !allowReplace)) return;
     if (selectionMode === "multiple" && items.some((item, index) =>
       index !== replaceIndex && item.url === path)) return;
     const addedKey =
@@ -207,6 +285,7 @@ export default function AdminMediaGalleryField(
   }
 
   function handleSelectMany(paths: string[]) {
+    if (isLocked() || !allowAdd) return;
     const additions = [...new Set(paths)]
       .filter((url) => !items.some((item) => item.url === url))
       .map((url) => ({
@@ -223,6 +302,12 @@ export default function AdminMediaGalleryField(
   }
 
   function removeAt(index: number) {
+    if (isLocked() || !allowRemove) return;
+    if (props.valueMode === "items" && props.onRequestRemove) {
+      const item = items[index];
+      if (item) props.onRequestRemove(item.key);
+      return;
+    }
     commitItems((current) =>
       current.filter((_, itemIndex) => itemIndex !== index),
     );
@@ -231,11 +316,64 @@ export default function AdminMediaGalleryField(
   function moveItem(index: number, direction: -1 | 1) {
     const target = index + direction;
     if (target < 0 || target >= items.length) return;
+    moveItemTo(items[index]?.key, target);
+  }
+
+  function moveItemTo(key: string | undefined, target: number) {
+    if (isLocked() || !allowReorder || !key) return;
+    const index = items.findIndex((item) => item.key === key);
+    if (index < 0 || target < 0 || target >= items.length || index === target) return;
     commitItems((current) => {
+      const currentIndex = current.findIndex((item) => item.key === key);
+      if (currentIndex < 0 || target >= current.length || currentIndex === target) return current;
       const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
+      const [moved] = next.splice(currentIndex, 1);
+      next.splice(target, 0, moved!);
       return next;
     });
+  }
+
+  function endDrag() {
+    draggedItemKeyRef.current = null;
+    setDraggedItemKey(null);
+    setDropTargetKey(null);
+  }
+
+  function startDrag(event: DragEvent<HTMLElement>, key: string) {
+    if (isLocked() || !allowReorder || !enableDragDrop || items.length < 2) {
+      event.preventDefault();
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const interactive = target?.closest("button, input, textarea, select, a, label, summary");
+    if (interactive && !interactive.hasAttribute("data-admin-grid-reorder-handle")) {
+      event.preventDefault();
+      return;
+    }
+    event.stopPropagation();
+    draggedItemKeyRef.current = key;
+    setDraggedItemKey(key);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", key);
+  }
+
+  function dragOver(event: DragEvent<HTMLElement>, targetKey?: string) {
+    if (isLocked() || !allowReorder || !enableDragDrop || !draggedItemKeyRef.current) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetKey(targetKey && targetKey !== draggedItemKeyRef.current ? targetKey : null);
+  }
+
+  function dropOn(event: DragEvent<HTMLElement>, targetKey: string) {
+    if (isLocked() || !allowReorder || !enableDragDrop || !draggedItemKeyRef.current) {
+      endDrag();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const target = items.findIndex((item) => item.key === targetKey);
+    moveItemTo(draggedItemKeyRef.current, target);
+    endDrag();
   }
 
   function updateItem(
@@ -243,7 +381,14 @@ export default function AdminMediaGalleryField(
     field: "alt" | "caption",
     value: string,
   ) {
-    setItems((current) =>
+    if (isLocked()) return;
+    if (props.valueMode === "items" && props.controlledItems !== undefined) {
+      props.onItemsChange?.((current) => current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ));
+      return;
+    }
+    setOwnedItems((current) =>
       current.map((item, itemIndex) =>
         itemIndex === index ? { ...item, [field]: value } : item,
       ),
@@ -252,9 +397,12 @@ export default function AdminMediaGalleryField(
 
   return (
     <div
+      ref={galleryRef}
       id={itemsMode ? "gallery-editor" : undefined}
       className="space-y-3 scroll-mt-24"
       data-admin-media-gallery-mode={itemsMode ? "items" : "paths"}
+      data-admin-media-gallery-presentation={panel ? "panel" : undefined}
+      data-admin-media-gallery-drag-drop={allowReorder && enableDragDrop ? "html5" : undefined}
       role={itemsMode ? "group" : undefined}
       aria-label={itemsMode ? label : undefined}
       aria-invalid={
@@ -263,8 +411,8 @@ export default function AdminMediaGalleryField(
       aria-describedby={
         itemsMode && (hasUrlError || hasAltError)
           ? [
-              hasUrlError ? `${props.name}-error` : null,
-              hasAltError ? `${altName}-error` : null,
+              hasUrlError ? `${errorName}-error` : null,
+              hasAltError ? `${altErrorName}-error` : null,
             ]
               .filter(Boolean)
               .join(" ")
@@ -286,33 +434,54 @@ export default function AdminMediaGalleryField(
         />
       )}
 
-      <span className="block text-xs font-semibold text-white/55">{label}</span>
-      {showGuidance ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
+      {panel ? (
+        <AdminModuleSectionHeader
+          id={`${props.name}-gallery-heading`}
+          sectionHeading={label}
+          icon="media"
+          sectionHeaderPresentation="premium"
+          sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+        />
+      ) : <span className="block text-xs font-semibold text-white/55">{label}</span>}
+      {showGuidance && !panel ? <AdminMediaSlotGuidance slot={mediaSlot} /> : null}
 
       <div
         className={`grid gap-3 ${
           density === "compact"
-            ? "grid-cols-1 md:grid-cols-3 xl:grid-cols-4"
-            : "grid-cols-1 md:grid-cols-2"
+            ? desktopColumns === 4
+              ? "grid-cols-1 md:grid-cols-3 xl:grid-cols-4"
+              : desktopColumns === 3
+                ? "grid-cols-1 md:grid-cols-3"
+              : "grid-cols-1 md:grid-cols-3 xl:grid-cols-2"
+            : desktopColumns === 4
+              ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-4"
+              : desktopColumns === 3
+                ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+              : "grid-cols-1 md:grid-cols-2"
         }`}
         data-admin-media-gallery-density={density}
       >
-        {items.map((item, index) => (
-          <div
-            key={item.key}
-            className={`relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 ${galleryCardHeightClass}`}
-            data-admin-media-gallery-card="image"
-            data-admin-media-gallery-index={index}
-          >
-            {itemsMode ? (
-              <input type="hidden" name={props.name} value={item.url} />
-            ) : null}
-
+        {items.map((item, index) => {
+          const reorderControls = allowReorder ? (
             <div className="absolute left-2 top-2 z-10 flex flex-col gap-1">
+              {enableDragDrop ? (
+                <AdminDataGridReorderHandle
+                  label={`الصورة ${index + 1} من ${label}`}
+                  position={index}
+                  count={items.length}
+                  disabled={disabled}
+                  tone={panel ? "gold" : undefined}
+                  onMoveTo={(target) => moveItemTo(item.key, target)}
+                  onDragStart={(event) => startDrag(event, item.key)}
+                  onDragOver={(event) => dragOver(event, item.key)}
+                  onDrop={(event) => dropOn(event, item.key)}
+                  onDragEnd={endDrag}
+                />
+              ) : null}
               <button
                 type="button"
                 onClick={() => moveItem(index, -1)}
-                disabled={index === 0}
+                disabled={disabled || index === 0}
                 className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-xs text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                 title={
                   index === 0
@@ -331,7 +500,7 @@ export default function AdminMediaGalleryField(
               <button
                 type="button"
                 onClick={() => moveItem(index, 1)}
-                disabled={index === items.length - 1}
+                disabled={disabled || index === items.length - 1}
                 className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-xs text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                 title={
                   index === items.length - 1
@@ -348,187 +517,115 @@ export default function AdminMediaGalleryField(
                 ↓
               </button>
             </div>
-
-            {actionPresentation === "default" ? (
-              <button
-                type="button"
-                onClick={() => removeAt(index)}
-                className="absolute right-2 top-2 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-white/80 hover:text-white"
-                title="إزالة الصورة"
-                aria-label={`إزالة الصورة ${index + 1} من ${label}`}
-                data-admin-media-gallery-action="remove"
-              >
-                ×
-              </button>
-            ) : null}
-
+          ) : null;
+          const cardContent = (
+            <>
+            {props.valueMode === "items" ? props.renderItemProjection?.(item, index) : null}
+            <AdminMediaImageField
+              name={props.name}
+              label={`الصورة ${index + 1} من ${label}`}
+              variant="gallery"
+              value={item.url}
+              referenceState={referenceState}
+              renderValueInput={itemsMode}
+              showLabel={false}
+              mediaSlot={mediaSlot}
+              showGuidance={panel && showGuidance}
+              showReferenceLabel={panel || showReferenceLabel}
+              dimensionsPresentation={panel ? "disclosure" : "default"}
+              previewAspectRatio={4 / 3}
+              previewFit="cover"
+              enablePreview={false}
+              actionPresentation={actionPresentation}
+              allowReplace={allowReplace}
+              allowRemove={allowRemove}
+              onReplace={() => openReplace(index)}
+              onRemove={() => removeAt(index)}
+              pickerExpanded={pickerOpen && replaceIndex === index}
+              focusTargetId={itemsMode && index === 0 ? props.focusTargetId : undefined}
+              ariaInvalid={itemsMode && index === 0 && hasUrlError}
+              ariaDescribedBy={itemsMode && index === 0 && hasUrlError ? `${errorName}-error` : undefined}
+              actionAttributes={{
+                replace: {
+                  id: itemsMode && index === 0 ? props.focusTargetId : undefined,
+                  "aria-describedby": itemsMode && index === 0 && hasUrlError ? `${errorName}-error` : undefined,
+                  disabled,
+                  "data-admin-media-gallery-action": "replace",
+                },
+                remove: {
+                  "aria-label": `إزالة الصورة ${index + 1} من ${label}`,
+                  disabled,
+                  "data-admin-media-gallery-action": "remove",
+                },
+              }}
+              altName={props.valueMode === "items" ? props.altName : undefined}
+              altValue={item.alt}
+              altLabel="النص البديل (alt)"
+              altPlaceholder="وصف مختصر للصورة"
+              showAlt={showAlt}
+              altRows={1}
+              showAltCounter={panel}
+              altId={itemsMode && index === altErrorIndex ? props.altFocusTargetId : undefined}
+              altInvalid={(index === altErrorIndex && hasAltError) || undefined}
+              altDescribedBy={itemsMode && index === altErrorIndex && hasAltError ? `${altErrorName}-error` : undefined}
+              onAltValueChange={(value) => updateItem(index, "alt", value)}
+              captionName={props.valueMode === "items" ? props.captionName : undefined}
+              captionValue={item.caption}
+              captionLabel="التعليق (caption)"
+              showCaption={showCaption}
+              captionRows={1}
+              showCaptionCounter={panel}
+              onCaptionValueChange={(value) => updateItem(index, "caption", value)}
+              metadataPresentation={panel ? "panel" : "gallery"}
+              metadataClassName={!panel ? "space-y-3 pt-1" : undefined}
+              previewOverlay={reorderControls}
+              previewSurfaceProps={allowReorder && enableDragDrop && dragFromImage ? {
+                draggable: !disabled && items.length > 1,
+                onDragStart: (event) => startDrag(event, item.key),
+                onDragEnd: endDrag,
+                "data-admin-media-gallery-drag-surface": "",
+              } : undefined}
+            />
+            </>
+          );
+          return (
             <div
-              className="relative aspect-[4/3]"
+              key={item.key}
+              className={`${panel ? "min-w-0" : `relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 ${galleryCardHeightClass}`} ${draggedItemKey === item.key ? "opacity-55" : ""} ${dropTargetKey === item.key ? "rounded-2xl ring-1 ring-[#D8B87A]/65" : ""}`}
+              data-admin-media-gallery-card="image"
+              data-admin-media-gallery-index={index}
+              data-gallery-item-key={item.key}
+              data-gallery-item-dragging={draggedItemKey === item.key || undefined}
+              data-gallery-item-drop-target={dropTargetKey === item.key || undefined}
+              onDragOver={(event) => dragOver(event, item.key)}
+              onDragLeave={(event) => {
+                if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+                setDropTargetKey((current) => current === item.key ? null : current);
+              }}
+              onDrop={(event) => dropOn(event, item.key)}
             >
-              <AdminMediaPreview value={item.url} state={referenceState} controlsOverlay={actionPresentation === "card"}>
-                <Image
-                  src={item.url}
-                  alt={itemsMode ? item.alt : ""}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 768px) 100vw, 50vw"
-                />
-              </AdminMediaPreview>
-              {actionPresentation === "card" ? (
-                <AdminMediaImageActions
-                  replace={{
-                    id: itemsMode && index === 0 ? props.focusTargetId : undefined,
-                    title: ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال",
-                    "aria-label": ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال",
-                    "aria-haspopup": "dialog",
-                    "aria-expanded": pickerOpen && replaceIndex === index,
-                    "aria-describedby": itemsMode && index === 0 && hasUrlError ? `${props.name}-error` : undefined,
-                    onClick: () => openReplace(index),
-                    "data-admin-media-gallery-action": "replace",
-                  }}
-                  remove={{
-                    title: "إزالة الصورة",
-                    "aria-label": `إزالة الصورة ${index + 1} من ${label}`,
-                    onClick: () => removeAt(index),
-                    "data-admin-media-gallery-action": "remove",
-                  }}
-                />
-              ) : null}
+              {panel ? (
+                <AdminCard presentation="premium" className="h-full min-w-0 overflow-hidden">
+                  {cardContent}
+                </AdminCard>
+              ) : cardContent}
             </div>
+          );
+        })}
 
-            <div className="space-y-2 px-3 py-2">
-              <AdminMediaOriginalDimensions value={item.url} state={referenceState} />
-              {showReferenceLabel || actionPresentation !== "card" ? <div className="flex flex-wrap items-center justify-between gap-2">
-                {showReferenceLabel ? <div className="min-w-0 flex-1"><AdminMediaReferenceLabel value={item.url} state={referenceState} /></div> : null}
-                {actionPresentation === "card" ? null : actionPresentation === "bare" ? (
-                  <div
-                    className="inline-flex shrink-0 items-center gap-1"
-                    data-admin-media-gallery-actions="bare"
-                  >
-                    <AdminActionButton
-                      id={itemsMode && index === 0 ? props.focusTargetId : undefined}
-                      onClick={() => openReplace(index)}
-                      variant="gold-ghost"
-                      size="icon"
-                      title={
-                        ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState))
-                          ? "اختيار بديل"
-                          : "استبدال"
-                      }
-                      aria-label={
-                        ["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState))
-                          ? "اختيار بديل"
-                          : "استبدال"
-                      }
-                      aria-haspopup="dialog"
-                      aria-expanded={pickerOpen && replaceIndex === index}
-                      aria-describedby={
-                        itemsMode && index === 0 && hasUrlError
-                          ? `${props.name}-error`
-                          : undefined
-                      }
-                      data-admin-media-gallery-action="replace"
-                    >
-                      <AdminDataGridActionIcon action="copy-link" size="lg" />
-                    </AdminActionButton>
-                    <AdminActionButton
-                      onClick={() => removeAt(index)}
-                      variant="danger-ghost"
-                      size="icon"
-                      title="إزالة الصورة"
-                      aria-label={`إزالة الصورة ${index + 1} من ${label}`}
-                      data-admin-media-gallery-action="remove"
-                    >
-                      <AdminDataGridActionIcon action="delete" size="lg" />
-                    </AdminActionButton>
-                  </div>
-                ) : (
-                  <button
-                    id={
-                      itemsMode && index === 0
-                        ? props.focusTargetId
-                        : undefined
-                    }
-                    type="button"
-                    onClick={() => openReplace(index)}
-                    aria-haspopup="dialog"
-                    aria-expanded={pickerOpen && replaceIndex === index}
-                    aria-describedby={
-                      itemsMode && index === 0 && hasUrlError
-                        ? `${props.name}-error`
-                        : undefined
-                    }
-                    className="cursor-pointer shrink-0 rounded-lg border border-[#D8B87A]/30 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10"
-                    data-admin-media-gallery-action="replace"
-                  >
-                    {["deleted", "missing"].includes(adminMediaPresentationState(item.url, referenceState)) ? "اختيار بديل" : "استبدال"}
-                  </button>
-                )}
-              </div> : null}
-
-
-              {itemsMode ? (
-                <div className="space-y-3 pt-1">
-                  <label className={ADMIN_FORM.labelStack}>
-                    <span className="text-xs font-semibold text-white/60">
-                      النص البديل (alt)
-                    </span>
-                    <input
-                      id={
-                        index === altErrorIndex
-                          ? props.altFocusTargetId
-                          : undefined
-                      }
-                      name={props.altName}
-                      value={item.alt}
-                      onChange={(event) =>
-                        updateItem(index, "alt", event.target.value)
-                      }
-                      placeholder="وصف مختصر للصورة"
-                      aria-invalid={
-                        (index === altErrorIndex && hasAltError) || undefined
-                      }
-                      aria-describedby={
-                        index === altErrorIndex && hasAltError
-                          ? `${props.altName}-error`
-                          : undefined
-                      }
-                      className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-                    />
-                  </label>
-
-                  <label className={ADMIN_FORM.labelStack}>
-                    <span className="text-xs font-semibold text-white/60">
-                      التعليق (caption)
-                    </span>
-                    <input
-                      name={props.captionName}
-                      value={item.caption}
-                      onChange={(event) =>
-                        updateItem(index, "caption", event.target.value)
-                      }
-                      placeholder="تعليق اختياري"
-                      className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
-                    />
-                  </label>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ))}
-
-        <button
+        {allowAdd ? <button
           id={
             itemsMode && items.length === 0 ? props.focusTargetId : undefined
           }
           type="button"
+          disabled={disabled}
           onClick={openAdd}
           aria-label={`إضافة صورة إلى ${label}`}
           aria-haspopup="dialog"
           aria-expanded={pickerOpen && replaceIndex === null}
           aria-describedby={
             itemsMode && items.length === 0 && hasUrlError
-              ? `${props.name}-error`
+              ? `${errorName}-error`
               : undefined
           }
           className={`group flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 bg-[#05070B] text-sm text-white/45 transition hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/[0.035] hover:text-white/75 ${galleryCardHeightClass}`}
@@ -541,14 +638,16 @@ export default function AdminMediaGalleryField(
           >
             +
           </span>
-          <span className="font-semibold">إضافة صورة</span>
-        </button>
+          <span className="font-semibold">{addLabel}</span>
+        </button> : null}
       </div>
+
+      {!items.length && emptyLabel ? <p className="text-sm text-white/55">{emptyLabel}</p> : null}
 
       {itemsMode ? (
         <div className="space-y-2">
-          <AdminFormError name={props.name} />
-          <AdminFormError name={props.altName} />
+          <AdminFormError name={errorName} />
+          <AdminFormError name={altErrorName} />
         </div>
       ) : null}
 

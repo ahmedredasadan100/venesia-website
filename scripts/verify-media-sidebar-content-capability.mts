@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
+import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFile(resolve(root, path), "utf8");
@@ -172,7 +173,7 @@ check(
 );
 
 
-const [sharedPresentation, usageBanner, sharedTabs, displayControls, gridOwner, ...unadoptedDisplayConsumers] = await Promise.all([
+const [sharedPresentation, usageBanner, sharedTabs, displayControls, gridOwner, ...displayTabConsumers] = await Promise.all([
   read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx"),
   read("src/components/admin/page-blocks/ModuleCrossPageUsageBanner.tsx"),
   read("src/components/admin/ui/AdminModuleTabs.tsx"),
@@ -182,6 +183,55 @@ const [sharedPresentation, usageBanner, sharedTabs, displayControls, gridOwner, 
   read("src/components/admin/content/editors/ArticleEditor.tsx"),
   read("src/components/admin/content/editors/media/MediaContentForm.tsx"),
 ]);
+function displaySyntax(input: string) {
+  const tree = ts.createSourceFile("DisplayConsumer.tsx", input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const find = <T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T[] => {
+    const nodes: T[] = [];
+    const visit = (node: ts.Node) => { if (predicate(node)) nodes.push(node); ts.forEachChild(node, visit); };
+    visit(root);
+    return nodes;
+  };
+  const attribute = (node: ts.JsxOpeningLikeElement, name: string) => node.attributes.properties.find(
+    (property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText(tree) === name,
+  );
+  const value = (node: ts.JsxOpeningLikeElement, name: string) => {
+    const initializer = attribute(node, name)?.initializer;
+    return initializer && ts.isStringLiteral(initializer) ? initializer.text : initializer && ts.isJsxExpression(initializer) ? initializer.expression?.getText(tree) : undefined;
+  };
+  return { tree, find, attribute, value };
+}
+function hasOptionalCanonicalDisplaySection(input: string) {
+  const { tree, find, value } = displaySyntax(input);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ContentDisplaySettings");
+  const parameter = owner?.parameters[0];
+  const heading = parameter && ts.isObjectBindingPattern(parameter.name) ? parameter.name.elements.find((node) => ts.isIdentifier(node.name) && node.name.text === "sectionHeading") : undefined;
+  const optional = parameter?.type && ts.isTypeLiteralNode(parameter.type) ? parameter.type.members.some((node) => ts.isPropertySignature(node) && node.name.getText(tree) === "sectionHeading" && node.questionToken) : false;
+  const returned = owner?.body?.statements.find(ts.isReturnStatement)?.expression;
+  if (!heading || heading.initializer || !optional || !returned || !ts.isConditionalExpression(returned) || returned.condition.getText(tree) !== "sectionHeading" || returned.whenFalse.getText(tree) !== "displayControls") return false;
+  const branch = ts.isParenthesizedExpression(returned.whenTrue) ? returned.whenTrue.expression : returned.whenTrue;
+  if (!ts.isJsxElement(branch) || branch.openingElement.tagName.getText(tree) !== "AdminCard" || value(branch.openingElement, "presentation") !== "premium" || value(branch.openingElement, "className") !== "min-w-0 p-3") return false;
+  const children = branch.children.filter((node) => ts.isJsxSelfClosingElement(node) || ts.isJsxExpression(node) && node.expression);
+  if (children.length !== 2 || !ts.isJsxSelfClosingElement(children[0]!) || !ts.isJsxExpression(children[1]!) || children[1].expression?.getText(tree) !== "displayControls") return false;
+  const header = children[0];
+  return header.tagName.getText(tree) === "AdminModuleSectionHeader" && value(header, "id") === "content-display-settings-heading" && value(header, "sectionHeading") === "sectionHeading" &&
+    value(header, "icon") === "settings" && value(header, "sectionHeaderPresentation") === "premium" && value(header, "sectionHeaderClassName") === "ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME" &&
+    find(tree, ts.isImportDeclaration).some((node) => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../ui/AdminModuleTabs" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some((binding) => !binding.propertyName && binding.name.text === "AdminModuleSectionHeader"));
+}
+function hasIndependentDisplayTab(input: string) {
+  const { tree, find, attribute, value } = displaySyntax(input);
+  const calls = find(tree, ts.isJsxSelfClosingElement).filter((node) => node.tagName.getText(tree) === "ContentDisplaySettings");
+  const basics = find(tree, (node): node is ts.JsxOpeningLikeElement => ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)).filter((node) => node.tagName.getText(tree) === "ContentBasicDataPanel");
+  const call = calls[0];
+  const tabs = find(tree, ts.isObjectLiteralExpression).filter((node) => node.properties.some((property) => ts.isPropertyAssignment(property) && property.name.getText(tree) === "id" && ts.isStringLiteral(property.initializer) && property.initializer.text === "display"));
+  return Boolean(calls.length === 1 && call && tabs.length === 1 && find(tabs[0]!, ts.isJsxSelfClosingElement).includes(call) &&
+    value(call, "sectionHeading") === "إعدادات العرض" && value(call, "columns") === "4" && value(call, "presentation") === "premium-inline" &&
+    basics.length === 1 && basics.every((node) => !attribute(node, "displaySettings")));
+}
+function hasSidebarControlsOnly(input: string) {
+  const { tree, find, attribute, value } = displaySyntax(input);
+  const calls = find(tree, ts.isJsxSelfClosingElement).filter((node) => node.tagName.getText(tree) === "ContentDisplaySettings");
+  return calls.length === 1 && !attribute(calls[0]!, "sectionHeading") && value(calls[0]!, "columns") === "3" && value(calls[0]!, "presentation") === "premium" && value(calls[0]!, "includeIntroCard") === "false";
+}
 const pagesComposition = sharedPresentation.slice(
   sharedPresentation.indexOf("export function ModuleEditorPagesTab("),
   sharedPresentation.indexOf("export function ModuleEditorFeedbackSlot("),
@@ -227,8 +277,9 @@ check(
     !/<(?:button|form|input)\b/u.test(usageBanner),
 );
 check(
-  "family page assignments keep authoritative rows and position management through the premium shared composition",
-  /<ModuleEditorPagesTab[\s\S]*?presentation="premium"[\s\S]*?showUsageBanner=\{false\}/u.test(editor) &&
+  "family page assignments keep authoritative rows and position management through the unified shared composition",
+  /<ModuleEditorPagesTab\b(?=[^>]*showUsageBanner=\{false\})(?![^>]*\bpresentation=)[^>]*\/>/u.test(editor) &&
+    !pagesComposition.includes("presentation?:") &&
     pagesComposition.includes("<ModulePageAssignmentsField") &&
     pagesComposition.includes("pages={assignmentContext.pages}") &&
     pagesComposition.includes("assignedPageIds={assignmentContext.assignments.map(") &&
@@ -240,7 +291,7 @@ check(
   /<ContentDisplaySettings\s+columns=\{3\}/u.test(editor) &&
     displayControls.includes('columns?: ComponentProps<typeof AdminFormGrid>["columns"]') &&
     displayControls.includes('from "../../ui/AdminFormRuntime"') &&
-    displayControls.includes('<AdminFormGrid columns={columns}>{controls}</AdminFormGrid>') &&
+    displayControls.includes('<AdminFormGrid columns={columns} density={presentation === "premium-inline" ? "compact" : undefined}>{controls}</AdminFormGrid>') &&
     displayControls.includes('{columns === undefined ? controls : (') &&
     displayControls.includes('className={columns === undefined') &&
     displayControls.includes('"grid scroll-mt-24 gap-3 sm:grid-cols-2 lg:grid-cols-4"') &&
@@ -254,11 +305,19 @@ check(
     displayControls.includes("{children}"),
 );
 check(
-  "Article create, Article edit and Media editors keep their existing display defaults without layout opt-in",
-  unadoptedDisplayConsumers.every((consumer) => {
-    const calls = [...consumer.matchAll(/<ContentDisplaySettings\b[^>]*>/gu)];
-    return calls.length === 1 && !calls[0][0].includes("columns=");
-  }),
+  "the optional canonical Display section leaves Sidebar controls-only while Article create, edit and Media use one independent four-column tab",
+  hasOptionalCanonicalDisplaySection(displayControls) && hasSidebarControlsOnly(editor) &&
+    displayTabConsumers.length === 3 && displayTabConsumers.every(hasIndependentDisplayTab),
+);
+check(
+  "negative Display adoption fixtures reject forced defaults, parallel headers, Sidebar opt-in and duplicate or misplaced consumer controls",
+  !hasOptionalCanonicalDisplaySection(displayControls.replace("  sectionHeading,", '  sectionHeading = "forced",')) &&
+    !hasOptionalCanonicalDisplaySection(displayControls.replace("<AdminModuleSectionHeader", "<ParallelSectionHeader")) &&
+    !hasOptionalCanonicalDisplaySection(displayControls.replace(") : displayControls;", ") : <AdminCard>{displayControls}</AdminCard>;")) &&
+    !hasSidebarControlsOnly(editor.replace("<ContentDisplaySettings", '<ContentDisplaySettings sectionHeading="unexpected"')) &&
+    displayTabConsumers.every((consumer) => !hasIndependentDisplayTab(consumer.replace('id: "display"', 'id: "basic"')) &&
+      !hasIndependentDisplayTab(consumer.replace("<ContentBasicDataPanel", "<ContentBasicDataPanel displaySettings={parallelDisplay}")) &&
+      !hasIndependentDisplayTab(consumer.replace("<ContentDisplaySettings", '<ContentDisplaySettings sectionHeading="duplicate"'))),
 );
 check(
   "inactive tabs remain mounted under the existing tabs and native save owners",

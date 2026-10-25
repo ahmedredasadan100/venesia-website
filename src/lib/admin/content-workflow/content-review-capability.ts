@@ -21,7 +21,7 @@ export type ContentReviewStatus = EntityReviewStatus;
 export type ContentReviewSeverity = EntityReviewSeverity;
 
 export type ContentReviewCorrectionTarget = EntityReviewCorrectionTarget & {
-  tabId: "basic" | "faq" | "seo" | "publish";
+  tabId: "basic" | "video" | "gallery" | "faq" | "seo" | "publish";
 };
 
 export type ContentReviewCheck = Omit<EntityReviewCheck, "correctionTarget"> & {
@@ -118,9 +118,9 @@ const COMMON_CORRECTION_TARGETS = {
   image: { tabId: "basic", targetId: "content-image-field" },
   "image-alt": { tabId: "basic", targetId: "topic-image-alt" },
   faq: { tabId: "faq", targetId: "topic-faq-editor" },
-  "video-url": { tabId: "basic", targetId: "video_url" },
-  "gallery-images": { tabId: "basic", targetId: "gallery_image_url" },
-  "gallery-alt": { tabId: "basic", targetId: "gallery_image_alt" },
+  "video-url": { tabId: "video", targetId: "video_url" },
+  "gallery-images": { tabId: "gallery", targetId: "gallery_image_url" },
+  "gallery-alt": { tabId: "gallery", targetId: "gallery_image_alt" },
 } as const satisfies Record<string, ContentReviewCorrectionTarget>;
 
 function seoTarget(_contentType: ContentType, field: "title" | "description" | "focus" | "canonical" | "og-alt") {
@@ -319,10 +319,10 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       : assertPayloadMatchesContentType(input.contentType, input.mediaPayload ?? null);
     checks.push(check(input, {
       id: "video-url",
-      label: "رابط YouTube",
+      label: "رابط الفيديو",
       status: videoUrl && !videoError ? "pass" : "fail",
       blocksPublish: true,
-      hint: videoError ?? (videoUrl ? "رابط الفيديو متوفر وصالح." : "أضف رابط YouTube صالحًا."),
+      hint: videoError ?? (videoUrl ? "رابط الفيديو متوفر وصالح." : "أضف رابط فيديو صالحًا للمزود المختار."),
       field: "video_url",
     }));
   } else if (input.contentType === "gallery") {

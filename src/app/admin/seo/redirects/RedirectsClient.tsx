@@ -395,6 +395,7 @@ export default function RedirectsClient({
     <>
       <AdminEntityListPageLayout className="pb-10" dir="rtl">
         <AdminPageContextHeader
+          visualPreset="seo"
           eyebrow="SEO REDIRECTS"
           title="إدارة التحويلات"
           description="أنشئ تحويلات URL عامة لتغييرات المسارات بعد الإطلاق. التحويلات النشطة تُطبَّق فورًا على الطلبات العامة."

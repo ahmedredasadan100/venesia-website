@@ -8,9 +8,13 @@ import {
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridActionsHeaderCell,
+  AdminDataGridCenterCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
+  AdminDataGridStatusCell,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
 import { adminFormHintClassName } from "../../../../lib/admin/admin-ui-styles";
@@ -60,29 +64,29 @@ export default function FooterMenuPreviewDataGrid({ footerMenuId, links }: Foote
       <p className={adminFormHintClassName()}>معاينة العناصر الحالية (قراءة فقط)</p>
 
       <AdminDataGrid>
-        <AdminDataGridHeader columns={columns}>
-          <span className="text-center">#</span>
-          <span>اسم العنصر</span>
-          <span>الرابط</span>
-          <span className="text-center">الترتيب</span>
-          <span className="text-center">الحالة</span>
-          <span className="text-center">الإجراءات</span>
+        <AdminDataGridHeader columns={columns} horizontalScroll>
+          <AdminDataGridCenterCell>#</AdminDataGridCenterCell>
+          <AdminDataGridPrimaryCell>اسم العنصر</AdminDataGridPrimaryCell>
+          <AdminDataGridCenterCell>الرابط</AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>الترتيب</AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+          <AdminDataGridActionsHeaderCell>الإجراءات</AdminDataGridActionsHeaderCell>
         </AdminDataGridHeader>
 
         {sortedLinks.length ? (
           sortedLinks.map((item, index) => (
-            <AdminDataGridRow key={`quick-${item.id ?? index}`} columns={columns}>
-              <span className="text-center text-sm font-en text-white/45">{index + 1}</span>
-              <span className="truncate text-sm text-white/85">{item.label || "—"}</span>
-              <span className="truncate font-en text-xs text-white/45" dir="ltr">
-                {item.href || "—"}
-              </span>
-              <span className="text-center text-xs font-en text-white/45">{item.sortOrder}</span>
-              <span className="flex justify-center">
+            <AdminDataGridRow key={`quick-${item.id ?? index}`} columns={columns} horizontalScroll>
+              <AdminDataGridCenterCell className="text-sm font-en text-white/45">{index + 1}</AdminDataGridCenterCell>
+              <AdminDataGridPrimaryCell className="truncate text-sm text-white/85">{item.label || "—"}</AdminDataGridPrimaryCell>
+              <AdminDataGridCenterCell>
+                <span className="block truncate font-en text-xs text-white/45" dir="ltr">{item.href || "—"}</span>
+              </AdminDataGridCenterCell>
+              <AdminDataGridCenterCell className="text-xs font-en text-white/45">{item.sortOrder}</AdminDataGridCenterCell>
+              <AdminDataGridStatusCell>
                 <AdminStatusPill tone={item.visible ? "green" : "muted"}>
                   {item.visible ? "ظاهر" : "مخفي"}
                 </AdminStatusPill>
-              </span>
+              </AdminDataGridStatusCell>
               <AdminDataGridActionsCell>
                 <AdminDataGridActionButton
                   action="edit"

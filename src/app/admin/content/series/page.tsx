@@ -76,6 +76,7 @@ export default async function Page({
     return (
       <AdminPageExperience state="error">
         <AdminPageHeader
+          visualPreset="series"
           eyebrow="SERIES CONTROL"
           title="إدارة السلاسل"
           description="قبل استخدام الصفحة، نفّذ ملف SQL الخاص بإنشاء جدول topic_series."
@@ -95,6 +96,7 @@ export default async function Page({
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
+        visualPreset="series"
         eyebrow="SERIES CONTROL"
         title="إدارة السلاسل"
         description="من هنا تُدار سلاسل المحتوى، مع تنظيم الربط بالمقالات والتصنيفات وتحسين بنية النشر من مكان واحد."

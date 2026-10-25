@@ -67,7 +67,7 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
     ],
     surfaces: ["shared-data-contract", "shared-presentation", "shared-preview", "shared-analysis", "shared-public-metadata"],
     rationale:
-      "Owns Entity SEO terminology, field presentation, previews, accordion disclosure, issue cards, metrics, and correction-button presentation.",
+      "Owns Entity SEO terminology, field presentation, previews, accordion disclosure, issue cards, metrics, and correction-button presentation. Standard21 panel composition retains the original Basic fields and social Alt Grid geometry with neutral AdminFormSection groups instead of five redundant field-only Premium cards. Independent media, Robots, Canonical, preview and issue groups retain their meaningful surfaces. Article, all five Media types, Projects and Page SEO inherit this correction through their existing adapters; omitted default/premium branches, native fields, inheritance, analysis and save owners are preserved. Targeted source/SSR evidence is under .tmp-qa/admin-development-batch-01/admin-wide-21-20261025/shared/; unobserved live consumers and Owner approval remain Pending.",
   },
   {
     id: "topic-article-seo",
@@ -121,7 +121,7 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
       "commercial:edit",
     ],
     rationale:
-      "A thin adapter maps Project fields, explicit Open Graph overrides, and correction targets into the shared owner.",
+      "A thin adapter maps Project fields, explicit Open Graph overrides, and correction targets into the shared owner. Owner Review identified incomplete presentation adoption: Project now selects the existing canonical Panel fields, sections, labels, spacing and previews, preserving the same native field names, initial values, correction targets, inheritance and save owners. Source and targeted contract proof do not grant live Desktop/Mobile/RTL or Owner approval.",
   },
   {
     id: "page-seo",

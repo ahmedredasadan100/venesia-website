@@ -4,18 +4,23 @@ import { AdminFormPendingFields } from "../../../../components/admin/ui/AdminFor
 
 import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
-import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
+import AdminModuleTabs, { AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import {
+  AdminActionButton,
   AdminCard,
+  AdminFormControlHeader,
+  AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormSwitch,
+  adminFormFieldClassName,
+  adminFormLabelClassName,
 } from "../../../../components/admin/ui";
 
 import { createMenuItem, updateMenu } from "./actions";
 import MenuItemForm from "./MenuItemForm";
 import MenuItemsTableClient from "./MenuItemsTableClient";
 import type { Menu, MenuItem } from "./menu-builder-shared";
-import { MENU_BUILDER_NOTICE_CODES, menuFieldClassName, menuLabelClassName } from "./menu-builder-shared";
+import { MENU_BUILDER_NOTICE_CODES } from "./menu-builder-shared";
 
 type MenuBuilderClientProps = {
   menu: Menu;
@@ -45,7 +50,7 @@ export default function MenuBuilderClient({
         "أدر الروابط والعناصر الفرعية وترتيب ظهورها داخل هذه القائمة.",
       icon: "content" as const,
       content: (
-        <AdminCard className="p-5 md:p-6">
+        <AdminCard className="p-3 md:p-6">
           <MenuItemsTableClient
             menu={menu}
             items={items}
@@ -61,51 +66,66 @@ export default function MenuBuilderClient({
       sectionHeading: "بيانات القائمة",
       sectionDescription:
         "حدّث الاسم والمسار والموقع وحالة التفعيل لهذه القائمة.",
+      sectionHeaderPresentation: "control" as const,
       icon: "settings" as const,
       content: (
-        <AdminCard className="p-5 md:p-6">
-          <form action={updateMenu} className="grid max-w-2xl gap-4">
-            <AdminFormPendingFields>
-              <input type="hidden" name="id" value={menu.id} />
-              <label className={menuLabelClassName()}>
-                الاسم
-                <input
-                  name="name"
-                  defaultValue={menu.name}
-                  className={menuFieldClassName("w-full")}
-                />
-              </label>
-              <label className={menuLabelClassName()}>
-                Slug
-                <input
-                  name="slug"
-                  defaultValue={menu.slug}
-                  className={menuFieldClassName("w-full text-left dir-ltr")}
-                />
-              </label>
-              <AdminFormListboxSelect
-                name="location"
-                label="Location"
-                defaultValue={menu.location}
-                options={[
-                  { value: "main", label: "Header / Main" },
-                  { value: "mobile", label: "Mobile" },
-                  { value: "footer", label: "Footer" },
-                  { value: "custom", label: "Custom" },
-                ]}
-              />
-              <AdminFormSwitch
-                name="is_active"
-                label="نشطة"
-                defaultChecked={menu.is_active}
-                surface
-              />
-              <button className="min-h-11 w-fit rounded-2xl bg-[#D8B87A] px-5 text-sm font-semibold text-[#05070B] transition hover:bg-[#E6C985]">
-                حفظ بيانات القائمة
-              </button>
-            </AdminFormPendingFields>
-          </form>
-        </AdminCard>
+        <form action={updateMenu}>
+          <AdminFormPendingFields>
+            <input type="hidden" name="id" value={menu.id} />
+            <AdminFormGrid columns={1}>
+              <AdminFormGrid columns={2}>
+                <AdminCard presentation="premium" className="p-3">
+                  <label className={adminFormLabelClassName()}>
+                    <AdminFormControlHeader title="الاسم" icon={<AdminModuleTabIcon name="content" />} presentation="leading-icon" />
+                    <input
+                      name="name"
+                      defaultValue={menu.name}
+                      className={adminFormFieldClassName()}
+                    />
+                  </label>
+                </AdminCard>
+                <AdminCard presentation="premium" className="p-3">
+                  <label className={adminFormLabelClassName()}>
+                    <AdminFormControlHeader title="Slug" icon={<AdminModuleTabIcon name="settings" />} presentation="leading-icon" />
+                    <input
+                      name="slug"
+                      defaultValue={menu.slug}
+                      dir="ltr"
+                      className={adminFormFieldClassName("text-left font-en")}
+                    />
+                  </label>
+                </AdminCard>
+                <AdminCard presentation="premium" className="p-3">
+                  <AdminFormListboxSelect
+                    name="location"
+                    label={<AdminFormControlHeader title="Location" icon={<AdminModuleTabIcon name="location" />} presentation="leading-icon" />}
+                    defaultValue={menu.location}
+                    options={[
+                      { value: "main", label: "Header / Main" },
+                      { value: "mobile", label: "Mobile" },
+                      { value: "footer", label: "Footer" },
+                      { value: "custom", label: "Custom" },
+                    ]}
+                    sizing="full"
+                  />
+                </AdminCard>
+                <AdminCard presentation="premium" className="p-3">
+                  <AdminFormSwitch
+                    name="is_active"
+                    label={<AdminFormControlHeader title="نشطة" icon={<AdminModuleTabIcon name="publish" />} presentation="leading-icon" />}
+                    defaultChecked={menu.is_active}
+                    embedded
+                  />
+                </AdminCard>
+              </AdminFormGrid>
+              <div className="flex flex-wrap gap-3">
+                <AdminActionButton type="submit" variant="primary">
+                  حفظ بيانات القائمة
+                </AdminActionButton>
+              </div>
+            </AdminFormGrid>
+          </AdminFormPendingFields>
+        </form>
       ),
     },
     {
@@ -114,18 +134,15 @@ export default function MenuBuilderClient({
       sectionHeading: "إضافة عنصر جديد",
       sectionDescription:
         "أضف عنصرًا داخل هذه القائمة واربطه بالوجهة المناسبة.",
+      sectionHeaderPresentation: "control" as const,
       icon: "section" as const,
       content: (
-        <AdminCard className="p-5 md:p-6">
-          <div>
-            <MenuItemForm
-              menu={menu}
-              parentItems={items}
-              action={createMenuItem}
-              submitLabel="إضافة"
-            />
-          </div>
-        </AdminCard>
+        <MenuItemForm
+          menu={menu}
+          parentItems={items}
+          action={createMenuItem}
+          submitLabel="إضافة"
+        />
       ),
     },
   ];

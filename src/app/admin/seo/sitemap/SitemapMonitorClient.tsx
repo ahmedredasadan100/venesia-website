@@ -91,6 +91,7 @@ export default function SitemapMonitorClient({
   return (
     <main className="space-y-7" dir="rtl">
       <AdminPageContextHeader
+        visualPreset="seo"
         eyebrow="GLOBAL SEO HEALTH"
         title="لوحة صحة SEO العامة"
         description="تشخيص فعلي للهوية والبيانات الوصفية والزحف والتبنّي والبنية التحتية. التحذيرات الخاصة بالـCanonical تشخيصية فقط ولا تغيّر أي قيمة حية."

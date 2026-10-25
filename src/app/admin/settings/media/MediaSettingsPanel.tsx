@@ -9,12 +9,22 @@ import {
 } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminConfirmDialog from "../../../../components/admin/ui/AdminConfirmDialog";
 import AdminFormRuntime, {
+  AdminFormActions,
   AdminFormError,
+  AdminFormGrid,
 } from "../../../../components/admin/ui/AdminFormRuntime";
 import {
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminActionButton,
+  AdminCard,
   AdminCheckbox,
+  AdminFormField,
+  AdminFormSection,
   AdminFormSwitch,
+  adminFormFieldClassName,
 } from "../../../../components/admin/ui";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import {
   CMS_IMAGE_EXTENSIONS,
   CMS_PDF_EXTENSIONS,
@@ -43,9 +53,6 @@ type ReconciliationResult = {
   uncertainties: string[];
   error?: string;
 };
-
-const inputClass =
-  "h-11 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white outline-none focus:border-[var(--admin-accent)]/45";
 
 export default function MediaSettingsPanel({
   settings,
@@ -188,15 +195,9 @@ export default function MediaSettingsPanel({
       <section
         ref={reconciliationRootRef}
         tabIndex={-1}
-        className="admin-premium-card mx-auto mb-6 w-full max-w-6xl space-y-5 rounded-[28px] p-5 sm:p-6 lg:p-8"
       >
-        <div>
-          <h2 className="text-lg font-semibold text-white">حالة فحص المكتبة</h2>
-          <p className="mt-1 text-sm leading-7 text-white/50">
-            يطابق الفحص الملفات المُدارة في مكان الحفظ مع سجل المكتبة ومواضع
-            استخدامها.
-          </p>
-        </div>
+        <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="media-reconciliation" sectionHeading="حالة فحص المكتبة" sectionDescription="يطابق الفحص الملفات المُدارة في مكان الحفظ مع سجل المكتبة ومواضع استخدامها." icon="media" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+        <AdminFormGrid columns={1}>
 
         <AdminFeedbackChannelViewport
           channel="media-settings-reconciliation"
@@ -264,16 +265,16 @@ export default function MediaSettingsPanel({
         ) : null}
 
         <div className="flex flex-wrap gap-3 border-t border-white/10 pt-5">
-          <button
+          <AdminActionButton
             type="button"
             disabled={!canRunScan || scanBusy !== null}
             onClick={() => void runScan(true)}
-            className="rounded-2xl border border-white/15 px-5 py-3 text-sm font-semibold text-white/75 disabled:opacity-40"
+            variant="dark"
           >
             {scanBusy === "preview" ? "جارٍ إعداد المعاينة…" : "معاينة الفحص"}
-          </button>
-          <button
-            ref={applyScanTriggerRef}
+          </AdminActionButton>
+          <AdminActionButton
+            buttonRef={applyScanTriggerRef}
             type="button"
             title={
               !canApplyScan
@@ -282,11 +283,13 @@ export default function MediaSettingsPanel({
             }
             disabled={!canApplyScan || scanBusy !== null}
             onClick={() => setConfirmScan(true)}
-            className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] disabled:opacity-40"
+            variant="primary"
           >
             تنفيذ الفحص والمزامنة
-          </button>
+          </AdminActionButton>
         </div>
+        </AdminFormGrid>
+        </AdminFormSection>
       </section>
 
       <AdminFormRuntime
@@ -294,30 +297,19 @@ export default function MediaSettingsPanel({
         initialState={MEDIA_SETTINGS_ACTION_INITIAL}
         mode="edit"
         entityKey="media-settings"
-        className="admin-premium-card mx-auto w-full max-w-6xl space-y-6 rounded-[28px] p-5 sm:p-6 lg:p-8"
       >
-        {({ fieldErrors, pending }) => (
-          <>
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                سياسة رفع الملفات
-              </h2>
-              <p className="mt-1 text-sm leading-7 text-white/50">
-                تحدد هذه القيم أنواع الملفات وأحجامها المسموح بها عند الرفع من
-                لوحة الإدارة.
-              </p>
-            </div>
+        {({ fieldErrors }) => (
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+            <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="media-upload-policy" sectionHeading="سياسة رفع الملفات" sectionDescription="تحدد هذه القيم أنواع الملفات وأحجامها المسموح بها عند الرفع من لوحة الإدارة." icon="settings" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+            <AdminFormGrid columns={1}>
 
             <AdminFeedbackChannelViewport
               channel="form:media-settings"
               label="نتيجة حفظ إعدادات الميديا"
             />
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">
-                  أقصى حجم للصورة — MB
-                </span>
+            <AdminFormGrid>
+              <AdminFormField label="أقصى حجم للصورة — MB" required presentation="panel">
                 <input
                   name="maxImageMb"
                   type="number"
@@ -331,17 +323,14 @@ export default function MediaSettingsPanel({
                       ? "maxImageMb-error"
                       : undefined
                   }
-                  className={`${inputClass} ${fieldErrors.maxImageMb?.length ? "border-red-300/45" : ""}`}
+                  className={adminFormFieldClassName(fieldErrors.maxImageMb?.length ? "border-red-300/45" : "")}
                 />
                 <AdminFormError
                   name="maxImageMb"
                   className="text-xs font-normal leading-5 text-red-200"
                 />
-              </label>
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">
-                  أقصى حجم للمستند — MB
-                </span>
+              </AdminFormField>
+              <AdminFormField label="أقصى حجم للمستند — MB" required presentation="panel">
                 <input
                   name="maxDocumentMb"
                   type="number"
@@ -355,24 +344,25 @@ export default function MediaSettingsPanel({
                       ? "maxDocumentMb-error"
                       : undefined
                   }
-                  className={`${inputClass} ${fieldErrors.maxDocumentMb?.length ? "border-red-300/45" : ""}`}
+                  className={adminFormFieldClassName(fieldErrors.maxDocumentMb?.length ? "border-red-300/45" : "")}
                 />
                 <AdminFormError
                   name="maxDocumentMb"
                   className="text-xs font-normal leading-5 text-red-200"
                 />
-              </label>
-            </div>
+              </AdminFormField>
+            </AdminFormGrid>
 
+            <AdminCard presentation="premium" className={fieldErrors.allowedKinds?.length ? "p-3 border-red-300/35" : "p-3"}>
             <fieldset
-              className={`space-y-5 rounded-2xl border p-4 sm:p-5 ${fieldErrors.allowedKinds?.length ? "border-red-300/35" : "border-white/10"}`}
+              className={ADMIN_FORM_STACK_CLASS_NAME}
               aria-describedby={
                 fieldErrors.allowedKinds?.length
                   ? "allowedKinds-error"
                   : undefined
               }
             >
-              <legend className="px-2 text-xs font-semibold text-white/60">
+              <legend className={adminFormLabelClassName({ textInset: true })}>
                 الأنواع والامتدادات المسموح بها
               </legend>
               <div className="flex flex-wrap gap-4">
@@ -398,6 +388,7 @@ export default function MediaSettingsPanel({
                 name="allowedKinds"
                 className="text-xs font-normal leading-5 text-red-200"
               />
+              <AdminCard presentation="premium" className={fieldErrors.allowedImageExtensions?.length ? "p-3 border-red-300/30" : "p-3"}>
               <div
                 role="group"
                 aria-labelledby="allowed-image-extensions-label"
@@ -406,11 +397,11 @@ export default function MediaSettingsPanel({
                     ? "allowedImageExtensions-error"
                     : undefined
                 }
-                className={`rounded-2xl border p-4 ${fieldErrors.allowedImageExtensions?.length ? "border-red-300/30" : "border-white/8"}`}
+                className={ADMIN_FORM_STACK_CLASS_NAME}
               >
                 <p
                   id="allowed-image-extensions-label"
-                  className="mb-3 text-xs font-semibold text-white/45"
+                  className={adminFormLabelClassName({ textInset: true })}
                 >
                   امتدادات الصور
                 </p>
@@ -441,6 +432,8 @@ export default function MediaSettingsPanel({
                   className="mt-3 text-xs font-normal leading-5 text-red-200"
                 />
               </div>
+              </AdminCard>
+              <AdminCard presentation="premium" className={fieldErrors.allowedDocumentExtensions?.length ? "p-3 border-red-300/30" : "p-3"}>
               <div
                 role="group"
                 aria-labelledby="allowed-document-extensions-label"
@@ -449,11 +442,11 @@ export default function MediaSettingsPanel({
                     ? "allowedDocumentExtensions-error"
                     : undefined
                 }
-                className={`rounded-2xl border p-4 ${fieldErrors.allowedDocumentExtensions?.length ? "border-red-300/30" : "border-white/8"}`}
+                className={ADMIN_FORM_STACK_CLASS_NAME}
               >
                 <p
                   id="allowed-document-extensions-label"
-                  className="mb-3 text-xs font-semibold text-white/45"
+                  className={adminFormLabelClassName({ textInset: true })}
                 >
                   امتدادات المستندات
                 </p>
@@ -484,6 +477,7 @@ export default function MediaSettingsPanel({
                   className="mt-3 text-xs font-normal leading-5 text-red-200"
                 />
               </div>
+              </AdminCard>
               <AdminFormSwitch
                 name="mimeVerification"
                 label="التحقق من أن محتوى الملف يطابق امتداده قبل قبوله"
@@ -491,22 +485,17 @@ export default function MediaSettingsPanel({
                 surface
               />
             </fieldset>
+            </AdminCard>
 
             <p className="rounded-2xl border border-white/8 bg-black/20 p-4 text-xs leading-6 text-white/42">
               تُطبق التغييرات على عمليات الرفع الجديدة، ولا تعدّل الملفات
               الموجودة حاليًا.
             </p>
 
-            <div className="flex justify-end border-t border-white/10 pt-5">
-              <button
-                type="submit"
-                disabled={pending}
-                className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] disabled:opacity-50"
-              >
-                {pending ? "جارٍ الحفظ…" : "حفظ إعدادات الرفع"}
-              </button>
-            </div>
-          </>
+            </AdminFormGrid>
+            </AdminFormSection>
+            <AdminFormActions submitLabel="حفظ إعدادات الرفع" pendingLabel="جارٍ الحفظ…" title="حفظ إعدادات الرفع" description={null} icon={<AdminModuleTabIcon name="content" />} showClose={false} />
+          </div>
         )}
       </AdminFormRuntime>
 

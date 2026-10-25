@@ -24,7 +24,7 @@ export default function AdminAuthenticatedLayout({
   return (
     <AdminEntityListQueryProvider>
       <AdminFeedbackProvider>
-        <AdminShell company={company} navigation={navigation}>
+        <AdminShell company={company} navigation={navigation} headerPresentation="cinematic">
           {children}
         </AdminShell>
       </AdminFeedbackProvider>

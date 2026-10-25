@@ -14,6 +14,8 @@ import { getMediaHref } from "../../lib/media-center/types";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import { getPublishedPageStateBySlug } from "../../lib/pages/get-published-page-by-slug";
+import { resolveMetaVideoEmbedRequest } from "../../lib/admin/media-topic-payload";
+import { readMetaVideoEmbed } from "../../lib/content/public-content-read/owner";
 import MediaDetailArticle from "./MediaDetailArticle";
 import MediaPageShell from "./MediaPageShell";
 
@@ -42,9 +44,14 @@ export default async function MediaDetailPage({
     notFound();
   }
 
-  const [relatedItems, globalSeo] = await Promise.all([
+  const metaVideo = item.type === "video" && item.videoProvider && item.videoUrl
+    ? { provider: item.videoProvider, video_url: item.videoUrl }
+    : null;
+  const metaRequest = metaVideo ? resolveMetaVideoEmbedRequest(metaVideo) : null;
+  const [relatedItems, globalSeo, metaEmbed] = await Promise.all([
     getRelatedMediaItems(config.mediaType, item.topicId ?? Number(item.id), 3),
     globalSeoPromise,
+    metaVideo && metaRequest ? readMetaVideoEmbed(metaVideo) : undefined,
   ]);
 
   const homeIdentity = getPublicPageRoute("home");
@@ -99,6 +106,7 @@ export default async function MediaDetailPage({
           content={content}
           config={config}
           relatedItems={relatedItems}
+          metaEmbed={metaEmbed}
         />
       </MediaPageShell>
     </InternalPageLayout>

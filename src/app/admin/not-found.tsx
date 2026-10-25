@@ -1,4 +1,4 @@
-import Link from "next/link";
+import AdminActionButton from "../../components/admin/ui/AdminActionButton";
 
 import AdminPageContextHeader from "../../components/admin/ui/AdminPageContextHeader";
 import AdminPageExperience from "../../components/admin/ui/AdminPageExperience";
@@ -13,12 +13,12 @@ export default function AdminNotFound() {
         status="empty"
         variant="minimal"
         actions={
-          <Link
+          <AdminActionButton
             href="/admin"
-            className="rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+            variant="dark"
           >
             العودة للرئيسية
-          </Link>
+          </AdminActionButton>
         }
       />
     </AdminPageExperience>

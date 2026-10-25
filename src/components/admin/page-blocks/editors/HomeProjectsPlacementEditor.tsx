@@ -3,14 +3,14 @@
 import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
-  ModuleEditorSectionHeading,
+  ModuleEditorSection,
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
-import {
+import { ADMIN_FORM_STACK_CLASS_NAME,
   AdminFormGrid,
   AdminCard,
   AdminFormControlHeader,
@@ -19,10 +19,10 @@ import {
   AdminLinkField,
   AdminTextFormatControls,
 } from "../../ui";
-import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
-import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
+import { adminFormLabelClassName, adminFormHintClassName, ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
 import {
   resolvePageBlockTextFormat,
   type HomeProjectsModuleConfig,
@@ -104,11 +104,11 @@ export default function HomeProjectsPlacementEditor({
   const introFormat = resolvePageBlockTextFormat(config, "intro");
 
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {section === "all" || section === "projects" ? (
         <AdminFormGrid columns={2}>
           <AdminCard presentation="premium" className="h-full p-3">
-            <label className={ADMIN_FORM.labelStack}>
+            <label className={adminFormLabelClassName({ textInset: true })}>
               <AdminFormControlHeader presentation="leading-icon" title="عدد المشاريع المعروضة" icon={<AdminModuleTabIcon name="section" />} />
               <input
                 name="projects_limit"
@@ -127,7 +127,7 @@ export default function HomeProjectsPlacementEditor({
             defaultChecked={config.showProjectLocation !== false}
           />
           <AdminCard presentation="premium" className="h-full p-3">
-            <label className={ADMIN_FORM.labelStack}>
+            <label className={adminFormLabelClassName({ textInset: true })}>
               <AdminFormControlHeader presentation="leading-icon" title="نص زر الكارت" icon={<AdminModuleTabIcon name="publish" />} />
               <input
                 name="card_cta_label"
@@ -147,7 +147,7 @@ export default function HomeProjectsPlacementEditor({
 
       {section === "all" || section === "text" ? (
       <div className="space-y-4">
-        <p className="text-xs leading-6 text-white/45">
+        <p className={adminFormHintClassName({ textInset: true })}>
           اترك أي حقل نصي فارغًا لاستخدام النص الافتراضي الحالي على الموقع.
         </p>
 
@@ -155,7 +155,6 @@ export default function HomeProjectsPlacementEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="النص التمهيدي"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_eyebrow"
               boldName="eyebrow_bold"
@@ -175,7 +174,6 @@ export default function HomeProjectsPlacementEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="العنوان"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_title"
               boldName="title_bold"
@@ -195,7 +193,6 @@ export default function HomeProjectsPlacementEditor({
           <ModuleEditorField nature="long-content" span={12}>
             <ModuleEditorVisibilityAlignRow
               label="النص التعريفي"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_intro"
               boldName="intro_bold"
@@ -222,15 +219,11 @@ export default function HomeProjectsPlacementEditor({
         <ModuleEditorFieldGrid className="items-stretch">
           <ModuleEditorField nature="link" span={4}>
             <div data-premium-cta-panel="data" className="h-full">
-              <AdminCard presentation="premium" className="flex h-full flex-col gap-3 p-4">
-                <header className="min-w-0 space-y-1">
-                  <ModuleEditorSectionHeading intent="cta">بيانات الزر</ModuleEditorSectionHeading>
-                  <p className="text-xs leading-5 text-white/45">أدخل نص الزر ورابطه.</p>
-                </header>
+              <ModuleEditorSection presentation="panel" header={<AdminModuleSectionHeader id="home-projects-cta-data" sectionHeading="بيانات الزر" sectionDescription="أدخل نص الزر ورابطه." icon="publish" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />} className="flex h-full flex-col gap-3">
                 <AdminFormGrid columns={1}>
                   <AdminCard presentation="premium" className="p-3">
-                    <label className={ADMIN_FORM.labelStack}>
-                      <span>نص الزر</span>
+                    <label className={adminFormLabelClassName({ textInset: true })}>
+                      <span data-admin-form-label-text>نص الزر</span>
                       <input
                         name="footer_cta_label"
                         defaultValue={config.footerCta?.label ?? ""}
@@ -252,16 +245,12 @@ export default function HomeProjectsPlacementEditor({
                     />
                   </AdminCard>
                 </AdminFormGrid>
-              </AdminCard>
+              </ModuleEditorSection>
             </div>
           </ModuleEditorField>
           <ModuleEditorField nature="standard" span={8}>
             <div data-premium-cta-panel="appearance" className="h-full">
-              <AdminCard presentation="premium" className="flex h-full flex-col gap-3 p-4">
-                <header className="min-w-0 space-y-1">
-                  <ModuleEditorSectionHeading intent="cta">مظهر وسلوك الزر</ModuleEditorSectionHeading>
-                  <p className="text-xs leading-5 text-white/45">خصص ظهور الزر وطريقة فتح رابطه ومحاذاته في الصفحة.</p>
-                </header>
+              <ModuleEditorSection presentation="panel" header={<AdminModuleSectionHeader id="home-projects-cta-appearance" sectionHeading="مظهر وسلوك الزر" sectionDescription="خصص ظهور الزر وطريقة فتح رابطه ومحاذاته في الصفحة." icon="publish" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />} className="flex h-full flex-col gap-3">
                 <AdminFormGrid columns={2}>
                   <div data-premium-cta-control="visibility" className="min-w-0 h-full">
                     <VisibilityToggle
@@ -294,7 +283,7 @@ export default function HomeProjectsPlacementEditor({
                     />
                   </div>
                 </AdminFormGrid>
-              </AdminCard>
+              </ModuleEditorSection>
             </div>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>

@@ -8,6 +8,7 @@ import type {
   DashboardSourceStatus,
 } from "../../../lib/admin/dashboard/dashboard-contract";
 import AdminMetricCard, {
+  type AdminMetricCardProps,
   type AdminMetricCardTone,
 } from "../ui/AdminMetricCard";
 import AdminActionButton from "../ui/AdminActionButton";
@@ -17,7 +18,7 @@ import {
   AdminModuleTabIcon,
   type AdminModuleTabIconName,
 } from "../ui/AdminModuleTabs";
-import { ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME } from "../../../lib/admin/admin-ui-styles";
+import { ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME, ADMIN_CINEMATIC_GOLD_V1 } from "../../../lib/admin/admin-ui-styles";
 import {
   adminDataGridActionsColumn,
   AdminDataGrid,
@@ -198,44 +199,53 @@ export default function AdminDashboardView({
   const metricDefinitions: Array<{
     label: string;
     tone: AdminMetricCardTone;
+    cinematicTone?: AdminMetricCardProps["cinematicTone"];
+    artwork: NonNullable<AdminMetricCardProps["artwork"]>;
     icon: AdminModuleTabIconName;
     value: number | undefined;
   }> = [
     {
-      label: "إجمالي المحتوى النشط",
+      label: "المحتوى النشط",
       value: truth?.kpis.topics.total,
       tone: "gold",
       icon: "content",
+      artwork: "content",
     },
     {
       label: "المحتوى المنشور",
       value: truth?.kpis.topics.published,
       tone: "blue",
       icon: "publish",
+      artwork: "published",
     },
     {
       label: "إجمالي المشاريع",
       value: truth?.kpis.projects.total,
       tone: "green",
+      cinematicTone: "teal",
       icon: "plans",
+      artwork: "projects",
     },
     {
       label: "الصفحات",
       value: truth?.kpis.pages.total,
       tone: "violet",
       icon: "content",
+      artwork: "pages",
     },
     {
       label: "الميديا المدارة",
       value: truth?.kpis.media.total,
       tone: "cyan",
       icon: "media",
+      artwork: "media",
     },
     {
       label: "التصنيفات المنشورة",
       value: truth?.kpis.categories.published,
-      tone: "amber",
+      tone: "gold",
       icon: "specifications",
+      artwork: "taxonomy",
     },
   ];
   const quickActions: Array<{
@@ -243,24 +253,28 @@ export default function AdminDashboardView({
     label: string;
     hint: string;
     icon: AdminModuleTabIconName;
+    variant: "primary" | "dark";
   }> = [
     {
       href: "/admin/content/topics/new",
       label: "موضوع جديد",
       hint: "إضافة محتوى",
       icon: "content",
+      variant: "primary",
     },
     {
       href: "/admin/content/categories/new",
       label: "تصنيف جديد",
       hint: "تنظيم الشجرة",
       icon: "specifications",
+      variant: "dark",
     },
     {
       href: "/admin/settings/general",
       label: "الإعدادات",
       hint: "بيانات النظام",
       icon: "settings",
+      variant: "dark",
     },
   ];
   const distributions = truth
@@ -303,14 +317,20 @@ export default function AdminDashboardView({
   return (
     <div className="min-w-0 space-y-5 pb-5" dir="rtl" data-admin-dashboard>
       <AdminPageContextHeader
+        visualPreset="dashboard"
+        presentation="cinematic"
+        icon={<AdminModuleTabIcon name="statistics" />}
+        artwork="statistics"
         title="لوحة التحكم"
         description="نظرة شاملة على المحتوى والمشاريع وحالة مصادر النظام."
+        actionsPresentation="cinematic"
         actions={quickActions.map((action) => (
           <AdminActionButton
             key={action.href}
             href={action.href}
             title={action.hint}
-            variant="gold-ghost"
+            variant={action.variant}
+            presentation="cinematic"
           >
             <span className="size-5 shrink-0" aria-hidden="true">
               <AdminModuleTabIcon name={action.icon} />
@@ -321,7 +341,7 @@ export default function AdminDashboardView({
       />
       <DashboardStateBanner model={model} />
       <section
-        className="grid min-w-0 auto-rows-fr grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
+        className={ADMIN_CINEMATIC_GOLD_V1.metric.gridClassName}
         aria-label="مؤشرات Dashboard"
       >
         {metricDefinitions.map(({ icon, value, ...metric }) => (
@@ -332,6 +352,7 @@ export default function AdminDashboardView({
             align="start"
             icon={<AdminModuleTabIcon name={icon} />}
             iconSize="prominent"
+            presentation="cinematic"
           />
         ))}
       </section>

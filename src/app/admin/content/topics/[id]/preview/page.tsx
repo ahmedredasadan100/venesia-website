@@ -1,18 +1,20 @@
 import { AdminMediaPreview } from "../../../../../../components/admin/media/AdminDeletedMediaNotice";
 import { readDeletedManagedValues, readMissingManagedValues } from "../../../../../../lib/admin/media-catalog/deleted-reference-state";
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import AdminCategoryBadge from "../../../../../../components/admin/content/AdminCategoryBadge";
 import {
+  AdminActionButton,
   AdminPageHeader,
   AdminStatusPill,
 } from "../../../../../../components/admin/ui";
 import RichTextContent from "../../../../../../components/content/RichTextContent";
+import { MediaVideoPlayback } from "../../../../../../components/media-center/MediaDetailArticle";
 import {
   parseMediaTopicPayload,
-  resolveYouTubeEmbedUrl,
+  resolveMetaVideoEmbedRequest,
 } from "../../../../../../lib/admin/media-topic-payload";
+import { readMetaVideoEmbed } from "../../../../../../lib/content/public-content-read/owner";
 import { requireAdminSession } from "../../../../../../lib/admin/auth/require-admin-session";
 import { getContentTypeLabel, isContentType } from "../../../../../../lib/admin/content/content-types";
 import { getContentStatusMetadata } from "../../../../../../lib/admin/content/content-status-metadata";
@@ -44,14 +46,25 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
   if (!topic || !isContentType(topic.content_type)) notFound();
   const payload = parseMediaTopicPayload(topic.media_payload);
   const publication = getContentStatusMetadata(topic.status);
-  const values = [topic.image, ...(payload?.kind === "gallery" ? payload.images.map(image => image.url) : [])];
-  const [deleted, missing] = await Promise.all([readDeletedManagedValues(values), readMissingManagedValues(values)]);
+  const values = [topic.image, ...(payload?.kind === "video" ? [payload.thumbnail] : []), ...(payload?.kind === "gallery" ? payload.images.map(image => image.url) : [])];
+  const metaVideo = topic.content_type === "video" && payload?.kind === "video"
+    ? payload
+    : null;
+  const metaRequest = metaVideo ? resolveMetaVideoEmbedRequest(metaVideo) : null;
+  const [deleted, missing, metaEmbed] = await Promise.all([
+    readDeletedManagedValues(values),
+    readMissingManagedValues(values),
+    metaVideo && metaRequest ? readMetaVideoEmbed(metaVideo) : undefined,
+  ]);
   const referenceState = { key: "preview", count: deleted.length, deleted, missing, available: true, originals: [] };
+  const videoPoster = payload?.kind === "video" ? payload.thumbnail?.trim() || topic.image?.trim() || "" : "";
+  const unavailableVideoPoster = deleted.includes(videoPoster) || missing.includes(videoPoster);
 
 
   return (
     <main className="space-y-7">
       <AdminPageHeader
+        visualPreset="topics"
         eyebrow="INTERNAL CONTENT PREVIEW"
         title={topic.title || "معاينة المحتوى"}
         description="معاينة إدارية موحدة لا تسجل مشاهدة عامة ولا تغيّر حالة المحتوى."
@@ -60,12 +73,12 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
             <AdminStatusPill tone={publication.tone}>
               {publication.label}
             </AdminStatusPill>
-            <Link
+            <AdminActionButton
               href={`/admin/content/topics/${topic.id}`}
-              className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+              variant="dark"
             >
               رجوع للتحرير
-            </Link>
+            </AdminActionButton>
           </>
         }
       />
@@ -99,7 +112,13 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
           {topic.excerpt ? <p className="mb-8 text-lg leading-9 text-white/58">{topic.excerpt}</p> : null}
 
           {topic.content_type === "video" && payload?.kind === "video" ? (
-            <VideoPreview url={payload.video_url} />
+            <MediaVideoPlayback item={{
+              title: topic.title || "معاينة الفيديو",
+              videoProvider: payload.provider,
+              videoUrl: payload.video_url,
+              videoStartSeconds: payload.start_seconds ?? 0,
+              image: unavailableVideoPoster ? "" : videoPoster,
+            }} metaEmbed={metaEmbed} />
           ) : topic.content_type === "gallery" && payload?.kind === "gallery" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               {payload.images.map((image, index) => (
@@ -124,22 +143,5 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
         </div>
       </article>
     </main>
-  );
-}
-
-function VideoPreview({ url }: { url: string }) {
-  const embedUrl = resolveYouTubeEmbedUrl(url);
-  return embedUrl ? (
-    <div className="aspect-video overflow-hidden rounded-[24px] border border-white/10">
-      <iframe
-        src={embedUrl}
-        title="معاينة الفيديو"
-        className="h-full w-full"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-      />
-    </div>
-  ) : (
-    <p className="rounded-[18px] border border-white/10 p-5 text-sm text-white/45">رابط الفيديو غير صالح للمعاينة.</p>
   );
 }

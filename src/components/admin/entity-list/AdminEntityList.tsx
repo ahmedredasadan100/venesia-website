@@ -1,5 +1,6 @@
 "use client";
 
+import { resolveAdminCollectionPresentation, type AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminNotice from "../AdminNotice";
@@ -70,6 +71,8 @@ export type AdminEntityListProps<
   TId extends AdminGridId = AdminGridId,
 > = {
   listId: string;
+  /** Visual opt-in only; query, mutation and preference ownership is unchanged. */
+  presentation?: AdminCollectionPresentation;
   rows: readonly TRow[];
   /** Retained results belong to the previous query until the controller resolves. */
   queryPending?: boolean;
@@ -260,6 +263,7 @@ function AdminEntityListInner<
 >(props: AdminEntityListProps<TRow, TKey, TSortKey, TId>) {
   const {
     listId,
+    presentation: requestedPresentation = "default",
     rows,
     queryPending,
     queryError,
@@ -296,6 +300,7 @@ function AdminEntityListInner<
     initialFeedback = null,
   } = props;
 
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const floating = useAdminFloatingLayer();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const sortCorrectionRef = useRef(false);
@@ -470,6 +475,7 @@ function AdminEntityListInner<
   const setOpenLayerId = floating?.setOpenLayerId ?? (() => undefined);
   const columnsControl = onPersistColumns ? (
     <AdminColumnVisibilityMenu
+      presentation={presentation}
       columns={columns}
       visibleColumns={visibleColumns}
       defaultColumns={resolvedDefaultVisibleColumns}
@@ -482,6 +488,7 @@ function AdminEntityListInner<
   const bulkBar =
     enableSelection && bulkOptions.length && onBulkExecute ? (
       <AdminBulkActionBar
+        presentation={presentation}
         selectedIds={selection.selectedIds}
         entityLabel={bulkEntityLabel}
         options={[...bulkOptions]}
@@ -491,6 +498,7 @@ function AdminEntityListInner<
         actionValue={bulkAction}
         actionControl={
           <AdminListboxSelect
+            presentation={presentation}
             id={`${listId}-bulk-action`}
             layerId={`${listId}-bulk-action`}
             openLayerId={openLayerId}
@@ -520,9 +528,11 @@ function AdminEntityListInner<
     <AdminEntityListTableFrame
       id={listId}
       data-admin-entity-list=""
+      data-admin-entity-list-presentation={presentation}
       toolbar={toolbar ? (
         <AdminEntityListFilters
           {...toolbar}
+          presentation={presentation}
           columnsControl={columnsControl}
           contextOverride={bulkBar}
           contextOverrideActive={selectionActive}
@@ -566,6 +576,7 @@ function AdminEntityListInner<
 
       <AdminEntityListPrimarySection>
         <AdminEntityListTable
+          presentation={presentation}
           queryPending={queryPending}
           key={visibleColumnDefs.map((column) => column.key).join("|")}
           rows={rows}

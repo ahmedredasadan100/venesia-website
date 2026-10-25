@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { ContentType } from "../../../../lib/admin/content/content-types";
+import type { VideoProvider } from "../../../../lib/admin/media-topic-payload";
 import {
   applyContentTemplatePreset,
   resolveContentTemplatePreset,
@@ -17,14 +18,19 @@ import type {
 } from "../../../../lib/admin/form-runtime";
 import AdminFormRuntime, { AdminFormActions } from "../../ui/AdminFormRuntime";
 import AdminModuleTabs, {
+  AdminModuleSectionHeader,
+  AdminModuleTabIcon,
   type AdminModuleTab,
 } from "../../ui/AdminModuleTabs";
+import AdminCard from "../../ui/AdminCard";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
 import ContentTemplatePicker from "../../content-workflow/ContentTemplatePicker";
 import { ADMIN_FORM_STACK_CLASS_NAME } from "../../ui";
 import { CONTENT_EDITOR_NAVIGATION_EVENT } from "./content-editor-navigation";
 import { CONTENT_FORM_NAVIGATION } from "./content-form-definition";
 import { ADMIN_ENTITY_REVIEW_TAB_LABEL } from "../../../../lib/admin/review/entity-review-presentation";
-import { encodeTopicRevision } from "../../../../lib/admin/content/topic-revision";
+import { encodeTopicRevision, type TopicDraftSession, type TopicFormDraftFields } from "../../../../lib/admin/content/topic-revision";
+import { TopicFormDraftRecovery } from "./article/TopicMarkdownEditor";
 
 type ContentEditorShellProps = {
   action: AdminFormAction;
@@ -40,12 +46,21 @@ type ContentEditorShellProps = {
   initialModelValue?: ContentEditorModelValue;
   templateContext?: ContentTemplateContext;
   initialState?: AdminFormActionState;
+  draftSession?: TopicDraftSession;
 };
 
-export type ContentEditorModelValue = ContentTemplateEditableValues;
+export type ContentEditorModelValue = ContentTemplateEditableValues & {
+  videoUrl?: string;
+  videoProvider?: VideoProvider;
+  videoStartSeconds?: string;
+  videoThumbnail?: string;
+  image?: string;
+};
 
 export type ContentEditorModel = {
   value: Readonly<ContentEditorModelValue>;
+  recoveryFields: TopicFormDraftFields | null;
+  recoveryEnabled: boolean;
   setField: <Field extends keyof ContentEditorModelValue>(
     field: Field,
     value: ContentEditorModelValue[Field],
@@ -77,6 +92,8 @@ type ContentEditorShellFrameProps = Omit<
   templateContext?: ContentTemplateContext;
   onApplyPreset?: (presetKey: string) => boolean;
   tabs: AdminModuleTab[];
+  restoreVersion?: number;
+  onRestoreDraft?: (fields: TopicFormDraftFields) => void;
 };
 
 function ContentEditorShellFrame({
@@ -91,21 +108,48 @@ function ContentEditorShellFrame({
   templateContext,
   onApplyPreset,
   initialState,
+  draftSession,
+  restoreVersion = 0,
+  onRestoreDraft,
 }: ContentEditorShellFrameProps) {
+  const draftScope = useMemo(() => draftSession ? {
+    ...draftSession, contentType, entity: entityId === undefined ? "create" : String(entityId),
+  } : null, [draftSession, contentType, entityId]);
   if (mode === "edit" && baselineRevision === undefined) {
     throw new Error("Content edit forms require a baseline revision.");
   }
 
-  const presentedTabs: AdminModuleTab[] = tabs.map((tab) =>
-    tab.id === "publish"
-      ? {
-          id: tab.id,
-          indicator: tab.indicator,
-          content: tab.content,
-          ...CONTENT_REVIEW_TAB_SECTION,
-        }
-      : tab,
-  );
+  const presentedTabs: AdminModuleTab[] = tabs.map((tab) => {
+    if (tab.id !== "publish") return tab;
+    const reviewTab: AdminModuleTab = {
+      id: tab.id,
+      indicator: tab.indicator,
+      content: tab.content,
+      ...CONTENT_REVIEW_TAB_SECTION,
+    };
+    if (tab.sectionHeaderPresentation !== "premium") return reviewTab;
+    return {
+      ...reviewTab,
+      sectionHeading: undefined,
+      sectionDescription: undefined,
+      content: (
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+          <AdminCard presentation="premium" className="min-w-0 overflow-hidden">
+            <AdminModuleSectionHeader
+              id={`${formId}-review-publish`}
+              sectionHeading={ADMIN_ENTITY_REVIEW_TAB_LABEL}
+              sectionDescription={CONTENT_REVIEW_TAB_SECTION.sectionDescription}
+              icon={CONTENT_REVIEW_TAB_SECTION.icon}
+              sectionHeaderPresentation="premium"
+              sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+              standalone
+            />
+          </AdminCard>
+          {tab.content}
+        </div>
+      ),
+    };
+  });
 
   return (
     <AdminFormRuntime
@@ -114,11 +158,11 @@ function ContentEditorShellFrame({
       initialState={initialState}
       mode={mode}
       entityKey={`content:${contentType}`}
+      finalizeFieldsOnSubmit
       invalidateEntities={["topics", "categories", "series", "topics_without_image"]}
       closeHref={closeHref}
       navigation={CONTENT_FORM_NAVIGATION}
       formId={formId}
-      className={ADMIN_FORM_STACK_CLASS_NAME}
     >
       {entityId ? <input type="hidden" name="id" value={entityId} /> : null}
       {mode === "edit" ? (
@@ -130,18 +174,21 @@ function ContentEditorShellFrame({
         />
       ) : null}
       <input type="hidden" name="content_type" value={contentType} />
-      {mode === "create" && templateContext && onApplyPreset ? (
-        <ContentTemplatePicker
-          context={templateContext}
-          onApplyPreset={onApplyPreset}
+      {draftScope && onRestoreDraft ? <TopicFormDraftRecovery scope={draftScope} baselineRevision={baselineRevision ?? null} onRestore={onRestoreDraft} restoreVersion={restoreVersion} /> : null}
+      <div key={restoreVersion} className={ADMIN_FORM_STACK_CLASS_NAME}>
+        {mode === "create" && templateContext && onApplyPreset ? (
+          <ContentTemplatePicker
+            context={templateContext}
+            onApplyPreset={onApplyPreset}
+          />
+        ) : null}
+        <AdminModuleTabs
+          tabs={presentedTabs}
+          variant="editor"
+          navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
         />
-      ) : null}
-      <AdminModuleTabs
-        tabs={presentedTabs}
-        variant="editor"
-        navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
-      />
-      <AdminFormActions />
+        <AdminFormActions description={null} icon={<AdminModuleTabIcon name="content" />} />
+      </div>
     </AdminFormRuntime>
   );
 }
@@ -155,19 +202,41 @@ function ModeledContentEditorShell(props: ContentEditorShellProps & {
   const [value, setValue] = useState(() =>
     normalizeContentEditorModelValue(initialModelValue),
   );
+  const [recoveryFields, setRecoveryFields] = useState<TopicFormDraftFields | null>(null);
+  const [restoreVersion, setRestoreVersion] = useState(0);
+  const restoreDraft = useCallback((fields: TopicFormDraftFields) => {
+    setRecoveryFields(fields);
+    setValue(current => {
+      const restored = { ...current };
+      const bindings = {
+        title: "title", excerpt: "excerpt", content: "content", seoTitle: "seo_title",
+        seoDescription: "seo_description", focusKeyword: "focus_keyword", videoUrl: "video_url",
+        videoProvider: "video_provider", videoStartSeconds: "video_start_seconds",
+        videoThumbnail: "video_thumbnail", image: "image",
+      } as const;
+      for (const [field, nativeName] of Object.entries(bindings)) {
+        if (!Object.hasOwn(fields, nativeName)) continue;
+        const next = fields[nativeName]?.at(-1) ?? "";
+        if (field === "videoProvider") restored.videoProvider = next as VideoProvider;
+        else restored[field as Exclude<keyof typeof bindings, "videoProvider">] = next;
+      }
+      return normalizeContentEditorModelValue(restored);
+    });
+    setRestoreVersion(version => version + 1);
+  }, []);
   const setField = useCallback<ContentEditorModel["setField"]>(
     (field, nextValue) => {
       setValue((current) =>
         current[field] ===
           (field === "content"
-            ? normalizeArticleMarkdown(nextValue)
+            ? normalizeArticleMarkdown(nextValue ?? "")
             : nextValue)
           ? current
           : {
               ...current,
               [field]:
                 field === "content"
-                  ? normalizeArticleMarkdown(nextValue)
+                  ? normalizeArticleMarkdown(nextValue ?? "")
                   : nextValue,
             },
       );
@@ -195,13 +264,15 @@ function ModeledContentEditorShell(props: ContentEditorShellProps & {
     },
     [templateContext],
   );
-  const model: ContentEditorModel = { value, setField, requestPreset };
+  const model: ContentEditorModel = { value, setField, requestPreset, recoveryFields, recoveryEnabled: Boolean(props.draftSession) };
 
   return (
     <ContentEditorShellFrame
       {...frameProps}
       templateContext={templateContext}
       onApplyPreset={requestPreset}
+      onRestoreDraft={restoreDraft}
+      restoreVersion={restoreVersion}
       tabs={tabs(model)}
     />
   );
@@ -226,7 +297,9 @@ export default function ContentEditorShell(props: ContentEditorShellProps) {
 
   return (
     <ModeledContentEditorShell
-      key={props.entityId ?? `${props.contentType}:create`}
+      key={props.draftSession
+        ? `${props.entityId ?? `${props.contentType}:create`}:${props.draftSession.actorId}:${props.draftSession.sessionVersion}:${props.draftSession.expiresAt}`
+        : props.entityId ?? `${props.contentType}:create`}
       {...props}
       initialModelValue={props.initialModelValue}
       tabs={props.tabs}

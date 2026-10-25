@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import {
+  ADMIN_CINEMATIC_GOLD_V1,
+  type AdminCollectionPresentation,
+} from "../../../lib/admin/admin-ui-styles";
 import {
   ADMIN_FILTER_MENU_ATTR,
   ADMIN_FILTER_MENU_PANEL_CLASSES,
@@ -16,6 +20,8 @@ export type AdminListboxSelectOption = {
   label: string;
   depth?: number;
   disabled?: boolean;
+  /** Optional visual identity for an inline choice; the text remains its accessible name. */
+  icon?: ReactNode;
 };
 
 export type AdminListboxSelectProps = {
@@ -35,6 +41,10 @@ export type AdminListboxSelectProps = {
   openLayerId?: string | null;
   onOpenLayer?: (id: string | null) => void;
   inline?: boolean;
+  /** Opt-in inline composition; omitted consumers retain their existing list layout. */
+  inlineClassName?: string;
+  inlineOptionsClassName?: string;
+  inlineOptionClassName?: (selected: boolean) => string;
   ariaLabel?: string;
   ariaLabelledBy?: string;
   ariaDescribedBy?: string;
@@ -43,6 +53,8 @@ export type AdminListboxSelectProps = {
   searchable?: boolean;
   searchPlaceholder?: string;
   emptyMessage?: string;
+  /** Explicit shared collection presentation; inline composition ports retain precedence. */
+  presentation?: AdminCollectionPresentation;
 };
 
 function ChevronDownIcon() {
@@ -80,6 +92,9 @@ export default function AdminListboxSelect({
   openLayerId,
   onOpenLayer,
   inline = false,
+  inlineClassName,
+  inlineOptionsClassName,
+  inlineOptionClassName,
   ariaLabel,
   ariaLabelledBy,
   ariaDescribedBy,
@@ -88,7 +103,9 @@ export default function AdminListboxSelect({
   searchable = false,
   searchPlaceholder = "ابحث في الخيارات",
   emptyMessage = "لا توجد خيارات مطابقة.",
+  presentation = "default",
 }: AdminListboxSelectProps) {
+  const cinematic = presentation === "cinematic";
   const generatedId = useId();
   const controlId = id ?? generatedId;
   const resolvedTriggerId = triggerId ?? `${controlId}-trigger`;
@@ -224,6 +241,7 @@ export default function AdminListboxSelect({
   }, [controlId, isOpen, resolvedActiveValue]);
 
   function handleSelect(next: string) {
+    if (disabled) return;
     if (resolvedOptions.find((option) => option.value === next)?.disabled) return;
     onChange(next);
     setOpen(false);
@@ -312,19 +330,23 @@ export default function AdminListboxSelect({
     event: React.KeyboardEvent<HTMLButtonElement>,
     optionValue: string,
   ) {
+    if (disabled) return;
     if (!selectableOptions.length) return;
     const index = selectableOptions.findIndex(
       (option) => option.value === optionValue,
     );
     if (index < 0) return;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       event.preventDefault();
-      const direction = event.key === "ArrowDown" ? 1 : -1;
-      onChange(
-        selectableOptions[
-          (index + direction + selectableOptions.length) % selectableOptions.length
-        ].value,
-      );
+      const direction = event.key === "ArrowDown" ||
+        (event.key === "ArrowLeft" && dir === "rtl") ||
+        (event.key === "ArrowRight" && dir === "ltr") ? 1 : -1;
+      const nextIndex = event.key === "Home" ? 0 : event.key === "End"
+        ? selectableOptions.length - 1
+        : (index + direction + selectableOptions.length) % selectableOptions.length;
+      const nextValue = selectableOptions[nextIndex].value;
+      onChange(nextValue);
+      document.getElementById(`${controlId}-option-${nextValue}`)?.focus();
       return;
     }
     if (event.key === "Enter" || event.key === " ") {
@@ -345,9 +367,10 @@ export default function AdminListboxSelect({
         dir={dir}
         data-admin-listbox-menu=""
         data-admin-listbox-popover=""
+        data-admin-listbox-presentation={presentation}
         data-placement={menuPosition.placement}
         style={menuPosition.style}
-        className={`${ADMIN_FILTER_MENU_PANEL_CLASSES} flex max-h-[calc(100dvh-24px)] flex-col overflow-hidden p-1.5`}
+        className={`${cinematic ? `rounded-[14px] border backdrop-blur-xl ${ADMIN_CINEMATIC_GOLD_V1.collection.menu}` : ADMIN_FILTER_MENU_PANEL_CLASSES} flex max-h-[calc(100dvh-24px)] flex-col overflow-hidden p-1.5`}
       >
         {searchable ? (
           <div className="shrink-0 p-1 pb-2">
@@ -366,7 +389,7 @@ export default function AdminListboxSelect({
                   : undefined
               }
               data-admin-listbox-search=""
-              className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#D8B87A]/45"
+              className={`h-10 w-full rounded-xl border px-3 text-sm outline-none ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.searchInput : "border-white/10 bg-black/25 text-white placeholder:text-white/35 focus:border-[#D8B87A]/45"}`}
             />
           </div>
         ) : null}
@@ -397,6 +420,8 @@ export default function AdminListboxSelect({
                   className={`block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                     option.disabled
                       ? "cursor-not-allowed bg-white/[0.02] text-white/28"
+                      : cinematic
+                      ? selectedOption || active ? ADMIN_CINEMATIC_GOLD_V1.collection.optionActive : `cursor-pointer ${ADMIN_CINEMATIC_GOLD_V1.collection.option}`
                       : selectedOption
                       ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]"
                       : active
@@ -440,12 +465,13 @@ export default function AdminListboxSelect({
     <div
       className={`relative overflow-visible ${containerSizingClassName} ${className}`}
       data-admin-listbox-sizing={sizing}
+      data-admin-listbox-presentation={presentation}
     >
       {inline ? (
         <div
           dir={dir}
           data-admin-listbox-menu=""
-          className="rounded-2xl border border-white/10 bg-black/25 p-1.5"
+          className={inlineClassName ?? (cinematic ? `rounded-2xl border p-1.5 ${ADMIN_CINEMATIC_GOLD_V1.collection.menu}` : "rounded-2xl border border-white/10 bg-black/25 p-1.5")}
         >
           {searchable ? (
             <input
@@ -463,7 +489,7 @@ export default function AdminListboxSelect({
                   : undefined
               }
               data-admin-listbox-search=""
-              className="mb-2 h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#D8B87A]/45"
+              className={`mb-2 h-10 w-full rounded-xl border px-3 text-sm outline-none ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.searchInput : "border-white/10 bg-black/25 text-white placeholder:text-white/35 focus:border-[#D8B87A]/45"}`}
             />
           ) : null}
           <div
@@ -474,7 +500,7 @@ export default function AdminListboxSelect({
             aria-describedby={ariaDescribedBy}
             aria-invalid={ariaInvalid || undefined}
             data-admin-listbox-scroll-viewport=""
-            className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto p-0.5`}
+            className={inlineOptionsClassName ?? `${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto p-0.5`}
           >
             {visibleOptions.length ? (
               visibleOptions.map((option) => {
@@ -486,19 +512,22 @@ export default function AdminListboxSelect({
                     id={`${controlId}-option-${option.value}`}
                     role="option"
                     aria-selected={selectedOption}
-                    aria-disabled={option.disabled || undefined}
-                    disabled={option.disabled}
+                    aria-disabled={disabled || option.disabled || undefined}
+                    disabled={disabled || option.disabled}
                     tabIndex={option.value === inlineTabStopValue ? 0 : -1}
                     onClick={() => handleSelect(option.value)}
                     onKeyDown={(event) => handleInlineKeyDown(event, option.value)}
-                    className={`block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+                    className={inlineOptionClassName?.(selectedOption) ?? `block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
                       option.disabled
                         ? "cursor-not-allowed bg-white/[0.02] text-white/28"
+                        : cinematic
+                        ? selectedOption ? ADMIN_CINEMATIC_GOLD_V1.collection.optionActive : `cursor-pointer ${ADMIN_CINEMATIC_GOLD_V1.collection.option}`
                         : selectedOption
                         ? "bg-[#D8B87A]/14 font-medium text-[#E6C882]"
                         : "cursor-pointer text-white/78 hover:bg-[#D8B87A]/[0.07] hover:text-[#F2D99B]"
                     }`}
                   >
+                    {option.icon ? <span aria-hidden="true" className="inline-flex size-6 shrink-0 items-center justify-center [&>svg]:size-6">{option.icon}</span> : null}
                     <span className="flex min-w-0 items-center">
                       {option.depth ? (
                         <span
@@ -545,13 +574,13 @@ export default function AdminListboxSelect({
             setOpen(!isOpen);
           }}
           onKeyDown={handleKeyDown}
-          className={`flex h-11 cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/10 bg-black/28 text-sm text-white outline-none transition hover:border-white/18 focus:border-[#D8B87A]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55 ${triggerSizingClassName}`}
+          className={`flex h-11 cursor-pointer items-center justify-between gap-2 rounded-2xl border text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-55 ${cinematic ? isOpen ? ADMIN_CINEMATIC_GOLD_V1.collection.controlOpen : ADMIN_CINEMATIC_GOLD_V1.collection.control : "border-white/10 bg-black/28 text-white hover:border-white/18 focus:border-[#D8B87A]/45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"} ${triggerSizingClassName}`}
         >
-          <span className={`min-w-0 truncate ${selected && !emptyValueUsesPlaceholder ? "text-white/78" : "text-white/35"}`}>
+          <span className={`min-w-0 truncate ${cinematic ? selected && !emptyValueUsesPlaceholder ? "text-current" : "opacity-65" : selected && !emptyValueUsesPlaceholder ? "text-white/78" : "text-white/35"}`}>
             {displayValue}
           </span>
           <span
-            className={`shrink-0 text-white/45 transition ${isOpen ? "rotate-180" : ""}`}
+            className={`shrink-0 text-white/45 transition ${cinematic ? "motion-reduce:transition-none" : ""} ${isOpen ? "rotate-180" : ""}`}
           >
             <ChevronDownIcon />
           </span>

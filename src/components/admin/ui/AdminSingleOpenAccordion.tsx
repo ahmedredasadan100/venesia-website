@@ -8,11 +8,21 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import {
+  ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME,
+  ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
+  ADMIN_PREMIUM_SECTION_HEADER_ACCENT_CLASS_NAME,
+  ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME,
+} from "../../../lib/admin/admin-ui-styles";
+import { AdminFormControlHeader } from "./AdminForm";
+import { AdminModuleTabIcon, type AdminModuleTabIconName } from "./AdminModuleTabs";
 
 export type AdminSingleOpenAccordionItem = {
   id: string;
   label: ReactNode;
   description?: ReactNode;
+  /** Optional semantic identity for the explicit panel presentation. */
+  icon?: AdminModuleTabIconName;
   content: ReactNode;
 };
 
@@ -22,6 +32,7 @@ export type AdminSingleOpenAccordionProps = {
   ariaLabel: string;
   className?: string;
   dir?: "rtl" | "ltr";
+  presentation?: "default" | "panel";
   /** Opens the disclosure containing a requested focus target before shared navigation focuses it. */
   navigationEventName?: string;
 };
@@ -48,8 +59,10 @@ export default function AdminSingleOpenAccordion({
   ariaLabel,
   className = "",
   dir = "rtl",
+  presentation = "default",
   navigationEventName,
 }: AdminSingleOpenAccordionProps) {
+  const panel = presentation === "panel";
   const generatedId = useId();
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const [openId, setOpenId] = useState<string | null>(() =>
@@ -107,7 +120,8 @@ export default function AdminSingleOpenAccordion({
       aria-label={ariaLabel}
       data-admin-single-open-accordion=""
       data-admin-single-open-accordion-active={resolvedOpenId ?? ""}
-      className={`overflow-hidden rounded-2xl border border-white/10 bg-black/20 ${className}`.trim()}
+      data-admin-single-open-accordion-presentation={panel ? "panel" : undefined}
+      className={`${panel ? "space-y-4" : "overflow-hidden rounded-2xl border border-white/10 bg-black/20"} ${className}`.trim()}
     >
       {items.map((item, index) => {
         const open = item.id === resolvedOpenId;
@@ -118,7 +132,7 @@ export default function AdminSingleOpenAccordion({
           <section
             key={item.id}
             data-admin-accordion-item={item.id}
-            className={index > 0 ? "border-t border-white/10" : undefined}
+            className={panel ? `relative ${ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME} overflow-hidden` : index > 0 ? "border-t border-white/10" : undefined}
           >
             <h3>
               <button
@@ -134,20 +148,34 @@ export default function AdminSingleOpenAccordion({
                   setOpenId((current) => (current === item.id ? null : item.id))
                 }
                 onKeyDown={(event) => handleTriggerKeyDown(event, item.id)}
-                className={`flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3.5 text-start text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70 ${
+                className={panel
+                  ? `relative flex w-full min-w-0 flex-nowrap items-center justify-between gap-3 ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME} ${ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} cursor-pointer text-start transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70 hover:text-[#F2D99B]`
+                  : `flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3.5 text-start text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70 ${
                   open
                     ? "bg-[#D8B87A]/[0.08] text-[#F2D99B]"
                     : "text-white/68 hover:bg-white/[0.035] hover:text-white"
                 }`}
               >
-                <span className="min-w-0">
+                {panel ? (
+                  <>
+                    <span aria-hidden="true" data-admin-tab-section-accent="premium" className={ADMIN_PREMIUM_SECTION_HEADER_ACCENT_CLASS_NAME} />
+                    <span className="min-w-0 flex-1">
+                      <AdminFormControlHeader
+                        presentation="leading-icon"
+                        title={item.label}
+                        description={item.description}
+                        icon={<AdminModuleTabIcon name={item.icon ?? "section"} />}
+                      />
+                    </span>
+                  </>
+                ) : <span className="min-w-0">
                   <span className="block">{item.label}</span>
                   {item.description ? (
                     <span className={`mt-1 block text-xs font-normal leading-5 ${open ? "text-white/48" : "text-white/36"}`}>
                       {item.description}
                     </span>
                   ) : null}
-                </span>
+                </span>}
                 <ChevronIcon open={open} />
               </button>
             </h3>
@@ -157,7 +185,7 @@ export default function AdminSingleOpenAccordion({
               aria-labelledby={triggerId}
               hidden={!open}
               data-admin-accordion-panel={item.id}
-              className="border-t border-white/10 p-4"
+              className={panel ? "p-3" : "border-t border-white/10 p-4"}
             >
               {item.content}
             </div>

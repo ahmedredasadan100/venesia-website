@@ -72,6 +72,8 @@ export type AdminEntityCellContext<TRow> = {
 export type AdminEntityBulkOption = {
   value: string;
   label: string;
+  /** Presentation only; the existing action value still owns behavior. */
+  tone?: "default" | "danger";
 };
 
 export type AdminEntityListEmptyState = {

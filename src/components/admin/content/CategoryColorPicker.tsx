@@ -22,9 +22,12 @@ function PaletteIcon() {
 export default function CategoryColorPicker({
   defaultToken,
   previewName = "معاينة التصنيف",
+  presentation = "default",
 }: {
   defaultToken?: string | null;
   previewName?: string;
+  /** The containing shared Panel supplies the visible heading; retain the accessible group legend. */
+  presentation?: "default" | "panel";
 }) {
   const hasStoredToken = Boolean(defaultToken);
   const [selected, setSelected] = useState<AdminToneToken | "">(
@@ -44,7 +47,7 @@ export default function CategoryColorPicker({
 
   return (
     <fieldset className="space-y-3 md:col-span-2">
-      <legend className="flex items-center gap-2 text-xs font-medium text-white/55">
+      <legend className={presentation === "panel" ? "sr-only" : "flex items-center gap-2 text-xs font-medium text-white/55"}>
         <PaletteIcon />
         لون التصنيف
       </legend>

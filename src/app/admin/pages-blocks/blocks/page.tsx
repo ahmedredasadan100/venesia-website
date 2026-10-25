@@ -162,6 +162,7 @@ export default function BlocksPage() {
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <AdminPageContextHeader
+        visualPreset="blocks"
         eyebrow="إدارة الصفحات والموديولات"
         title="البلوكات"
         description="مكتبة الموديولات القابلة لإعادة الاستخدام. تُدار القوالب هنا ثم تُربط بالصفحات من شاشة إدارة الصفحات."

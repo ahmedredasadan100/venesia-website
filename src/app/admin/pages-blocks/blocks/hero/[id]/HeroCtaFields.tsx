@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  AdminCard,
-  AdminFormControlHeader,
   AdminFormGrid,
+  AdminFormField,
   AdminLinkField,
 } from "../../../../../../components/admin/ui";
+import { ModuleEditorSection } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import { AdminModuleTabIcon } from "../../../../../../components/admin/ui/AdminModuleTabs";
 import type { AdminLinkValue } from "../../../../../../lib/admin/links/types";
 import type { HeroTextAlignment } from "../../../../../../lib/hero/hero-content-controls";
@@ -36,6 +36,16 @@ export default function HeroCtaFields({
   alignmentDefault = "right",
   enableAlignment = true,
 }: HeroCtaFieldsProps) {
+  const projectActionLabelField = (
+    <input
+      name="primary_cta_label"
+      defaultValue={primaryLabel}
+      maxLength={100}
+      aria-label="نص زر فتح تفاصيل المشروع"
+      placeholder="نص زر فتح التفاصيل"
+      className={fieldClassName("h-11 min-w-0")}
+    />
+  );
   if (linkSource === "project-domain") {
     return (
       <HeroVisibilityAlignRow
@@ -47,21 +57,11 @@ export default function HeroCtaFields({
         boldDefault={boldDefault}
         enableAlignment={enableAlignment}
         showDefault={showDefault}
-        controlsPlacement="header"
+        icon={<AdminModuleTabIcon name="section" />}
       >
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">
-            نص زر فتح التفاصيل
-          </span>
-          <input
-            name="primary_cta_label"
-            defaultValue={primaryLabel}
-            maxLength={100}
-            aria-label="نص زر فتح تفاصيل المشروع"
-            placeholder="نص زر فتح التفاصيل"
-            className={fieldClassName("h-11 min-w-0")}
-          />
-        </label>
+        <AdminFormField label="نص زر فتح التفاصيل" presentation="panel">
+            {projectActionLabelField}
+          </AdminFormField>
       </HeroVisibilityAlignRow>
     );
   }
@@ -77,14 +77,12 @@ export default function HeroCtaFields({
       boldDefault={boldDefault}
       enableAlignment={enableAlignment}
       showDefault={showDefault}
-      presentation="premium"
     >
       <AdminFormGrid columns={2}>
         <div data-hero-cta-row="primary">
-          <AdminCard presentation="premium" className="h-full space-y-3 p-3">
-            <AdminFormControlHeader title="الزر الأساسي" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+          <ModuleEditorSection title="الزر الأساسي" className="h-full">
             <AdminFormGrid columns={1}>
-              <label className="block min-w-0 space-y-2">
+              <AdminFormField label="نص الزر الأساسي">
                 <input
                   name="primary_cta_label"
                   defaultValue={primaryLabel}
@@ -93,7 +91,7 @@ export default function HeroCtaFields({
                   placeholder="نص الزر الأساسي"
                   className={fieldClassName("h-11 min-w-0")}
                 />
-              </label>
+              </AdminFormField>
               <AdminLinkField
                 prefix="primary_cta"
                 label="رابط الزر الأساسي"
@@ -105,13 +103,12 @@ export default function HeroCtaFields({
                 clearLinkLabel="مسح"
               />
             </AdminFormGrid>
-          </AdminCard>
+          </ModuleEditorSection>
         </div>
         <div data-hero-cta-row="secondary">
-          <AdminCard presentation="premium" className="h-full space-y-3 p-3">
-            <AdminFormControlHeader title="الزر الثانوي" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+          <ModuleEditorSection title="الزر الثانوي" className="h-full">
             <AdminFormGrid columns={1}>
-              <label className="block min-w-0 space-y-2">
+              <AdminFormField label="نص الزر الثانوي">
                 <input
                   name="secondary_cta_label"
                   defaultValue={secondaryLabel}
@@ -120,7 +117,7 @@ export default function HeroCtaFields({
                   placeholder="نص الزر الثانوي"
                   className={fieldClassName("h-11 min-w-0")}
                 />
-              </label>
+              </AdminFormField>
               <AdminLinkField
                 prefix="secondary_cta"
                 label="رابط الزر الثانوي"
@@ -132,7 +129,7 @@ export default function HeroCtaFields({
                 clearLinkLabel="مسح"
               />
             </AdminFormGrid>
-          </AdminCard>
+          </ModuleEditorSection>
         </div>
       </AdminFormGrid>
     </HeroVisibilityAlignRow>

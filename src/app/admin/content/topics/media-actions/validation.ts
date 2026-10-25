@@ -8,6 +8,15 @@ import {
   MEDIA_EDITABLE_CONTENT_TYPES,
 } from "../../../../../lib/admin/content/content-types";
 import type { MediaTopicRow } from "./types";
+import type { VideoMediaPayload, MetaVideoEmbedResult } from "../../../../../lib/admin/media-topic-payload";
+import { readMetaVideoEmbed } from "../../../../../lib/content/public-content-read/owner";
+
+export async function readMediaVideoEmbed(
+  payload: Pick<VideoMediaPayload, "provider" | "video_url">,
+): Promise<MetaVideoEmbedResult> {
+  await requireAdminSession();
+  return readMetaVideoEmbed(payload);
+}
 
 function validateId(id: string) {
   const parsed = Number(id);

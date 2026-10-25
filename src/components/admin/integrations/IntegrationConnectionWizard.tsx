@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { getAdminFeedbackPolicy } from "../../../lib/admin/admin-action-feedback";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME, adminFormLabelClassName } from "../../../lib/admin/admin-ui-styles";
 import type {
   IntegrationAssetType,
   IntegrationConnectionStatus,
@@ -11,7 +12,13 @@ import type {
 } from "../../../lib/admin/integrations/integrations-contract";
 import { isIntegrationAppConfigurationAuthorizationReady } from "../../../lib/admin/integrations/server-configuration-contract";
 import { formatAdminDateTime } from "../../../lib/content-dates";
-import { AdminConfirmDialog, AdminListboxSelect, AdminStatusPill } from "../ui";
+import {
+  AdminFeedbackChannelViewport,
+  useAdminFeedback,
+} from "../AdminFeedbackProvider";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminActionButton, AdminCard, AdminConfirmDialog, AdminFormGrid, AdminFormSection, AdminListboxSelect, AdminStatusPill } from "../ui";
+import { adminActionButtonClassName } from "../ui/AdminActionButton";
+import { AdminModuleSectionHeader } from "../ui/AdminModuleTabs";
 import IntegrationBrandIcon from "./IntegrationBrandIcon";
 
 const ASSET_LABELS: Record<IntegrationAssetType, string> = {
@@ -77,14 +84,13 @@ export default function IntegrationConnectionWizard({
   callbackError: string | null;
 }) {
   const router = useRouter();
+  const { clearFeedback, publishFeedback } = useAdminFeedback();
+  const feedbackChannel = `integration-connection:${item.key}`;
+  const activeFeedbackChannel = useRef<string | null>(null);
   const disconnectButtonRef = useRef<HTMLButtonElement | null>(null);
   const testButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pending, setPending] = useState<Operation | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [feedback, setFeedback] = useState<{
-    tone: "success" | "error";
-    message: string;
-  } | null>(callbackError ? { tone: "error", message: callbackError } : null);
   const initialSelection = Object.fromEntries(
     item.selectedAssets.map((asset) => [asset.type, asset.id ?? ""]),
   ) as Partial<Record<IntegrationAssetType, string>>;
@@ -100,6 +106,27 @@ export default function IntegrationConnectionWizard({
     return [...map.entries()];
   }, [item.availableAssets]);
 
+  const publishOperationFeedback = useCallback((variant: "success" | "danger", message: string) => {
+    if (activeFeedbackChannel.current !== feedbackChannel) return;
+    publishFeedback({
+      ...getAdminFeedbackPolicy(variant === "success" ? "transient_action" : "action_validation"),
+      variant,
+      title: variant === "success" ? "تم الإجراء" : "تعذر إكمال الإجراء",
+      message,
+      layout: "stacked",
+      dismissSearchParams: [],
+    }, { channel: feedbackChannel, placement: "inline", critical: false });
+  }, [feedbackChannel, publishFeedback]);
+
+  useEffect(() => {
+    activeFeedbackChannel.current = feedbackChannel;
+    if (callbackError) publishOperationFeedback("danger", callbackError);
+    return () => {
+      activeFeedbackChannel.current = null;
+      clearFeedback(feedbackChannel);
+    };
+  }, [callbackError, clearFeedback, feedbackChannel, publishOperationFeedback]);
+
   useEffect(() => {
     if (requestedAction === "test") testButtonRef.current?.focus();
   }, [requestedAction]);
@@ -110,7 +137,7 @@ export default function IntegrationConnectionWizard({
   ) {
     if (!item.liveConnectionSupported || pending) return;
     setPending(operation);
-    setFeedback(null);
+    clearFeedback(feedbackChannel);
     try {
       const response = await fetch(
         `/api/admin/integrations/${item.key}/action`,
@@ -135,18 +162,11 @@ export default function IntegrationConnectionWizard({
         operation === "diagnose" && payload.result?.message
           ? `${payload.result.message}${payload.result.code ? ` (${payload.result.code})` : ""}`
           : null;
-      setFeedback({
-        tone: "success",
-        message: diagnostic ?? `${actionLabel(operation)} تم بنجاح.`,
-      });
+      publishOperationFeedback("success", diagnostic ?? `${actionLabel(operation)} تم بنجاح.`);
       setConfirmDisconnect(false);
       router.refresh();
     } catch (error) {
-      setFeedback({
-        tone: "error",
-        message:
-          error instanceof Error ? error.message : "integration_action_failed",
-      });
+      publishOperationFeedback("danger", error instanceof Error ? error.message : "integration_action_failed");
       throw error;
     } finally {
       setPending(null);
@@ -182,27 +202,22 @@ export default function IntegrationConnectionWizard({
           : -1;
 
   return (
-    <div className="space-y-5" dir="rtl">
-      <Link
-        href="/admin/settings/integrations"
-        className="inline-flex min-h-10 items-center rounded-xl border border-white/10 px-4 text-xs font-semibold text-white/55 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]"
-      >
+    <div className={ADMIN_FORM_STACK_CLASS_NAME} dir="rtl">
+      <AdminActionButton href="/admin/settings/integrations" variant="dark">
         العودة إلى التكاملات
-      </Link>
+      </AdminActionButton>
 
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/85 p-6 shadow-[0_24px_80px_rgba(0,0,0,.24)]">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-4">
-            <IntegrationBrandIcon integration={item.key} />
-            <div>
-              <p className="font-en text-xl font-semibold text-white">
-                {item.label}
-              </p>
-              <p className="mt-2 max-w-2xl text-xs leading-6 text-white/45">
-                {item.description}
-              </p>
-            </div>
-          </div>
+      <AdminFormSection presentation="panel" header={(
+        <AdminModuleSectionHeader
+          id="integration-connection-overview"
+          sectionHeading={item.label}
+          sectionDescription={item.description}
+          icon="link"
+          sectionHeaderPresentation="premium"
+          sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+          sectionSummary={(
+            <>
+              <IntegrationBrandIcon integration={item.key} />
           <AdminStatusPill
             tone={
               item.status === "connected"
@@ -215,11 +230,15 @@ export default function IntegrationConnectionWizard({
           >
             {STATUS_LABELS[item.status]}
           </AdminStatusPill>
-        </div>
+            </>
+          )}
+        />
+      )}>
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
 
         <ol
           aria-label="مراحل ربط التكامل"
-          className="mt-5 grid gap-2 sm:grid-cols-4"
+          className="grid gap-2 sm:grid-cols-4"
         >
           {LIFECYCLE_STEPS.map((step, index) => (
             <li
@@ -233,84 +252,88 @@ export default function IntegrationConnectionWizard({
           ))}
         </ol>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+        <AdminFormGrid columns={3}>
+          <AdminCard presentation="premium" className="p-3">
             <p className="text-[10px] text-white/35">آخر مزامنة</p>
             <p className="mt-2 font-en text-xs text-white/65">
               {formatAdminDateTime(item.lastSyncAt)}
             </p>
-          </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+          </AdminCard>
+          <AdminCard presentation="premium" className="p-3">
             <p className="text-[10px] text-white/35">المزامنة التالية</p>
             <p className="mt-2 font-en text-xs text-white/65">
               {formatAdminDateTime(item.nextSyncAt)}
             </p>
-          </div>
-          <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-4">
+          </AdminCard>
+          <AdminCard presentation="premium" className="p-3">
             <p className="text-[10px] text-white/35">الأصول المحددة</p>
             <p className="mt-2 font-en text-xs text-white/65">
               {item.selectedAssets.length}
             </p>
-          </div>
-        </div>
+          </AdminCard>
+        </AdminFormGrid>
 
-        <p className="mt-5 rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-xs leading-6 text-white/50">
+        <p className="text-xs leading-6 text-white/50">
           {item.message}
         </p>
-        {feedback ? (
-          <p
-            role={feedback.tone === "error" ? "alert" : "status"}
-            className={`mt-4 rounded-2xl border px-4 py-3 text-xs ${feedback.tone === "error" ? "border-rose-400/20 bg-rose-400/[.07] text-rose-100" : "border-emerald-400/20 bg-emerald-400/[.07] text-emerald-100"}`}
-          >
-            {feedback.message}
-          </p>
-        ) : null}
-      </section>
+        <div className="empty:hidden">
+          <AdminFeedbackChannelViewport channel={feedbackChannel} label="نتيجة إجراء التكامل" />
+        </div>
+        </div>
+      </AdminFormSection>
 
       {!canAuthorize && item.liveConnectionSupported ? (
-        <section className="rounded-[24px] border border-amber-300/18 bg-amber-300/[.055] p-5">
-          <h2 className="text-sm font-semibold text-amber-100">
-            App Configuration غير جاهزة
-          </h2>
-          <p className="mt-2 text-xs leading-6 text-amber-100/65">
+        <AdminFormSection presentation="panel" header={(
+          <AdminModuleSectionHeader
+            id="integration-configuration-unavailable"
+            sectionHeading="App Configuration غير جاهزة"
+            icon="settings"
+            sectionHeaderPresentation="premium"
+            sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+          />
+        )}>
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+          <p className="text-xs leading-6 text-amber-100/65">
             لا يمكن بدء OAuth قبل حفظ الإعداد داخل CMS Vault واجتياز الفحص
             الآمن. حالة المصدر:{" "}
             <span className="font-en">{item.appConfigurationSource}</span>.
           </p>
           {item.missingConfiguration.length ? (
-            <ul className="mt-3 space-y-2 font-en text-xs text-amber-100/80">
+            <ul className="space-y-2 font-en text-xs text-amber-100/80">
               {item.missingConfiguration.map((name) => (
                 <li key={name}>• {name}</li>
               ))}
             </ul>
           ) : null}
-          <Link
+          <AdminActionButton
             href={`/admin/settings/integrations/server-configuration#${item.key === "whatsapp_business" ? "whatsapp" : item.key.startsWith("google_") ? "google" : item.key === "meta_business" ? "meta" : item.key === "tiktok_ads" ? "tiktok" : "snapchat"}`}
-            className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-amber-200/22 px-4 text-xs font-semibold text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+            variant="dark"
           >
             فتح إعدادات الربط على السيرفر
-          </Link>
-        </section>
+          </AdminActionButton>
+          </div>
+        </AdminFormSection>
       ) : null}
 
       {showAssetSelection ? (
-        <section className="rounded-[28px] border border-white/10 bg-[#080B10]/85 p-6">
-          <h2 className="text-lg font-semibold text-white">
-            اختيار أصول Venesia
-          </h2>
-          <p className="mt-2 text-xs leading-6 text-white/42">
-            يُسمح بأصل واحد من كل نوع. العلاقات والصلاحيات تُفحص على السيرفر قبل
-            الاختبار.
-          </p>
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <AdminFormSection presentation="panel" header={(
+          <AdminModuleSectionHeader
+            id="integration-asset-selection"
+            sectionHeading="اختيار أصول Venesia"
+            sectionDescription="يُسمح بأصل واحد من كل نوع. العلاقات والصلاحيات تُفحص على السيرفر قبل الاختبار."
+            icon="database"
+            sectionHeaderPresentation="premium"
+            sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+          />
+        )}>
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+          <AdminFormGrid>
             {groups.map(([type, assets]) => (
-              <div
-                key={type}
-                className="block rounded-2xl border border-white/8 bg-white/[.025] p-4"
-              >
+              <AdminCard key={type} presentation="premium" className="p-3">
+                <div className={adminFormLabelClassName({ textInset: true })}>
                 <span
                   id={`integration-asset-${type}-label`}
-                  className="text-xs font-semibold text-white/70"
+                  data-admin-form-label-text
                 >
                   {ASSET_LABELS[type]}{" "}
                   {item.requiredAssetTypes.includes(type) ? (
@@ -336,12 +359,12 @@ export default function IntegrationConnectionWizard({
                       })),
                   ]}
                   ariaLabelledBy={`integration-asset-${type}-label`}
-                  className="mt-3"
                 />
-              </div>
+                </div>
+              </AdminCard>
             ))}
-          </div>
-          <button
+          </AdminFormGrid>
+          <AdminActionButton
             type="button"
             disabled={!requiredReady || pending !== null}
             onClick={() =>
@@ -349,89 +372,97 @@ export default function IntegrationConnectionWizard({
                 () => undefined,
               )
             }
-            className="mt-5 min-h-11 cursor-pointer rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/[.10] px-5 text-xs font-semibold text-[#E8CF9A] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]"
+            variant="primary"
           >
             {pending === "select_test_sync"
               ? "جارٍ الاختبار والمزامنة…"
               : "اختبار الاتصال وبدء المزامنة"}
-          </button>
-        </section>
+          </AdminActionButton>
+          </div>
+        </AdminFormSection>
       ) : null}
 
-      <section className="rounded-[28px] border border-white/10 bg-[#080B10]/85 p-6">
-        <h2 className="text-lg font-semibold text-white">إجراءات الاتصال</h2>
-        <div className="mt-5 flex flex-wrap gap-3">
+      <AdminFormSection presentation="panel" header={(
+        <AdminModuleSectionHeader
+          id="integration-connection-actions"
+          sectionHeading="إجراءات الاتصال"
+          icon="settings"
+          sectionHeaderPresentation="premium"
+          sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+        />
+      )}>
+        <div className="flex flex-wrap gap-3">
           {canAuthorize ? (
             <a
               href={`/api/admin/integrations/${item.key}/authorize`}
-              className="inline-flex min-h-11 items-center rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/[.08] px-5 text-xs font-semibold text-[#E8CF9A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]"
+              className={adminActionButtonClassName({ variant: "primary" })}
             >
               {item.connectionId ? "إعادة التفويض" : "بدء التفويض"}
             </a>
           ) : null}
           {item.connectionId && !groups.length ? (
-            <button
+            <AdminActionButton
               type="button"
               disabled={pending !== null}
               onClick={() => void execute("discover").catch(() => undefined)}
-              className="min-h-11 rounded-xl border border-white/12 px-5 text-xs font-semibold text-white/65 disabled:opacity-40"
+              variant="dark"
             >
               اكتشاف الأصول
-            </button>
+            </AdminActionButton>
           ) : null}
           {item.connectionId && item.selectedAssets.length ? (
-            <button
-              ref={testButtonRef}
+            <AdminActionButton
+              buttonRef={testButtonRef}
               type="button"
               disabled={pending !== null}
               onClick={() => void execute("test").catch(() => undefined)}
-              className="min-h-11 rounded-xl border border-white/12 px-5 text-xs font-semibold text-white/65 disabled:opacity-40"
+              variant="dark"
             >
               اختبار الاتصال
-            </button>
+            </AdminActionButton>
           ) : null}
           {item.connectionId ? (
-            <button
+            <AdminActionButton
               type="button"
               disabled={pending !== null}
               onClick={() => void execute("diagnose").catch(() => undefined)}
-              className="min-h-11 rounded-xl border border-white/12 px-5 text-xs font-semibold text-white/65 disabled:opacity-40"
+              variant="dark"
             >
               تشخيص الاتصال
-            </button>
+            </AdminActionButton>
           ) : null}
           {item.connectionId &&
           ["connected", "needs_attention"].includes(item.status) ? (
-            <button
+            <AdminActionButton
               type="button"
               disabled={pending !== null}
               onClick={() => void execute("sync").catch(() => undefined)}
-              className="min-h-11 rounded-xl border border-emerald-400/20 px-5 text-xs font-semibold text-emerald-100/75 disabled:opacity-40"
+              variant="dark"
             >
               مزامنة الآن
-            </button>
+            </AdminActionButton>
           ) : null}
           {item.reportsAvailable ? (
-            <Link
+            <AdminActionButton
               href={item.reportsHref}
-              className="inline-flex min-h-11 items-center rounded-xl border border-[#D8B87A]/25 px-5 text-xs font-semibold text-[#E8CF9A]"
+              variant="dark"
             >
               عرض التقارير
-            </Link>
+            </AdminActionButton>
           ) : null}
           {item.connectionId ? (
-            <button
-              ref={disconnectButtonRef}
+            <AdminActionButton
+              buttonRef={disconnectButtonRef}
               type="button"
               disabled={pending !== null}
               onClick={() => setConfirmDisconnect(true)}
-              className="min-h-11 rounded-xl border border-rose-400/20 px-5 text-xs font-semibold text-rose-200/75 disabled:opacity-40"
+              variant="danger"
             >
               فصل الاتصال
-            </button>
+            </AdminActionButton>
           ) : null}
         </div>
-      </section>
+      </AdminFormSection>
 
       <AdminConfirmDialog
         open={confirmDisconnect}

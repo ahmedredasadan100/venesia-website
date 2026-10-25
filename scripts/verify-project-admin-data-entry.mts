@@ -5,6 +5,11 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createJiti } from "jiti";
+import { ENTITY_SEO_FIELD_NAMES } from "../src/lib/seo/entity-seo-types.ts";
 import {
   verifyProjectEntryMediaPreflight,
   verifyProjectEntryReadScheduling,
@@ -24,6 +29,137 @@ function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+if (process.argv.includes("--owner-review-presentation")) {
+  await verifyOwnerReviewPresentation();
+  console.log(`Project Owner Review verification passed (${passed} affected native binding/owner checks; no hosted writes, browser or save proof).`);
+  process.exit(0);
+}
+
+async function verifyOwnerReviewPresentation() {
+  const jiti = createJiti(import.meta.url, { fsCache: false, jsx: { runtime: "automatic" } });
+  const mediaPath = "src/components/admin/projects/entry/ProjectMediaEditors.tsx";
+  const videoPath = "src/components/admin/content/editors/media/MediaVideoFields.tsx";
+  const formPath = "src/app/admin/projects/ProjectEditForm.tsx";
+  const source = read(mediaPath), form = read(formPath), video = read(videoPath);
+  const ui = await jiti.import<typeof import("../src/components/admin/ui/AdminForm.tsx")>("../src/components/admin/ui/AdminForm.tsx");
+  const runtime = await jiti.import<typeof import("../src/components/admin/ui/AdminFormRuntime.tsx")>("../src/components/admin/ui/AdminFormRuntime.tsx");
+  const styles = await jiti.import<typeof import("../src/lib/admin/admin-ui-styles.ts")>("../src/lib/admin/admin-ui-styles.ts");
+  const playback = await jiti.import<typeof import("../src/lib/admin/media-topic-payload.ts")>("../src/lib/admin/media-topic-payload.ts");
+  const contract = await jiti.import<typeof import("../src/lib/admin/projects/project-entry-contract.ts")>("../src/lib/admin/projects/project-entry-contract.ts");
+  const compile = (path: string, input: string, dependencies: Record<string, unknown>) => {
+    const ast = ts.createSourceFile(path, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const executable = ast.statements.filter((node) => !ts.isImportDeclaration(node)).map((node) => node.getText(ast)).join("\n");
+    const exports: Record<string, React.ElementType> = {};
+    const compiled = ts.transpileModule(executable, { compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+    new Function("exports", "React", ...Object.keys(dependencies), compiled)(exports, React, ...Object.values(dependencies));
+    return exports;
+  };
+  const Section = ({ children }: { children?: React.ReactNode }) => React.createElement("div", null, children);
+  const Image = (props: { name: string; defaultValue?: string }) => React.createElement("input", { type: "hidden", name: props.name, value: props.defaultValue ?? "", readOnly: true });
+  const videoOwner = compile(videoPath, video, {
+    ...playback, ...styles, AdminFormField: ui.AdminFormField, AdminFormGrid: runtime.AdminFormGrid,
+    AdminCard: Section, AdminModuleSectionHeader: () => null, AdminModuleTabIcon: () => null,
+    AdminNotice: () => null, AdminFormError: () => null, useOptionalAdminFormRuntime: () => null,
+    AdminMediaImageField: Image, AdminFormListboxSelect: ({ name, value }: { name?: string; value?: string }) => React.createElement("input", { type: "hidden", name, value, readOnly: true }),
+    MediaVideoPlayback: ({ item }: { item: { videoProvider: string } }) => React.createElement("span", { "data-resolved-video-provider": item.videoProvider }),
+    mediaContentSlot: () => ({}),
+  }).default!;
+  let state: unknown[] = [], cursor = 0;
+  let gallery: Record<string, unknown> = {}, dialog: Record<string, unknown> = {};
+  const useState = (initial: unknown) => {
+    const index = cursor++;
+    if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
+    return [state[index], (update: unknown) => { state[index] = typeof update === "function" ? update(state[index]) : update; }];
+  };
+  const media = compile(mediaPath, source, {
+    useState, useRef: () => ({ current: null }), projectMediaSlot: () => ({}), ADMIN_FORM_STACK_CLASS_NAME: ui.ADMIN_FORM_STACK_CLASS_NAME,
+    AdminFormError: () => null, MediaVideoFields: videoOwner,
+    AdminConfirmDialog: (props: Record<string, unknown>) => { dialog = props; return null; },
+    AdminMediaGalleryField: (props: Record<string, unknown>) => { gallery = props; return null; },
+  });
+  const initial = [
+    { id: 11, client_key: "image-a", section: "gallery", image: "/a.jpg", alt_text: "Alt A" },
+    { id: 13, client_key: "image-c", section: "overview", image: "/c.jpg", alt_text: "Alt C" },
+    { id: 12, client_key: "image-b", section: "gallery", image: "/b.jpg", alt_text: "Alt B" },
+  ];
+  const renderImage = () => {
+    cursor = 0;
+    const Component = media.ProjectImageCollectionEditor as (props: unknown) => React.ReactElement;
+    return renderToStaticMarkup(Component({ section: "gallery", initialItems: initial }));
+  };
+  renderImage();
+  type GalleryItem = { key: string; url: string; alt: string; caption: string };
+  const items = () => gallery.controlledItems as GalleryItem[];
+  assert.deepEqual(items().map((item) => item.key), ["image-a", "image-b"]);
+  assert.equal(gallery.enableDragDrop, true); assert.equal(gallery.dragFromImage, true); assert.equal(gallery.showCaption, false);
+  assert.equal(gallery.name, "media_image"); assert.equal(gallery.altName, "media_alt_text");
+  const projection = gallery.renderItemProjection as (item: GalleryItem, index: number) => React.ReactElement;
+  assert.match(renderToStaticMarkup(projection(items()[0]!, 0)), /name="media_id" value="11"/u);
+  (gallery.onItemsChange as (update: (current: GalleryItem[]) => GalleryItem[]) => void)((current) => [...current].reverse());
+  renderImage();
+  assert.deepEqual((state[0] as typeof initial).map(({ id, client_key, image, alt_text }) => ({ id, client_key, image, alt_text })), [initial[2], initial[0]].map(({ id, client_key, image, alt_text }) => ({ id, client_key, image, alt_text })));
+  const data = new FormData();
+  for (const item of state[0] as typeof initial) for (const [name, value] of Object.entries({ media_id: item.id, media_client_key: item.client_key, media_section: item.section, media_image: item.image, media_alt_text: item.alt_text })) data.append(name, String(value));
+  assert.deepEqual(contract.projectEntryPayloadFromFormData(data).media, state[0]);
+  check("Actual Project gallery delegates movement to the shared owner and preserves IDs, section, native tuple ordering and parser projection", true);
+  (gallery.onRequestRemove as (key: string) => void)("image-b"); renderImage();
+  assert.equal(dialog.open, true); assert.equal((state[0] as unknown[]).length, 2); assert.deepEqual(state[1], []);
+  (dialog.onCancel as () => void)(); renderImage(); assert.equal((state[0] as unknown[]).length, 2);
+  (gallery.onRequestRemove as (key: string) => void)("image-b"); renderImage(); (dialog.onConfirm as () => void)();
+  const deletedProjection = renderImage();
+  assert.deepEqual(state[1], [12]); assert.deepEqual(items().map((item) => item.key), ["image-a"]);
+  assert.match(deletedProjection, /name="deleted_media_id" value="12"/u);
+  check("Project removal retains the current confirmation boundary and explicit tombstone lifecycle", true);
+  state = []; cursor = 0;
+  const Video = media.ProjectVideoCollectionEditor as (props: unknown) => React.ReactElement;
+  const videoMarkup = renderToStaticMarkup(Video({ section: "gallery", initialItems: [{ id: 21, client_key: "video-a", section: "gallery", video_url: "https://www.facebook.com/reel/123456789", poster_image: "/poster.jpg", poster_alt: "Poster Alt" }] }));
+  for (const [name, value] of Object.entries({ video_id: "21", video_client_key: "video-a", video_section: "gallery", video_url: "https://www.facebook.com/reel/123456789", video_poster_image: "/poster.jpg", video_poster_alt: "Poster Alt" })) assert.ok(videoMarkup.includes(`name="${name}"`) && videoMarkup.includes(`value="${value}"`), `${name} retains its native value`);
+  for (const name of ["video_provider", "video_duration", "video_start_seconds", "video_thumbnail"]) assert.ok(!videoMarkup.includes(`name="${name}"`), `Project cannot serialize unsupported ${name}`);
+  assert.ok(videoMarkup.includes('data-resolved-video-provider="facebook"'));
+  assert.ok(videoMarkup.includes('id="gallery_video_url_input"') && videoMarkup.includes('id="gallery_video_poster_alt"'));
+  check("Actual Project video reaches the existing shared Video fields with exact native URL/poster/alt identity and no added domain fields", true);
+  state = []; cursor = 0;
+  const unavailableRows = renderToStaticMarkup(Video({ section: "gallery", initialItems: ["a", "b"].map((key, index) => ({ id: 31 + index, client_key: `unsupported-${key}`, section: "gallery", video_url: `https://example.com/source-${key}`, poster_image: "", poster_alt: `Alt ${key}` })) }));
+  const rowIds = [...unavailableRows.matchAll(/\bid="([^"]+)"/gu)].map((match) => match[1]);
+  assert.equal(new Set(rowIds).size, rowIds.length);
+  assert.ok(unavailableRows.includes('id="gallery_video_url_input"') && unavailableRows.includes('id="gallery-unsupported-b-video-url"'));
+  assert.ok(unavailableRows.includes('value="https://example.com/source-a"') && unavailableRows.includes('value="https://example.com/source-b"'));
+  assert.ok(!unavailableRows.includes('id="video_url-validation"') && video.includes('{!nativeBinding ? <AdminFormError name={urlErrorName} /> : null}'));
+  check("Multiple unavailable Project video rows retain native sources and unique focus identity with collection-owned error projection", true);
+  const urls = { youtube: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", vimeo: "https://vimeo.com/123456789", facebook: "https://www.facebook.com/reel/123456789", tiktok: "https://www.tiktok.com/@account/video/123456789", instagram: "https://www.instagram.com/reel/ABC123/", direct: "https://example.com/video.mp4" };
+  for (const [provider, url] of Object.entries(urls)) {
+    const markup = renderToStaticMarkup(React.createElement(videoOwner, { presentation: "panel", videoUrl: url, nativeBinding: { urlId: "project-url", urlErrorName: "gallery_video_url", thumbnailName: "video_poster_image", thumbnailAltName: "video_poster_alt", thumbnailAltId: "project-alt", thumbnailAltErrorName: "gallery_video_poster_alt", thumbnailAlt: "Alt", onThumbnailAltChange: () => undefined, browseFolder: "images/projects/videos", mediaSlot: {} } }));
+    assert.ok(markup.includes(`data-resolved-video-provider="${provider}"`), `${provider} is recognized only through the existing resolver`);
+    assert.ok(markup.includes(`value="${url.replaceAll("&", "&amp;")}"`), `${provider} authoring URL remains unchanged`);
+  }
+  const topicDefault = renderToStaticMarkup(React.createElement(videoOwner, { defaultVideoUrl: urls.youtube, defaultDuration: "3:45", defaultThumbnail: "/topic.jpg" }));
+  for (const name of ["video_provider", "video_url", "video_duration", "video_thumbnail"]) assert.ok(topicDefault.includes(`name="${name}"`));
+  assert.ok(topicDefault.includes('value="3:45"') && !topicDefault.includes('name="video_poster_alt"'));
+  check("Shared Video preserves Topic native defaults and reuses all six existing provider resolvers without URL rewriting", true);
+  const stackValid = (input: string) => {
+    const tree = ts.createSourceFile(formPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let found = false;
+    const visit = (node: ts.Node) => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "div" && node.openingElement.attributes.properties.some((attr) => ts.isJsxAttribute(attr) && attr.name.getText(tree) === "data-project-entry-form-stack")) {
+        const elements = node.children.filter((child) => ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child));
+        found = node.openingElement.attributes.properties.some((attr) => ts.isJsxAttribute(attr) && attr.name.getText(tree) === "className" && attr.initializer?.getText(tree) === "{ADMIN_FORM_STACK_CLASS_NAME}") &&
+          elements.some((child) => ts.isJsxElement(child) && child.getText(tree).includes("<AdminModuleTabs")) && elements.some((child) => ts.isJsxSelfClosingElement(child) && child.tagName.getText(tree) === "AdminFormActions");
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree); return found;
+  };
+  assert.ok(stackValid(form)); assert.ok(!stackValid(form.replace('className={ADMIN_FORM_STACK_CLASS_NAME} data-project-entry-form-stack=""', 'data-project-entry-form-stack=""')));
+  assert.ok(form.includes('<AdminFormGrid columns={2} presentation="aligned-fields">') && form.includes("embedded"));
+  assert.ok(form.includes('<div className={ADMIN_FORM_STACK_CLASS_NAME}>{children}</div>'));
+  assert.ok(!form.includes('className="space-y-4"'));
+  check("Project spacing belongs to the actual inner DOM stack and mixed field rows use the canonical alignment owner; missing inner stack is rejected", true);
+  const adopted = (input: string) => input.includes("<AdminMediaGalleryField") && input.includes("controlledItems=") && input.includes("onItemsChange=") && input.includes("renderItemProjection=") && input.includes("onRequestRemove=") && input.includes("enableDragDrop") && input.includes("dragFromImage") && input.includes("<MediaVideoFields") && input.includes("nativeBinding=");
+  assert.ok(adopted(source));
+  for (const binding of ["controlledItems=", "onItemsChange=", "renderItemProjection=", "onRequestRemove=", "enableDragDrop", "nativeBinding="]) assert.ok(!adopted(source.replace(binding, "missing-contract=")));
+  check("Negative adoption probes reject missing shared gallery identity, movement, confirmation and native Video ports", true);
 }
 
 const migrationPath =
@@ -178,27 +314,80 @@ const coordinator = read(
 );
 const projectSeoPanel = read(projectSeoPanelPath);
 const seoPanel = read(sharedSeoPanelPath);
+function defaultEntitySeoRender(input: string, premium = false, panel = false) {
+  const tree = ts.createSourceFile(sharedSeoPanelPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = new Map<string, ts.Expression>();
+  const collect = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) declarations.set(node.name.text, node.initializer);
+    ts.forEachChild(node, collect);
+  };
+  collect(tree);
+  const selector = declarations.get("premium");
+  assert.ok(selector && ts.isBinaryExpression(selector) && selector.left.getText(tree) === 'presentation === "premium"' &&
+    selector.operatorToken.kind === ts.SyntaxKind.BarBarToken && selector.right.getText(tree) === "panel" &&
+    declarations.get("panel")?.getText(tree) === 'presentation === "panel"',
+  "Project SEO inspection requires the actual explicit canonical Panel selector and preserved compatibility selector.");
+  const isJsx = (node: ts.Node): boolean => ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node) ||
+    ts.isParenthesizedExpression(node) && isJsx(node.expression) ||
+    ts.isConditionalExpression(node) && (isJsx(node.whenTrue) || isJsx(node.whenFalse));
+  const expand = (node: ts.Node, expanding: readonly string[]): string => {
+    const start = node.getStart(tree);
+    const replacements: Array<{ start: number; end: number; text: string }> = [];
+    const visit = (child: ts.Node) => {
+      if (ts.isConditionalExpression(child) && ["premium", "panel"].includes(child.condition.getText(tree))) {
+        const selected = child.condition.getText(tree) === "panel" ? panel : premium;
+        replacements.push({ start: child.getStart(tree), end: child.getEnd(), text: expand(selected ? child.whenTrue : child.whenFalse, expanding) });
+        return;
+      }
+      if (ts.isJsxExpression(child) && child.expression && ts.isIdentifier(child.expression)) {
+        const name = child.expression.text;
+        const initializer = declarations.get(name);
+        if (initializer && isJsx(initializer) && !expanding.includes(name)) {
+          replacements.push({ start: child.getStart(tree), end: child.getEnd(), text: expand(initializer, [...expanding, name]) });
+          return;
+        }
+      }
+      ts.forEachChild(child, visit);
+    };
+    visit(node);
+    let rendered = node.getText(tree);
+    for (const replacement of replacements.sort((left, right) => right.start - left.start)) {
+      rendered = rendered.slice(0, replacement.start - start) + replacement.text + rendered.slice(replacement.end - start);
+    }
+    return rendered;
+  };
+  const content = (name: string) => {
+    const initializer = declarations.get(name);
+    assert.ok(initializer, `Existing shared Entity SEO content is required: ${name}`);
+    return expand(initializer, [name]);
+  };
+  return {
+    primary: ["seoBasicsContent", "robotsCanonicalContent", "socialSharingFields"].map(content).join("\n"),
+    robots: content("robotsCanonicalContent"),
+  };
+}
+const defaultSeoRender = defaultEntitySeoRender(seoPanel);
+const panelSeoRender = defaultEntitySeoRender(seoPanel, true, true);
+const hasRenderedSeoField = (rendered: string, field: string) =>
+  new RegExp(`\\bfieldNames\\.${field}\\b`, "u").test(rendered);
 const entitySeoPrimaryStart = seoPanel.indexOf("const seoBasicsContent");
 const entitySeoReturnStart = seoPanel.indexOf(
   "  return (",
   entitySeoPrimaryStart,
 );
-const entitySeoPrimaryRender = seoPanel.slice(
-  entitySeoPrimaryStart,
-  entitySeoReturnStart,
-);
+const entitySeoPrimaryRender = defaultSeoRender.primary;
 const entitySeoHelperStart = seoPanel.indexOf(
   "<AdminSingleOpenAccordion",
   entitySeoReturnStart,
 );
 const entitySeoHelperRender = seoPanel.slice(entitySeoHelperStart);
-const entitySeoRobotsIndexPosition = seoPanel.indexOf(
+const entitySeoRobotsIndexPosition = defaultSeoRender.robots.indexOf(
   "name={fieldNames.robotsIndex}",
 );
-const entitySeoRobotsFollowPosition = seoPanel.indexOf(
+const entitySeoRobotsFollowPosition = defaultSeoRender.robots.indexOf(
   "name={fieldNames.robotsFollow}",
 );
-const entitySeoCanonicalPosition = seoPanel.indexOf(
+const entitySeoCanonicalPosition = defaultSeoRender.robots.indexOf(
   "name={fieldNames.canonicalUrl}",
 );
 const projectsHubPage = read(projectsHubPagePath);
@@ -1150,9 +1339,8 @@ check(
     !existsSync(join(ROOT, previewPath)) &&
     form.includes('className="grid gap-4 xl:grid-cols-3"') &&
     repeaters.includes('className="grid scroll-mt-28 gap-4 xl:grid-cols-3"') &&
-    mediaEditors.includes(
-      'className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"',
-    ) &&
+    mediaEditors.includes("<AdminMediaGalleryField") && mediaEditors.includes("desktopColumns={3}") &&
+    mediaEditors.includes("controlledItems=") && mediaEditors.includes("renderItemProjection=") &&
     !mediaEditors.includes("2xl:grid-cols-4"),
 );
 check(
@@ -1373,20 +1561,10 @@ check(
     entitySeoPrimaryStart >= 0 &&
     entitySeoReturnStart > entitySeoPrimaryStart &&
     entitySeoHelperStart > entitySeoReturnStart &&
-    [
-      "seoTitle",
-      "seoDescription",
-      "focusKeyword",
-      "seoKeywords",
-      "robotsIndex",
-      "robotsFollow",
-      "canonicalUrl",
-      "ogImage",
-      "ogImageAlt",
-    ].every(
+    Object.keys(ENTITY_SEO_FIELD_NAMES).every(
       (field) =>
-        entitySeoPrimaryRender.includes(`fieldNames.${field}`) &&
-        !entitySeoHelperRender.includes(`fieldNames.${field}`),
+        hasRenderedSeoField(entitySeoPrimaryRender, field) &&
+        !hasRenderedSeoField(entitySeoHelperRender, field),
     ) &&
     entitySeoRobotsIndexPosition >= 0 &&
     entitySeoRobotsIndexPosition < entitySeoRobotsFollowPosition &&
@@ -1404,6 +1582,32 @@ check(
     ) &&
     !seoPanel.includes("project-") &&
     !seoPanel.includes("images/projects"),
+);
+check(
+  "Project explicitly adopts the existing canonical Panel renderer with all native SEO fields and aligned robots controls",
+  projectSeoPanel.match(/<AdminEntitySeoPanel\b/g)?.length === 1 &&
+    projectSeoPanel.match(/\bpresentation="panel"/g)?.length === 1 &&
+    Object.keys(ENTITY_SEO_FIELD_NAMES).every((field) =>
+      hasRenderedSeoField(panelSeoRender.primary, field) &&
+      !hasRenderedSeoField(entitySeoHelperRender, field),
+    ) &&
+    panelSeoRender.robots.match(/sizing=(?:"full"|\{\s*"full"\s*\})/g)?.length === 2 &&
+    panelSeoRender.robots.indexOf("name={fieldNames.robotsIndex}") >= 0 &&
+    panelSeoRender.robots.indexOf("name={fieldNames.robotsIndex}") < panelSeoRender.robots.indexOf("name={fieldNames.robotsFollow}") &&
+    panelSeoRender.robots.indexOf("name={fieldNames.robotsFollow}") < panelSeoRender.robots.indexOf("name={fieldNames.canonicalUrl}") &&
+    panelSeoRender.robots.includes('data-admin-seo-control-order="index-follow-canonical"') &&
+    !panelSeoRender.robots.includes('sizing="wide"'),
+);
+check(
+  "Project default, compatibility and canonical Panel SEO reject unrendered fields even when their shared JSX declarations remain present",
+  ["seoTitleField", "canonicalField", "socialImageField"].every((name) => {
+    const mutant = seoPanel.replaceAll(`{${name}}`, "{null}");
+    assert.notEqual(mutant, seoPanel, `The actual rendered field reference must exist: ${name}`);
+    return [[false, false], [true, false], [true, true]].every(([premium, panel]) => {
+      const rendered = defaultEntitySeoRender(mutant, premium, panel).primary;
+      return !Object.keys(ENTITY_SEO_FIELD_NAMES).every((field) => hasRenderedSeoField(rendered, field));
+    });
+  }),
 );
 check(
   "Form Runtime adoption registry records the unified Project create/edit owner",

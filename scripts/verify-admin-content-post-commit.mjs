@@ -30,6 +30,7 @@ function load(file, dependencies) {
 }
 
 const resultOwner = load("src/lib/admin/admin-action-result.ts", {});
+const topicWriteErrors = load("src/lib/admin/content/topic-write-errors.ts", { "server-only": {} });
 const readSource = (file) => readFileSync(path.join(root, file), "utf8");
 
 function harness(kind, options = {}) {
@@ -147,6 +148,7 @@ function harness(kind, options = {}) {
     else if (name.includes("synchronization")) dependencies[name] = { synchronizeMediaReferenceWriteScopesAfterDomainMutation: async () => mediaSynchronization };
     else if (name.includes("write-lease")) dependencies[name] = { MediaReferenceWriteLeaseError: TestLeaseError, getMediaReferenceWriteLeaseUserMessage: () => "lease failure" };
     else if (name.includes("topic-revision")) dependencies[name] = { parseTopicRevisionToken: () => ({ provided: true, value: current.updated_at }), topicRevisionMatches: () => true, TopicRevisionConflictError: TestRevisionConflict };
+    else if (name.includes("topic-write-errors")) dependencies[name] = topicWriteErrors;
     else if (name.includes("content-types")) dependencies[name] = { isContentType: () => true, isMediaEditableContentType: () => true, MEDIA_EDITABLE_CONTENT_TYPES: ["video"] };
     else if (name.includes("category-hierarchy")) dependencies[name] = { getAdminContentSeriesCategoryError: () => null, isAdminContentSeriesInCategory: () => true };
     else if (name.includes("taxonomy-mutations")) {

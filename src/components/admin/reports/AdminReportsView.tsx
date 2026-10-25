@@ -141,6 +141,7 @@ export default function AdminReportsView({ model }: { model: AdminReportsModel }
   return (
     <AdminPageExperience className="min-w-0 pb-12" dir="rtl">
       <AdminPageContextHeader
+        visualPreset="reports"
         eyebrow="REPORTING SYSTEM"
         title="نظرة عامة على التقارير"
         description="ملخص تنفيذي قابل للقرار. كل بطاقة تنقلك إلى التقرير والفلتر المرتبطين بها، بينما التفاصيل الكاملة تعيش في صفحاتها المستقلة."

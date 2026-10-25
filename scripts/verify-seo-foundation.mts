@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createElement, Fragment, type ReactNode } from "react";
+import { createElement, Fragment, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -8,6 +8,8 @@ import ts from "typescript";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../src/lib/database.types.ts";
 import type { EntitySeoData } from "../src/lib/seo/entity-seo-types.ts";
+import type { VideoProvider } from "../src/lib/admin/media-topic-payload.ts";
+import type { MediaContentItem } from "../src/lib/media-center/types.ts";
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, "..");
@@ -65,7 +67,12 @@ mod._load = (request, parent, main) => {
   if (request === "server-only") return {};
   if (request === "next/server") return { connection: async () => {} };
   // Render the real shared preview and adapters; only unrelated media/form widgets are ports.
-  if (request.endsWith("/AdminFormRuntime")) return { useOptionalAdminFormRuntime: () => null, AdminFormError: () => null };
+  if (request.endsWith("/AdminFormRuntime")) return {
+    useOptionalAdminFormRuntime: () => null,
+    AdminFormError: () => null,
+    AdminFormGrid: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+    AdminFormGridItem: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+  };
   if (/\/(AdminTagsField|AdminMediaImageField|AdminFormListboxSelect)$/.test(request)) return { default: () => null, __esModule: true };
   if (request.endsWith("/AdminSingleOpenAccordion")) return { __esModule: true, default: ({ items }: { items: Array<{ content: ReactNode }> }) => createElement(Fragment, null, ...items.map(item => item.content)) };
   if (request.endsWith("/cache/public-cache-generation")) return { cachePublicRead: (fn: unknown) => fn };
@@ -78,6 +85,7 @@ const { resolveSeoMetadata } = load<typeof import("../src/lib/seo/resolve-seo-me
 const { generatePublicMetadata } = load<typeof import("../src/lib/seo/generate-public-metadata")>("src/lib/seo/generate-public-metadata.ts");
 const { buildMetadataFromResolved } = load<typeof import("../src/lib/seo/build-metadata-from-resolved")>("src/lib/seo/build-metadata-from-resolved.ts");
 const { buildPageJsonLd } = load<typeof import("../src/lib/seo/build-jsonld")>("src/lib/seo/build-jsonld.ts");
+const { MediaVideoPlayback } = load<typeof import("../src/components/media-center/MediaDetailArticle")>("src/components/media-center/MediaDetailArticle.tsx");
 const { presentSeoText } = load<typeof import("../src/lib/seo/seo-utils")>("src/lib/seo/seo-utils.ts");
 const { NO_INDEX_ROBOTS } = load<typeof import("../src/config/seo/seo-rules")>("src/config/seo/seo-rules.ts");
 const { generateSitemapEntries, resolveSitemapCandidate } = load<typeof import("../src/lib/seo/generate-sitemap-entries")>("src/lib/seo/generate-sitemap-entries.ts");
@@ -85,6 +93,7 @@ const { resolveRobots } = require("next/dist/lib/metadata/resolvers/resolve-basi
 const { default: SeoPanel } = load<typeof import("../src/components/admin/SeoPanel")>("src/components/admin/SeoPanel.tsx");
 const { default: AdminEntitySeoPanel } = load<typeof import("../src/components/admin/seo/AdminEntitySeoPanel")>("src/components/admin/seo/AdminEntitySeoPanel.tsx");
 const { default: manifest } = load<typeof import("../src/app/manifest")>("src/app/manifest.ts");
+const isolatedTypeScriptLoader = require.extensions[".tsx"]!;
 mod._load = originalLoad;
 if (originalTs) require.extensions[".ts"] = originalTs; else delete require.extensions[".ts"];
 if (originalTsx) require.extensions[".tsx"] = originalTsx; else delete require.extensions[".tsx"];
@@ -125,6 +134,159 @@ assert.equal(listing.address, undefined);
 assert.deepEqual(listing.contentLocation, { "@type": "Place", address: { "@type": "PostalAddress", addressLocality: "Cairo" } });
 assert.ok(!json.includes(input.path));
 assert.ok(json.includes("https://seo.test#organization"));
+
+const videoSchemaInput = {
+  path: "/media-center/videos/verified-video", title: "فيديو منشور", description: "وصف الفيديو المنشور",
+  publishedAt: "2026-10-23T12:00:00Z",
+};
+for (const [provider, url, expectedMode, startSeconds] of [
+  ["youtube", "https://youtu.be/dQw4w9WgXcQ", "embed", 75],
+  ["vimeo", "https://vimeo.com/123456789", "embed", 75],
+  ["facebook", "https://www.facebook.com/watch/?v=123456789", "external", 0],
+  ["tiktok", "https://www.tiktok.com/@venesia/video/1234567890123456789", "embed", 0],
+  ["instagram", "https://www.instagram.com/reel/ABCdef123_-", "external", 0],
+  ["direct", "https://cdn.example.com/movie.mp4", "direct", 75],
+] as const) {
+  const schemas = buildPageJsonLd({ ...videoSchemaInput, type: "article", image: "/video-poster.jpg" }, global);
+  const serializedSchemas = JSON.stringify(schemas);
+  assert.ok(serializedSchemas.includes('"image":"https://seo.test/video-poster.jpg"'));
+  assert.ok(!serializedSchemas.includes("VideoObject") && !serializedSchemas.includes("uploadDate") && !serializedSchemas.includes('"duration"'), `${provider}: CMS publication dates and legacy duration must not become invented provider metadata`);
+  const playbackHtml = renderToStaticMarkup(createElement(MediaVideoPlayback, {
+    item: { title: videoSchemaInput.title, videoProvider: provider, videoUrl: url, videoStartSeconds: startSeconds, image: "/video-poster.jpg" },
+  }));
+  assert.ok(playbackHtml.includes(`data-public-media-video-mode="${expectedMode}"`), `${provider}: the shared playback owner renders its canonical mode`);
+  assert.ok(playbackHtml.includes('target="_blank"') && playbackHtml.includes('rel="noopener noreferrer"'), `${provider}: restricted or unavailable content retains its verified source action`);
+  assert.ok(!/(?:[?&]|&amp;)autoplay=1|\sautoplay(?:=|;|\s|>)/i.test(playbackHtml), `${provider}: preview and public playback never autoplay`);
+  if (expectedMode === "embed") {
+    assert.ok(playbackHtml.includes("<iframe") && !playbackHtml.includes("<video"));
+    assert.ok(playbackHtml.includes('loading="lazy"') && playbackHtml.includes('referrerPolicy="strict-origin-when-cross-origin"'));
+  } else if (expectedMode === "direct") {
+    assert.ok(playbackHtml.includes("<video") && !playbackHtml.includes("<iframe"));
+    assert.ok(playbackHtml.includes('poster="/video-poster.jpg"') && playbackHtml.includes('preload="none"') && playbackHtml.includes("object-contain"));
+  } else {
+    assert.ok(!playbackHtml.includes("<video") && !playbackHtml.includes("<iframe"));
+  }
+}
+for (const videoUrl of ["", "https://notyoutube.com/watch?v=dQw4w9WgXcQ"]) {
+  const invalidHtml = renderToStaticMarkup(createElement(MediaVideoPlayback, { item: { title: "Unavailable", videoUrl } }));
+  assert.ok(invalidHtml.includes("data-public-media-video-unavailable") && !invalidHtml.includes("<iframe") && !invalidHtml.includes("<video") && !invalidHtml.includes('target="_blank"'));
+}
+console.log("PASS Video public playback and SEO: six providers use the shared resolver, source-only limits are honest, embeds/native video do not autoplay, and page metadata invents no provider upload date or duration.");
+
+// Exercise the real rendering entry points; only their existing data/service ports
+// are isolated. Meta reads must never leak into unrelated providers or SEO reads.
+const originalRenderLoad = mod._load;
+const { default: MediaDetailArticle } = load<typeof import("../src/components/media-center/MediaDetailArticle")>("src/components/media-center/MediaDetailArticle.tsx");
+let renderItem: MediaContentItem;
+let previewTopic: Record<string, unknown>;
+let embedReads = 0;
+let previewAuthReads = 0;
+let deniedEmbed = false;
+const renderPort = ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children);
+function findRenderedComponent(node: ReactNode, component: unknown): Record<string, unknown> | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findRenderedComponent(child, component);
+      if (found) return found;
+    }
+  } else if (isValidElement<{ children?: ReactNode }>(node)) {
+    if (node.type === component) return node.props;
+    return findRenderedComponent(node.props.children, component);
+  }
+}
+try {
+  require.extensions[".tsx"] = require.extensions[".ts"] = isolatedTypeScriptLoader;
+  mod._load = (request, parent, main) => {
+    if (request === "server-only") return {};
+    if (request.endsWith("/media-center")) return {
+      getMediaItemBySlug: async () => renderItem,
+      getRelatedMediaItems: async () => [],
+    };
+    if (request.endsWith("/content/public-content-read/owner")) return {
+      readMetaVideoEmbed: async (payload: { provider: VideoProvider; video_url: string }) => {
+        embedReads++;
+        assert.ok(payload.provider === "facebook" || payload.provider === "instagram", "Only Meta reaches the oEmbed read port");
+        if (deniedEmbed) return { status: "unavailable", reason: "denied" };
+        return { status: "ready", provider: payload.provider, sourceUrl: payload.video_url };
+      },
+    };
+    if (request.endsWith("/pages/get-published-page-by-slug")) return { getPublishedPageStateBySlug: async () => ({ page: null }) };
+    if (request.endsWith("/require-admin-session")) return { requireAdminSession: async () => { previewAuthReads++; } };
+    if (request.endsWith("/media-catalog/deleted-reference-state")) return {
+      readDeletedManagedValues: async () => [], readMissingManagedValues: async () => [],
+    };
+    if (request.endsWith("/AdminDeletedMediaNotice")) return { AdminMediaPreview: renderPort };
+    if (request.endsWith("/components/admin/ui")) return { AdminPageHeader: renderPort, AdminStatusPill: renderPort };
+    if (/\/(InternalPageLayout|MediaPageShell|JsonLd|TopicViewTracker)$/.test(request)) return { __esModule: true, default: renderPort };
+    if (request.endsWith("/supabase-admin")) return { getSupabaseAdmin: () => ({ from: (table: string) => {
+      assert.equal(table, "admin_content_topics");
+      const query = { select: () => query, eq: () => query, is: () => query, maybeSingle: async () => ({ data: previewTopic, error: null }) };
+      return query;
+    } }) };
+    return originalRenderLoad(request, parent, main);
+  };
+  const { default: MediaDetailPage } = load<typeof import("../src/components/media-center/MediaDetailPage")>("src/components/media-center/MediaDetailPage.tsx");
+  const { default: ContentPreviewPage } = load<typeof import("../src/app/admin/content/topics/[id]/preview/page")>("src/app/admin/content/topics/[id]/preview/page.tsx");
+  const { generateMediaDetailMetadata } = load<typeof import("../src/lib/media-center/generate-media-detail-metadata")>("src/lib/media-center/generate-media-detail-metadata.ts");
+  for (const [provider, videoUrl, eligible] of [
+    ["facebook", "https://www.facebook.com/watch?v=123456789", true],
+    ["instagram", "https://www.instagram.com/reel/ABCdef123_-/", true],
+    ["facebook", "https://www.facebook.com/share/v/123456789", false],
+    ["facebook", "https://www.facebook.com.evil.test/watch?v=123456789", false],
+    ["instagram", "https://www.instagram.com/p/ABCdef123_-/", false],
+    ["youtube", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", false],
+    ["vimeo", "https://vimeo.com/123456789", false],
+    ["tiktok", "https://www.tiktok.com/@venesia/video/1234567890123456789", false],
+    ["direct", "https://cdn.example.com/movie.mp4", false],
+  ] as const) {
+    renderItem = {
+      id: "42", slug: "isolated-render", title: "Isolated Video", excerpt: "", category: "", date: "", publishedAt: "2026-10-23T12:00:00Z", image: "", type: "video",
+      videoProvider: provider, videoUrl, showTitleOnPage: true, showImageOnPage: true, showExcerptOnPage: true,
+      showDateOnPage: true, showCategoryOnPage: true, showSeriesOnPage: true, showIntroCardOnPage: true,
+    };
+    const before = embedReads;
+    const page = await MediaDetailPage({ configKey: "videos", slug: renderItem.slug });
+    const articleProps = findRenderedComponent(page, MediaDetailArticle);
+    assert.ok(articleProps, `${provider}: public detail retains its existing Article owner`);
+    assert.equal(embedReads - before, Number(eligible), `${provider}: only an eligible Meta detail reads oEmbed`);
+    assert.equal((articleProps.metaEmbed as { status?: string } | undefined)?.status, eligible ? "ready" : undefined);
+
+    previewTopic = { id: 42, title: "Isolated Video", content_type: "video", status: "unpublished", media_payload: { kind: "video", provider, video_url: videoUrl } };
+    const beforePreview = embedReads;
+    const beforeAuth = previewAuthReads;
+    const preview = await ContentPreviewPage({ params: Promise.resolve({ id: "42" }) });
+    const playerProps = findRenderedComponent(preview, MediaVideoPlayback);
+    assert.ok(playerProps, `${provider}: saved preview retains the same single playback owner`);
+    assert.equal(previewAuthReads - beforeAuth, 1, "Saved preview keeps its authenticated read boundary");
+    assert.equal(embedReads - beforePreview, Number(eligible), `${provider}: an invalid draft URL or unrelated provider makes no oEmbed request`);
+    assert.equal((playerProps.metaEmbed as { status?: string } | undefined)?.status, eligible ? "ready" : undefined);
+  }
+  renderItem = { ...renderItem!, videoProvider: "facebook", videoUrl: "https://www.facebook.com/watch?v=123456789" };
+  previewTopic = { ...previewTopic!, media_payload: { kind: "video", provider: "facebook", video_url: renderItem.videoUrl } };
+  deniedEmbed = true;
+  const deniedPublic = await MediaDetailPage({ configKey: "videos", slug: renderItem.slug });
+  const deniedPreview = await ContentPreviewPage({ params: Promise.resolve({ id: "42" }) });
+  assert.deepEqual(findRenderedComponent(deniedPublic, MediaDetailArticle)?.metaEmbed, { status: "unavailable", reason: "denied" }, "Public detail passes provider denial to the existing fallback renderer without failing the content page");
+  assert.deepEqual(findRenderedComponent(deniedPreview, MediaVideoPlayback)?.metaEmbed, { status: "unavailable", reason: "denied" }, "Saved preview preserves provider failure as a fallback result");
+  const beforeMetadata = embedReads;
+  const deniedMetadata = await generateMediaDetailMetadata("videos", { params: Promise.resolve({ slug: renderItem.slug }) });
+  deniedEmbed = false;
+  const readyMetadata = await generateMediaDetailMetadata("videos", { params: Promise.resolve({ slug: renderItem.slug }) });
+  assert.deepEqual(readyMetadata, deniedMetadata, "oEmbed availability never changes public metadata");
+  assert.equal(embedReads, beforeMetadata, "The existing Media metadata generator makes no oEmbed request");
+  const beforeNews = embedReads;
+  renderItem = { ...renderItem!, type: "news", videoProvider: "facebook", videoUrl: "https://www.facebook.com/watch?v=123456789" };
+  await MediaDetailPage({ configKey: "news", slug: renderItem.slug });
+  previewTopic = { ...previewTopic!, content_type: "article" };
+  await ContentPreviewPage({ params: Promise.resolve({ id: "42" }) });
+  assert.equal(embedReads, beforeNews, "Non-video public and saved-preview consumers never activate Meta even when payload contains a Meta URL");
+} finally {
+  mod._load = originalRenderLoad;
+  if (originalTs) require.extensions[".ts"] = originalTs; else delete require.extensions[".ts"];
+  if (originalTsx) require.extensions[".tsx"] = originalTsx; else delete require.extensions[".tsx"];
+}
+console.log("PASS Meta render bindings: public detail and authenticated saved preview opt in only after canonical eligibility; other providers, invalid drafts and non-video consumers make no oEmbed request.");
+
 for (const [robots, expected] of [[resolved.robots, "index, nofollow"], [NO_INDEX_ROBOTS, "noindex, nofollow"]] as const) {
   const serialized = resolveRobots(robots);
   assert.equal(serialized?.basic, expected);

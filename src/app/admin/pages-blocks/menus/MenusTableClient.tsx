@@ -310,6 +310,7 @@ export default function MenusTableClient({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageHeader
+        visualPreset="navigation"
         eyebrow="Admin Panel"
         title="إدارة القوائم"
         description="هنا بتدير كل قوائم الموقع: القائمة الرئيسية، الموبايل، الفوتر، أو أي قائمة جديدة. الدخول على اسم القائمة يفتح Builder الشجرة الخاصة بها."
@@ -411,7 +412,7 @@ export default function MenusTableClient({
         />
 
         <AdminDataGrid className="!rounded-t-none !border-t-0" summary={`${pagination.totalCount} قائمة`}>
-          <AdminDataGridHeader columns={columns}>
+          <AdminDataGridHeader columns={columns} horizontalScroll>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
                 inputRef={selection.selectAllRef}
@@ -555,7 +556,7 @@ export default function MenusTableClient({
               };
 
               return (
-              <AdminDataGridRow key={menu.id} columns={columns}>
+              <AdminDataGridRow key={menu.id} columns={columns} horizontalScroll>
                 <AdminDataGridCheckboxCell>
                   <AdminDataGridCheckbox
                     checked={selection.selectedSet.has(menu.id)}

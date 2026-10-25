@@ -7,6 +7,7 @@ import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedba
 import { statusMeta } from "../../../lib/page-blocks/admin-utils";
 import { AdminFeedbackRegion } from "../AdminFeedbackProvider";
 import { AdminActionButton, AdminPageContextHeader } from "../ui";
+import type { AdminPageContextHeaderProps } from "../ui/AdminPageContextHeader";
 
 export type BlockEditorContextHeaderProps = {
   backHref: string;
@@ -18,6 +19,9 @@ export type BlockEditorContextHeaderProps = {
   meta?: ReactNode;
   saved?: boolean;
   actions?: ReactNode;
+  icon?: AdminPageContextHeaderProps["icon"];
+  artwork?: AdminPageContextHeaderProps["artwork"];
+  visualPreset?: AdminPageContextHeaderProps["visualPreset"];
 };
 
 export default function BlockEditorContextHeader({
@@ -29,6 +33,9 @@ export default function BlockEditorContextHeader({
   status,
   meta,
   actions,
+  icon,
+  artwork,
+  visualPreset,
 }: BlockEditorContextHeaderProps) {
   const statusInfo = status ? statusMeta(status) : null;
   return (
@@ -36,6 +43,9 @@ export default function BlockEditorContextHeader({
       eyebrow={eyebrow}
       title={title}
       description={description}
+      icon={icon}
+      artwork={artwork}
+      visualPreset={visualPreset}
       meta={
         meta ?? statusInfo?.label
       }

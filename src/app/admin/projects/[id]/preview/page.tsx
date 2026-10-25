@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  AdminActionButton,
   AdminPageHeader,
   AdminStatusPill,
 } from "../../../../../components/admin/ui";
@@ -42,6 +42,7 @@ export default async function ProjectAdminPreviewPage({
   return (
     <div className="space-y-7">
       <AdminPageHeader
+        visualPreset="projects"
         eyebrow="INTERNAL PROJECT PREVIEW"
         title={project.arabicName}
         description="معاينة إدارية تستخدم مكوّن العرض العام نفسه دون تجاوز سياسة النشر على المسار العام."
@@ -50,12 +51,12 @@ export default async function ProjectAdminPreviewPage({
             <AdminStatusPill tone={publication.tone}>
               {publication.label}
             </AdminStatusPill>
-            <Link
+            <AdminActionButton
               href={`/admin/projects/${projectId}`}
-              className="rounded-full border border-white/15 px-5 py-3 text-sm font-medium text-white/65 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+              variant="dark"
             >
               رجوع للمحرر
-            </Link>
+            </AdminActionButton>
           </>
         }
       />

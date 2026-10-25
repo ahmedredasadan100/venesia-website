@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../entity-list/AdminEntityListFilters";
@@ -14,6 +16,7 @@ import {
   ADMIN_DATA_GRID_COLUMNS,
   ADMIN_FORM,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminActionButton,
   AdminBulkActionBar,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
@@ -28,6 +31,8 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
+  AdminFormField,
+  AdminStickyFormBar,
   AdminFormListboxSelect,
   AdminFormRuntime,
   AdminModalCancelButton,
@@ -37,7 +42,6 @@ import {
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../ui";
@@ -368,23 +372,23 @@ export default function BlockModuleManagerClient({
   function requestCreateClose() {
     createRuntimeRef.current?.requestClose();
   }
-
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset={moduleKey === "breadcrumb" || moduleKey === "cta" ? "navigation" : "blocks"}
         eyebrow="إدارة الموديولات"
         title={moduleTitle}
         description={moduleDescription}
         actions={
-          <button
+          <AdminActionButton
             type="button"
             onClick={() => setShowCreateModal(true)}
             disabled={Boolean(loadError)}
-            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
+            variant="primary"
           >
             <PlusIcon />
             إضافة بلوك
-          </button>
+          </AdminActionButton>
         }
       />
 
@@ -484,7 +488,7 @@ export default function BlockModuleManagerClient({
       />
 
       <AdminDataGrid className="!rounded-t-none !border-t-0">
-        <AdminDataGridHeader columns={gridColumns}>
+        <AdminDataGridHeader columns={gridColumns} horizontalScroll>
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
               checked={selection.allSelected}
@@ -641,6 +645,7 @@ export default function BlockModuleManagerClient({
             <AdminDataGridRow
               key={row.id}
               columns={gridColumns}
+              horizontalScroll
               className="border-b border-white/8 last:border-b-0"
             >
               <AdminDataGridCheckboxCell>
@@ -735,8 +740,7 @@ export default function BlockModuleManagerClient({
           {({ fieldErrors, pending, requestClose }) => (
             <>
               <AdminFormError />
-              <label className={adminFormLabelClassName()}>
-                الاسم
+              <AdminFormField presentation="panel" label="الاسم" required>
                 <input
                   name="name"
                   required
@@ -749,10 +753,9 @@ export default function BlockModuleManagerClient({
                   }
                 />
                 <AdminFormError name="name" />
-              </label>
+              </AdminFormField>
               {technicalIdentityMode === "editable" ? (
-                <label className={adminFormLabelClassName()}>
-                  المعرّف التقني
+                <AdminFormField presentation="panel" label="المعرّف التقني">
                   <input
                     name="slug"
                     dir="ltr"
@@ -766,10 +769,11 @@ export default function BlockModuleManagerClient({
                     }
                   />
                   <AdminFormError name="slug" />
-                </label>
+                </AdminFormField>
               ) : null}
               {variantFieldMode === "editable" ? (
                 <AdminFormListboxSelect
+                  presentation="panel"
                   name={moduleKey === "feed" ? "feed_type" : "variant"}
                   label={moduleKey === "feed" ? "نوع موديول المحتوى" : "النمط"}
                   defaultValue={defaultVariant}
@@ -783,8 +787,7 @@ export default function BlockModuleManagerClient({
               )}
               {moduleKey === "feed" ? (
                 <>
-                  <label className={adminFormLabelClassName()}>
-                    {MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
+                  <AdminFormField presentation="panel" label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr} required>
                     <input
                       name="widget_title"
                       required
@@ -802,9 +805,8 @@ export default function BlockModuleManagerClient({
                       }
                     />
                     <AdminFormError name="widget_title" />
-                  </label>
-                  <label className={adminFormLabelClassName()}>
-                    عدد النتائج
+                  </AdminFormField>
+                  <AdminFormField presentation="panel" label="عدد النتائج">
                     <input
                       name="limit"
                       type="number"
@@ -819,7 +821,7 @@ export default function BlockModuleManagerClient({
                       }
                     />
                     <AdminFormError name="limit" />
-                  </label>
+                  </AdminFormField>
                 </>
               ) : null}
               {moduleKey === "cards" ? (
@@ -827,7 +829,7 @@ export default function BlockModuleManagerClient({
               ) : null}
               <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />
-              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+              <AdminStickyFormBar title="إجراءات النموذج" icon={<AdminModuleTabIcon name="content" />}>
                 <AdminModalCancelButton
                   onClick={requestClose}
                   disabled={pending}
@@ -837,7 +839,7 @@ export default function BlockModuleManagerClient({
                 <AdminModalPrimaryButton type="submit" disabled={pending}>
                   {pending ? "جار الإنشاء..." : "إنشاء وفتح"}
                 </AdminModalPrimaryButton>
-              </div>
+              </AdminStickyFormBar>
             </>
           )}
         </AdminFormRuntime>

@@ -47,7 +47,6 @@ export default function HeroTextFieldRow({
     <HeroVisibilityAlignRow
       label={label}
       icon={<AdminModuleTabIcon name="content" />}
-      presentation="premium"
       alignmentName={alignmentName}
       showName={showName}
       boldName={boldName}

@@ -23,8 +23,9 @@ export default async function GeneralSettingsPage() {
   ]);
 
   return (
-    <AdminPageExperience className="pb-10">
+    <AdminPageExperience as="div" className="pb-10">
       <AdminPageContextHeader
+        visualPreset="settings"
         eyebrow="ADMIN SETTINGS"
         title="الإعدادات العامة"
         description="إدارة هوية لوحة الإدارة وإعدادات الموقع العامة من مصدر واضح وقابل للتحديث."

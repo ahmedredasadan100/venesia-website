@@ -469,19 +469,20 @@ function filterFixture(source = toolbar, adapterSource = topicsAdapter, sourceFo
   const Search = props => React.createElement("input", { type: "search", value: props.value, placeholder: props.placeholder, disabled: props.disabled, onChange() {} });
   const DatePicker = props => React.createElement("input", props);
   const owner = loadPureTypeScriptModule("src/components/admin/entity-list/AdminEntityListFilters.tsx", {
+    "../../../lib/admin/admin-ui-styles": styles,
     react: hooks, "react-dom": { createPortal: node => node }, "next/navigation": { useSearchParams: () => new URLSearchParams(current.search), useRouter: () => Object.fromEntries(["push", "replace"].map(behavior => [behavior, (href, options) => { routeCalls.push({ behavior, href, options }); current = new URL(href, current); }])) },
     "../../../hooks/use-client-mounted": { useClientMounted: () => true }, "../../../lib/admin/entity-list": { ...url, ...normalizer },
     "../VenesiaModal": modalModule, "../ui/AdminSearchInput": { default: Search }, "../ui/AdminDatePicker": { default: DatePicker },
     "../ui/admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: scrollbar.VENESIA_SCROLLBAR_VISUAL_CLASSES },
     "../ui/useAdminFloatingMenuPosition": { useAdminFloatingMenuPosition: () => null }, "./AdminFloatingLayerContext": { useAdminFloatingLayer: () => ({ setOpenLayerId() {} }) },
   }, source, globals).default;
-  const iconModule = loadPureTypeScriptModule("src/components/admin/ui/AdminModuleTabs.tsx", { react: hooks, "./AdminForm": {} }, sourceFor("src/components/admin/ui/AdminModuleTabs.tsx"));
   const dateTimeCell = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGridDateTimeCell.tsx", {
     react: hooks, "react-dom": { createPortal: node => node },
     "../../../lib/content-dates": pure("src/lib/content-dates.ts"),
     "./useAdminFloatingMenuPosition": { useAdminFloatingMenuPosition: () => null },
   }, sourceFor("src/components/admin/ui/AdminDataGridDateTimeCell.tsx"), globals);
-  const gridIcons = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", { "next/link": { default: () => null }, "./AdminCheckbox": { default: () => null }, "./AdminDataGridQueryStatus": { default: () => null }, "./AdminDataGridDateTimeCell": dateTimeCell, "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: scrollbar.VENESIA_SCROLLBAR_VISUAL_CLASSES } }, sourceFor("src/components/admin/ui/AdminDataGrid.tsx"));
+  const gridIcons = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", { "../../../lib/admin/admin-ui-styles": styles, "next/link": { default: () => null }, "./AdminCheckbox": { default: () => null }, "./AdminDataGridQueryStatus": { default: () => null }, "./AdminDataGridDateTimeCell": dateTimeCell, "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: scrollbar.VENESIA_SCROLLBAR_VISUAL_CLASSES } }, sourceFor("src/components/admin/ui/AdminDataGrid.tsx"));
+  const iconModule = loadPureTypeScriptModule("src/components/admin/ui/AdminModuleTabs.tsx", { react: hooks, "./AdminForm": {}, "./AdminDataGrid": gridIcons, "../../../lib/admin/admin-ui-styles": styles }, sourceFor("src/components/admin/ui/AdminModuleTabs.tsx"));
   const adapter = loadPureTypeScriptModule("src/components/admin/content/UnifiedContentFilters.tsx", {
     react: hooks, "../../../lib/admin/content/category-hierarchy": pure("src/lib/admin/content/category-hierarchy.ts"),
     "../../../lib/admin/content/content-types": pure("src/lib/admin/content/content-types.ts"), "../ui/AdminModuleTabs": iconModule, "../ui/AdminDataGrid": gridIcons,
@@ -523,6 +524,73 @@ function filterFixture(source = toolbar, adapterSource = topicsAdapter, sourceFo
 
 const FILTER_IDS = ["content-type", "category", "series", "status", "image", "featured"];
 const FILTER_KEYS = ["content_type", "category", "series", "status", "image", "featured"];
+function verifyCinematicToolbarContract(source = toolbar) {
+  const fixture = filterFixture(source);
+  fixture.render(); const omitted = fixture.ssr();
+  fixture.render({ presentation: "default" }); assert.equal(fixture.ssr(), omitted, "Explicit default and omission retain exact shared toolbar output");
+  const before = fixture.elements(undefined, node => "data-admin-collection-toolbar-owner" in node.props)[0];
+  assert.equal(before.props["data-admin-collection-toolbar-presentation"], "cinematic");
+  fixture.render({ presentation: "cinematic" });
+  const after = fixture.elements(undefined, node => "data-admin-collection-toolbar-owner" in node.props)[0];
+  assert.equal(after.props["data-admin-collection-toolbar-presentation"], "cinematic");
+  assert.equal(after.props.className, before.props.className, "Both compatibility names select the official shared Cinematic tokens");
+  assert.ok(after.props.className.includes(fixture.styles.ADMIN_CINEMATIC_GOLD_V1.collection.toolbarSurface), "The official toolbar consumes its shared cinematic surface");
+  assert.equal(fixture.search().props.presentation, "cinematic", "The canonical Search control receives the selected presentation");
+  fixture.open(); fixture.render({ presentation: "cinematic" });
+  assert.deepEqual(fixture.fields().map(field => field.props.filter.id), FILTER_IDS, "Presentation retains every existing Topics filter in original order");
+  assert.equal(fixture.button("تطبيق الفلاتر").props.disabled, true);
+  fixture.button("إلغاء").props.onClick(); fixture.render({ presentation: "cinematic" });
+  fixture.search().props.onChange("بحث سينمائي"); fixture.render({ presentation: "cinematic" }); fixture.search().props.onEnter();
+  assert.deepEqual(fixture.patches.at(-1), { patch: { q: "بحث سينمائي" }, behavior: "replace" });
+  for (const [key, value] of [["sort", "title_asc"], ["limit", "50"], ["view", "trash"], ["owned", "keep"]]) assert.equal(fixture.url().searchParams.get(key), value);
+  return true;
+}
+check("Cinematic Toolbar preserves default output, native filters and accepted Search URL semantics", verifyCinematicToolbarContract());
+const cinematicToolbarMutants = [toolbar.replace('resolveAdminCollectionPresentation(requestedPresentation)', 'requestedPresentation'), toolbar.replaceAll('presentation === "cinematic"', 'false')];
+check("Cinematic Toolbar negatives reject a legacy default alias and ignored official presentation", cinematicToolbarMutants.every(source => { assert.notEqual(source, toolbar); try { verifyCinematicToolbarContract(source); return false; } catch { return true; } }));
+async function verifyColumnMenuCommitBoundary(source = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx")) {
+  for (const presentation of ["default", "cinematic"]) {
+    const fixture = filterFixture(), pending = [], attempts = [], commits = [];
+    const Checkbox = () => null;
+    let visible = ["title", "seo"], tree, runner;
+    const document = { body: {}, addEventListener() {}, removeEventListener() {}, activeElement: null };
+    const window = { requestAnimationFrame: callback => { callback(); return 1; }, cancelAnimationFrame() {} };
+    function commit() {
+      tree = runner.render({ presentation, columns: [{ key: "title", label: "العنوان", hideable: false }, { key: "seo", label: "SEO", hideable: true }], visibleColumns: visible, defaultColumns: ["title", "seo"], onChange: next => { visible = next; }, onPersist: columns => new Promise(resolve => { attempts.push([...columns]); pending.push(resolve); }) });
+      commits.push({ columns: [...visible], pending: fixture.elements(tree, node => node.type === "span" && node.props.className?.includes("animate-spin")).length > 0 });
+      runner.effects(); return tree;
+    }
+    const Owner = loadPureTypeScriptModule("src/components/admin/ui/AdminColumnVisibilityMenu.tsx", {
+      react: fixture.hooks, "react-dom": { createPortal: node => node, flushSync: callback => { callback(); commit(); } },
+      "../../../hooks/use-client-mounted": { useClientMounted: () => true },
+      "../../../lib/admin/entity-list/column-preferences": loadPureTypeScriptModule("src/lib/admin/entity-list/column-preferences.ts"),
+      "../../../lib/admin/admin-ui-styles": fixture.styles,
+      "../entity-list/AdminFloatingLayerContext": { useAdminFloatingLayer: () => null },
+      "./AdminCheckbox": { default: Checkbox }, "./useAdminFloatingMenuPosition": { useAdminFloatingMenuPosition: () => ({ style: {}, placement: "bottom" }) },
+    }, source, { window, document }).default;
+    runner = fixture.runner(Owner); commit();
+    fixture.elements(tree, node => node.type === "button")[0].props.onClick(); commit();
+    const toggle = () => fixture.elements(tree, node => node.type === Checkbox && node.props.label.endsWith("SEO"))[0].props.onChange();
+    const drain = async () => { for (let count = 0; count < 8; count++) await Promise.resolve(); commit(); };
+    toggle();
+    assert.deepEqual(visible, ["title"]);
+    assert.equal(commits.at(-1).pending, true, "The actual optimistic commit must already expose pending before passive effects run");
+    await drain(); assert.deepEqual(attempts, [["title"]]); pending.shift()({ ok: false, message: "رفض العينة" }); await drain();
+    assert.deepEqual(visible, ["title", "seo"], "Rejected first save restores the committed columns under both presentations");
+    assert.ok(fixture.elements(tree, node => node.props.role === "alert").length === 1);
+    toggle(); toggle(); await drain(); assert.equal(attempts.length, 2, "Only one serial queued write starts before settlement");
+    pending.shift()({ ok: true }); await drain(); assert.equal(attempts.length, 3); assert.deepEqual(attempts.slice(1), [["title"], ["title", "seo"]]);
+    pending.shift()({ ok: true }); await drain(); assert.deepEqual(visible, ["title", "seo"]); assert.equal(commits.at(-1).pending, false);
+    runner.close();
+  }
+  return true;
+}
+check("Actual default and Cinematic Column Menu mark optimistic commits pending, roll back rejected saves and keep serial order", await verifyColumnMenuCommitBoundary());
+const columnMenuCurrent = read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx");
+const prematureColumnCommit = columnMenuCurrent.replace(/flushSync\(\(\) => \{\s*setPendingSaves\(\(count\) => count \+ 1\);\s*onChange\(next\);\s*\}\);/u, 'flushSync(() => onChange(next)); setPendingSaves((count) => count + 1);');
+assert.notEqual(prematureColumnCommit, columnMenuCurrent, "Rollback negative must apply to the current canonical owner");
+await assert.rejects(() => verifyColumnMenuCommitBoundary(prematureColumnCommit), { name: "AssertionError" });
+check("Column Menu negative reproduces the premature idle commit that loses rollback", true);
 function verifyFilterTransactions(source = toolbar, adapterSource = topicsAdapter) {
   const fixture = filterFixture(source, adapterSource);
   fixture.render();
@@ -667,7 +735,7 @@ const compositionMutants = [
   toolbar.replace('presentation={filterPanelPresentation}', 'presentation={undefined}'),
   toolbar.replace('data-admin-filter-field-width={premium ? fullWidth ? "full" : "half" : undefined}', 'data-admin-filter-field-width={premium ? "half" : undefined}'),
   toolbar.replace('{filters.map((filter) => (', '{filters.slice(0, -1).map((filter) => ('),
-  toolbar.replace('fullWidth ? "md:col-span-2" : ""', '""'),
+  toolbar.replaceAll('fullWidth ? "md:col-span-2" : ""', '""'),
 ];
 check("Composition negatives reject premium tokens on an unrelated path and flattened real field widths", compositionMutants.every(source => {
   if (source === toolbar) return false;

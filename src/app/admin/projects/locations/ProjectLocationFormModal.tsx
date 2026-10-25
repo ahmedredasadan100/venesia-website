@@ -3,7 +3,6 @@
 import { useRef } from "react";
 
 import {
-  ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME,
   AdminFormField,
   AdminFormGrid,
   AdminFormListboxSelect,
@@ -139,7 +138,7 @@ export default function ProjectLocationFormModal({
               />
             ) : null}
 
-            <AdminFormGrid>
+            <AdminFormGrid presentation="aligned-fields">
               <AdminFormField label="الترتيب" required>
                 <input
                   name="sort_order"
@@ -158,14 +157,13 @@ export default function ProjectLocationFormModal({
                 <AdminFormError name="sort_order" />
               </AdminFormField>
 
-              <div className={`${ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME} flex items-center`}>
-                <AdminFormSwitch
-                  name="is_active"
-                  label="نشط"
-                  defaultChecked={location?.is_active ?? true}
-                  disabled={pending}
-                />
-              </div>
+              <AdminFormSwitch
+                name="is_active"
+                label="نشط"
+                defaultChecked={location?.is_active ?? true}
+                disabled={pending}
+                embedded
+              />
             </AdminFormGrid>
 
             <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">

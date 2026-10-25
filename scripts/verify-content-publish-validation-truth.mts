@@ -81,6 +81,44 @@ function parseSource(path: string, source = read(path)) {
   );
 }
 
+function hasReviewDashboardPresentation(source: string, canonicalPresentationSource = sharedReview) {
+  const tree = parseSource("src/components/admin/content-workflow/ContentReviewPanel.tsx", source);
+  const component = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ContentReviewPanel");
+  const props = tree.statements.find((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === "ContentReviewPanelProps")?.type;
+  const presentationType = props && ts.isTypeLiteralNode(props) ? props.members.find((node): node is ts.PropertySignature => ts.isPropertySignature(node) && node.name.getText(tree) === "presentation") : undefined;
+  let variants = presentationType?.type;
+  if (variants && ts.isTypeReferenceNode(variants) && ts.isIdentifier(variants.typeName)) {
+    const typeName = variants.typeName.text;
+    const imported = tree.statements.find((node): node is ts.ImportDeclaration => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../review/AdminEntityReviewPanel")?.importClause?.namedBindings;
+    if (!imported || !ts.isNamedImports(imported) || !imported.elements.some(binding => binding.name.text === typeName && (binding.propertyName ?? binding.name).text === "AdminEntityReviewPresentation")) return false;
+    const canonicalTree = parseSource("src/components/admin/review/AdminEntityReviewPanel.tsx", canonicalPresentationSource);
+    variants = canonicalTree.statements.find((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === "AdminEntityReviewPresentation")?.type;
+  }
+  if (!presentationType?.questionToken || !variants || !ts.isUnionTypeNode(variants) || variants.types.length !== 2 || !variants.types.every(node => ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal) && ["default", "panel"].includes(node.literal.text)) || new Set(variants.types.map(node => node.getText(tree))).size !== 2) return false;
+  const parameter = component?.parameters[0];
+  if (!component?.body || !parameter || !ts.isObjectBindingPattern(parameter.name)) return false;
+  const presentation = parameter.name.elements.find(node => (node.propertyName ?? node.name).getText(tree) === "presentation")?.initializer;
+  if (!presentation || !ts.isStringLiteral(presentation) || presentation.text !== "default") return false;
+  const panel = component.body.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : []).find(node => ts.isIdentifier(node.name) && node.name.text === "panel")?.initializer;
+  if (!panel || !ts.isBinaryExpression(panel) || panel.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken || !ts.isIdentifier(panel.left) || panel.left.text !== "presentation" || !ts.isStringLiteral(panel.right) || panel.right.text !== "panel") return false;
+  const markers: ts.JsxAttribute[] = [];
+  const delegatedPresentations: ts.JsxAttribute[] = [];
+  const importedOwner = tree.statements.find((node): node is ts.ImportDeclaration => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../review/AdminEntityReviewPanel")?.importClause?.name?.text;
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxAttribute(node) && node.name.getText(tree) === "data-content-review-presentation") markers.push(node);
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(tree) === importedOwner) {
+      const attribute = node.attributes.properties.find((entry): entry is ts.JsxAttribute => ts.isJsxAttribute(entry) && entry.name.getText(tree) === "presentation");
+      if (attribute) delegatedPresentations.push(attribute);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(component.body);
+  const marker = markers[0]?.initializer;
+  const expression = marker && ts.isJsxExpression(marker) ? marker.expression : undefined;
+  const delegation = delegatedPresentations[0]?.initializer;
+  return markers.length === 1 && Boolean(expression && ts.isConditionalExpression(expression) && ts.isIdentifier(expression.condition) && expression.condition.text === "panel" && ts.isStringLiteral(expression.whenTrue) && expression.whenTrue.text === "panel" && ts.isStringLiteral(expression.whenFalse) && expression.whenFalse.text === "dashboard") && delegatedPresentations.length === 1 && Boolean(delegation && ts.isJsxExpression(delegation) && delegation.expression && ts.isIdentifier(delegation.expression) && delegation.expression.text === "presentation");
+}
+
 function findFunction(sourceFile: ts.SourceFile, name: string) {
   const declaration = sourceFile.statements.find(
     (statement): statement is ts.FunctionDeclaration =>
@@ -1053,9 +1091,19 @@ check(
     sharedReview.includes("items={blockingIssues}") &&
     sharedReview.includes("lg:grid-cols-3") &&
     sharedReview.includes("data-admin-entity-review-validation-row") &&
-    review.includes('data-content-review-presentation="dashboard"') &&
+    hasReviewDashboardPresentation(review) &&
     sharedReview.includes("ملخص الحالة") &&
     !sharedReview.includes("سجل المراجعة"),
+);
+check(
+  "Review presentation source negatives retain the omitted dashboard and reject unsupported variants, wrong markers and lost canonical delegation",
+  !hasReviewDashboardPresentation(review.replace('presentation = "default"', 'presentation = "panel"')) &&
+    !hasReviewDashboardPresentation(review.replace(/presentation\?: (?:AdminEntityReviewPresentation|"default" \| "panel")/, 'presentation?: "default" | "panel" | "editor"')) &&
+    !hasReviewDashboardPresentation(review, sharedReview.replace('"default" | "panel"', '"default" | "panel" | "editor"')) &&
+    !hasReviewDashboardPresentation(review.replace('panel ? "panel" : "dashboard"', 'panel ? "panel" : "default"')) &&
+    !hasReviewDashboardPresentation(review.replace('panel ? "panel" : "dashboard"', 'panel ? "dashboard" : "panel"')) &&
+    !hasReviewDashboardPresentation(review.replace("presentation={presentation}", "presentation={undefined}")) &&
+    !hasReviewDashboardPresentation(review.replace('../review/AdminEntityReviewPanel"', '../review/ParallelReviewPanel"')),
 );
 check(
   "Review and server consumers use explicit blocking semantics instead of severity",

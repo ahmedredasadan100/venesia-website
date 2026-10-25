@@ -27,8 +27,10 @@ function AdminFixture({done}){return <AdminFeedbackProvider><Commit done={done}/
 window.mount=kind=>new Promise(resolve=>root.render(kind==='admin'?<AdminFixture done={resolve}/>:<PublicFixture kind={kind} done={resolve}/>));
 window.mount('legacy');`;
 await writeFile(path.join(out, "entry.tsx"), entry);
-await writeFile(path.join(out, "navigation.ts"), `const router={refresh(){window.refreshes+=1;},push(){},replace(){}};export const useRouter=()=>router;`);
+await writeFile(path.join(out, "navigation.ts"), `export{unstable_rethrow}from'next/dist/client/components/unstable-rethrow.browser';const router={refresh(){window.refreshes+=1;},push(){},replace(){}};export const useRouter=()=>router;export const useSearchParams=()=>new URLSearchParams();export const usePathname=()=>'/admin/pages-blocks/pages/77';`);
 await writeFile(path.join(out, "actions.ts"), `export const savePageLayout=input=>window.__layoutAction('save',input);export const selectPageLayout=(pageId,layoutId)=>window.__layoutAction('select',{pageId,layoutId});`);
+// Shared presentation imports the link owner; this Layout fixture never invokes its server ports.
+await writeFile(path.join(out, "link-actions.ts"), `const unexpected=async()=>{throw new Error('Unexpected Link server action in Page Layout fixture');};export const browseAdminLinksAjax=unexpected,browseMenuItemsPickerAjax=unexpected,browseMenusPickerAjax=unexpected,browseTopicCategoriesPickerAjax=unexpected,resolveAdminLinkAjax=unexpected;`);
 await writeFile(path.join(out, "plan.ts"), `export function buildSlotRenderPlan(){return []}`);
 await writeFile(path.join(out, "theme.ts"), `import {resolveVenesiaThemeLayout} from '@src/components/page-composition/venisia-theme-regions';export const VENISIA_THEME_CONTRACT={resolveLayout:resolveVenesiaThemeLayout,modulePresentation:{}};`);
 await writeFile(path.join(out, "renderers.tsx"), `import React from 'react';export default function Empty(){return null}export const MediaSidebarWidget=Empty;export const renderMediaHubSections=()=>[];export const renderVenesiaThemeMediaHubNodes=nodes=>nodes;`);
@@ -44,6 +46,7 @@ const compiler = webpack({
     new webpack.NormalModuleReplacementPlugin(/.*/, (resource) => {
       const full = path.resolve(resource.context, resource.request).replaceAll("\\", "/");
       if (full.endsWith("/src/app/admin/pages-blocks/pages/actions")) resource.request = path.join(out, "actions.ts");
+      if (full.endsWith("/src/lib/admin/links/actions")) resource.request = path.join(out, "link-actions.ts");
       if (full.endsWith("/src/components/page-composition/build-slot-render-plan")) resource.request = path.join(out, "plan.ts");
       if (full.endsWith("/src/components/page-composition/venisia-theme-contract")) resource.request = path.join(out, "theme.ts");
       if ([

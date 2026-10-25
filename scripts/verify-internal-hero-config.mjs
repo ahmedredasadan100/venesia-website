@@ -4,6 +4,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import strictAssert from "node:assert/strict";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
 import { Children, Fragment, createElement, isValidElement, useState } from "react";
@@ -28,6 +29,200 @@ import {
   resolveHeroImageCompositionPreset,
   resolveHeroMediaSlot,
 } from "../src/lib/hero/hero-content-controls.ts";
+
+if (process.argv.includes("--media-owner-capabilities")) {
+  verifyMediaOwnerCapabilities();
+  process.exit(0);
+}
+
+function verifyMediaOwnerCapabilities() {
+  const assert = strictAssert;
+  const read = path => readFileSync(resolve(path), "utf8");
+  const checks = [];
+  const check = (name, verify) => { verify(); checks.push(name); console.log(`PASS ${name}`); };
+  const gallerySource = read("src/components/admin/media/AdminMediaGalleryField.tsx");
+  const heroSource = read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx");
+  const introSource = read("src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx");
+  const tree = (file, value) => ts.createSourceFile(file, value, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const allNodes = sourceFile => {
+    const result = [];
+    function visit(node) { result.push(node); ts.forEachChild(node, visit); }
+    visit(sourceFile);
+    return result;
+  };
+  const galleryTree = tree("Gallery.tsx", gallerySource);
+  const declaration = (sourceFile, name) => {
+    const matches = allNodes(sourceFile).filter(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.equal(matches.length, 1, `Actual owner callback ${name}`);
+    return matches[0].getText(sourceFile).replace(/^export\s+default\s+|^export\s+/u, "");
+  };
+  const enabled = (node, name, sourceFile) => {
+    const value = node.attributes.properties.find(property => ts.isJsxAttribute(property) && property.name.getText(sourceFile) === name);
+    return Boolean(value && (!value.initializer || ts.isJsxExpression(value.initializer) && value.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword));
+  };
+  const heroCapabilities = source => {
+    const sourceFile = tree("Hero.tsx", source);
+    const galleries = allNodes(sourceFile).filter(node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(sourceFile) === "AdminImagePathListField");
+    return galleries.length === 2 && galleries.every(node => enabled(node, "enableDragDrop", sourceFile) && enabled(node, "dragFromImage", sourceFile));
+  };
+  check("Hero Desktop/Mobile adopt existing Gallery drag capabilities without replacing ordered native path bindings", () => {
+    assert.equal(read("src/components/admin/page-blocks/AdminImagePathListField.tsx").trim(), 'export { default } from "../media/AdminMediaGalleryField";');
+    assert.ok(heroCapabilities(heroSource));
+    for (const port of ["enableDragDrop", "dragFromImage"]) {
+      assert.ok(!heroCapabilities(heroSource.replace(`                          ${port}\r\n`, "").replace(`                          ${port}\n`, "")), `Omitted ${port} fails the same adoption check`);
+      assert.ok(!heroCapabilities(heroSource.replace(port + "\r\n", port + "={false}\r\n").replace(port + "\n", port + "={false}\n")));
+    }
+    for (const binding of ['name="images"', 'defaultValue={imagesText}', 'name="mobile_images"', 'defaultValue={mobileImagesText}', 'resolveHeroMediaSlot(guidanceVariant, "desktop")', 'resolveHeroMediaSlot(guidanceVariant, "mobile")']) assert.ok(heroSource.includes(binding));
+  });
+
+  const introTree = tree("AboutIntro.tsx", introSource);
+  check("Content Home Story preserves its applicable ordered image and Alt swap while fixed semantic slots stay fixed", () => {
+    let state = { main: "/main.webp", secondary: "/secondary.webp", mainAlt: "Main Alt", secondaryAlt: "Secondary Alt" };
+    const swap = new Function("setHomeStoryImages", ts.transpileModule(declaration(introTree, "swapHomeStoryImages"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + "\nreturn swapHomeStoryImages;")(update => { state = update(state); });
+    swap(); assert.deepEqual(state, { main: "/secondary.webp", secondary: "/main.webp", mainAlt: "Secondary Alt", secondaryAlt: "Main Alt" });
+    swap(); assert.deepEqual(state, { main: "/main.webp", secondary: "/secondary.webp", mainAlt: "Main Alt", secondaryAlt: "Secondary Alt" });
+    assert.equal((introSource.match(/onClick=\{swapHomeStoryImages\}/gu) ?? []).length, 2);
+    for (const field of ["image_main", "image_secondary", "image_main_alt", "image_secondary_alt"]) assert.ok(introSource.includes(`"${field}"`));
+    for (const slot of ["main", "secondary", "accent"]) assert.ok(introSource.includes(`{ key: "${slot}", altKey: "${slot}Alt"`));
+    assert.ok(!introSource.includes("AdminMediaGalleryField"), "Named Content slots are not converted into an unordered generic Gallery");
+  });
+
+  const compiledGallery = ts.transpileModule(["parsePaths", "normalizeItems", "resolveDefaultItems", "getDefaultKey", "AdminMediaGalleryField"].map(name => declaration(galleryTree, name)).join("\n"), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const handleTree = tree("AdminDataGrid.tsx", read("src/components/admin/ui/AdminDataGrid.tsx"));
+  const Handle = new Function("React", ts.transpileModule(declaration(handleTree, "AdminDataGridReorderHandle"), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 } }).outputText + "\nreturn AdminDataGridReorderHandle;")({ createElement });
+  const ImageField = () => null;
+  const Picker = () => null;
+  const Stub = () => null;
+  const rows = ["a", "b", "c"].map(key => ({ key, url: `/${key}.webp`, alt: `Alt ${key}`, caption: `Caption ${key}` }));
+  function fixture({ controlled = false, runtimePending = false, nativePending = false, fieldsetPending = false, fieldErrors = {}, ...ports } = {}) {
+    let slots = [], cursor = 0, effects = [], rendered, controlledRows = rows.map(item => ({ ...item })), controlledCalls = 0, dirtySignals = 0;
+    const flags = { runtimePending, nativePending, fieldsetPending };
+    const state = initializer => {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = typeof initializer === "function" ? initializer() : initializer;
+      return [slots[index], update => { slots[index] = typeof update === "function" ? update(slots[index]) : update; }];
+    };
+    const ref = initial => { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; };
+    const effect = (callback, deps) => {
+      const index = cursor++, previous = slots[index];
+      if (!previous || deps.some((value, itemIndex) => value !== previous[itemIndex])) effects.push(callback);
+      slots[index] = deps;
+    };
+    const Element = class {};
+    const Gallery = new Function("React", "useState", "useRef", "useLayoutEffect", "useFormStatus", "useOptionalAdminFormRuntime", "useAdminMediaReferenceState", "AdminDataGridReorderHandle", "AdminMediaImageField", "AdminMediaPickerModal", "AdminCard", "AdminModuleSectionHeader", "AdminMediaSlotGuidance", "AdminFormError", "ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", "Element", "Node", compiledGallery + "\nreturn AdminMediaGalleryField;")(
+      { createElement, Fragment }, state, ref, effect, () => ({ pending: flags.nativePending }), () => ({ pending: flags.runtimePending, fieldErrors }), () => ({ available: true, deleted: [], missing: [], originals: [] }), Handle, ImageField, Picker, Stub, Stub, Stub, Stub, "canonical-charcoal", Element, Element,
+    );
+    const nodes = () => {
+      const result = [];
+      const visit = value => {
+        if (!isValidElement(value)) return;
+        result.push(value);
+        for (const child of Children.toArray(value.props.children)) visit(child);
+        if (value.props.previewOverlay) visit(value.props.previewOverlay);
+      };
+      visit(rendered); return result;
+    };
+    const render = () => {
+      cursor = 0; effects = [];
+      const identity = (item, index) => createElement("input", { key: item.key, type: "hidden", name: "domain_identity", value: `id-${item.key}`, "data-native-index": index });
+      rendered = Gallery({ label: "Gallery", name: "gallery_url", valueMode: "items", altName: "gallery_alt", captionName: "gallery_caption", focusTargetId: "gallery-focus", altFocusTargetId: "gallery-alt-focus", ...(controlled ? { controlledItems: controlledRows, onItemsChange: update => { controlledRows = update(controlledRows); controlledCalls++; }, renderItemProjection: identity } : { defaultItems: rows }), ...ports });
+      for (const node of nodes()) {
+        if (node.props.ref) node.props.ref.current = node.type === "input" ? { dispatchEvent: event => { assert.equal(event.type, "input"); assert.equal(event.bubbles, true); dirtySignals++; } } : { closest: selector => { assert.equal(selector, "fieldset:disabled"); return flags.fieldsetPending ? {} : null; } };
+      }
+      for (const callback of effects) callback();
+      return rendered;
+    };
+    render();
+    return { nodes, render, flags, images: () => nodes().filter(node => node.type === ImageField), handles: () => nodes().filter(node => node.type === Handle), cards: () => nodes().filter(node => node.props["data-admin-media-gallery-card"] === "image"), action: name => nodes().filter(node => node.props["data-admin-media-gallery-action"] === name), picker: () => nodes().find(node => node.type === Picker), read: () => ({ controlledRows, controlledCalls, dirtySignals }) };
+  }
+  const event = () => ({ prevented: 0, stopped: 0, dataTransfer: { effectAllowed: "", dropEffect: "", setData() {} }, preventDefault() { this.prevented++; }, stopPropagation() { this.stopped++; } });
+  const tuples = test => test.images().map(node => ({ url: node.props.value, alt: node.props.altValue, caption: node.props.captionValue }));
+  const expected = order => order.map(key => { const row = rows.find(item => item.key === key); return { url: row.url, alt: row.alt, caption: row.caption }; });
+  const order = (test, value) => assert.deepEqual(tuples(test), expected(value));
+  check("Gallery omitted functional defaults and ordered path projection remain unchanged; controlled identity permits repeated URLs", () => {
+    const bindings = allNodes(galleryTree).filter(node => ts.isBindingElement(node));
+    for (const [name, value] of [["enableDragDrop", "false"], ["dragFromImage", "false"], ["allowAdd", "true"], ["allowReplace", "true"], ["allowRemove", "true"], ["allowReorder", "true"], ["showAlt", "true"], ["showCaption", "true"], ["selectionMode", '"single"'], ["density", '"default"'], ["presentation", '"default"'], ["actionPresentation", '"default"']]) assert.equal(bindings.find(node => node.name.getText(galleryTree) === name)?.initializer?.getText(galleryTree), value, `Omitted ${name}`);
+    const paths = fixture({ valueMode: "paths", defaultValue: "/first.webp\n/second.webp", defaultItems: undefined });
+    const projection = () => paths.nodes().find(node => node.type === "input" && node.props.name === "gallery_url").props.value;
+    assert.equal(projection(), "/first.webp\n/second.webp");
+    paths.action("move-down")[0].props.onClick(); paths.render(); assert.equal(projection(), "/second.webp\n/first.webp");
+    const duplicates = fixture({ controlledItems: [{ ...rows[0], key: "persisted-1" }, { ...rows[0], key: "persisted-2", alt: "Distinct Alt" }], onItemsChange: () => {}, controlled: false });
+    assert.equal(duplicates.images().length, 2);
+    assert.deepEqual(duplicates.cards().map(node => node.props["data-gallery-item-key"]), ["persisted-1", "persisted-2"]);
+    assert.equal(duplicates.images()[1].props.altValue, "Distinct Alt");
+  });
+  check("Actual Gallery owned and controlled modes move full tuples through arrows, shared keyboard handle and native image drag", () => {
+    for (const controlled of [false, true]) {
+      const test = fixture({ controlled, enableDragDrop: true, dragFromImage: true });
+      order(test, ["a", "b", "c"]);
+      assert.equal(test.action("move-up")[0].props.disabled, true);
+      assert.equal(test.action("move-down")[2].props.disabled, true);
+      test.action("move-down")[0].props.onClick(); test.render(); order(test, ["b", "a", "c"]);
+      assert.equal(test.read().dirtySignals, 1);
+      const keyEvent = { key: "End", preventDefault() {} };
+      Handle(test.handles()[1].props).props.onKeyDown(keyEvent); test.render(); order(test, ["b", "c", "a"]);
+      const start = event(); test.images()[2].props.previewSurfaceProps.onDragStart(start);
+      assert.equal(start.dataTransfer.effectAllowed, "move");
+      const drop = event(); test.cards()[0].props.onDragOver(drop); test.cards()[0].props.onDrop(drop); test.render(); order(test, ["a", "b", "c"]);
+      assert.equal(drop.prevented, 2); assert.equal(test.read().dirtySignals, 3);
+      if (controlled) {
+        assert.equal(test.read().controlledCalls, 3);
+        assert.deepEqual(test.nodes().filter(node => node.type === "input" && node.props.name === "domain_identity").map(node => node.props.value), ["id-a", "id-b", "id-c"]);
+      }
+      const before = test.read().dirtySignals;
+      test.action("move-up")[0].props.onClick(); test.action("move-down")[2].props.onClick();
+      test.render(); order(test, ["a", "b", "c"]); assert.equal(test.read().dirtySignals, before);
+      const external = event(); test.cards()[1].props.onDrop(external); test.render(); order(test, ["a", "b", "c"]); assert.equal(external.prevented, 0);
+    }
+  });
+  check("Actual Gallery honors functional flags and locks native drag, keyboard, picker and tuple updates during every existing Pending owner", () => {
+    for (const lock of ["runtimePending", "nativePending", "fieldsetPending", "disabled"]) {
+      const test = fixture({ controlled: true, enableDragDrop: true, dragFromImage: true, [lock]: true });
+      test.action("move-down")[0].props.onClick();
+      Handle(test.handles()[0].props).props.onKeyDown({ key: "End", preventDefault() {} });
+      const start = event(); test.images()[0].props.previewSurfaceProps.onDragStart(start); assert.equal(start.prevented, 1);
+      test.cards()[2].props.onDrop(event());
+      test.images()[0].props.onRemove(); test.images()[0].props.onReplace(); test.images()[0].props.onAltValueChange("Changed");
+      test.action("add")[0].props.onClick(); test.picker().props.onSelect("/changed.webp");
+      test.render(); order(test, ["a", "b", "c"]); assert.equal(test.read().controlledCalls, 0); assert.equal(test.read().dirtySignals, 0);
+    }
+    const omitted = fixture();
+    assert.equal(omitted.handles().length, 0); assert.equal(omitted.images()[0].props.previewSurfaceProps, undefined);
+    const blocked = fixture({ allowReorder: false, enableDragDrop: true, dragFromImage: true });
+    assert.equal(blocked.handles().length, 0); assert.equal(blocked.action("move-up").length, 0);
+    assert.equal(blocked.images()[0].props.previewSurfaceProps, undefined);
+    const interrupted = fixture({ controlled: true, enableDragDrop: true, dragFromImage: true });
+    interrupted.images()[0].props.previewSurfaceProps.onDragStart(event()); interrupted.flags.fieldsetPending = true;
+    interrupted.cards()[2].props.onDrop(event()); interrupted.flags.fieldsetPending = false;
+    interrupted.cards()[2].props.onDrop(event()); interrupted.render(); order(interrupted, ["a", "b", "c"]);
+  });
+  check("Controlled Gallery retains domain add/remove confirmation hooks and picker cancellation without owning a second ordered collection", () => {
+    let requestedAdd = 0, requestedRemove = null;
+    const test = fixture({ controlled: true, onRequestAdd: () => { requestedAdd++; }, onRequestRemove: key => { requestedRemove = key; } });
+    test.action("add")[0].props.onClick(); test.images()[1].props.onRemove(); test.render();
+    assert.equal(requestedAdd, 1); assert.equal(requestedRemove, "b"); order(test, ["a", "b", "c"]);
+    assert.equal(test.read().controlledCalls, 0, "Domain confirms removal before the only item authority changes");
+    test.images()[0].props.onReplace(); test.render(); assert.equal(test.picker().props.open, true);
+    test.picker().props.onClose(); test.render(); assert.equal(test.picker().props.open, false); order(test, ["a", "b", "c"]);
+    assert.equal(test.read().controlledCalls, 0);
+    test.images()[0].props.onReplace(); test.render(); test.picker().props.onSelect("/replacement.webp"); test.render();
+    assert.equal(test.read().controlledRows[0].key, "a"); assert.equal(test.read().controlledRows[0].url, "/replacement.webp"); assert.equal(test.read().controlledRows[0].alt, "Alt a");
+    assert.equal(test.read().controlledCalls, 1);
+  });
+  check("Gallery default and domain error aliases retain native field names and the same actionable aggregate focus", () => {
+    for (const custom of [false, true]) {
+      const imageKey = custom ? "project_images" : "gallery_url", altKey = custom ? "project_image_alt" : "gallery_alt";
+      const test = fixture({ controlled: custom, ...(custom ? { errorName: imageKey, altErrorName: altKey } : {}), fieldErrors: { [imageKey]: ["Image error"], [altKey]: ["Alt error"] } });
+      assert.equal(test.nodes()[0].props["aria-describedby"], `${imageKey}-error ${altKey}-error`);
+      assert.equal(test.images()[0].props.name, "gallery_url"); assert.equal(test.images()[0].props.altName, "gallery_alt");
+      assert.equal(test.images()[0].props.ariaInvalid, true); assert.equal(test.images()[0].props.ariaDescribedBy, `${imageKey}-error`);
+      assert.equal(test.images()[0].props.altDescribedBy, `${altKey}-error`);
+      assert.equal(test.nodes().filter(node => node.type === Stub && node.props.name === imageKey).length, 1);
+      assert.equal(test.nodes().filter(node => node.type === Stub && node.props.name === altKey).length, 1);
+    }
+  });
+  console.log(JSON.stringify({ status: "pass", count: checks.length, checks, scope: "Actual shared Gallery function/callbacks, shared handle and bounded source contracts; authenticated browser/save/reload and named Content ID schema remain Pending.", globalClosed: false }));
+}
 
 function assert(condition, message) {
   if (!condition) {
@@ -647,25 +842,21 @@ const [{ default: AdminCard }, { AdminFormControlHeader }, { default: AdminFormS
 const heroRowTree = ts.createSourceFile("ModuleEditorPresentation.tsx", heroVisibilitySource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const heroRowNode = heroRowTree.statements.find(node =>
   ts.isFunctionDeclaration(node) && node.name?.text === "ModuleEditorVisibilityAlignRow");
-const heroRowSurface = heroRowTree.statements.filter(ts.isVariableStatement)
-  .flatMap(node => node.declarationList.declarations)
-  .find(node => ts.isIdentifier(node.name) && node.name.text === "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME");
-if (!heroRowNode || !heroRowSurface?.initializer || !ts.isStringLiteral(heroRowSurface.initializer)) {
-  throw new Error("The actual shared Hero row and its existing surface must be available to the rendering guard.");
+if (!heroRowNode || !heroRowNode.getText(heroRowTree).includes("<AdminCard")) {
+  throw new Error("The actual shared Hero row must delegate its canonical surface to AdminCard.");
 }
 const compiledHeroRow = ts.transpileModule(heroRowNode.getText(heroRowTree).replace(/^export /u, ""), {
   compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const HeroVisibilityAlignRow = new Function(
-  "React", "Children", "useState", "AdminCard", "AdminFormControlHeader", "AdminFormSwitch", "AdminTextFormatControls", "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME",
+  "React", "useState", "AdminCard", "AdminFormControlHeader", "AdminFormSwitch", "AdminTextFormatControls",
   `${compiledHeroRow}\nreturn ModuleEditorVisibilityAlignRow;`,
-)({ createElement, Fragment }, Children, useState, AdminCard, AdminFormControlHeader, AdminFormSwitch, AdminTextFormatControls, heroRowSurface.initializer.text);
+)({ createElement, Fragment }, useState, AdminCard, AdminFormControlHeader, AdminFormSwitch, AdminTextFormatControls);
 assert(
   heroVisibilityAdapterSource.includes("ModuleEditorVisibilityAlignRow as default"),
   "Hero adapter retains the actual shared visibility and text-formatting owner",
 );
 
-for (const presentation of ["card", "premium"]) {
   for (const preserveUnsetBold of [false, true]) {
     for (const boldDefault of [undefined, false, true]) {
       for (const enableBold of [false, true]) {
@@ -677,7 +868,6 @@ for (const presentation of ["card", "premium"]) {
           showDefault: false,
           alignmentDefault: "center",
           enableBold,
-          ...(presentation === "premium" ? { presentation } : {}),
           ...(preserveUnsetBold ? { preserveUnsetBold } : {}),
           ...(boldDefault === undefined ? {} : { boldDefault }),
         }));
@@ -718,12 +908,11 @@ for (const presentation of ["card", "premium"]) {
           });
         assert(
           fieldsArePreserved && heroRoundtrip,
-          `Actual ${presentation} Hero row: Bold ${String(boldDefault)}, control ${enableBold ? "enabled" : "hidden"}, unset opt-in ${preserveUnsetBold} retains native submission and parser roundtrip`,
+          `Actual unified Hero row: Bold ${String(boldDefault)}, control ${enableBold ? "enabled" : "hidden"}, unset opt-in ${preserveUnsetBold} retains native submission and parser roundtrip`,
         );
       }
     }
   }
-}
 
 function findSharedBoldButton(node) {
   if (!isValidElement(node)) return undefined;

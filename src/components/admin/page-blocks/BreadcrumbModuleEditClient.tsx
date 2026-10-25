@@ -2,15 +2,15 @@
 
 import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
-import { AdminCard, AdminFormControlHeader, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminFormField, AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
+import { adminFormLabelClassName } from "../../../lib/admin/admin-ui-styles";
 import {
   ModuleEditorFeedback,
-  ModuleEditorField,
-  ModuleEditorFieldGrid,
   ModuleEditorHeader,
   ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
+  ModuleEditorSection,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
@@ -40,7 +40,7 @@ export default function BreadcrumbModuleEditClient({
   updateAction,
 }: BreadcrumbModuleEditClientProps) {
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
+    <div className={`${ADMIN_FORM_STACK_CLASS_NAME} pb-10`} dir="rtl">
       <ModuleEditorHeader
         moduleKind="breadcrumb"
         entityName={block.name}
@@ -56,73 +56,65 @@ export default function BreadcrumbModuleEditClient({
           <input type="hidden" name="description" value={block.description ?? ""} />
           <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
 
-          <ModuleEditorIdentitySection
-            name={block.name}
-            status={block.status}
-            inputClassName={fieldClassName("h-11")}
-          />
+          <div className={`min-w-0 ${ADMIN_FORM_STACK_CLASS_NAME}`}>
+            <ModuleEditorIdentitySection
+              name={block.name}
+              status={block.status}
+              inputClassName={fieldClassName("h-11")}
+            />
 
-          <ModuleEditorTabs
-            moduleKind="breadcrumb"
-            activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/breadcrumb" saved={saved} />}
-            tabs={[
-              {
-                id: "content",
-                content: (
-                  <div className="space-y-6">
-                    <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="standard" span={4}>
-                        <AdminCard presentation="premium" className="h-full p-3">
-                        <AdminFormListboxSelect
-                          name="source"
-                          label={<AdminFormControlHeader title="مصدر الرابط" />}
-                          defaultValue={config.source ?? "navigation"}
-                          options={[
-                            { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
-                            { value: "manual", label: "يدوي" },
-                          ]}
-                          sizing="full"
-                        />
-                        </AdminCard>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <AdminCard presentation="premium" className="h-full p-3">
-                        <label className="block space-y-3">
-                          <AdminFormControlHeader title="تسمية الرابط (اختياري)" />
-                          <input
-                            name="current_label_override"
-                            defaultValue={config.currentLabelOverride ?? ""}
-                            placeholder="يستبدل آخر عنصر في المسار"
-                            className={fieldClassName()}
+            <ModuleEditorTabs
+              moduleKind="breadcrumb"
+              activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/breadcrumb" saved={saved} />}
+              tabs={[
+                {
+                  id: "content",
+                  content: (
+                    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+                      <ModuleEditorSection surface="neutral">
+                      <AdminFormGrid columns={3} presentation="aligned-fields">
+                          <AdminFormListboxSelect
+                            name="source"
+                            label="مصدر الرابط"
+                            presentation="panel"
+                            defaultValue={config.source ?? "navigation"}
+                            options={[
+                              { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
+                              { value: "manual", label: "يدوي" },
+                            ]}
+                            sizing="full"
                           />
-                        </label>
-                        </AdminCard>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="binary-state" span={4}>
-                        <AdminCard presentation="premium" className="h-full p-3">
-                          <AdminFormSwitch
-                            name="show_home"
-                            label={<AdminFormControlHeader title="إظهار الرئيسية" />}
-                            value="true"
-                            defaultChecked={config.showHome !== false}
-                            embedded
-                          />
-                        </AdminCard>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                    <BreadcrumbManualItemsField items={config.manualItems ?? []} />
-                  </div>
-                ),
-              },
-              {
-                id: "pages",
-                sectionHeaderPresentation: "control",
-                content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
-              },
-            ]}
-          />
+                          <AdminFormField presentation="panel" label="تسمية الرابط (اختياري)">
+                            <input
+                              name="current_label_override"
+                              defaultValue={config.currentLabelOverride ?? ""}
+                              placeholder="يستبدل آخر عنصر في المسار"
+                              className={fieldClassName()}
+                            />
+                          </AdminFormField>
+                            <AdminFormSwitch
+                              name="show_home"
+                              label={<span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>إظهار الرئيسية</span></span>}
+                              value="true"
+                              defaultChecked={config.showHome !== false}
+                              embedded
+                            />
+                      </AdminFormGrid>
+                      </ModuleEditorSection>
+                      <BreadcrumbManualItemsField items={config.manualItems ?? []} />
+                    </div>
+                  ),
+                },
+                {
+                  id: "pages",
+                  sectionHeaderPresentation: "control",
+                  content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
+                },
+              ]}
+            />
 
-          <ModuleEditorSaveArea />
+            <ModuleEditorSaveArea />
+          </div>
         </AdminFormPendingFields>
       </form>
     </div>

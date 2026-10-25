@@ -7,7 +7,11 @@ import { chromium } from "playwright";
 import { expect } from "playwright/test";
 
 const root = path.resolve(import.meta.dirname, "..");
-const out = path.join(root, ".tmp-qa/evidence-adoption-gaps/settings-results");
+const requestedOutput = process.env.ADMIN_SETTINGS_RESULT_OUTPUT;
+const out = requestedOutput ? path.resolve(root, requestedOutput) : path.join(root, ".tmp-qa/evidence-adoption-gaps/settings-results");
+assert(!requestedOutput || out.startsWith(path.join(root, ".tmp-qa") + path.sep), "Settings result evidence must stay inside the workspace .tmp-qa tree");
+const only=process.argv.find(arg=>arg.startsWith("--only="))?.slice(7);
+assert.ok(only===undefined||["footer-save-warning","maintenance-warning-retains-new-state","media-warning-shared-form-settles-clean"].includes(only), "Only existing bounded settings result cases are supported.");
 await mkdir(out, { recursive: true });
 const require = createRequire(import.meta.url);
 const entry = String.raw`import React,{useLayoutEffect} from 'react';
@@ -70,8 +74,6 @@ await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true });
 const results = [];
-const only=process.argv.find(arg=>arg.startsWith("--only="))?.slice(7);
-assert.ok(only===undefined||only==="footer-save-warning", "Only the bounded Footer Save selection is supported.");
 async function check(name, width, run) {
   if(only&&name!==only)return;
   const context = await browser.newContext({ viewport: { width, height: 900 } });

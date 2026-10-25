@@ -2,7 +2,7 @@
 
 import type { GlobalSeoSettings } from "../../../lib/seo/global-seo-types";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 
 import {
   analyzeEntitySeo,
@@ -20,10 +20,17 @@ import {
 } from "../../../lib/admin/seo-length-standards";
 import AdminTagsField from "../AdminTagsField";
 import AdminMediaImageField from "../media/AdminMediaImageField";
-import { ADMIN_FORM_SECTION_CLASSES, AdminFormLayout } from "../ui/AdminForm";
+import { ADMIN_FORM_SECTION_CLASSES, ADMIN_FORM_STACK_CLASS_NAME, AdminFormControlHeader, AdminFormLayout, AdminFormSection } from "../ui/AdminForm";
+import AdminCard from "../ui/AdminCard";
+import AdminActionButton from "../ui/AdminActionButton";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../ui/AdminModuleTabs";
+import { AdminDataGridActionIcon } from "../ui/AdminDataGrid";
+import { ADMIN_FORM, ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME, adminFormFieldClassName, adminFormHintClassName, adminFormLabelClassName, adminFormTextareaClassName } from "../../../lib/admin/admin-ui-styles";
 import AdminFormListboxSelect from "../ui/AdminFormListboxSelect";
 import {
   AdminFormError,
+  AdminFormGrid,
+  AdminFormGridItem,
   useOptionalAdminFormRuntime,
 } from "../ui/AdminFormRuntime";
 import AdminSingleOpenAccordion from "../ui/AdminSingleOpenAccordion";
@@ -97,6 +104,8 @@ export type AdminEntitySeoAnalysisExtension<TState> = {
 };
 
 export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
+  /** Explicit consumer adoption; existing Entity SEO editors retain their default presentation. */
+  presentation?: "default" | "premium" | "panel";
   seoSettings?: GlobalSeoSettings;
   previewDescription?: { fieldName: string; value: string };
   id?: string;
@@ -205,32 +214,42 @@ function robotsPreviewLabel(
 function correctionButton(
   navigationEventName: string,
   target: AdminEntitySeoCorrectionTarget | undefined,
+  presentation: "default" | "premium" = "default",
 ) {
   if (!target) return null;
+  const onClick = () => {
+    window.dispatchEvent(
+      new CustomEvent(navigationEventName, { detail: target }),
+    );
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const element = document.getElementById(target.targetId);
+        if (!element) return;
+        const focusTarget = element.matches(
+          'input, textarea, select, button, [contenteditable="true"], [tabindex]',
+        )
+          ? element
+          : element.querySelector<HTMLElement>(
+              'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+            );
+        element.scrollIntoView({ block: "center" });
+        (focusTarget as HTMLElement | null)?.focus({ preventScroll: true });
+      });
+    });
+  };
+  if (presentation === "premium") {
+    return (
+      <AdminActionButton type="button" variant="gold" onClick={onClick} className="shrink-0">
+        <AdminDataGridActionIcon action="edit" />
+        تصحيح
+      </AdminActionButton>
+    );
+  }
   return (
     <button
       type="button"
       className="shrink-0 rounded-lg border border-[#D8B87A]/28 bg-[#D8B87A]/8 px-3 py-1.5 text-xs font-semibold text-[#F2D99B] transition hover:border-[#D8B87A]/50 hover:bg-[#D8B87A]/14 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
-      onClick={() => {
-        window.dispatchEvent(
-          new CustomEvent(navigationEventName, { detail: target }),
-        );
-        window.requestAnimationFrame(() => {
-          window.requestAnimationFrame(() => {
-            const element = document.getElementById(target.targetId);
-            if (!element) return;
-            const focusTarget = element.matches(
-              'input, textarea, select, button, [contenteditable="true"], [tabindex]',
-            )
-              ? element
-              : element.querySelector<HTMLElement>(
-                  'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
-                );
-            element.scrollIntoView({ block: "center" });
-            (focusTarget as HTMLElement | null)?.focus({ preventScroll: true });
-          });
-        });
-      }}
+      onClick={onClick}
     >
       تصحيح
     </button>
@@ -249,6 +268,8 @@ function SeoTextField({
   textarea = false,
   dir = "rtl",
   standard,
+  presentation = "default",
+  icon,
 }: {
   id: string;
   name: string;
@@ -261,7 +282,11 @@ function SeoTextField({
   textarea?: boolean;
   dir?: "rtl" | "ltr";
   standard?: SeoLengthStandard;
+  presentation?: "default" | "premium" | "panel";
+  icon?: ReactNode;
 }) {
+  const panel = presentation === "panel";
+  const premium = presentation === "premium" || panel;
   const assessment = standard ? assessSeoLength(liveValue, standard) : null;
   const hasError = Boolean(
     useOptionalAdminFormRuntime()?.fieldErrors[name]?.length,
@@ -286,9 +311,9 @@ function SeoTextField({
   return (
     <label
       htmlFor={id}
-      className="block scroll-mt-28 text-sm font-semibold text-white/72"
+      className={premium ? `${adminFormLabelClassName({ textInset: panel })} scroll-mt-28` : "block scroll-mt-28 text-sm font-semibold text-white/72"}
     >
-      {label}
+      {panel ? <span data-admin-form-label-text>{label}</span> : premium ? <AdminFormControlHeader title={label} icon={icon} presentation="leading-icon" /> : label}
       {textarea ? (
         <textarea
           id={id}
@@ -298,7 +323,7 @@ function SeoTextField({
           dir={dir}
           aria-invalid={hasError || undefined}
           aria-describedby={describedBy}
-          className={`${fieldClass} resize-y leading-7`}
+          className={premium ? adminFormTextareaClassName("resize-y leading-7") : `${fieldClass} resize-y leading-7`}
         />
       ) : (
         <input
@@ -308,14 +333,14 @@ function SeoTextField({
           dir={dir}
           aria-invalid={hasError || undefined}
           aria-describedby={describedBy}
-          className={fieldClass}
+          className={premium ? adminFormFieldClassName() : fieldClass}
         />
       )}
       <span
         id={assessment ? lengthFeedbackId : undefined}
         aria-live={assessment ? "polite" : undefined}
         aria-atomic={assessment ? "true" : undefined}
-        className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-white/42"
+        className={`mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-white/42 ${panel ? ADMIN_FORM.helperTextInset : ""}`.trim()}
       >
         <span>
           {assessment
@@ -360,10 +385,12 @@ function IssueRow({
   issue,
   target,
   navigationEventName,
+  presentation = "default",
 }: {
   issue: SeoIssue;
   target?: AdminEntitySeoCorrectionTarget;
   navigationEventName: string;
+  presentation?: "default" | "premium";
 }) {
   const tone =
     issue.type === "success"
@@ -388,7 +415,7 @@ function IssueRow({
       data-admin-entity-seo-issue={issue.id ?? "unclassified"}
       data-admin-entity-seo-severity={issue.type}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className={presentation === "premium" ? "flex flex-wrap items-start justify-between gap-3" : "flex items-start justify-between gap-3"}>
         <details className="min-w-0 flex-1">
           <summary className="cursor-pointer text-sm font-medium text-white/78">
             {icon} {issue.label}
@@ -403,13 +430,14 @@ function IssueRow({
         </details>
         {issue.type === "success"
           ? null
-          : correctionButton(navigationEventName, target)}
+          : correctionButton(navigationEventName, target, presentation)}
       </div>
     </div>
   );
 }
 
 export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
+  presentation = "default",
   id = "admin-entity-seo-panel",
   entityLabel,
   publicPathPrefix,
@@ -429,6 +457,8 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   onControlledValueChange,
   analysisExtension,
 }: AdminEntitySeoPanelProps<TAnalysisState>) {
+  const panel = presentation === "panel";
+  const premium = presentation === "premium" || panel;
   const [publicDescription, setPublicDescription] = useState(previewDescription?.value);
   const initialSeoTitleSegment = stripSeoTitleSuffix(
     initial.seoTitle,
@@ -594,72 +624,208 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   const { title, description } = presentSeoText(resolvedPreview);
   const canonical = resolvedPreview.canonical;
 
-  const seoBasicsContent = (
+  const seoTitleField = (
+    <SeoTextField
+      id={fieldIds.seoTitle}
+      name={fieldNames.seoTitle}
+      label={
+        previewSuffix
+          ? "عنوان صفحة محركات البحث (بدون اسم الموقع)"
+          : ADMIN_ENTITY_SEO_TERMINOLOGY.seoTitle
+      }
+      defaultValue={initialSeoTitleSegment}
+      value={controlledValues?.seoTitle}
+      onValueChange={(value) =>
+        onControlledValueChange?.("seoTitle", value)
+      }
+      liveValue={effectiveSeoTitle}
+      standard={SEO_LENGTH_STANDARDS.title}
+      presentation={presentation}
+      icon={<AdminModuleTabIcon name="seo" />}
+    />
+  );
+  const seoTitleTemplate = previewSuffix ? (
+      <p className={`-mt-3 text-xs leading-6 text-white/42 ${panel ? ADMIN_FORM.helperTextInset : ""}`.trim()} data-admin-seo-title-template>
+        يُضاف تلقائيًا: <span dir="auto" className="text-white/60">{previewSuffix}</span>
+      </p>
+    ) : null;
+  const seoDescriptionField = (
+    <SeoTextField
+      id={fieldIds.seoDescription}
+      name={fieldNames.seoDescription}
+      label={ADMIN_ENTITY_SEO_TERMINOLOGY.seoDescription}
+      defaultValue={initial.seoDescription}
+      value={controlledValues?.seoDescription}
+      onValueChange={(value) =>
+        onControlledValueChange?.("seoDescription", value)
+      }
+      liveValue={live.seoDescription}
+      textarea
+      standard={SEO_LENGTH_STANDARDS.description}
+      presentation={presentation}
+      icon={<AdminModuleTabIcon name="content" />}
+    />
+  );
+  const focusKeywordField = (
+    <SeoTextField
+      id={fieldIds.focusKeyword}
+      name={fieldNames.focusKeyword}
+      label={ADMIN_ENTITY_SEO_TERMINOLOGY.focusKeyword}
+      defaultValue={initial.focusKeyword}
+      value={controlledValues?.focusKeyword}
+      onValueChange={(value) =>
+        onControlledValueChange?.("focusKeyword", value)
+      }
+      liveValue={live.focusKeyword}
+      helper={ADMIN_ENTITY_SEO_TERMINOLOGY.focusKeywordHelper}
+      presentation={presentation}
+      icon={<AdminModuleTabIcon name="seo" />}
+    />
+  );
+  const seoKeywordsField = (
+    <div id={fieldIds.seoKeywords} className="scroll-mt-28">
+      <AdminTagsField
+        name={fieldNames.seoKeywords}
+        label={ADMIN_ENTITY_SEO_TERMINOLOGY.seoKeywords}
+        defaultTags={initial.seoKeywords}
+        appearance="dark"
+        className={panel ? "min-w-0" : undefined}
+        labelClassName={panel ? adminFormLabelClassName({ textInset: true }) : undefined}
+        helperClassName={panel ? `mt-2 ${adminFormHintClassName({ textInset: true })}` : undefined}
+      />
+      <AdminFormError name={fieldNames.seoKeywords} />
+    </div>
+  );
+  const seoBasicsGrid = (
+    <AdminFormGrid columns={1}>
+      <AdminFormSection surface="neutral">
+        <div className="space-y-5">{seoTitleField}{seoTitleTemplate}</div>
+      </AdminFormSection>
+      <AdminFormSection surface="neutral">{seoDescriptionField}</AdminFormSection>
+      <AdminFormSection surface="neutral">{focusKeywordField}</AdminFormSection>
+      <AdminFormSection surface="neutral">{seoKeywordsField}</AdminFormSection>
+    </AdminFormGrid>
+  );
+  const seoBasicsContent = panel ? (
+    <section data-admin-entity-seo-basics>
+      <AdminCard presentation="premium" className="p-3">
+        <AdminModuleSectionHeader
+          id={`${id}-basics`}
+          sectionHeading="أساسيات تحسين محركات البحث"
+          icon="seo"
+          sectionHeaderPresentation="premium"
+          sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+        />
+        {seoBasicsGrid}
+      </AdminCard>
+    </section>
+  ) : premium ? (
+    <section data-admin-entity-seo-basics>
+      <AdminFormGrid columns={1}>
+        <AdminCard presentation="premium" className="p-3">
+          <div className="space-y-5">{seoTitleField}{seoTitleTemplate}</div>
+        </AdminCard>
+        <AdminCard presentation="premium" className="p-3">{seoDescriptionField}</AdminCard>
+        <AdminCard presentation="premium" className="p-3">{focusKeywordField}</AdminCard>
+        <AdminCard presentation="premium" className="p-3">{seoKeywordsField}</AdminCard>
+      </AdminFormGrid>
+    </section>
+  ) : (
     <section
       className="rounded-2xl border border-white/10 bg-black/20 p-5"
       data-admin-entity-seo-basics
     >
       <div className="space-y-5">
-        <SeoTextField
-          id={fieldIds.seoTitle}
-          name={fieldNames.seoTitle}
-          label={
-            previewSuffix
-              ? "عنوان صفحة محركات البحث (بدون اسم الموقع)"
-              : ADMIN_ENTITY_SEO_TERMINOLOGY.seoTitle
-          }
-          defaultValue={initialSeoTitleSegment}
-          value={controlledValues?.seoTitle}
-          onValueChange={(value) =>
-            onControlledValueChange?.("seoTitle", value)
-          }
-          liveValue={effectiveSeoTitle}
-          standard={SEO_LENGTH_STANDARDS.title}
-        />
-        {previewSuffix ? (
-          <p className="-mt-3 text-xs leading-6 text-white/42" data-admin-seo-title-template>
-            يُضاف تلقائيًا: <span dir="auto" className="text-white/60">{previewSuffix}</span>
-          </p>
-        ) : null}
-        <SeoTextField
-          id={fieldIds.seoDescription}
-          name={fieldNames.seoDescription}
-          label={ADMIN_ENTITY_SEO_TERMINOLOGY.seoDescription}
-          defaultValue={initial.seoDescription}
-          value={controlledValues?.seoDescription}
-          onValueChange={(value) =>
-            onControlledValueChange?.("seoDescription", value)
-          }
-          liveValue={live.seoDescription}
-          textarea
-          standard={SEO_LENGTH_STANDARDS.description}
-        />
-        <SeoTextField
-          id={fieldIds.focusKeyword}
-          name={fieldNames.focusKeyword}
-          label={ADMIN_ENTITY_SEO_TERMINOLOGY.focusKeyword}
-          defaultValue={initial.focusKeyword}
-          value={controlledValues?.focusKeyword}
-          onValueChange={(value) =>
-            onControlledValueChange?.("focusKeyword", value)
-          }
-          liveValue={live.focusKeyword}
-          helper={ADMIN_ENTITY_SEO_TERMINOLOGY.focusKeywordHelper}
-        />
-        <div id={fieldIds.seoKeywords} className="scroll-mt-28">
-          <AdminTagsField
-            name={fieldNames.seoKeywords}
-            label={ADMIN_ENTITY_SEO_TERMINOLOGY.seoKeywords}
-            defaultTags={initial.seoKeywords}
-            appearance="dark"
-          />
-          <AdminFormError name={fieldNames.seoKeywords} />
-        </div>
+        {seoTitleField}
+        {seoTitleTemplate}
+        {seoDescriptionField}
+        {focusKeywordField}
+        {seoKeywordsField}
       </div>
     </section>
   );
 
-  const robotsCanonicalContent = (
+  const robotsIndexField = (
+    <AdminFormListboxSelect
+      id={fieldIds.robotsIndexListbox}
+      focusTargetId={fieldIds.robotsIndexFocusTarget}
+      name={fieldNames.robotsIndex}
+      label={panel ? <span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>الفهرسة</span></span> : "الفهرسة"}
+      options={robotsIndexOptions}
+      defaultValue={
+        initial.robotsIndex === null ? "" : String(initial.robotsIndex)
+      }
+      placeholder="الإعداد العام"
+      sizing={premium ? "full" : "wide"}
+    />
+  );
+  const robotsFollowField = (
+    <AdminFormListboxSelect
+      id={fieldIds.robotsFollowListbox}
+      focusTargetId={fieldIds.robotsFollowFocusTarget}
+      name={fieldNames.robotsFollow}
+      label={panel ? <span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>تتبع الروابط</span></span> : "تتبع الروابط"}
+      options={robotsFollowOptions}
+      defaultValue={
+        initial.robotsFollow === null ? "" : String(initial.robotsFollow)
+      }
+      placeholder="الإعداد العام"
+      sizing={premium ? "full" : "wide"}
+    />
+  );
+  const canonicalField = (
+    <SeoTextField
+      id={fieldIds.canonicalUrl}
+      name={fieldNames.canonicalUrl}
+      label={ADMIN_ENTITY_SEO_TERMINOLOGY.canonicalUrl}
+      defaultValue={initial.canonicalUrl}
+      liveValue={live.canonicalUrl}
+      helper={`اتركه فارغًا لاستخدام رابط ${entityLabel} العام تلقائيًا.`}
+      dir="ltr"
+      presentation={presentation}
+      icon={<AdminModuleTabIcon name="settings" />}
+    />
+  );
+  const robotsCanonicalContent = panel ? (
+    <section id={fieldIds.robotsSection} className="scroll-mt-28" data-admin-entity-seo-overrides>
+      <div data-admin-seo-control-order="index-follow-canonical">
+        <AdminFormGrid columns={1}>
+          <section>
+            <AdminCard presentation="premium" className="p-3">
+              <AdminFormGrid columns={2}>
+                {robotsIndexField}
+                {robotsFollowField}
+              </AdminFormGrid>
+            </AdminCard>
+          </section>
+          <AdminCard presentation="premium" className="p-3">
+            {canonicalField}
+          </AdminCard>
+        </AdminFormGrid>
+      </div>
+    </section>
+  ) : premium ? (
+    <section id={fieldIds.robotsSection} className="scroll-mt-28" data-admin-entity-seo-overrides>
+      <div data-admin-seo-control-order="index-follow-canonical">
+        <AdminFormGrid columns={1}>
+          <section>
+            <AdminModuleSectionHeader
+              id={fieldIds.robotsSection}
+              sectionHeading={ADMIN_ENTITY_SEO_TERMINOLOGY.robots}
+              icon="settings"
+            />
+            <AdminCard presentation="premium" className="p-3">
+              <AdminFormGrid columns={2}>
+                {robotsIndexField}
+                {robotsFollowField}
+              </AdminFormGrid>
+            </AdminCard>
+          </section>
+          <AdminCard presentation="premium" className="p-3">{canonicalField}</AdminCard>
+        </AdminFormGrid>
+      </div>
+    </section>
+  ) : (
     <section
       id={fieldIds.robotsSection}
       className="scroll-mt-28 rounded-2xl border border-white/10 bg-black/20 p-5"
@@ -676,44 +842,90 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         className="mt-5 grid gap-3 lg:grid-cols-[minmax(180px,.7fr)_minmax(180px,.7fr)_minmax(0,1.6fr)] lg:items-start"
         data-admin-seo-control-order="index-follow-canonical"
       >
-        <AdminFormListboxSelect
-          id={fieldIds.robotsIndexListbox}
-          focusTargetId={fieldIds.robotsIndexFocusTarget}
-          name={fieldNames.robotsIndex}
-          label="الفهرسة"
-          options={robotsIndexOptions}
-          defaultValue={
-            initial.robotsIndex === null ? "" : String(initial.robotsIndex)
-          }
-          placeholder="الإعداد العام"
-          sizing="wide"
-        />
-        <AdminFormListboxSelect
-          id={fieldIds.robotsFollowListbox}
-          focusTargetId={fieldIds.robotsFollowFocusTarget}
-          name={fieldNames.robotsFollow}
-          label="تتبع الروابط"
-          options={robotsFollowOptions}
-          defaultValue={
-            initial.robotsFollow === null ? "" : String(initial.robotsFollow)
-          }
-          placeholder="الإعداد العام"
-          sizing="wide"
-        />
-        <SeoTextField
-          id={fieldIds.canonicalUrl}
-          name={fieldNames.canonicalUrl}
-          label={ADMIN_ENTITY_SEO_TERMINOLOGY.canonicalUrl}
-          defaultValue={initial.canonicalUrl}
-          liveValue={live.canonicalUrl}
-          helper={`اتركه فارغًا لاستخدام رابط ${entityLabel} العام تلقائيًا.`}
-          dir="ltr"
-        />
+        {robotsIndexField}
+        {robotsFollowField}
+        {canonicalField}
       </div>
     </section>
   );
 
-  const socialSharingFields = (
+  const socialImageField = (
+    <AdminMediaImageField
+      name={fieldNames.ogImage}
+      label="صورة المشاركة"
+      defaultValue={initial.ogImage}
+      browseFolder={social.mediaBrowseFolder}
+      appearance="dark"
+      variant={premium ? "card" : undefined}
+      labelClassName={panel ? adminFormLabelClassName({ textInset: true }) : undefined}
+      guidanceClassName={panel ? adminFormHintClassName({ textInset: true }) : undefined}
+      originalDimensionsClassName={panel ? ADMIN_FORM.helperTextInset : undefined}
+      onValueChange={(ogImage) =>
+        setObservedLive((current) => ({ ...current, ogImage }))
+      }
+    />
+  );
+  const socialImageAltField = (
+    <label className={premium ? adminFormLabelClassName({ textInset: panel }) : "mt-4 block text-sm font-semibold text-white/72"}>
+      {panel ? <span data-admin-form-label-text>النص البديل لصورة المشاركة</span> : premium ? <AdminFormControlHeader title="النص البديل لصورة المشاركة" icon={<AdminModuleTabIcon name="content" />} presentation="leading-icon" /> : "النص البديل لصورة المشاركة"}
+      <input
+        id={social.fieldIds.imageAlt}
+        name={fieldNames.ogImageAlt}
+        defaultValue={initial.ogImageAlt}
+        className={premium ? adminFormFieldClassName() : fieldClass}
+      />
+      <AdminFormError name={fieldNames.ogImageAlt} />
+    </label>
+  );
+  const socialSharingFields = panel ? (
+    <section data-admin-entity-seo-social-fields data-admin-entity-seo-social-mode="editable_override">
+      <AdminCard presentation="premium" className="p-3">
+        <AdminModuleSectionHeader
+          id={social.fieldIds.imageSection}
+          sectionHeading={ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettings}
+          icon="media"
+          sectionHeaderPresentation="premium"
+          sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+        />
+        <AdminFormGrid columns={12} presentation="equal-height-columns">
+          <AdminFormGridItem span={8}>
+            <AdminFormGrid columns={1}>
+              {robotsCanonicalContent}
+              <AdminFormSection surface="neutral">
+                {socialImageAltField}
+              </AdminFormSection>
+            </AdminFormGrid>
+          </AdminFormGridItem>
+          <AdminFormGridItem span={4} className="grid grid-cols-1">
+            <AdminCard presentation="premium" className="p-3">
+              <AdminModuleSectionHeader
+                id={`${social.fieldIds.imageSection}-media`}
+                sectionHeading="صورة المشاركة"
+                icon="media"
+                sectionHeaderPresentation="premium"
+                sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+              />
+              <div id={social.fieldIds.imageSection} className="scroll-mt-28">{socialImageField}</div>
+            </AdminCard>
+          </AdminFormGridItem>
+        </AdminFormGrid>
+      </AdminCard>
+    </section>
+  ) : premium ? (
+    <section data-admin-entity-seo-social-fields data-admin-entity-seo-social-mode="editable_override">
+      <AdminModuleSectionHeader
+        id={social.fieldIds.imageSection}
+        sectionHeading={ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettings}
+        icon="media"
+      />
+      <AdminCard presentation="premium" className="p-3">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+          <div id={social.fieldIds.imageSection} className="scroll-mt-28">{socialImageField}</div>
+          {socialImageAltField}
+        </div>
+      </AdminCard>
+    </section>
+  ) : (
     <section
       className="rounded-2xl border border-white/10 bg-black/20 p-5"
       data-admin-entity-seo-social-fields
@@ -723,26 +935,8 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         {ADMIN_ENTITY_SEO_TERMINOLOGY.socialSettings}
       </h3>
       <div id={social.fieldIds.imageSection} className="mt-5 scroll-mt-28">
-        <AdminMediaImageField
-          name={fieldNames.ogImage}
-          label="صورة المشاركة"
-          defaultValue={initial.ogImage}
-          browseFolder={social.mediaBrowseFolder}
-          appearance="dark"
-          onValueChange={(ogImage) =>
-            setObservedLive((current) => ({ ...current, ogImage }))
-          }
-        />
-        <label className="mt-4 block text-sm font-semibold text-white/72">
-          النص البديل لصورة المشاركة
-          <input
-            id={social.fieldIds.imageAlt}
-            name={fieldNames.ogImageAlt}
-            defaultValue={initial.ogImageAlt}
-            className={fieldClass}
-          />
-          <AdminFormError name={fieldNames.ogImageAlt} />
-        </label>
+        {socialImageField}
+        {socialImageAltField}
       </div>
     </section>
   );
@@ -835,6 +1029,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
               issue={issue}
               target={issue.id ? correctionTargets[issue.id] : undefined}
               navigationEventName={navigationEventName}
+              presentation={premium ? "premium" : "default"}
             />
           ))
         ) : (
@@ -849,43 +1044,58 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   return (
     <section
       id={id}
-      className={ADMIN_FORM_SECTION_CLASSES}
+      className={premium ? "min-w-0 space-y-5" : ADMIN_FORM_SECTION_CLASSES}
       data-admin-entity-seo-panel
+      data-admin-entity-seo-presentation={premium ? presentation : undefined}
     >
       <AdminFormLayout
+        className={premium ? "min-w-0 grid-cols-[minmax(0,1fr)] [&>div]:min-w-0" : undefined}
         aside={
           <AdminSingleOpenAccordion
+            presentation={panel ? "panel" : undefined}
             ariaLabel={`معاينات وتحليل SEO الخاصة بـ${entityLabel}`}
             defaultOpenId="search-result-preview"
             navigationEventName={navigationEventName}
             items={[
               {
                 id: "search-result-preview",
+                icon: "overview",
                 label: "معاينة نتائج البحث",
-                description: "الشكل المتوقع للرابط داخل نتائج محركات البحث.",
+                description: panel ? undefined : "الشكل المتوقع للرابط داخل نتائج محركات البحث.",
                 content: searchResultPreviewContent,
               },
               {
                 id: "open-graph-preview",
+                icon: "media",
                 label: ADMIN_ENTITY_SEO_TERMINOLOGY.socialPreview,
                 description:
-                  ADMIN_ENTITY_SEO_TERMINOLOGY.socialPreviewDescription,
+                  panel ? undefined : ADMIN_ENTITY_SEO_TERMINOLOGY.socialPreviewDescription,
                 content: openGraphPreviewContent,
               },
               {
                 id: "live-seo-analysis",
+                icon: "seo",
                 label: "تحليل SEO المباشر",
-                description: "الدرجة الإرشادية وملاحظات تحسين المحتوى.",
+                description: panel ? undefined : "الدرجة الإرشادية وملاحظات تحسين المحتوى.",
                 content: liveSeoAnalysisContent,
               },
             ]}
           />
         }
-        asideClassName="xl:sticky xl:top-6 xl:self-start"
+        asideClassName={premium ? "min-w-0 xl:sticky xl:top-6 xl:self-start" : "xl:sticky xl:top-6 xl:self-start"}
       >
         {seoBasicsContent}
-        {robotsCanonicalContent}
-        {socialSharingFields}
+        {panel ? socialSharingFields : premium ? (
+          <AdminFormGrid columns={2} className="items-start">
+            {robotsCanonicalContent}
+            {socialSharingFields}
+          </AdminFormGrid>
+        ) : (
+          <>
+            {robotsCanonicalContent}
+            {socialSharingFields}
+          </>
+        )}
       </AdminFormLayout>
     </section>
   );

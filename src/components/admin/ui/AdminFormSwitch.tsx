@@ -1,7 +1,8 @@
 import type { ChangeEventHandler, ReactNode } from "react";
+import AdminCard from "./AdminCard";
 
 export const ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME =
-  "rounded-xl border border-white/10 bg-black/16 px-4 py-3";
+  "min-h-11 rounded-xl border border-white/10 bg-black/16 px-4 py-2.5";
 export const ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME =
   "h-8 min-w-20 justify-between border border-white/10 bg-white/[0.035] px-2.5 py-1.5";
 
@@ -9,11 +10,14 @@ export type AdminFormSwitchProps = {
   id?: string;
   name?: string;
   label: ReactNode;
+  icon?: ReactNode;
   defaultChecked?: boolean;
   checked?: boolean;
   onChange?: ChangeEventHandler<HTMLInputElement>;
   disabled?: boolean;
   surface?: boolean;
+  /** One shared Premium Card for an independent Boolean setting. */
+  presentation?: "default" | "premium" | "premium-inline";
   /** The containing card owns the surface; keep the native label and control. */
   embedded?: boolean;
   /** Inline settings keep the same native checkbox and label participation. */
@@ -30,11 +34,13 @@ export default function AdminFormSwitch({
   id,
   name,
   label,
+  icon,
   defaultChecked = false,
   checked,
   onChange,
   disabled = false,
-  surface = false,
+  surface = true,
+  presentation = "default",
   embedded = false,
   embeddedLayout = "stacked",
   value,
@@ -65,10 +71,45 @@ export default function AdminFormSwitch({
     </span>
   );
   const labelContent = (
-    <span className={surface ? "min-w-0 text-start leading-5" : undefined}>
+    <span className={surface || presentation === "premium" ? "min-w-0 text-start leading-5" : undefined}>
       {label}
     </span>
   );
+
+  if (presentation === "premium-inline") {
+    return (
+      <AdminCard presentation="premium" className="px-2.5 py-2.5">
+        <label
+          id={id}
+          data-admin-form-switch-surface="premium-inline"
+          className={`flex min-w-0 cursor-pointer items-center gap-1 text-xs leading-5 text-white/70 ${disabled ? "cursor-not-allowed opacity-55" : ""} ${className}`.trim()}
+        >
+          {icon ? (
+            <span aria-hidden="true" className="inline-flex size-4 shrink-0 items-center justify-center text-[#D8B87A] [&>svg]:size-4">
+              {icon}
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1 text-start leading-5">{label}</span>
+          {switchControl}
+        </label>
+      </AdminCard>
+    );
+  }
+
+  if (presentation === "premium") {
+    return (
+      <AdminCard presentation="premium" className="h-full p-3">
+        <label
+          id={id}
+          data-admin-form-switch-surface="premium"
+          className={`flex h-full min-w-0 cursor-pointer items-center justify-between gap-2 text-xs leading-5 text-white/70 ${disabled ? "cursor-not-allowed opacity-55" : ""} ${className}`.trim()}
+        >
+          {labelContent}
+          {switchControl}
+        </label>
+      </AdminCard>
+    );
+  }
 
   if (embedded) {
     return (

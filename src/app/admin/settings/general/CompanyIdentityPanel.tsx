@@ -1,15 +1,21 @@
 "use client";
 
 import { AdminMediaImageField } from "../../../../components/admin/media";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import {
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminCard,
   AdminFormActions,
+  AdminFormControlHeader,
   AdminFormError,
   AdminFormField,
   AdminFormGrid,
   AdminFormRuntime,
   AdminFormSection,
+  AdminStatusPill,
   adminFormFieldClassName,
 } from "../../../../components/admin/ui";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
 import type { ResolvedAdminCompanyConfig } from "../../../../lib/admin/shell/contracts";
 import { updateAdminCompanyAction } from "./actions";
 
@@ -43,105 +49,126 @@ export default function CompanyIdentityPanel({
         mode="edit"
         entityKey="admin-company-identity"
         closeHref="/admin"
-        className="space-y-6"
       >
         {({ fieldErrors }) => (
-          <>
-            <AdminFormSection
-              title="هوية لوحة الإدارة"
-              description="الهوية والألوان والشعارات هنا تخص الـAdmin Shell ولا تغير بيانات المحتوى."
-              actions={
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/45">
-                  المصدر: {company.source}
-                </span>
-              }
-            >
-              <AdminFormError className="mb-5" />
-
-              <AdminFormGrid>
-                {textFields.map(({ name, label, value, dir }) => (
-                  <AdminFormField key={name} label={label} required>
-                    <input
-                      name={name}
-                      defaultValue={value}
-                      required
-                      dir={dir}
-                      className={adminFormFieldClassName(
-                        fieldErrors[name]?.length ? "border-red-400/40" : "",
-                      )}
-                      aria-invalid={Boolean(fieldErrors[name]?.length)}
-                      aria-describedby={
-                        fieldErrors[name]?.length ? `${name}-error` : undefined
-                      }
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+            <AdminFormGrid columnRatio="3:2" presentation="equal-height-columns">
+              <AdminFormGrid columns={1} density="sections">
+                <AdminFormSection
+                  presentation="panel"
+                  header={<AdminModuleSectionHeader
+                    id="company-identity"
+                    sectionHeading="هوية لوحة الإدارة"
+                    sectionDescription="الهوية والألوان والشعارات هنا تخص الـAdmin Shell ولا تغير بيانات المحتوى."
+                    icon="settings"
+                    sectionSummary={<AdminStatusPill>المصدر: {company.source}</AdminStatusPill>}
+                    sectionHeaderPresentation="premium"
+                    sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+                  />}
+                >
+                  <AdminFormGrid columns={1}>
+                    <AdminFormError />
+                    <AdminFormGrid columns={1}>
+                      {textFields.map(({ name, label, value, dir }) => (
+                        <AdminFormField key={name} label={label} required presentation="panel">
+                          <input
+                            name={name}
+                            defaultValue={value}
+                            required
+                            dir={dir}
+                            className={adminFormFieldClassName(
+                              fieldErrors[name]?.length ? "border-red-400/40" : "",
+                            )}
+                            aria-invalid={Boolean(fieldErrors[name]?.length)}
+                            aria-describedby={
+                              fieldErrors[name]?.length ? `${name}-error` : undefined
+                            }
+                          />
+                          <AdminFormError name={name} />
+                        </AdminFormField>
+                      ))}
+                    </AdminFormGrid>
+                  </AdminFormGrid>
+                </AdminFormSection>
+                <AdminFormSection
+                  presentation="panel"
+                  header={<AdminModuleSectionHeader
+                    id="company-colors"
+                    sectionHeading="ألوان الهوية"
+                    sectionDescription="ألوان لوحة الإدارة الحالية، وتُحفظ مع بيانات هوية الإدارة."
+                    icon="settings"
+                    sectionHeaderPresentation="premium"
+                    sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}
+                  />}
+                >
+                  <AdminFormGrid columns={3} presentation="aligned-fields">
+                    {colorFields.map(([name, label, value]) => (
+                      <AdminFormField key={name} label={label} required presentation="panel" hint={<span dir="ltr">{value}</span>}>
+                        <input
+                          name={name}
+                          type="color"
+                          defaultValue={value}
+                          className={adminFormFieldClassName(
+                            fieldErrors[name]?.length ? "border-red-400/40" : "",
+                          )}
+                          aria-label={label}
+                          aria-invalid={Boolean(fieldErrors[name]?.length)}
+                          aria-describedby={
+                            fieldErrors[name]?.length ? `${name}-error` : undefined
+                          }
+                        />
+                        <AdminFormError name={name} />
+                      </AdminFormField>
+                    ))}
+                  </AdminFormGrid>
+                </AdminFormSection>
+              </AdminFormGrid>
+              <AdminFormGrid columns={1} density="sections">
+                <AdminCard presentation="premium" className="p-3">
+                  <AdminFormGrid columns={1}>
+                    <AdminFormControlHeader title="الشعار الرئيسي" icon={<AdminModuleTabIcon name="media" />} presentation="compact-inline" />
+                    <AdminMediaImageField
+                      name="logoUrl"
+                      label="الشعار الرئيسي"
+                      focusTargetId="logoUrl"
+                      ariaInvalid={Boolean(fieldErrors.logoUrl?.length)}
+                      ariaDescribedBy={fieldErrors.logoUrl?.length ? "logoUrl-error" : undefined}
+                      defaultValue={company.logoUrl}
+                      browseFolder="images"
+                      variant="card"
+                      showLabel={false}
                     />
-                    <AdminFormError name={name} />
-                  </AdminFormField>
-                ))}
+                    <AdminFormError name="logoUrl" />
+                  </AdminFormGrid>
+                </AdminCard>
+                <AdminCard presentation="premium" className="p-3">
+                  <AdminFormGrid columns={1}>
+                    <AdminFormControlHeader title="الشعار المصغر" icon={<AdminModuleTabIcon name="media" />} presentation="compact-inline" />
+                    <AdminMediaImageField
+                      name="compactLogoUrl"
+                      label="الشعار المصغر"
+                      focusTargetId="compactLogoUrl"
+                      ariaInvalid={Boolean(fieldErrors.compactLogoUrl?.length)}
+                      ariaDescribedBy={fieldErrors.compactLogoUrl?.length ? "compactLogoUrl-error" : undefined}
+                      defaultValue={company.compactLogoUrl}
+                      browseFolder="images"
+                      variant="card"
+                      showLabel={false}
+                    />
+                    <AdminFormError name="compactLogoUrl" />
+                  </AdminFormGrid>
+                </AdminCard>
               </AdminFormGrid>
-
-              <AdminFormGrid className="mt-6">
-                <div>
-                  <AdminMediaImageField
-                    name="logoUrl"
-                    label="الشعار الرئيسي"
-                    defaultValue={company.logoUrl}
-                    browseFolder="images"
-                  />
-                  <AdminFormError name="logoUrl" />
-                </div>
-                <div>
-                  <AdminMediaImageField
-                    name="compactLogoUrl"
-                    label="الشعار المصغر"
-                    defaultValue={company.compactLogoUrl}
-                    browseFolder="images"
-                  />
-                  <AdminFormError name="compactLogoUrl" />
-                </div>
-              </AdminFormGrid>
-
-              <AdminFormGrid columns={3} className="mt-6">
-                {colorFields.map(([name, label, value]) => (
-                  <AdminFormField key={name} label={label} required>
-                    <span
-                      className={`flex items-center gap-3 rounded-2xl border bg-black/25 p-2 ${
-                        fieldErrors[name]?.length
-                          ? "border-red-400/40"
-                          : "border-white/10"
-                      }`}
-                    >
-                      <input
-                        name={name}
-                        type="color"
-                        defaultValue={value}
-                        className="size-10 rounded-xl border-0 bg-transparent"
-                        aria-label={label}
-                        aria-invalid={Boolean(fieldErrors[name]?.length)}
-                        aria-describedby={
-                          fieldErrors[name]?.length ? `${name}-error` : undefined
-                        }
-                      />
-                      <span
-                        dir="ltr"
-                        className="min-w-0 flex-1 px-2 text-sm text-white/65"
-                      >
-                        {value}
-                      </span>
-                    </span>
-                    <AdminFormError name={name} />
-                  </AdminFormField>
-                ))}
-              </AdminFormGrid>
-            </AdminFormSection>
-
+            </AdminFormGrid>
             <AdminFormActions
+              icon={<AdminModuleTabIcon name="content" />}
               submitLabel="حفظ هوية الإدارة"
               pendingLabel="جارٍ الحفظ…"
               closeLabel="العودة إلى لوحة الإدارة"
-              title="إجراءات هوية لوحة الإدارة"
-              description="احفظ الهوية أو عد إلى لوحة الإدارة دون تغيير القيم المحفوظة."
+              title="إجراءات النموذج"
+              description="تُحدّث التغييرات بعد اكتمال الحفظ."
             />
-          </>
+          </div>
         )}
       </AdminFormRuntime>
     </section>

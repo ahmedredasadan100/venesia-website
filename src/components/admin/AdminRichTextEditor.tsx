@@ -28,24 +28,32 @@ import {
 import AdminTextFormatControls, {
   type AdminTextAlignment,
 } from "./ui/AdminTextFormatControls";
+import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./ui/admin-scrollbar-styles";
 
 export { normalizeRichTextContent };
 
 type AdminRichTextEditorProps = {
   name: string;
   label: string;
+  /** Optional outer stack classes; omitted consumers retain their existing spacing. */
+  className?: string;
   defaultValue?: string;
   value?: string;
   placeholder?: string;
   minHeight?: number;
   /** Suppress the visible caption when an enclosing shared field header owns it. */
   showLabel?: boolean;
+  /** Bound the writing viewport; its toolbar stays outside the shared scroll surface. */
   maxHeight?: number;
+  /** Position the native scrollbar on its noneditable viewport; writing remains RTL. */
+  scrollbarSide?: "auto" | "right";
   /** full = all tools; minimal = Bold (+ optional text align); none = content input only. */
   toolbarMode?: "full" | "minimal" | "none";
   /** Show paragraph alignment controls when the content domain owns text alignment. */
   enableTextAlign?: boolean;
   helperText?: string;
+  /** Presentation-only classes for the helper copy. */
+  helperTextClassName?: string;
   appearance?: "dark" | "light";
   /** Keep HTML as the default contract; Article consumers opt into their existing Markdown contract. */
   storageFormat?: "html" | "markdown";
@@ -102,15 +110,18 @@ function ToolButton({
 export default function AdminRichTextEditor({
   name,
   label,
+  className = "space-y-2",
   defaultValue = "",
   value,
   placeholder = "اكتب المحتوى هنا...",
   minHeight = 220,
   showLabel = true,
   maxHeight,
+  scrollbarSide = "auto",
   toolbarMode = "full",
   enableTextAlign = false,
   helperText,
+  helperTextClassName,
   appearance = "dark",
   storageFormat = "html",
   enableArticleStructure = false,
@@ -471,7 +482,7 @@ export default function AdminRichTextEditor({
   );
 
   return (
-    <div className="space-y-2" data-admin-rich-text-scope={styleScope}>
+    <div className={className} data-admin-rich-text-scope={styleScope}>
       <input
         type="hidden"
         name={name}
@@ -507,20 +518,21 @@ export default function AdminRichTextEditor({
           {showToolbar ? toolbar : null}
 
           <div
-            className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4"
+            dir={scrollbarSide === "right" ? "ltr" : undefined}
+            className={`admin-rich-text-editor min-w-0 flex-1 px-4 py-4 ${maxHeight === undefined ? "" : `overscroll-y-contain ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}`.trim()}
             style={{
               minHeight,
               maxHeight,
-              overflowY: maxHeight === undefined ? undefined : "clip",
+              overflowY: maxHeight === undefined ? undefined : "auto",
             }}
           >
-            <EditorContent editor={editor} />
+            <EditorContent editor={editor} dir="rtl" />
           </div>
         </div>
       </fieldset>
 
       {helperText ? (
-        <p className={`text-xs leading-6 ${appearance === "light" ? "text-slate-500" : "text-white/45"}`}>
+        <p className={helperTextClassName ?? `text-xs leading-6 ${appearance === "light" ? "text-slate-500" : "text-white/45"}`}>
           {helperText}
         </p>
       ) : null}
@@ -529,7 +541,7 @@ export default function AdminRichTextEditor({
 
       <style jsx global>{`
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-editor .ProseMirror {
-          min-height: ${minHeight}px;
+          min-height: ${maxHeight === undefined ? `${minHeight}px` : `min(${minHeight}px, calc(${maxHeight}px - 2rem))`};
           outline: none;
         }
         [data-admin-rich-text-scope="${styleScope}"] .admin-rich-text-editor .ProseMirror p.is-editor-empty:first-child::before {

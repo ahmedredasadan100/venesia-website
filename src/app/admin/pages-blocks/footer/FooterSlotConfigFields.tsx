@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { ADMIN_FORM_STACK_CLASS_NAME } from "../../../../components/admin/ui/AdminForm";
 
 import {
   adminFormFieldClassName,
-  ADMIN_FORM,
   adminFormHintClassName,
-  adminFormLabelClassName,
 } from "../../../../lib/admin/admin-ui-styles";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { serializeAdminLink } from "../../../../lib/admin/links/serialize";
@@ -34,6 +33,9 @@ import {
   QuickLinksField,
 } from "./FooterBuilderEditors";
 import {
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormSection,
   AdminFormSwitch,
   AdminLinkField,
   AdminListboxSelect,
@@ -109,8 +111,7 @@ export function BlockTypeSelect({
   onChange: (type: FooterBlockType) => void;
 }) {
   return (
-    <div className={adminFormLabelClassName()}>
-      <span>نوع البلوك</span>
+    <AdminFormField label="نوع البلوك">
       <AdminListboxSelect
         value={value}
         onChange={(next) => onChange(next as FooterBlockType)}
@@ -120,7 +121,7 @@ export function BlockTypeSelect({
         }))}
         ariaLabel="نوع البلوك"
       />
-    </div>
+    </AdminFormField>
   );
 }
 
@@ -146,9 +147,8 @@ function TextSlotFields({
   onChange: (config: FooterTextSlotConfig) => void;
 }) {
   return (
-    <div className="space-y-4">
-      <label className={adminFormLabelClassName()}>
-        <span>العنوان الرئيسي (Title) — اختياري</span>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+      <AdminFormField label="العنوان الرئيسي (Title) — اختياري">
         <input
           value={config.title}
           onChange={(event) =>
@@ -158,9 +158,8 @@ function TextSlotFields({
           dir="rtl"
           placeholder="يُترك فارغًا لإخفاء العنوان الرئيسي"
         />
-      </label>
-      <label className={adminFormLabelClassName()}>
-        <span>النص / Tagline</span>
+      </AdminFormField>
+      <AdminFormField label="النص / Tagline">
         <textarea
           value={config.body}
           onChange={(event) =>
@@ -169,7 +168,7 @@ function TextSlotFields({
           className={`${adminFormFieldClassName()} min-h-24`}
           dir="rtl"
         />
-      </label>
+      </AdminFormField>
       <AdminFormSwitch
         label="إظهار أيقونة البراند"
         checked={config.showBrandIcon}
@@ -178,10 +177,7 @@ function TextSlotFields({
         }
         surface
       />
-      <div className="rounded-[22px] border border-white/10 bg-white/[0.02] p-4">
-        <p className="mb-3 text-sm font-medium text-white/70">
-          زر CTA (اختياري)
-        </p>
+      <AdminFormSection title="زر CTA (اختياري)">
         <AdminFormSwitch
           label="تفعيل الزر"
           checked={config.cta.enabled}
@@ -195,9 +191,8 @@ function TextSlotFields({
           className="mb-3"
         />
         {config.cta.enabled ? (
-          <div className={ADMIN_FORM.gridTwoCol}>
-            <label className={adminFormLabelClassName()}>
-              <span>تسمية الزر</span>
+          <AdminFormGrid columns={2}>
+            <AdminFormField label="تسمية الزر">
               <input
                 value={config.cta.label}
                 onChange={(event) =>
@@ -209,7 +204,7 @@ function TextSlotFields({
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
-            </label>
+            </AdminFormField>
             <div className="md:col-span-2">
               <AdminLinkField
                 prefix="footer_text_cta"
@@ -222,8 +217,7 @@ function TextSlotFields({
                 }
               />
             </div>
-            <div className={adminFormLabelClassName()}>
-              <span>الفتح في</span>
+            <AdminFormField label="الفتح في">
               <AdminListboxSelect
                 value={config.cta.target}
                 onChange={(value) =>
@@ -238,10 +232,10 @@ function TextSlotFields({
                 ]}
                 ariaLabel="الفتح في"
               />
-            </div>
-          </div>
+            </AdminFormField>
+          </AdminFormGrid>
         ) : null}
-      </div>
+      </AdminFormSection>
     </div>
   );
 }
@@ -260,7 +254,7 @@ function MenuSlotFields({
   menuOptions: FooterMenuOption[];
 }) {
   return (
-    <div className="space-y-4">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <p className={adminFormHintClassName()}>
         يعرض قائمة موجودة مسبقًا فقط — إنشاء وتعديل العناصر من{" "}
         <Link
@@ -271,8 +265,7 @@ function MenuSlotFields({
         </Link>
         .
       </p>
-      <div className={adminFormLabelClassName()}>
-        <span>مصدر القائمة</span>
+      <AdminFormField label="مصدر القائمة">
         <AdminListboxSelect
           value={config.source}
           onChange={(value) =>
@@ -287,12 +280,11 @@ function MenuSlotFields({
           ]}
           ariaLabel="مصدر القائمة"
         />
-      </div>
+      </AdminFormField>
 
       {config.source === "location" ? (
         <>
-          <div className={adminFormLabelClassName()}>
-            <span>موقع القائمة</span>
+          <AdminFormField label="موقع القائمة">
             <AdminListboxSelect
               value={config.location}
               onChange={(value) =>
@@ -306,9 +298,8 @@ function MenuSlotFields({
               )}
               ariaLabel="موقع القائمة"
             />
-          </div>
-          <div className={adminFormLabelClassName()}>
-            <span>قائمة احتياطية</span>
+          </AdminFormField>
+          <AdminFormField label="قائمة احتياطية">
             <AdminListboxSelect
               value={config.fallbackLocation ?? ""}
               onChange={(value) =>
@@ -327,15 +318,14 @@ function MenuSlotFields({
               ]}
               ariaLabel="قائمة احتياطية"
             />
-          </div>
+          </AdminFormField>
           {config.location === "footer" ? (
             <QuickLinksField footerMenuId={footerMenuId} links={quickLinks} />
           ) : null}
         </>
       ) : (
         <>
-          <div className={adminFormLabelClassName()}>
-            <span>القائمة</span>
+          <AdminFormField label="القائمة">
             <AdminListboxSelect
               value={String(config.menuId ?? "")}
               onChange={(value) =>
@@ -353,7 +343,7 @@ function MenuSlotFields({
               ]}
               ariaLabel="القائمة"
             />
-          </div>
+          </AdminFormField>
           {config.menuId && config.menuId === footerMenuId ? (
             <QuickLinksField footerMenuId={footerMenuId} links={quickLinks} />
           ) : config.menuId ? (
@@ -371,9 +361,8 @@ function MenuSlotFields({
         </>
       )}
 
-      <div className={ADMIN_FORM.gridTwoCol}>
-        <label className={adminFormLabelClassName()}>
-          <span>الحد الأقصى للعناصر</span>
+      <AdminFormGrid columns={2} presentation="aligned-fields">
+        <AdminFormField label="الحد الأقصى للعناصر">
           <input
             type="number"
             min={1}
@@ -389,16 +378,16 @@ function MenuSlotFields({
             className={adminFormFieldClassName()}
             placeholder="بدون حد"
           />
-        </label>
+        </AdminFormField>
         <AdminFormSwitch
           label="المستوى الأول فقط"
           checked={config.showOnlyTopLevel}
           onChange={(event) =>
             onChange({ ...config, showOnlyTopLevel: event.target.checked })
           }
-          surface
+          embedded
         />
-      </div>
+      </AdminFormGrid>
     </div>
   );
 }
@@ -411,9 +400,8 @@ function ContactSlotFields({
   onChange: (config: FooterContactSlotConfig) => void;
 }) {
   return (
-    <div className="space-y-4">
-      <div className={adminFormLabelClassName()}>
-        <span>مصدر بيانات التواصل</span>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+      <AdminFormField label="مصدر بيانات التواصل">
         <AdminListboxSelect
           value={config.source}
           onChange={(value) =>
@@ -428,7 +416,7 @@ function ContactSlotFields({
           ]}
           ariaLabel="مصدر بيانات التواصل"
         />
-      </div>
+      </AdminFormField>
 
       {config.source === "global" ? (
         <div className="rounded-[22px] border border-white/10 bg-white/[0.02] p-4 text-sm leading-7 text-white/62">
@@ -458,9 +446,8 @@ function MediaSlotFields({
   menuOptions: FooterMenuOption[];
 }) {
   return (
-    <div className="space-y-4">
-      <div className={adminFormLabelClassName()}>
-        <span>مصدر الروابط</span>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+      <AdminFormField label="مصدر الروابط">
         <AdminListboxSelect
           value={config.source}
           onChange={(value) =>
@@ -474,7 +461,7 @@ function MediaSlotFields({
           )}
           ariaLabel="مصدر الروابط"
         />
-      </div>
+      </AdminFormField>
 
       {config.source === "main_submenu" ? (
         <>
@@ -508,8 +495,7 @@ function MediaSlotFields({
       ) : null}
 
       {config.source === "menu_id" ? (
-        <div className={adminFormLabelClassName()}>
-          <span>القائمة</span>
+        <AdminFormField label="القائمة">
           <AdminListboxSelect
             value={String(config.menuId ?? "")}
             onChange={(value) =>
@@ -527,7 +513,7 @@ function MediaSlotFields({
             ]}
             ariaLabel="القائمة"
           />
-        </div>
+        </AdminFormField>
       ) : null}
 
       {config.source === "manual" ? (
@@ -537,8 +523,7 @@ function MediaSlotFields({
         />
       ) : null}
 
-      <label className={adminFormLabelClassName()}>
-        <span>الحد الأقصى للعناصر</span>
+      <AdminFormField label="الحد الأقصى للعناصر">
         <input
           type="number"
           min={1}
@@ -552,7 +537,7 @@ function MediaSlotFields({
           className={adminFormFieldClassName()}
           placeholder="بدون حد"
         />
-      </label>
+      </AdminFormField>
     </div>
   );
 }
@@ -565,7 +550,7 @@ function CustomLinksSlotFields({
   onChange: (config: FooterCustomLinksSlotConfig) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <p className={adminFormHintClassName()}>
         روابط يدوية (Label + URL) تُحفظ داخل إعدادات الفوتر فقط — لا تُكتب في
         القوائم أو menu_items.

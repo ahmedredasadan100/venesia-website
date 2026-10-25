@@ -19,6 +19,8 @@ type AdminSlugFieldProps = {
   readOnly?: boolean;
   onChange?: (slug: string) => void;
   appearance?: "dark" | "light";
+  labelClassName?: string;
+  hintClassName?: string;
 };
 
 export default function AdminSlugField({
@@ -31,6 +33,8 @@ export default function AdminSlugField({
   readOnly = false,
   onChange,
   appearance = "dark",
+  labelClassName,
+  hintClassName,
 }: AdminSlugFieldProps) {
   const [internalSlug, setInternalSlug] = useState(controlledValue ?? "");
   const [isManual, setIsManual] = useState(Boolean(controlledValue));
@@ -80,9 +84,9 @@ export default function AdminSlugField({
   const light = appearance === "light";
 
   return (
-    <label className={light ? "block space-y-1.5 text-sm font-semibold text-slate-700" : adminFormLabelClassName()}>
-      <span className="flex items-center justify-between gap-3">
-        <span>الرابط المختصر</span>
+    <label className={labelClassName ?? (light ? "block space-y-1.5 text-sm font-semibold text-slate-700" : adminFormLabelClassName())}>
+      <span data-admin-form-label-text={labelClassName === undefined ? undefined : ""} className="flex items-center justify-between gap-3">
+        <span>الرابط المختصر{labelClassName && required ? <> <span className="text-red-400">*</span></> : null}</span>
         {!readOnly ? (
           <button
             type="button"
@@ -119,7 +123,7 @@ export default function AdminSlugField({
           {error}
         </span>
       ) : (
-        <span id="admin-slug-hint" className={light ? "mt-2 block text-xs leading-5 text-slate-500" : adminFormHintClassName()}>
+        <span id="admin-slug-hint" className={hintClassName ?? (light ? "mt-2 block text-xs leading-5 text-slate-500" : adminFormHintClassName())}>
           {readOnly
             ? "الرابط المختصر ثابت بعد أول حفظ لحماية الروابط والعلاقات الحالية."
             : "يُولَّد تلقائيًا من الاسم أثناء الكتابة، ويمكنك تعديله يدويًا قبل أول حفظ."}

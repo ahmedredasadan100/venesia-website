@@ -4,10 +4,9 @@ import { useState } from "react";
 
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
-import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import type { BreadcrumbBlockItem } from "../../../../lib/page-blocks/configs";
 import { TrashIcon } from "../../AdminRowActions";
-import { AdminActionButton, AdminFormControlHeader, AdminLinkField } from "../../ui";
+import { AdminActionButton, AdminFormControlHeader, AdminFormField, AdminLinkField } from "../../ui";
 import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
@@ -54,7 +53,6 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
   function removeItem(index: number) {
     setRows((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -73,12 +71,11 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
       </div>
 
       {rows.length ? (
-        <ModuleEditorRepeaterGrid presentation="premium">
+        <ModuleEditorRepeaterGrid>
           {rows.map((item, index) => (
             <ModuleEditorRepeaterCard
               key={item.clientKey}
               title={`عنصر ${index + 1}`}
-              presentation="premium"
               actions={(
                 <>
                   <AdminActionButton type="button" size="icon" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك عنصر المسار ${index + 1} لأعلى`}>↑</AdminActionButton>
@@ -87,10 +84,9 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
                 </>
               )}
             >
-              <label className={ADMIN_FORM.labelStack}>
-                <span className="text-xs font-semibold text-white/55">التسمية</span>
+              <AdminFormField presentation="panel" label="التسمية">
                 <input name={`manual_item_${index}_label`} value={item.label ?? ""} onChange={(event) => updateLabel(index, event.target.value)} className={fieldClassName()} />
-              </label>
+              </AdminFormField>
               <AdminLinkField
                 prefix={`manual_item_${index}`}
                 label="الرابط"

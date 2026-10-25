@@ -4798,6 +4798,42 @@ check(
     entityListTableSource.includes("<AdminDataGridStickyActionsHeaderCell") &&
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
+function hasAdminEntityTableBaseClasses(source: string) {
+  const ast = ts.createSourceFile("AdminEntityListTable.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const required = ["w-full", "table-fixed", "border-separate", "border-spacing-0", "text-right"];
+  const tables: boolean[] = [];
+  function visit(node: ts.Node) {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(ast) === "table") {
+      const attribute = node.attributes.properties.find((entry) => ts.isJsxAttribute(entry) && entry.name.getText(ast) === "className");
+      const initializer = attribute && ts.isJsxAttribute(attribute) ? attribute.initializer : undefined;
+      const expression = initializer && ts.isJsxExpression(initializer) ? initializer.expression : initializer;
+      const prefix = expression && (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
+        ? expression.text
+        : expression && ts.isTemplateExpression(expression) ? expression.head.text : "";
+      const classes = new Set(prefix.trim().split(/\s+/u));
+      tables.push(required.every((token) => classes.has(token)));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  return tables.length > 0 && tables.every(Boolean);
+}
+check(
+  "shared table sizing guard accepts live literal/template classes and rejects missing tokens or unrelated source decoys",
+  (() => {
+    const tokens = ["w-full", "table-fixed", "border-separate", "border-spacing-0", "text-right"];
+    const classes = tokens.join(" ");
+    const literal = '<table className="' + classes + '" />';
+    const template = '<table className={`' + classes + ' ${cinematic ? "gold" : ""}`} />';
+    const decoys = '// <table className="' + classes + '" />\n<div className="' + classes + '" />;\n';
+    return hasAdminEntityTableBaseClasses(literal) &&
+      hasAdminEntityTableBaseClasses(template) &&
+      !hasAdminEntityTableBaseClasses(decoys) &&
+      tokens.every((missing) => !hasAdminEntityTableBaseClasses(
+        decoys + '<table className={`' + tokens.filter((token) => token !== missing).join(" ") + ' ${cinematic ? "gold" : ""}`} />',
+      ));
+  })(),
+);
 check(
   "shared sizing allocates minimum, preferred, and constrained widths from the live viewport budget",
   entityListTableSource.includes("const flexibleColumnKey =") &&
@@ -4822,7 +4858,7 @@ check(
       "ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH",
     ) &&
     entityListTableSource.includes("const observer = new ResizeObserver") &&
-    entityListTableSource.includes('className="w-full table-fixed') &&
+    hasAdminEntityTableBaseClasses(entityListTableSource) &&
     entityListTableSource.includes("fillAvailableWidth?: boolean") &&
     entityListTableSource.includes("fillAvailableWidth = false") &&
     entityListTableSource.includes(
@@ -4898,6 +4934,64 @@ check(
     dataGridSource.includes("textOnly:") &&
     dataGridSource.includes("compactIcon:") &&
     dataGridSource.includes("standardIcon:"),
+);
+
+function hasOptionalPrimaryCellPresentation(source: string) {
+  const tree = ts.createSourceFile("AdminDataGrid.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "AdminDataGridPrimaryCell",
+  );
+  const parameter = owner?.parameters[0];
+  if (!owner?.body || !parameter || !ts.isObjectBindingPattern(parameter.name)) return false;
+  const binding = parameter.name.elements.find((node) => ts.isIdentifier(node.name) && node.name.text === "presentation");
+  const properties: ts.PropertySignature[] = [];
+  const findProperties = (node: ts.Node) => {
+    if (ts.isPropertySignature(node) && node.name.getText(tree) === "presentation") properties.push(node);
+    ts.forEachChild(node, findProperties);
+  };
+  if (parameter.type) findProperties(parameter.type);
+  const property = properties[0];
+  const canonicalType = tree.statements.some((node) => ts.isImportDeclaration(node) &&
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../lib/admin/entity-list" &&
+    node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+    node.importClause.namedBindings.elements.some((item) =>
+      (item.propertyName ?? item.name).text === "AdminEntityPrimaryColumnPresentation" &&
+      item.name.text === "AdminEntityPrimaryColumnPresentation"));
+  const result = owner.body.statements.find(ts.isReturnStatement)?.expression;
+  const jsx = result && ts.isParenthesizedExpression(result) ? result.expression : result;
+  if (!jsx || !ts.isJsxElement(jsx) || jsx.openingElement.tagName.getText(tree) !== "div") return false;
+  const attributes = jsx.openingElement.attributes.properties;
+  const style = attributes.find((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === "style")?.initializer;
+  const expression = style && ts.isJsxExpression(style) ? style.expression : undefined;
+  const delegated = expression && ts.isConditionalExpression(expression) &&
+    ts.isIdentifier(expression.condition) && expression.condition.text === "presentation" &&
+    ts.isCallExpression(expression.whenTrue) && ts.isIdentifier(expression.whenTrue.expression) &&
+    expression.whenTrue.expression.text === "getAdminDataGridPrimaryPresentationStyle" &&
+    expression.whenTrue.arguments.length === 1 && ts.isIdentifier(expression.whenTrue.arguments[0]!) &&
+    expression.whenTrue.arguments[0]!.text === "presentation" &&
+    ts.isIdentifier(expression.whenFalse) && expression.whenFalse.text === "undefined";
+  return Boolean(canonicalType && binding && !binding.initializer && properties.length === 1 &&
+    property?.questionToken && property.type && ts.isTypeReferenceNode(property.type) &&
+    property.type.typeName.getText(tree) === "AdminEntityPrimaryColumnPresentation" && delegated &&
+    !attributes.some(ts.isJsxSpreadAttribute));
+}
+
+check(
+  "standalone PrimaryCell optionally delegates the existing presentation contract while omitted consumers retain no style",
+  hasOptionalPrimaryCellPresentation(dataGridSource),
+);
+check(
+  "negative PrimaryCell fixtures reject required, widened or implicit-default presentation contracts",
+  !hasOptionalPrimaryCellPresentation(dataGridSource.replace("presentation?: AdminEntityPrimaryColumnPresentation", "presentation: AdminEntityPrimaryColumnPresentation")) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replace("presentation?: AdminEntityPrimaryColumnPresentation", "presentation?: string")) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replaceAll("\r\n", "\n").replace("  presentation,\n}: BaseProps & { presentation?", "  presentation = \"text-only\",\n}: BaseProps & { presentation?")),
+);
+const primaryCellStyle = "style={presentation ? getAdminDataGridPrimaryPresentationStyle(presentation) : undefined}";
+check(
+  "negative PrimaryCell fixtures reject default style changes and local padding in place of the shared helper",
+  dataGridSource.includes(primaryCellStyle) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replace(primaryCellStyle, primaryCellStyle.replace(": undefined", ": {}"))) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replace(primaryCellStyle, primaryCellStyle.replace("getAdminDataGridPrimaryPresentationStyle(presentation)", "{ paddingInlineStart: 20 }"))),
 );
 check(
   "Topics, Series, Projects, and Pages consume explicit primary presentations and shared sizing presets",

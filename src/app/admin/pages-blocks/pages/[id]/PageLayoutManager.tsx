@@ -4,6 +4,22 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
+import { ModuleEditorRepeaterCard } from "../../../../../components/admin/page-blocks/ModuleEditorPresentation";
+import {
+  AdminActionButton,
+  AdminCard,
+  AdminDataGridActionIcon,
+  AdminFormControlHeader,
+  AdminFormGrid,
+  AdminFormField,
+  AdminFormSection,
+  AdminStickyFormBar,
+  ADMIN_FORM_STACK_CLASS_NAME,
+  adminFormFieldClassName,
+  adminFormLabelClassName,
+} from "../../../../../components/admin/ui";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../../components/admin/ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../../lib/admin/admin-ui-styles";
 import { AdminFormPendingFields } from "../../../../../components/admin/ui/AdminFormRuntime";
 import AdminFormListboxSelect from "../../../../../components/admin/ui/AdminFormListboxSelect";
 import AdminFormSwitch from "../../../../../components/admin/ui/AdminFormSwitch";
@@ -129,7 +145,7 @@ export default function PageLayoutManager({
   ];
 
   return (
-    <section className="space-y-6 rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
+    <section data-page-layout-manager="" className={ADMIN_FORM_STACK_CLASS_NAME} dir="rtl">
       <div
         ref={feedbackRef}
         tabIndex={-1}
@@ -149,37 +165,45 @@ export default function PageLayoutManager({
         />
       </div>
 
-      <AdminFormPendingFields pending={isPending} className="space-y-6">
-        <div className="grid gap-4 rounded-2xl border border-white/8 bg-white/[0.025] p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <AdminFormListboxSelect
-            name="page_layout_id"
-            label="التخطيط المختار للصفحة"
-            value={assignmentLayoutId}
-            onChange={setAssignmentLayoutId}
-            options={layoutOptions}
-            required
-            sizing="full"
-            hint="يُرفض الاختيار تلقائيًا إذا كانت أي Assignment تستخدم Region غير موجودة في التخطيط."
-          />
-          <button
-            type="button"
-            onClick={handleSelectLayout}
-            disabled={isPending || assignmentLayoutId === String(currentLayoutId)}
-            className="min-h-11 rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            اختيار للصفحة
-          </button>
-        </div>
+      <AdminFormPendingFields pending={isPending} className="min-w-0">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+        <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="page-layout-selection" sectionHeading="اختيار تخطيط الصفحة" icon="plans" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+          <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end">
+            <div className="min-w-0 flex-1">
+              <AdminFormListboxSelect
+                name="page_layout_id"
+                label="التخطيط المختار للصفحة"
+                presentation="panel"
+                value={assignmentLayoutId}
+                onChange={setAssignmentLayoutId}
+                options={layoutOptions}
+                required
+                sizing="full"
+                hint="يُرفض الاختيار تلقائيًا إذا كانت أي Assignment تستخدم Region غير موجودة في التخطيط."
+              />
+            </div>
+            <AdminActionButton
+              type="button"
+              onClick={handleSelectLayout}
+              disabled={isPending || assignmentLayoutId === String(currentLayoutId)}
+              variant="primary"
+            >
+              اختيار للصفحة
+            </AdminActionButton>
+          </div>
+        </AdminFormSection>
 
-        <div className="space-y-5">
-          <AdminFormListboxSelect
-            name="layout_editor"
-            label="إنشاء أو تحرير تخطيط"
-            value={editorValue}
-            onChange={handleEditorChange}
-            options={editorOptions}
-            sizing="full"
-          />
+        <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="page-layout-editor" sectionHeading="إنشاء أو تحرير تخطيط" icon="settings" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+            <AdminFormListboxSelect
+              name="layout_editor"
+              label="إنشاء أو تحرير تخطيط"
+              presentation="panel"
+              value={editorValue}
+              onChange={handleEditorChange}
+              options={editorOptions}
+              sizing="full"
+            />
 
           {legacyProtected ? (
             <AdminFeedbackRegion
@@ -195,35 +219,37 @@ export default function PageLayoutManager({
               }}
             />
           ) : (
-            <div className="space-y-5 rounded-2xl border border-white/8 bg-white/[0.025] p-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-2 text-sm text-white/70">
-                  <span>المعرّف التقني</span>
-                  <input
-                    value={layoutKey}
-                    onChange={(event) => setLayoutKey(event.currentTarget.value)}
-                    disabled={Boolean(editedLayout)}
-                    pattern="[a-z][a-z0-9-]{0,63}"
-                    required
-                    dir="ltr"
-                    className="min-h-11 w-full rounded-2xl border border-white/12 bg-black/30 px-4 text-white disabled:opacity-55"
-                  />
-                </label>
-                <label className="space-y-2 text-sm text-white/70">
-                  <span>الاسم الإداري</span>
-                  <input
-                    value={adminLabel}
-                    onChange={(event) => setAdminLabel(event.currentTarget.value)}
-                    required
-                    className="min-h-11 w-full rounded-2xl border border-white/12 bg-black/30 px-4 text-white"
-                  />
-                </label>
-              </div>
+            <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+              <AdminFormGrid columns={2}>
+                <AdminCard presentation="premium" className="p-3">
+                  <AdminFormField label="المعرّف التقني" required presentation="panel">
+                    <input
+                      value={layoutKey}
+                      onChange={(event) => setLayoutKey(event.currentTarget.value)}
+                      disabled={Boolean(editedLayout)}
+                      pattern="[a-z][a-z0-9-]{0,63}"
+                      required
+                      dir="ltr"
+                      className={adminFormFieldClassName("disabled:opacity-55")}
+                    />
+                  </AdminFormField>
+                </AdminCard>
+                <AdminCard presentation="premium" className="p-3">
+                  <AdminFormField label="الاسم الإداري" required presentation="panel">
+                    <input
+                      value={adminLabel}
+                      onChange={(event) => setAdminLabel(event.currentTarget.value)}
+                      required
+                      className={adminFormFieldClassName()}
+                    />
+                  </AdminFormField>
+                </AdminCard>
+              </AdminFormGrid>
 
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-sm font-bold text-white">المناطق وترتيبها</h3>
-                  <button
+                  <AdminFormControlHeader title={<span role="heading" aria-level={3}>المناطق وترتيبها</span>} icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+                  <AdminActionButton
                     type="button"
                     onClick={() => setRegions((current) => [
                       ...current,
@@ -234,69 +260,80 @@ export default function PageLayoutManager({
                         sortOrder: (current.length + 1) * 10,
                       },
                     ])}
-                    className="min-h-10 rounded-xl border border-[#D8B87A]/40 px-4 text-xs font-bold text-[#E8C98B]"
+                    variant="gold"
                   >
                     إضافة Region
-                  </button>
+                  </AdminActionButton>
                 </div>
                 {regions.map((region, index) => (
-                  <div key={region.draftId} className="grid gap-3 rounded-2xl border border-white/8 p-3 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-                    <label className="space-y-1 text-xs text-white/60">
-                      <span>المعرّف</span>
-                      <input
-                        value={region.key}
-                        onChange={(event) => {
-                          const value = event.currentTarget.value;
-                          setRegions((current) => current.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, key: value } : item,
-                          ));
-                        }}
-                        dir="ltr"
-                        required
-                        className="min-h-10 w-full rounded-xl border border-white/12 bg-black/30 px-3 text-sm text-white"
-                      />
-                    </label>
-                    <label className="space-y-1 text-xs text-white/60">
-                      <span>الاسم الإداري</span>
-                      <input
-                        value={region.adminLabel}
-                        onChange={(event) => {
-                          const value = event.currentTarget.value;
-                          setRegions((current) => current.map((item, itemIndex) =>
-                            itemIndex === index ? { ...item, adminLabel: value } : item,
-                          ));
-                        }}
-                        required
-                        className="min-h-10 w-full rounded-xl border border-white/12 bg-black/30 px-3 text-sm text-white"
-                      />
-                    </label>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => moveRegion(index, -1)} disabled={index === 0} aria-label={`نقل ${region.adminLabel} لأعلى`} className="min-h-10 rounded-xl border border-white/12 px-3 disabled:opacity-35">↑</button>
-                      <button type="button" onClick={() => moveRegion(index, 1)} disabled={index === regions.length - 1} aria-label={`نقل ${region.adminLabel} لأسفل`} className="min-h-10 rounded-xl border border-white/12 px-3 disabled:opacity-35">↓</button>
-                      <button type="button" onClick={() => setRegions((current) => current.filter((_, itemIndex) => itemIndex !== index))} disabled={regions.length === 1} className="min-h-10 rounded-xl border border-red-400/25 px-3 text-red-200 disabled:opacity-35">حذف</button>
-                    </div>
+                  <div key={region.draftId} data-page-layout-region="">
+                    <ModuleEditorRepeaterCard
+                      title={`منطقة ${index + 1}`}
+                      icon={<AdminModuleTabIcon name="section" />}
+                      actions={<>
+                        <AdminActionButton type="button" onClick={() => moveRegion(index, -1)} disabled={index === 0} aria-label={`نقل ${region.adminLabel} لأعلى`} size="icon">↑</AdminActionButton>
+                        <AdminActionButton type="button" onClick={() => moveRegion(index, 1)} disabled={index === regions.length - 1} aria-label={`نقل ${region.adminLabel} لأسفل`} size="icon">↓</AdminActionButton>
+                        <AdminActionButton type="button" onClick={() => setRegions((current) => current.filter((_, itemIndex) => itemIndex !== index))} disabled={regions.length === 1} variant="danger-ghost"><AdminDataGridActionIcon action="delete" />حذف</AdminActionButton>
+                      </>}
+                    >
+                      <AdminFormGrid columns={2}>
+                        <AdminFormField label="المعرّف" required presentation="panel">
+                          <input
+                            value={region.key}
+                            onChange={(event) => {
+                              const value = event.currentTarget.value;
+                              setRegions((current) => current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, key: value } : item,
+                              ));
+                            }}
+                            dir="ltr"
+                            required
+                            className={adminFormFieldClassName()}
+                          />
+                        </AdminFormField>
+                        <AdminFormField label="الاسم الإداري" required presentation="panel">
+                          <input
+                            value={region.adminLabel}
+                            onChange={(event) => {
+                              const value = event.currentTarget.value;
+                              setRegions((current) => current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, adminLabel: value } : item,
+                              ));
+                            }}
+                            required
+                            className={adminFormFieldClassName()}
+                          />
+                        </AdminFormField>
+                      </AdminFormGrid>
+                    </ModuleEditorRepeaterCard>
                   </div>
                 ))}
               </div>
 
-              <AdminFormSwitch
-                checked={assignAfterSave}
-                onChange={(event) => setAssignAfterSave(event.currentTarget.checked)}
-                label="احفظ واختر هذا التخطيط للصفحة في العملية الذرية نفسها"
-                surface
-              />
-              <div className="flex justify-end">
-                <button
+              <AdminCard presentation="premium" className="p-3">
+                <AdminFormSwitch
+                  checked={assignAfterSave}
+                  onChange={(event) => setAssignAfterSave(event.currentTarget.checked)}
+                  label={<span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>احفظ واختر هذا التخطيط للصفحة في العملية الذرية نفسها</span></span>}
+                  embedded
+                />
+              </AdminCard>
+            </div>
+          )}
+          </div>
+        </AdminFormSection>
+        {!legacyProtected ? (
+              <AdminStickyFormBar title="إجراءات النموذج" description={null} icon={<AdminModuleTabIcon name="content" />}>
+                <AdminActionButton
                   type="button"
                   onClick={handleSaveLayout}
                   disabled={isPending || !layoutKey.trim() || !adminLabel.trim() || regions.length === 0}
-                  className="min-h-11 rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] disabled:cursor-not-allowed disabled:opacity-50"
+                  variant="primary"
                 >
                   حفظ التخطيط والمناطق
-                </button>
-              </div>
-            </div>
-          )}
+                </AdminActionButton>
+              </AdminStickyFormBar>
+        ) : null}
         </div>
       </AdminFormPendingFields>
     </section>

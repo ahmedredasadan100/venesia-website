@@ -1,3 +1,4 @@
+import type { AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
 import Link from "next/link";
 import { getContentTypeLabel } from "../../../lib/admin/content/content-types";
 import { adminContentTopicPath } from "../../../lib/admin/content-routes";
@@ -97,6 +98,7 @@ function compactSingleLine(value?: string | null, fallback = "—") {
 export function createUnifiedContentColumns(
   currentListPath: string,
   rowActionHandlers?: UnifiedContentRowActionHandlers,
+  presentation: AdminCollectionPresentation = "default",
 ): UnifiedContentColumn[] {
   return [
     {
@@ -171,6 +173,7 @@ export function createUnifiedContentColumns(
         }
         return rowActionHandlers ? (
           <UnifiedContentRowActions
+            presentation={presentation}
             row={row}
             currentListPath={currentListPath}
             onMutationResult={onMutationResult}
@@ -231,6 +234,7 @@ export function createUnifiedContentColumns(
       renderCell: ({ row, onMutationResult }) =>
         rowActionHandlers ? (
           <UnifiedContentRowActions
+            presentation={presentation}
             row={row}
             currentListPath={currentListPath}
             onMutationResult={onMutationResult}
@@ -349,6 +353,7 @@ export function createUnifiedContentColumns(
       renderCell: ({ row, onMutationResult }) =>
         rowActionHandlers ? (
           <UnifiedContentRowActions
+            presentation={presentation}
             row={row}
             currentListPath={currentListPath}
             onMutationResult={onMutationResult}

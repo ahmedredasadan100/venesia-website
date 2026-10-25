@@ -798,15 +798,20 @@ for (const publicCtaCapability of ["showCta", "ctaBold", "ctaAlignment"]) {
   assert.ok(collectionHeader.includes(publicCtaCapability));
 }
 assert.ok(
-  collectionFields.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME"),
+  collectionFields.includes("<AdminCard") &&
+    collectionFields.includes("<ModuleEditorFieldGrid>") &&
+    !collectionFields.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME") &&
+    !collectionFields.includes("surfacePresentation"),
 );
 for (const editorOrganizationToken of [
   'data-collection-presentation-fields=""',
   "إعدادات النمط المختار",
   'data-collection-presentation-settings={activeLayout}',
   'data-collection-presentation-context=""',
-  "COLLECTION_PRESENTATION_CONTROL_SURFACE_CLASS_NAME",
-  "COLLECTION_PRESENTATION_LISTBOX_CLASS_NAME",
+  'name="item_limit"',
+  'name="secondary_item_count"',
+  'name="items_per_row"',
+  'name="collection_card_variant"',
   "{contextLabel}",
   "LAYOUT_SUMMARIES[activeLayout]",
   "variantCapabilities.itemsPerRow",

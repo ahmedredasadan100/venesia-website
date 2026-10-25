@@ -39,6 +39,7 @@ export default async function ProjectEditPage({
     return (
       <AdminPageExperience dir="rtl" state="error">
         <AdminPageContextHeader
+          visualPreset="projects"
           eyebrow="إدارة المشاريع"
           title="تعذر فتح محرر المشروع"
           description="المشاريع / تعديل المشروع"
@@ -61,6 +62,7 @@ export default async function ProjectEditPage({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="projects"
         eyebrow="إدارة المشاريع"
         title={project.arabic_name || project.english_name || "تعديل المشروع"}
         description={`المشاريع / تعديل المشروع — ${project.english_name || "اسم المشروع بالإنجليزية"} — ${project.slug}`}

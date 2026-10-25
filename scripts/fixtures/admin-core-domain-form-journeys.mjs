@@ -474,18 +474,18 @@ export async function runCoreDomainFormJourneys(ctx) {
       }));
       assertCorePlainParagraphSnapshot({ ...snapshot, markdown: await control(form, "content").inputValue() }, body, richTextHtmlToMarkdown);
     }
-    if (recipe.kind === "video") await control(form, "video_duration").fill("2:34");
-    const createFields = { title, slug, excerpt, category_id: fixtures.category.id, ...(markdown ? { content: body } : {}), ...(recipe.kind === "video" ? { video_duration: "2:34" } : {}) };
+    if (recipe.kind === "video") { await expect(control(form, "video_duration")).toHaveAttribute("type", "hidden"); await expect(control(form, "video_duration")).toHaveValue(""); }
+    const createFields = { title, slug, excerpt, category_id: fixtures.category.id, ...(markdown ? { content: body } : {}), ...(recipe.kind === "video" ? { video_duration: "" } : {}) };
     await valuesEqual(form, createFields);
     await dirtyCloseCancel(form, createFields);
     await rejectRequired(form, "title", createFields);
     const payloadAudit = recipe.kind === "video"
-      ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "video" }, { column: "media_payload", path: ["duration"], value: "2:34" }] }
+      ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "video" }, { column: "media_payload", path: ["duration"], value: null }] }
       : recipe.kind === "gallery" ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "gallery" }] } : {};
     await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-create",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/topics',async()=>{
       await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'title').fill(title);await control(form,'slug').fill(slug);await control(form,'excerpt').fill(excerpt);await selectValue(form,'category_id',fixtures.category.id);
       if(markdown){const editor=form.getByRole('textbox',{name:'نص المقال',exact:true});await editor.fill(body);await form.getByRole('button',{name:'فقرة',exact:true}).click();await expect(control(form,'content')).toHaveValue(body);}
-      if(recipe.kind==='video')await control(form,'video_duration').fill('2:34');
+      if(recipe.kind==='video')await expect(control(form,'video_duration')).toHaveValue('');
     })});
     const id = await permissionIntent(recipe, recipe.surfaces[0], "core-" + recipe.kind + "-content-create", async () => {
       await accepted(form);
@@ -513,7 +513,7 @@ export async function runCoreDomainFormJourneys(ctx) {
       const descriptor = audit("topics", id, "topic", edited, "update", { title: edited, slug, excerpt: editedExcerpt, category_id: fixtures.category.id, content_type: recipe.kind, status: "unpublished", ...(markdown ? { content: body } : {}) }, payloadAudit);
       return { nativeWrites: [descriptor] };
     });
-    return details(recipe, id, Object.keys(editFields), { publication: "unpublished", bodyBoundary: markdown ? "authored_markdown_roundtrip" : recipe.kind === "video" ? "authored_duration_and_draft_video_kind_only" : "draft_gallery_kind_only_no_media_selection_claim" });
+    return details(recipe, id, Object.keys(editFields), { publication: "unpublished", bodyBoundary: markdown ? "authored_markdown_roundtrip" : recipe.kind === "video" ? "preserved_hidden_duration_and_draft_video_kind_only" : "draft_gallery_kind_only_no_media_selection_claim" });
   });
 
   for (const recipe of plan.projectEdits) await run(`core-project-${recipe.kind}-existing-form-edit`, recipe.coverage, async () => {

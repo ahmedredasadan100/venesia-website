@@ -2,29 +2,16 @@ import "server-only";
 
 import { coordinateMediaReferenceEntityMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import {
+  isTopicSlugUniqueViolation,
+  TopicSlugConflictError,
+} from "../../../../../lib/admin/content/topic-write-errors";
 import { buildTopicWritePayload, type TopicPayload } from "./helpers";
 import type { CategoryRow, SeriesRow, TopicStatus } from "./types";
 
-export class ArticleSlugConflictError extends Error {
-  readonly slug: string;
-
-  constructor(slug: string, options?: ErrorOptions) {
-    super(`Article slug already exists: ${slug}`, options);
-    this.name = "ArticleSlugConflictError";
-    this.slug = slug;
-  }
-}
-
-function isSlugUniqueViolation(error: {
-  code?: string;
-  message?: string;
-  details?: string;
-} | null) {
-  if (!error || error.code !== "23505") return false;
-  return /topics_slug_key|\bslug\b/i.test(
-    `${error.message ?? ""} ${error.details ?? ""}`,
-  );
-}
+export {
+  TopicSlugConflictError as ArticleSlugConflictError,
+} from "../../../../../lib/admin/content/topic-write-errors";
 
 export function createArticleDomainRecord(input: {
   payload: TopicPayload;
@@ -63,8 +50,8 @@ export function createArticleDomainRecord(input: {
         .select("id, slug")
         .single();
 
-      if (isSlugUniqueViolation(error)) {
-        throw new ArticleSlugConflictError(input.payload.slug, {
+      if (isTopicSlugUniqueViolation(error)) {
+        throw new TopicSlugConflictError(input.payload.slug, {
           cause: error,
         });
       }

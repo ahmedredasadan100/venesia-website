@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
+import { PGlite } from "@electric-sql/pglite";
 import { buildCoreTopicControlsPlan, coreTopicControlFixtureSlug, TOPIC_CONTROL_ASSET_KEYS, TOPIC_CONTROL_KINDS, TOPIC_CONTROL_PHASES, TOPIC_CONTROL_VALUES as v, expectedTopicControlPayload, validateTopicControlsRequest, assertTopicControlsProjection } from "./fixtures/admin-core-topic-controls-contract.mjs";
 const root=resolve(import.meta.dirname,".."),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false,alias:{"server-only":resolve(root,"node_modules/next/dist/compiled/server-only/empty.js")}});
 const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>(resolve(root,"src/lib/admin/form-system/adoption-manifest.ts"));
@@ -25,7 +26,7 @@ test("Fixed finite checkpoints accepted",()=>{for(const recipe of TOPIC_CONTROL_
 for(const delta of [{sql:"select 1"},{expected:{}},{table:"topics"},{id:"unowned"},{kind:"other"},{recipe:"__proto__"},{recipe:"constructor"},{phase:"skip-to-final"}])test("Untrusted checkpoint rejects "+JSON.stringify(delta),()=>assert.throws(()=>validateTopicControlsRequest({...request,...delta})));
 const original={id:101,slug:"qa-core-topic-controls",title:"عنوان محتوى صالح",excerpt:"مقتطف صالح لاختبار بيانات الحفظ المتخصصة الحالية.",content:"الأصل",created_at:"2026-01-01T00:00:00Z",created_by:8,published_by:null,view_count:0,deleted_at:null,date_label:null,faq:[],media_payload:null};
 const forms=(kind:string)=>{
- const form=new FormData();const scalar={title:original.title,slug:original.slug,excerpt:original.excerpt,content:v.markdown,image:fixtures.assets[1].publicUrl,image_alt:v.imageAlt,content_type:kind,category_id:String(fixtures.category.id),series_id:String(fixtures.series.id),status:"unpublished",is_featured:"on",is_popular:"on",date_label:"",published_at:"",media_project:["news","site_update"].includes(kind)?v.mediaProject:"",seo_title:"",seo_description:"",focus_keyword:"",canonical_url:"",og_image:"",og_image_alt:"",video_url:v.videoUrl,video_duration:v.duration,video_thumbnail:fixtures.assets[2].publicUrl,faq_editor_present:"true",show_faq_on_page:"on"};
+ const form=new FormData();const scalar={title:original.title,slug:original.slug,excerpt:original.excerpt,content:v.markdown,image:fixtures.assets[1].publicUrl,image_alt:v.imageAlt,content_type:kind,category_id:String(fixtures.category.id),series_id:String(fixtures.series.id),status:"unpublished",is_featured:"on",is_popular:"on",date_label:"",published_at:"",media_project:["news","site_update"].includes(kind)?v.mediaProject:"",seo_title:"",seo_description:"",focus_keyword:"",canonical_url:"",og_image:"",og_image_alt:"",video_url:v.videoUrl,video_duration:v.duration??"",video_thumbnail:fixtures.assets[2].publicUrl,faq_editor_present:"true",show_faq_on_page:"on"};
  for(const[key,value]of Object.entries(scalar))form.append(key,value);
  for(const[key,value]of Object.entries(v.display))if(value)form.append(key,"on");
  if(kind==="article")for(const item of [v.faq[1],v.faq[0]]){form.append("faq_question",item.question);form.append("faq_answer",item.answer);}
@@ -56,7 +57,7 @@ test("Existing published date is immutable under later field input",()=>assert.e
 const reviewInput={title:original.title,slug:original.slug,excerpt:original.excerpt,content:v.markdown,image:fixtures.assets[1].publicUrl,imageAlt:v.imageAlt,categorySlug:fixtures.category.slug,seoTitle:"",seoDescription:"",focusKeyword:"",canonicalUrl:"",ogImage:"",ogImageAlt:""};
 test("Actual published Video invalid-provider rule gives exact video_url issue",()=>{const input={...reviewInput,contentType:"video" as const,mediaPayload:{kind:"video" as const,provider:"youtube" as const,video_url:"https://example.invalid/not-youtube"}};assert.ok(review.getContentPublishBlockingChecks(input).some(row=>row.field==="video_url"));assert.equal(review.getContentDraftBlockingChecks(input).some(row=>row.field==="video_url"),false);});
 test("Actual published Gallery missing alt gives exact gallery_image_alt issue",()=>{const input={...reviewInput,contentType:"gallery" as const,mediaPayload:{kind:"gallery" as const,images:[{url:fixtures.assets[0].publicUrl,alt:""}]}};assert.ok(review.getContentPublishBlockingChecks(input).some(row=>row.field==="gallery_image_alt"));assert.equal(review.getContentDraftBlockingChecks(input).some(row=>row.field==="gallery_image_alt"),false);});
-test("Video duration retains actual free-text contract",()=>{const form=forms("video");form.set("video_duration","custom-duration");assert.equal(payload.parseVideoPayloadFromForm(form).duration,"custom-duration");});
+test("Video duration retains actual free-text contract",()=>{const form=forms("video");form.set("video_duration","custom-duration");const parsed=payload.parseVideoPayloadFromForm(form);assert.ok(parsed);assert.equal(parsed.duration,"custom-duration");});
 const source=readFileSync(resolve(root,"scripts/fixtures/admin-core-topic-controls-journeys.mjs"),"utf8");
 test("No hidden/forced form writes, arbitrary HTTP client or alternate route owner",()=>{assert.doesNotMatch(source,/page\.(route|unroute|request)|force:\s*true|\.selectOption\(/u);assert.match(source,/nativeFinalityRequired: true/u);assert.match(source,/published_at/u);});
 
@@ -94,5 +95,56 @@ function findFixtureSlug(node:ts.Node){if(ts.isVariableDeclaration(node)&&node.n
 for(const kind of TOPIC_CONTROL_KINDS)test("Actual native fixture slug round-trips through real save: "+kind,()=>{const actual=new Function("kind","coreTopicControlFixtureSlug","return "+slugExpression!.getText(nativeSeedTree))(kind,coreTopicControlFixtureSlug);const form=forms(kind);form.set("slug",actual);assert.equal((kind==="article"?article:media).getPayload(form).slug,actual);assert.equal(media.validateSlug(actual),true);assert.equal(actual,fixtures.topics.find(row=>row.kind===kind)!.slug);});
 test("Old site_update seed is noncanonical and real save changes it",()=>{const form=forms("site_update"),old="qa-core-topic-controls-site_update";form.set("slug",old);assert.equal(media.validateSlug(old),false);assert.equal(media.getPayload(form).slug,"qa-core-topic-controls-site-update");assert.notEqual(media.getPayload(form).slug,old);});
 test("Noncanonical site_update identity cannot enter the updated exact plan",()=>assert.throws(()=>buildCoreTopicControlsPlan({manifest,fixtures:{...fixtures,topics:fixtures.topics.map(row=>row.kind==="site_update"?{...row,slug:"qa-core-topic-controls-site_update"}:row)}})));
+
+// This disposable PostgreSQL instance proves the existing JSONB storage contract.
+// It deliberately does not claim the complete application/RLS/server-action path.
+const videoDb = new PGlite();
+try {
+ await videoDb.exec("create table video_payload_fixture (id integer generated always as identity primary key, status text not null, media_payload jsonb not null)");
+ const providerUrls = {
+  youtube:"https://youtu.be/dQw4w9WgXcQ",vimeo:"https://vimeo.com/76979871?h=a1b2c3",
+  facebook:"https://www.facebook.com/Venesia/videos/123456789/",tiktok:"https://www.tiktok.com/@venesia/video/1234567890123456789",
+  instagram:"https://www.instagram.com/reel/ABC_def-123/",direct:"https://cdn.example.com/video.mp4?token=signed",
+ } as const;
+ type StoredVideo = {id:number;status:string;media_payload:Parameters<typeof payload.parseMediaTopicPayload>[0]};
+ for (const provider of payload.VIDEO_PROVIDERS) {
+  const form=forms("video");form.set("video_provider",provider.value);form.set("video_url",providerUrls[provider.value]);form.set("video_duration","legacy-3:45");form.set("video_start_seconds",provider.supportsStartTime?"17":"0");form.set("seo_title","Video provider storage round-trip and playback proof");form.set("seo_description","وصف فيديو ".repeat(14).trim());form.set("focus_keyword","فينيسيا");
+  const native=media.getPayload(form),resolved=media.resolveWriteMediaPayload("video",form,native);assert.equal(resolved.ok,true);
+  assert.equal(media.getDraftValidationChecks("video",resolved.mediaPayload,native).length,0);
+  assert.deepEqual(media.getPublishedValidationChecks("video",resolved.mediaPayload,"published",native),[]);
+  const created=media.buildMediaWritePayload(native,fixtures.category,"video",resolved.mediaPayload,"2026-10-23T10:00:00Z",null,fixtures.series);
+  const inserted=await videoDb.query<StoredVideo>("insert into video_payload_fixture(status,media_payload) values ($1,$2::jsonb) returning *",[created.status,JSON.stringify(created.media_payload)]);
+  const record=inserted.rows[0];assert.ok(record);
+  const reloaded=payload.parseMediaTopicPayload(record.media_payload);assert.ok(reloaded?.kind==="video");
+  test("Isolated JSONB Create/reload retains canonical provider/start/duration: "+provider.value,()=>{assert.deepEqual(reloaded,created.media_payload);assert.equal(reloaded.duration,"legacy-3:45");assert.equal(reloaded.start_seconds,provider.supportsStartTime?17:undefined);if(provider.value==="vimeo")assert.equal(reloaded.video_url,"https://vimeo.com/76979871/a1b2c3");});
+  form.set("video_url",reloaded.video_url);form.set("video_duration",reloaded.duration??"");form.set("video_thumbnail",reloaded.thumbnail??"");form.set("video_start_seconds",String(reloaded.start_seconds??0));
+  const editNative=media.getPayload(form),editResolved=media.resolveWriteMediaPayload("video",form,editNative);assert.equal(editResolved.ok,true);
+  const edited=media.buildMediaWritePayload(editNative,fixtures.category,"video",editResolved.mediaPayload,"2026-10-23T10:01:00Z",original as unknown as Parameters<typeof media.buildMediaWritePayload>[5],fixtures.series);
+  const updated=await videoDb.query<StoredVideo>("update video_payload_fixture set media_payload=$1::jsonb where id=$2 returning *",[JSON.stringify(edited.media_payload),record.id]);
+  test("Isolated JSONB Edit preserves legacy duration and timing: "+provider.value,()=>assert.deepEqual(payload.parseMediaTopicPayload(updated.rows[0].media_payload),reloaded));
+  const duplicate=await videoDb.query<StoredVideo>("insert into video_payload_fixture(status,media_payload) select 'unpublished',media_payload from video_payload_fixture where id=$1 returning *",[record.id]);
+  test("Isolated JSONB Duplicate preserves the complete payload as unpublished: "+provider.value,()=>{assert.equal(duplicate.rows[0].status,"unpublished");assert.notEqual(duplicate.rows[0].id,record.id);assert.deepEqual(payload.parseMediaTopicPayload(duplicate.rows[0].media_payload),reloaded);});
+  form.set("video_url","authored incomplete URL");
+  const draftNative=media.getPayload(form),draftResolved=media.resolveWriteMediaPayload("video",form,draftNative);assert.equal(draftResolved.ok,true);
+  assert.equal(media.getDraftValidationChecks("video",draftResolved.mediaPayload,draftNative).length,0);
+  assert.ok(media.getPublishedValidationChecks("video",draftResolved.mediaPayload,"published",draftNative).some(issue=>issue.field==="video_url"));
+  const draft=media.buildMediaWritePayload(draftNative,fixtures.category,"video",draftResolved.mediaPayload,"2026-10-23T10:02:00Z",null,fixtures.series);
+  const storedDraft=await videoDb.query<StoredVideo>("insert into video_payload_fixture(status,media_payload) values ('unpublished',$1::jsonb) returning *",[JSON.stringify(draft.media_payload)]);
+  test("Isolated JSONB incomplete Draft remains correctable and cannot publish: "+provider.value,()=>{const actual=payload.parseMediaTopicPayload(storedDraft.rows[0].media_payload);assert.ok(actual?.kind==="video");assert.equal(actual.video_url,"authored incomplete URL");assert.equal(actual.duration,"legacy-3:45");assert.equal(actual.provider,provider.value);});
+  const before=(await videoDb.query<{count:number}>("select count(*)::integer as count from video_payload_fixture")).rows[0].count;
+  form.set("video_provider","untrusted-provider");
+  const badProvider=media.resolveWriteMediaPayload("video",form,media.getPayload(form));
+  test("Unsupported provider fails at the existing write owner before storage: "+provider.value,()=>{assert.equal(badProvider.ok,false);if(!badProvider.ok)assert.equal(badProvider.field,"video_provider");});
+  form.set("video_provider",provider.value);form.set("video_start_seconds",provider.supportsStartTime?"1.5":"17");
+  const badStart=media.resolveWriteMediaPayload("video",form,media.getPayload(form));
+  test("Invalid or unsupported start fails before storage: "+provider.value,()=>{assert.equal(badStart.ok,false);if(!badStart.ok)assert.equal(badStart.field,"video_start_seconds");});
+  const after=(await videoDb.query<{count:number}>("select count(*)::integer as count from video_payload_fixture")).rows[0].count;
+  assert.equal(after,before,"Rejected native submissions must not issue a storage write");
+ }
+ const actualDuplicate=readFileSync(resolve(root,"src/app/admin/content/topics/actions.ts"),"utf8");
+ test("Actual duplicate owner retains whole media_payload via copyable row",()=>{assert.match(actualDuplicate,/\.\.\.copyable\s*\n\s*\}\s*=\s*topic/u);assert.match(actualDuplicate,/const nextRow = \{\s*\.\.\.copyable,/u);assert.match(actualDuplicate,/status: "unpublished"/u);});
+} finally {
+ await videoDb.close();
+}
 
 console.log(JSON.stringify({status:"pass",controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));

@@ -24,6 +24,7 @@ export default async function ConstructionUpdatesPage() {
   const metricItems: AdminMetricCardsGridItem[] = [
     {
       label: "المشروعات المتاحة",
+      artwork: "projects",
       value: projects.length,
       tone: "blue",
       icon: <AdminModuleTabIcon name="plans" />,
@@ -31,6 +32,7 @@ export default async function ConstructionUpdatesPage() {
     },
     {
       label: "مراحل المتابعة",
+      artwork: "series",
       value: projects.reduce(
         (total, project) => total + project.stageCount,
         0,
@@ -41,6 +43,7 @@ export default async function ConstructionUpdatesPage() {
     },
     {
       label: "التحديثات التاريخية",
+      artwork: "content",
       value: projects.reduce(
         (total, project) => total + project.updateCount,
         0,
@@ -57,6 +60,7 @@ export default async function ConstructionUpdatesPage() {
       state={projects.length > 0 ? "ready" : "empty"}
     >
       <AdminPageContextHeader
+        visualPreset="construction"
         eyebrow="PROJECT TRACKING DOMAIN"
         title="متابعة تنفيذ المشروعات"
         description="اختر مشروعًا للدخول إلى ملف المتابعة المستقل، ومراحله وبنوده وتحديثاته التاريخية."

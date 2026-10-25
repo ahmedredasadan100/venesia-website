@@ -4,6 +4,8 @@ import {
   AdminPageContextHeader,
   AdminPageExperience,
 } from "../../../../components/admin/ui";
+import { AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
+import { AdminDataGridActionIcon } from "../../../../components/admin/ui/AdminDataGrid";
 import TopicsListClient from "../../../../components/admin/content/TopicsListClient";
 import { DEFAULT_UNIFIED_CONTENT_COLUMN_KEYS } from "../../../../components/admin/content/unified-content-columns";
 import {
@@ -125,24 +127,33 @@ export default async function UnifiedContentTopicsPage({
   return (
     <AdminPageExperience className="min-w-0">
       <AdminPageContextHeader
+        visualPreset="topics"
+        presentation="cinematic"
+        artwork="document"
+        icon={<AdminModuleTabIcon name="content" />}
         eyebrow="UNIFIED CONTENT ENGINE"
         title="إدارة الموضوعات"
         description="قائمة موحدة لكل المقالات والأخبار والبيانات الصحفية وتحديثات التنفيذ والفيديوهات ومعارض الصور."
         actions={
           <>
-            <AdminActionButton href={ADMIN_CONTENT_ROUTES.newTopic} variant="primary">
-              + إضافة موضوع جديد
+            <AdminActionButton href={ADMIN_CONTENT_ROUTES.newTopic} variant="primary" presentation="cinematic">
+              <span className="size-5 shrink-0" aria-hidden="true"><AdminModuleTabIcon name="content" /></span>
+              إضافة موضوع جديد
             </AdminActionButton>
-            <AdminActionButton href={ADMIN_CONTENT_ROUTES.categories} variant="dark">
+            <AdminActionButton href={ADMIN_CONTENT_ROUTES.categories} variant="dark" presentation="cinematic">
+              <span className="size-5 shrink-0" aria-hidden="true"><AdminModuleTabIcon name="specifications" /></span>
               إدارة التصنيفات
             </AdminActionButton>
-            <AdminActionButton href={ADMIN_CONTENT_ROUTES.series} variant="dark">
+            <AdminActionButton href={ADMIN_CONTENT_ROUTES.series} variant="dark" presentation="cinematic">
+              <span className="size-5 shrink-0" aria-hidden="true"><AdminModuleTabIcon name="link" /></span>
               سلاسل المحتوى
             </AdminActionButton>
             <AdminActionButton
               href={`${ADMIN_CONTENT_ROUTES.topics}?view=trash`}
               variant="dark"
+              presentation="cinematic"
             >
+              <span className="size-5 shrink-0" aria-hidden="true"><AdminDataGridActionIcon action="delete" /></span>
               المحذوفات
             </AdminActionButton>
           </>

@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminModuleTabIcon } from "../../../../../components/admin/ui/AdminModuleTabs";
+
 import type { AdminActionResult } from "../../../../../lib/admin/admin-action-result";
 
 import Link from "next/link";
@@ -16,6 +18,7 @@ import {
   ADMIN_DATA_GRID_COLUMNS,
   ADMIN_FORM,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminActionButton,
   AdminBulkActionBar,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
@@ -30,6 +33,8 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
+  AdminFormField,
+  AdminStickyFormBar,
   AdminFormListboxSelect,
   AdminFormRuntime,
   AdminModalCancelButton,
@@ -39,7 +44,6 @@ import {
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
@@ -381,19 +385,20 @@ export default function ContentBlocksTableClient({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="blocks"
         eyebrow="إدارة الموديولات"
         title="إدارة بلوكات المحتوى"
         description="قوالب المحتوى النصي القابلة لإعادة الاستخدام والربط بالصفحات."
         actions={
-          <button
+          <AdminActionButton
             type="button"
             onClick={() => setShowCreateModal(true)}
             disabled={Boolean(loadError)}
-            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
+            variant="primary"
           >
             <PlusIcon />
             إضافة بلوك
-          </button>
+          </AdminActionButton>
         }
       />
 
@@ -541,7 +546,7 @@ export default function ContentBlocksTableClient({
         />
 
         <AdminDataGrid className="!rounded-t-none !border-t-0">
-          <AdminDataGridHeader columns={columns}>
+          <AdminDataGridHeader columns={columns} horizontalScroll>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
                 inputRef={selection.selectAllRef}
@@ -692,7 +697,7 @@ export default function ContentBlocksTableClient({
               };
 
               return (
-                <AdminDataGridRow key={row.id} columns={columns}>
+                <AdminDataGridRow key={row.id} columns={columns} horizontalScroll>
                   <AdminDataGridCheckboxCell>
                     <AdminDataGridCheckbox
                       checked={selection.selectedSet.has(row.id)}
@@ -791,8 +796,7 @@ export default function ContentBlocksTableClient({
           {({ fieldErrors, pending, requestClose }) => (
             <>
               <AdminFormError />
-              <label className={adminFormLabelClassName()}>
-                الاسم
+              <AdminFormField presentation="panel" label="الاسم" required>
                 <input
                   name="name"
                   required
@@ -805,9 +809,8 @@ export default function ContentBlocksTableClient({
                   }
                 />
                 <AdminFormError name="name" />
-              </label>
-              <label className={adminFormLabelClassName()}>
-                المعرّف التقني
+              </AdminFormField>
+              <AdminFormField presentation="panel" label="المعرّف التقني">
                 <input
                   name="slug"
                   dir="ltr"
@@ -821,8 +824,9 @@ export default function ContentBlocksTableClient({
                   }
                 />
                 <AdminFormError name="slug" />
-              </label>
+              </AdminFormField>
               <AdminFormListboxSelect
+                  presentation="panel"
                 name="variant"
                 label="النمط"
                 defaultValue="default"
@@ -833,7 +837,7 @@ export default function ContentBlocksTableClient({
               />
               <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />
-              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+              <AdminStickyFormBar title="إجراءات النموذج" icon={<AdminModuleTabIcon name="content" />}>
                 <AdminModalCancelButton
                   onClick={requestClose}
                   disabled={pending}
@@ -843,7 +847,7 @@ export default function ContentBlocksTableClient({
                 <AdminModalPrimaryButton type="submit" disabled={pending}>
                   {pending ? "جار الإنشاء..." : "إنشاء وفتح"}
                 </AdminModalPrimaryButton>
-              </div>
+              </AdminStickyFormBar>
             </>
           )}
         </AdminFormRuntime>

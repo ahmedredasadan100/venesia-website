@@ -12,16 +12,19 @@ import { TOPIC_SETTINGS_SURFACE_CLASS_NAME } from "./TopicFormSwitch";
 type TopicDateLabelFieldProps = {
   defaultValue?: string | null;
   publishedAt?: string | null;
+  draftDisplayDate?: string;
   disabled?: boolean;
   className?: string;
+  labelClassName?: string;
 };
 
-export default function TopicDateLabelField({ defaultValue, publishedAt, disabled = false, className = "" }: TopicDateLabelFieldProps) {
+export default function TopicDateLabelField({ defaultValue, publishedAt, draftDisplayDate, disabled = false, className = "", labelClassName }: TopicDateLabelFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const defaultIsDate = /^\d{4}-\d{2}-\d{2}$/.test(defaultValue ?? "");
   const publishedDateValue = getDateInputValue(publishedAt);
   const [dateValue, setDateValue] = useState(() => {
     if (publishedDateValue) return publishedDateValue;
+    if (draftDisplayDate !== undefined) return draftDisplayDate;
     if (defaultIsDate) return defaultValue ?? "";
     if (!defaultValue) return getTodayInputValue();
     return "";
@@ -41,7 +44,7 @@ export default function TopicDateLabelField({ defaultValue, publishedAt, disable
           data-topic-date-picker-trigger="label"
           className="flex w-full items-center justify-between gap-3 text-xs font-medium text-white/70 transition hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-55"
         >
-          <span>تاريخ النشر الظاهر</span>
+          <span className={labelClassName}>تاريخ النشر الظاهر</span>
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"

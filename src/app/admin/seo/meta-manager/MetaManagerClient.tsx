@@ -1,18 +1,23 @@
 "use client";
 
-import type { ReactNode } from "react";
-
+import AdminMediaImageField from "../../../../components/admin/media/AdminMediaImageField";
 import AdminFormRuntime, {
   AdminFormActions,
   AdminFormError,
   AdminFormGrid,
+  useAdminFormRuntime,
 } from "../../../../components/admin/ui/AdminFormRuntime";
-import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
+import AdminModuleTabs, { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import {
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminCard,
+  AdminFormControlHeader,
   AdminFormField,
   AdminFormListboxSelect,
+  AdminFormSection,
   adminFormFieldClassName,
 } from "../../../../components/admin/ui";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME, adminFormHintClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import type {
   GlobalSeoEffectiveContract,
   GlobalSeoFieldKey,
@@ -32,6 +37,12 @@ const sourceLabels = {
   code_fallback: "Code Fallback",
 } as const;
 
+const META_MANAGER_NAVIGATION_EVENT = "admin:global-seo-field-navigation";
+
+function fieldSupportIds(field: GlobalSeoFieldKey, hasError: boolean) {
+  return `${field}-source-note${hasError ? ` ${field}-error` : ""}`;
+}
+
 function SourceNote({
   contract,
   field,
@@ -41,8 +52,9 @@ function SourceNote({
 }) {
   const source = contract.fields[field];
   return (
-    <p
-      className="mt-1 text-xs text-white/42"
+    <span
+      id={`${field}-source-note`}
+      className={adminFormHintClassName({ textInset: true })}
       data-seo-effective-source={source.source}
     >
       المصدر الفعلي:{" "}
@@ -53,15 +65,7 @@ function SourceNote({
       {!source.persisted
         ? " · الحقل الفارغ يرث هذه القيمة ولا يحفظها ضمنيًا"
         : ""}
-    </p>
-  );
-}
-
-function SectionCard({ children }: { children: ReactNode }) {
-  return (
-    <section className="space-y-5 rounded-[24px] border border-white/10 bg-[#080B10]/78 p-5">
-      {children}
-    </section>
+    </span>
   );
 }
 
@@ -80,6 +84,8 @@ function StringField({
   multiline?: boolean;
   dir?: "ltr" | "rtl";
 }) {
+  const { fieldErrors } = useAdminFormRuntime();
+  const hasError = Boolean(fieldErrors[field]?.length);
   const persisted = contract.persistedSettings[field];
   const effective = contract.settings[field];
   const shared = {
@@ -87,15 +93,59 @@ function StringField({
     name,
     defaultValue: typeof persisted === "string" ? persisted : "",
     placeholder: typeof effective === "string" ? effective : "",
-    className: adminFormFieldClassName(),
+    className: adminFormFieldClassName(hasError ? "border-red-400/40" : ""),
+    "aria-invalid": hasError,
+    "aria-describedby": fieldSupportIds(field, hasError),
     dir,
   } as const;
   return (
-    <AdminFormField label={label}>
+    <AdminFormField label={label} presentation="panel">
+      <AdminFormGrid columns={1} density="compact">
       {multiline ? <textarea {...shared} rows={4} /> : <input {...shared} />}
       <SourceNote contract={contract} field={field} />
       <AdminFormError name={field} />
+      </AdminFormGrid>
     </AdminFormField>
+  );
+}
+
+function ImageSourceField({
+  contract,
+  field,
+  name,
+  label,
+  dir,
+}: {
+  contract: GlobalSeoEffectiveContract;
+  field: "defaultOgImage" | "defaultTwitterImage" | "organizationLogo";
+  name: string;
+  label: string;
+  dir?: "ltr" | "rtl";
+}) {
+  const { fieldErrors } = useAdminFormRuntime();
+  const hasError = Boolean(fieldErrors[field]?.length);
+  const persisted = contract.persistedSettings[field];
+  const effective = contract.settings[field];
+  return (
+    <AdminFormGrid columns={1} density="compact">
+      <AdminMediaImageField
+        name={name}
+        label={label}
+        labelClassName={adminFormLabelClassName({ textInset: true })}
+        defaultValue={typeof persisted === "string" ? persisted : ""}
+        variant="card"
+        urlInput={{
+          id: field,
+          placeholder: typeof effective === "string" ? effective : "",
+          dir,
+          ariaInvalid: hasError,
+          ariaDescribedBy: fieldSupportIds(field, hasError),
+        }}
+        ariaDescribedBy={fieldSupportIds(field, hasError)}
+      />
+      <SourceNote contract={contract} field={field} />
+      <AdminFormError name={field} />
+    </AdminFormGrid>
   );
 }
 
@@ -110,11 +160,17 @@ function BooleanSourceField({
   name: string;
   label: string;
 }) {
+  const { fieldErrors } = useAdminFormRuntime();
   const persisted = contract.persistedSettings[field];
   return (
-    <AdminFormField label={label}>
+    <AdminFormGrid columns={1} density="compact">
       <AdminFormListboxSelect
         id={field}
+        focusTargetId={field}
+        ariaDescribedBy={`${field}-source-note`}
+        label={label}
+        presentation="panel"
+        error={fieldErrors[field]?.join(" ") ?? null}
         name={name}
         defaultValue={
           typeof persisted === "boolean" ? String(persisted) : "inherit"
@@ -126,14 +182,13 @@ function BooleanSourceField({
         ]}
       />
       <SourceNote contract={contract} field={field} />
-      <AdminFormError name={field} />
-    </AdminFormField>
+    </AdminFormGrid>
   );
 }
 
 function DefaultsTab({ contract }: MetaManagerClientProps) {
   return (
-    <SectionCard>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <AdminFormGrid>
         <StringField
           contract={contract}
@@ -156,14 +211,14 @@ function DefaultsTab({ contract }: MetaManagerClientProps) {
         multiline
       />
       <AdminFormGrid>
-        <StringField
+        <ImageSourceField
           contract={contract}
           field="defaultOgImage"
           name="default_og_image"
           label="صورة Open Graph"
           dir="ltr"
         />
-        <StringField
+        <ImageSourceField
           contract={contract}
           field="defaultTwitterImage"
           name="default_twitter_image"
@@ -196,17 +251,18 @@ function DefaultsTab({ contract }: MetaManagerClientProps) {
           label="Follow الافتراضي"
         />
       </AdminFormGrid>
-    </SectionCard>
+    </div>
   );
 }
 
 function IdentityTab({ contract }: MetaManagerClientProps) {
+  const { fieldErrors } = useAdminFormRuntime();
   const persistedLinks =
     contract.persistedSettings.organizationSocialLinks ?? [];
   const persistedKnowsAbout =
     contract.persistedSettings.organizationKnowsAbout ?? [];
   return (
-    <SectionCard>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <AdminFormGrid>
         <StringField
           contract={contract}
@@ -241,7 +297,7 @@ function IdentityTab({ contract }: MetaManagerClientProps) {
         multiline
       />
       <AdminFormGrid>
-        <StringField
+        <ImageSourceField
           contract={contract}
           field="organizationLogo"
           name="organization_logo"
@@ -301,38 +357,47 @@ function IdentityTab({ contract }: MetaManagerClientProps) {
           dir="ltr"
         />
       </AdminFormGrid>
-      <AdminFormField label="مجالات المعرفة — قيمة في كل سطر">
+      <AdminFormField label="مجالات المعرفة — قيمة في كل سطر" presentation="panel">
+        <AdminFormGrid columns={1} density="compact">
         <textarea
           id="organizationKnowsAbout"
           name="organization_knows_about"
           rows={5}
           defaultValue={persistedKnowsAbout.join("\n")}
           placeholder={contract.settings.organizationKnowsAbout.join("\n")}
-          className={adminFormFieldClassName()}
+          className={adminFormFieldClassName(fieldErrors.organizationKnowsAbout?.length ? "border-red-400/40" : "")}
+          aria-invalid={Boolean(fieldErrors.organizationKnowsAbout?.length)}
+          aria-describedby={fieldSupportIds("organizationKnowsAbout", Boolean(fieldErrors.organizationKnowsAbout?.length))}
         />
         <SourceNote contract={contract} field="organizationKnowsAbout" />
         <AdminFormError name="organizationKnowsAbout" />
+        </AdminFormGrid>
       </AdminFormField>
-      <div className="space-y-3">
-        <p className="text-sm font-semibold text-white/75">روابط المؤسسة</p>
+      <div className={ADMIN_FORM_STACK_CLASS_NAME} role="group" aria-labelledby="organization-social-links-heading" aria-describedby={fieldSupportIds("organizationSocialLinks", Boolean(fieldErrors.organizationSocialLinks?.length))}>
+        <AdminFormControlHeader title={<span id="organization-social-links-heading">روابط المؤسسة</span>} presentation="compact-inline" />
         {(persistedLinks.length
           ? persistedLinks
           : [{ label: "", href: "" }]
         ).map((link: GlobalSeoSocialLink, index: number) => (
           <AdminFormGrid key={`${link.label}-${index}`}>
-            <AdminFormField label="المنصة">
+            <AdminFormField label="المنصة" presentation="panel">
               <input
+                id={index === 0 ? "organizationSocialLinks" : undefined}
                 name="social_label"
                 defaultValue={link.label}
                 className={adminFormFieldClassName()}
+                aria-invalid={Boolean(fieldErrors.organizationSocialLinks?.length)}
+                aria-describedby={fieldSupportIds("organizationSocialLinks", Boolean(fieldErrors.organizationSocialLinks?.length))}
               />
             </AdminFormField>
-            <AdminFormField label="الرابط">
+            <AdminFormField label="الرابط" presentation="panel">
               <input
                 name="social_href"
                 defaultValue={link.href}
                 className={adminFormFieldClassName()}
                 dir="ltr"
+                aria-invalid={Boolean(fieldErrors.organizationSocialLinks?.length)}
+                aria-describedby={fieldSupportIds("organizationSocialLinks", Boolean(fieldErrors.organizationSocialLinks?.length))}
               />
             </AdminFormField>
           </AdminFormGrid>
@@ -340,13 +405,14 @@ function IdentityTab({ contract }: MetaManagerClientProps) {
         <SourceNote contract={contract} field="organizationSocialLinks" />
         <AdminFormError name="organizationSocialLinks" />
       </div>
-    </SectionCard>
+    </div>
   );
 }
 
 function CrawlTab({ contract }: MetaManagerClientProps) {
+  const { fieldErrors } = useAdminFormRuntime();
   return (
-    <SectionCard>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <AdminFormGrid>
         <StringField
           contract={contract}
@@ -378,7 +444,8 @@ function CrawlTab({ contract }: MetaManagerClientProps) {
         />
       </AdminFormGrid>
       <AdminFormGrid>
-        <AdminFormField label="Robots Allow — مسار في كل سطر">
+        <AdminFormField label="Robots Allow — مسار في كل سطر" presentation="panel">
+          <AdminFormGrid columns={1} density="compact">
           <textarea
             id="robotsTxtAllow"
             name="robots_txt_allow"
@@ -387,13 +454,17 @@ function CrawlTab({ contract }: MetaManagerClientProps) {
               contract.persistedSettings.robotsTxtAllow ?? []
             ).join("\n")}
             placeholder={contract.settings.robotsTxtAllow.join("\n")}
-            className={adminFormFieldClassName()}
+            className={adminFormFieldClassName(fieldErrors.robotsTxtAllow?.length ? "border-red-400/40" : "")}
             dir="ltr"
+            aria-invalid={Boolean(fieldErrors.robotsTxtAllow?.length)}
+            aria-describedby={fieldSupportIds("robotsTxtAllow", Boolean(fieldErrors.robotsTxtAllow?.length))}
           />
           <SourceNote contract={contract} field="robotsTxtAllow" />
           <AdminFormError name="robotsTxtAllow" />
+          </AdminFormGrid>
         </AdminFormField>
-        <AdminFormField label="Robots Disallow — مسار في كل سطر">
+        <AdminFormField label="Robots Disallow — مسار في كل سطر" presentation="panel">
+          <AdminFormGrid columns={1} density="compact">
           <textarea
             id="robotsTxtDisallow"
             name="robots_txt_disallow"
@@ -402,25 +473,26 @@ function CrawlTab({ contract }: MetaManagerClientProps) {
               contract.persistedSettings.robotsTxtDisallow ?? []
             ).join("\n")}
             placeholder={contract.settings.robotsTxtDisallow.join("\n")}
-            className={adminFormFieldClassName()}
+            className={adminFormFieldClassName(fieldErrors.robotsTxtDisallow?.length ? "border-red-400/40" : "")}
             dir="ltr"
+            aria-invalid={Boolean(fieldErrors.robotsTxtDisallow?.length)}
+            aria-describedby={fieldSupportIds("robotsTxtDisallow", Boolean(fieldErrors.robotsTxtDisallow?.length))}
           />
           <SourceNote contract={contract} field="robotsTxtDisallow" />
           <AdminFormError name="robotsTxtDisallow" />
+          </AdminFormGrid>
         </AdminFormField>
       </AdminFormGrid>
-    </SectionCard>
+    </div>
   );
 }
 
 function PreviewTab({ contract }: MetaManagerClientProps) {
   const settings = contract.settings;
   return (
-    <SectionCard>
-      <div
-        className="rounded-2xl border border-white/10 bg-black/25 p-5"
-        dir="rtl"
-      >
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+      <AdminCard presentation="premium" className="p-3">
+      <div dir="rtl">
         <p className="font-en text-sm text-emerald-300">
           {settings.canonicalBaseUrl}
         </p>
@@ -431,8 +503,9 @@ function PreviewTab({ contract }: MetaManagerClientProps) {
           {settings.defaultDescription}
         </p>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
+      </AdminCard>
+      <AdminFormGrid>
+        <AdminCard presentation="premium" className="p-3">
           <p className="text-xs uppercase tracking-[0.2em] text-white/42">
             Open Graph
           </p>
@@ -445,8 +518,8 @@ function PreviewTab({ contract }: MetaManagerClientProps) {
           <p className="mt-3 font-en text-xs text-white/40">
             {settings.defaultOgImage}
           </p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
+        </AdminCard>
+        <AdminCard presentation="premium" className="p-3">
           <p className="text-xs uppercase tracking-[0.2em] text-white/42">
             Organization
           </p>
@@ -459,13 +532,13 @@ function PreviewTab({ contract }: MetaManagerClientProps) {
           <p className="mt-3 font-en text-xs text-white/40">
             {settings.organizationPhone} · {settings.organizationEmail}
           </p>
-        </div>
-      </div>
+        </AdminCard>
+      </AdminFormGrid>
       <p className="text-sm leading-7 text-white/45">
         هذه معاينة للـEffective Contract الحالي. التعديلات غير المحفوظة لا تصبح
         Effective قبل نجاح الحفظ.
       </p>
-    </SectionCard>
+    </div>
   );
 }
 
@@ -485,6 +558,7 @@ export default function MetaManagerClient({
       sectionDescription:
         "قيم metadata والمشاركة والـrobots الافتراضية مع مصدر كل قيمة.",
       icon: "seo" as const,
+      fields: ["siteName", "defaultTitle", "defaultDescription", "defaultOgImage", "defaultTwitterImage", "defaultOgImageAlt", "twitterHandle", "defaultRobotsIndex", "defaultRobotsFollow"] as const,
       content: <DefaultsTab contract={contract} />,
     },
     {
@@ -494,6 +568,7 @@ export default function MetaManagerClient({
       sectionDescription:
         "الهوية المنظمة الوحيدة التي يستهلكها Metadata وStructured Data والأسطح العامة.",
       icon: "content" as const,
+      fields: ["organizationName", "organizationAlternateName", "organizationLegalName", "organizationTagline", "organizationDescription", "organizationLogo", "organizationAreaServed", "organizationPhone", "organizationEmail", "organizationAddress", "organizationAddressLocality", "organizationAddressRegion", "organizationPostalCode", "organizationAddressCountry", "organizationKnowsAbout", "organizationSocialLinks"] as const,
       content: <IdentityTab contract={contract} />,
     },
     {
@@ -503,6 +578,7 @@ export default function MetaManagerClient({
       sectionDescription:
         "قاعدة الدومين وRobots policy ومفاتيح التحقق دون تعديل Canonical الكيانات.",
       icon: "section" as const,
+      fields: ["siteUrl", "canonicalBaseUrl", "googleSiteVerification", "bingSiteVerification", "robotsTxtAllow", "robotsTxtDisallow"] as const,
       content: <CrawlTab contract={contract} />,
     },
     {
@@ -512,9 +588,14 @@ export default function MetaManagerClient({
       sectionDescription:
         "معاينة القيم الفعلية بعد تطبيق Database ثم Environment ثم Code Fallback.",
       icon: "overview" as const,
+      fields: [] as const,
       content: <PreviewTab contract={contract} />,
     },
   ];
+  const navigation = {
+    eventName: META_MANAGER_NAVIGATION_EVENT,
+    fields: Object.fromEntries(tabs.flatMap(tab => tab.fields.map(field => [field, { tabId: tab.id, targetId: field }]))),
+  };
   return (
     <AdminFormRuntime<GlobalSeoSettingsInput>
       action={saveGlobalSeoSettingsAction}
@@ -522,19 +603,29 @@ export default function MetaManagerClient({
       mode="edit"
       entityKey="global-seo-settings"
       closeHref="/admin"
-      className="space-y-6 pb-10"
+      className="pb-10"
+      navigation={navigation}
     >
+      <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <AdminModuleTabs
-        tabs={tabs}
+        tabs={tabs.map(tab => ({
+          ...tab,
+          sectionHeading: undefined,
+          sectionDescription: undefined,
+          content: <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id={`global-seo-${tab.id}`} sectionHeading={tab.sectionHeading} sectionDescription={tab.sectionDescription} icon={tab.icon} sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>{tab.content}</AdminFormSection>,
+        }))}
         initialTabId="defaults"
         ariaLabel="أقسام Global SEO"
+        navigationEventName={META_MANAGER_NAVIGATION_EVENT}
       />
       <AdminFormActions
         submitLabel="حفظ Global SEO"
         pendingLabel="جارٍ الحفظ…"
-        title="إجراءات Global SEO"
+        title="إجراءات النموذج"
+        icon={<AdminModuleTabIcon name="content" />}
         description="احفظ القيم المدخلة فقط؛ الحقول الفارغة تستمر في الوراثة ولا تُعرض كقيم persisted."
       />
+      </div>
     </AdminFormRuntime>
   );
 }

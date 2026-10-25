@@ -9,7 +9,7 @@ export const TOPIC_CONTROL_ASSET_KEYS = ["images/projects/c35/hero.jpg", "images
 export const TOPIC_CONTROL_VALUES = {
   imageAlt: "وصف صورة عناصر المحتوى المحفوظة",
   markdown: "فقرة محررة للتحقق من الحفظ وإعادة الفتح لعناصر المحتوى المتخصصة.",
-  videoUrl: "https://youtu.be/aqz-KE-bpKQ", storedVideoUrl: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", duration: "4:32",
+  videoUrl: "https://youtu.be/aqz-KE-bpKQ", storedVideoUrl: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", duration: null,
   mediaProject: "B4-C35",
   faq: [{ question: "كيف يظهر السؤال الأول؟", answer: "تظهر الإجابة الأولى بعد الحفظ." }, { question: "كيف يظهر السؤال الثاني؟", answer: "تظهر الإجابة الثانية بالترتيب الجديد." }],
   display: { show_title_on_page: false, show_image_on_page: true, show_category_on_page: false, show_series_on_page: true, show_excerpt_on_page: false, show_date_on_page: true, show_intro_card_on_page: false },
@@ -43,7 +43,7 @@ export function buildCoreTopicControlsPlan({ manifest, fixtures, selection = nul
     return { ...topic, consumer, surface, coverage: [] };
   });
   return { recipes, automaticAxisCoverage: [], globalClosed: false,
-    explicitNonCapabilities: ["Gallery picker is single-select; duplicate URLs remain separate authored rows.", "Gallery removal is immediate local state; picker cancellation is a separate no-write control.", "Unpublished date edits do not set published_at.", "Video duration is free text; no nonexistent duration validator is claimed."] };
+    explicitNonCapabilities: ["Gallery picker is single-select; duplicate URLs remain separate authored rows.", "Gallery removal is immediate local state; picker cancellation is a separate no-write control.", "Unpublished date edits do not set published_at.", "Video panel retains existing duration as hidden metadata; no duration authoring or validator is claimed."] };
 }
 export function validateTopicControlsRequest(input) {
   assert.ok(input && typeof input === "object" && !Array.isArray(input));

@@ -317,16 +317,26 @@ function findFeedback(n) {
 findFeedback(compositionAst);
 assert.ok(feedbackExpression);
 const boundedFactories = composition.map(
-  (item, index) =>
+  (item, index) => {
+    const args = item.names.at(-1) === "handleBulkExecute"
+      ? "'detach',[assignmentRowId(row)]"
+      : item.action === "display-position"
+        ? "row,'body'"
+        : item.action === "delete"
+          ? "row"
+          : "row,1";
+    return (
     "function boundedAdapter" +
     index +
-    "(instant:any,execute:any,row:any,domainWarning:boolean){let actionFeedback:any;const setActionFeedback=(value:any)=>{actionFeedback=value;};const page={id:1},regionKeys=['hero','body'],manualReorderEnabled=true;const normalizeLayoutSlot=(slot:any)=>slot,normalizeBoolean=(value:any)=>Boolean(value),assignmentRowId=(value:any)=>String(value.id),getDisplayPositionOptions=()=>regionKeys,comparePageAssignmentOrder=(a:any,b:any)=>a.sortOrder-b.sortOrder,getAssignmentSiblings=()=>instant.rows;const updatePageBlockAssignment=execute,reorderPageComposition=async()=>({...await execute(),warning:domainWarning?'Committed domain warning':null});const run=" +
+    "(instant:any,execute:any,row:any,domainWarning:boolean){let actionFeedback:any;const setActionFeedback=(value:any)=>{actionFeedback=value;};const page={id:1},regionKeys=['hero','body'],manualReorderEnabled=true;const normalizeLayoutSlot=(slot:any)=>slot,normalizeBoolean=(value:any)=>Boolean(value),assignmentRowId=(value:any)=>value.module_kind+':'+value.id,isManageableAssignment=(value:any)=>value.manages_assignment_on_page,getDisplayPositionOptions=()=>regionKeys,comparePageAssignmentOrder=(a:any,b:any)=>a.sortOrder-b.sortOrder,getAssignmentSiblings=()=>instant.rows;const updatePageBlockAssignment=execute,detachPageBlockAssignment=execute,bulkPageBlockAssignments=execute,selection={clearSelection:()=>undefined},reorderPageComposition=async()=>({...await execute(),warning:domainWarning?'Committed domain warning':null});const run=" +
     item.text.replace(/^async function\s+\w+/, "async function") +
-    ";return async()=>{await run(row," +
-    (item.action === "display-position" ? "'body'" : "1") +
-    ");return{result:actionFeedback,feedback:(" +
+    ";return async()=>{try{await run(" +
+    args +
+    ");}catch(error){if(!actionFeedback)throw error;}return{result:actionFeedback,feedback:(" +
     feedbackExpression +
-    ")};};}",
+    ")};};}"
+    );
+  },
 );
 appendFileSync(
   path.join(out, "adapters.ts"),
@@ -347,7 +357,7 @@ let entry = readFileSync(path.join(out, "entry.tsx"), "utf8")
   );
 entry = entry.replace(
   "const initial={rows:[row]",
-  "const boundedRows=[{...row,slot:'hero',module_kind:'content',sort_order:10},{...row,id:2,slot:'hero',module_kind:'content',sort_order:20}];\nconst initial={rows:[row]",
+  "const boundedRows=[{...row,slot:'hero',module_kind:'content',sort_order:10,manages_assignment_on_page:true},{...row,id:2,slot:'hero',module_kind:'content',sort_order:20,manages_assignment_on_page:true}];\nconst initial={rows:[row]",
 );
 entry = entry.replace(
   "const instant=useAdminEntityInstantMutation('settled-adoption',query);",
@@ -357,7 +367,7 @@ entry = entry.replace(
   "window.retryRead=",
   String.raw`
 window.runBounded=async(index:number,fault:boolean,domainWarning:boolean)=>{
- const base=boundedInstant;const controlled={...base,mutateAsync:(request:any)=>base.mutateAsync({...request,reconcileSuccess:request.reconcileSuccess?(result:any,tools:any)=>request.reconcileSuccess(result,fault?{...tools,cache:{...tools.cache,patchRows:()=>{throw Error('Injected local reconciliation failure');}}}:tools):undefined})};
+ const base=boundedInstant;const controlled={...base,mutateAsync:(request:any)=>base.mutateAsync({...request,reconcileSuccess:request.reconcileSuccess?(result:any,tools:any)=>request.reconcileSuccess(result,fault?{...tools,cache:{...tools.cache,patchRows:()=>{throw Error('Injected local reconciliation failure');},transformActiveRows:()=>{throw Error('Injected local reconciliation failure');}}}:tools):undefined})};
  const item=domainWarning?{...boundedRows[0],slot:'body'}:boundedRows[0];
  const run=boundedFactories[index](controlled,execute,item,domainWarning);return run();
 };

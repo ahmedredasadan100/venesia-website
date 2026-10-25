@@ -14,10 +14,12 @@ import PageVisualSlotMap from "../../../../../components/admin/page-blocks/PageV
 import {
   AdminBulkActionBar,
   AdminColumnVisibilityMenu,
+  AdminFormSection,
   AdminPageExperience,
   AdminTablePagination,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../../lib/admin/admin-ui-styles";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import {
   adminCollectionSearchIncludes,
@@ -446,12 +448,17 @@ export default function PageBlocksClient({
       const result = await instant.mutateAsync({
         rowId: assignmentRowId(row),
         action: "delete",
-        optimistic: (cache) => cache.removeRows(new Set([assignmentRowId(row)])),
+        optimistic: () => undefined,
         execute: async () => {
           const response = await detachPageBlockAssignment(formData);
           return response.ok
             ? { ok: true as const, feedbackStatus: response.feedbackStatus, message: response.message ?? "تمت إزالة الموديول من الصفحة." }
             : { ok: false as const, code: "assignment_detach_failed", message: response.message ?? "تعذرت إزالة الموديول من الصفحة." };
+        },
+        reconcileSuccess: (_response, { cache }) => {
+          cache.transformActiveRows((rows) => rows.filter(
+            (candidate) => assignmentRowId(candidate) !== assignmentRowId(row),
+          ));
         },
       });
       setActionFeedback({ message: result.message, ok: true, feedbackStatus: result.feedbackStatus });
@@ -609,7 +616,7 @@ export default function PageBlocksClient({
     visibility === "all";
 
   async function handleReorderAssignment(row: PageBlockAssignmentRow, targetPosition: number) {
-    if (!manualReorderEnabled) return;
+    if (!manualReorderEnabled || instant.bulkInteraction.isBlocked || !isManageableAssignment(row)) return;
     if (row.module_kind === "hero") return;
     const siblings = getAssignmentSiblings(row);
     const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
@@ -728,7 +735,6 @@ export default function PageBlocksClient({
         bulk: true,
         optimistic: (cache) => {
           if (action === "detach") {
-            cache.removeRows(idSet);
             return;
           }
           cache.patchRows((candidate) =>
@@ -752,6 +758,12 @@ export default function PageBlocksClient({
             feedbackStatus: response.feedbackStatus,
           };
         },
+        reconcileSuccess: (_response, { cache }) => {
+          if (action !== "detach") return;
+          cache.transformActiveRows((rows) => rows.filter(
+            (candidate) => !idSet.has(assignmentRowId(candidate)),
+          ));
+        },
       });
       selection.clearSelection();
       setActionFeedback({
@@ -769,7 +781,7 @@ export default function PageBlocksClient({
   }
 
   return (
-    <AdminPageExperience dir="rtl">
+    <AdminPageExperience as="div" dir="rtl">
       <PageBlocksHeader
         returnTo={returnTo}
         page={page}
@@ -802,6 +814,8 @@ export default function PageBlocksClient({
         tabs={[
           {
             id: "seo",
+            sectionHeaderPresentation: "premium",
+            sectionHeaderClassName: ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
             navigationLabel: "SEO",
             sectionHeading: "تحسين محركات البحث والمشاركة",
             sectionDescription: "أدر بيانات البحث والمشاركة والتحليل من عقد Entity SEO المشترك.",
@@ -832,6 +846,8 @@ export default function PageBlocksClient({
           },
           {
             id: "layout",
+            sectionHeaderPresentation: "premium",
+            sectionHeaderClassName: ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
             navigationLabel: "التخطيط",
             sectionHeading: "تخطيط الصفحة ومناطقها",
             sectionDescription: "أنشئ تخطيطًا مدعومًا، رتّب مناطقه، واختره للصفحة عبر Page Composition owner الذري.",
@@ -846,18 +862,31 @@ export default function PageBlocksClient({
           },
           {
             id: "map",
+            sectionHeaderPresentation: "premium",
+            sectionHeaderClassName: ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
             navigationLabel: "الخريطة",
             sectionHeading: "خريطة الصفحة",
             sectionDescription: "راجع ترتيب أقسام الصفحة وهيكل المحتوى الظاهر للزائر.",
             icon: "plans",
             content: (
-              <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageVisualSlotMap assignments={instant.rows} regions={regions} returnTo={returnTo} />
-              </section>
+              <AdminFormSection presentation="panel">
+                <PageVisualSlotMap
+                  assignments={instant.rows}
+                  regions={regions}
+                  layoutKey={layouts.find((layout) => layout.id === currentLayoutId)?.key ?? ""}
+                  returnTo={returnTo}
+                  getReorderPosition={getReorderPosition}
+                  getRowInteraction={(row) => instant.getRowInteraction(assignmentRowId(row))}
+                  reorderDisabled={!manualReorderEnabled || instant.bulkInteraction.isBlocked}
+                  onMoveTo={handleReorderAssignment}
+                />
+              </AdminFormSection>
             ),
           },
           {
             id: "modules",
+            sectionHeaderPresentation: "premium",
+            sectionHeaderClassName: ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
             navigationLabel: "الموديولات",
             sectionHeading: `مرجع موديولات الصفحة ${page.title || page.slug}`,
             sectionDescription: "أدر الموديولات المرتبطة بالصفحة وترتيبها وحالة ظهورها.",

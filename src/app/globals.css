@@ -13,6 +13,51 @@ html:has([data-admin-shell]) body,
   @apply venesia-scrollbar;
 }
 
+/* Admin document semantics include its body portals. Owner cursor utilities keep precedence. */
+@layer base {
+  :where(body:has([data-admin-shell])) {
+    cursor: default;
+  }
+
+  :where(body:has([data-admin-shell])) :where(
+    a[href], button, summary, select,
+    input:is([type="button"], [type="submit"], [type="reset"], [type="checkbox"], [type="radio"], [type="file"], [type="color"], [type="range"], [type="date"], [type="datetime-local"], [type="month"], [type="week"], [type="time"]),
+    [role="button"], [role="link"], [role="tab"], [role="menuitem"],
+    [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"],
+    label:has(input:is([type="checkbox"], [type="radio"]):not(:disabled))
+  ) {
+    cursor: pointer;
+  }
+
+  :where(body:has([data-admin-shell])) :where(input[type="file"])::file-selector-button {
+    cursor: inherit;
+  }
+
+  :where(body:has([data-admin-shell])) :where(
+    input:not([type]),
+    input:is([type="text"], [type="search"], [type="email"], [type="url"], [type="tel"], [type="password"], [type="number"]),
+    textarea, [contenteditable]:not([contenteditable="false"])
+  ) {
+    cursor: text;
+  }
+
+  :where(body:has([data-admin-shell])) :where([draggable="true"]) {
+    cursor: grab;
+  }
+
+  :where(body:has([data-admin-shell])) :where([draggable="true"]:active, [aria-grabbed="true"]) {
+    cursor: grabbing;
+  }
+}
+
+/* A plain pointer utility must not make a disabled control look actionable.
+   State utilities such as disabled:cursor-default/wait remain more specific. */
+@layer utilities {
+  :where(body:has([data-admin-shell])) :is(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -330,19 +375,18 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-/* ─── Venesia Admin Sidebar: real layout integration ─────────────
-   The sidebar is not a framed panel anymore.
-   Navigation retains native scrolling when its contents exceed the viewport.
-   No own background or divider.
-   It participates in the page canvas exactly like Joomla-style admin layout. */
+/* Shared Sidebar default. Desktop retains the document scroll owner; the
+   bounded mobile drawer owns its native nav scroll. Compact submenus may
+   extend outside the rail. Company identity still supplies the accent. */
 .admin-sidebar-shell {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  outline: 0 !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  overflow: visible !important;
+  background: linear-gradient(
+    160deg,
+    var(--admin-sidebar-surface-start, #10171f),
+    var(--admin-sidebar-surface-end, #050a10) 62%
+  );
+  border-inline-end: 1px solid color-mix(in srgb, var(--admin-accent) 20%, transparent);
+  box-shadow: inset 1px 0 0 rgba(163, 184, 210, 0.045), inset -1px 0 0 rgba(163, 184, 210, 0.035);
+  overflow: visible;
 }
 
 .admin-sidebar-shell,
@@ -350,10 +394,12 @@ body {
   scroll-behavior: auto;
 }
 
-.admin-sidebar-shell::before,
-.admin-sidebar-shell::after {
-  content: none !important;
-  display: none !important;
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar-shell,
+  .admin-sidebar-shell * {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 @keyframes admin-edge-trace {
@@ -366,7 +412,8 @@ body {
   inherits: false;
 }
 
-.admin-premium-card::after {
+.admin-premium-card::after,
+.admin-cinematic-edge::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -393,13 +440,146 @@ body {
   transition: opacity 280ms ease;
 }
 
-.admin-premium-card:hover::after {
+.admin-premium-card:hover::after,
+.admin-cinematic-edge:is(:hover, :focus-within)::after {
   opacity: 1;
   animation: admin-edge-trace 1.15s linear infinite;
 }
 
+/* Optional collection edge behavior uses the original trace once per pointer
+   entry. Retained pointer focus stays quiet; keyboard focus keeps a static cue. */
+.admin-cinematic-edge[data-admin-edge-motion="entry"]::after {
+  opacity: 0;
+  animation: none;
+}
+
+.admin-cinematic-edge[data-admin-edge-motion="entry"]:has(:focus-visible)::after {
+  opacity: 0.42;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .admin-cinematic-edge[data-admin-edge-motion="entry"]:hover::after {
+    opacity: 1;
+    animation: admin-edge-trace 1.15s linear 1 both;
+  }
+}
+
+/* Module titles retain one shaped text run and their existing geometry. With a
+   3x background, increasing its position translates it from right to left by
+   2x the title box. The 2/3-image period joins the loop at the same color phase. */
+@keyframes admin-module-title-shimmer {
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
+}
+
+[data-admin-page-header] [data-admin-page-header-title] {
+  color: #F6F7FA;
+}
+
+/* Only the Module Header frame and its own action dock stay static; the shared
+   edge engine and its System Header, KPI and collection consumers are intact. */
+[data-admin-page-header]::after,
+[data-admin-page-header]:is(:hover, :focus-within)::after,
+[data-admin-page-header] [data-admin-page-header-actions-dock]::after,
+[data-admin-page-header] [data-admin-page-header-actions-dock]:is(:hover, :focus-within)::after {
+  content: none;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    [data-admin-page-header] [data-admin-page-header-title] {
+      background-image: repeating-linear-gradient(
+        90deg,
+        #F6F7FA 0%,
+        #F6F7FA 4%,
+        #D8B068 27%,
+        #FFF3BE 33.333333%,
+        #D8B068 39.666667%,
+        #F6F7FA 62.666667%,
+        #F6F7FA 66.666667%
+      );
+      background-size: 300% 100%;
+      background-position: 0% 50%;
+      background-repeat: no-repeat;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      animation: admin-module-title-shimmer 2.8s linear infinite;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-admin-page-header] [data-admin-page-header-title] {
+    animation: none;
+    background-image: none;
+    color: #F6F7FA;
+    -webkit-text-fill-color: #F6F7FA;
+  }
+}
+
+/* A TableRegion owns the collection edge; a nested standalone Grid keeps its
+   data/scroll owner without tracing a second frame. Standalone grids retain it. */
+[data-admin-entity-list-table-region]
+  [data-admin-data-grid-surface="standalone"][data-admin-data-grid-presentation="cinematic"]::after {
+  content: none;
+  opacity: 0;
+  animation: none;
+}
+
 .admin-premium-card > * {
   z-index: 2;
+}
+
+/* Cinematic consumers opt into the original Admin edge and KPI motion. The
+   existing premium/default consumers retain their presentation and timings. */
+.admin-cinematic-metric {
+  transition-property: transform, border-color, box-shadow;
+  transition-duration: 300ms;
+  transition-timing-function: ease-out;
+}
+
+.admin-cinematic-metric::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 85% 12%,
+    color-mix(in srgb, var(--admin-metric-color) 18%, transparent),
+    transparent 42%
+  );
+  opacity: 0.7;
+  transition: opacity 300ms ease-out;
+}
+
+.admin-cinematic-metric:is(:hover, :focus-visible) {
+  transform: translateY(-4px);
+}
+
+.admin-cinematic-metric:is(:hover, :focus-visible)::before {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-cinematic-edge::after,
+  .admin-cinematic-edge:is(:hover, :focus-within)::after {
+    animation: none;
+    transition: none;
+  }
+
+  .admin-cinematic-metric,
+  .admin-cinematic-metric:is(:hover, :focus-visible) {
+    transform: none;
+    transition: none;
+  }
+
+  .admin-cinematic-metric::before {
+    transition: none;
+  }
 }
 
 @media (max-height: 760px) {
@@ -412,8 +592,8 @@ body {
     row-gap: 0.15rem !important;
   }
 
-  .admin-sidebar-shell a,
-  .admin-sidebar-shell button {
+  .admin-sidebar-shell [data-admin-nav-item],
+  .admin-sidebar-shell [data-admin-nav-child] {
     padding-top: 0.52rem !important;
     padding-bottom: 0.52rem !important;
   }

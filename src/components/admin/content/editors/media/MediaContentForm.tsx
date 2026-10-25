@@ -2,6 +2,8 @@
 import { mediaContentSlot } from "../../../../../lib/media-center/detail-page-config";
 
 import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
+import type { TopicDraftSession } from "../../../../../lib/admin/content/topic-revision";
+import { applyTopicFormDraftFields, getTopicDraftDisplayDate } from "../content-form-definition";
 
 import { createAdminFormErrorState } from "../../../../../lib/admin/form-runtime";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
@@ -10,9 +12,10 @@ import {
   getContentTypeLabel,
   type MediaEditableContentType,
 } from "../../../../../lib/admin/content/content-types";
-import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
+import { VIDEO_PROVIDERS, normalizeVideoUrl, type MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import { mediaRowToPublishInput } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { saveContentForm } from "../../../../../app/admin/content/topics/editor-actions/save";
+import { readMediaVideoEmbed } from "../../../../../app/admin/content/topics/media-actions/validation";
 import ContentReviewPanel from "../../../content-workflow/ContentReviewPanel";
 import ContentBasicDataPanel from "../ContentBasicDataPanel";
 import ContentDisplaySettings from "../ContentDisplaySettings";
@@ -21,6 +24,7 @@ import ContentEditorShell, {
 } from "../ContentEditorShell";
 import ContentPublishingOptions from "../ContentPublishingOptions";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
+import AdminCard from "../../../ui/AdminCard";
 import AdminMediaGalleryField from "../../../media/AdminMediaGalleryField";
 import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
 import MediaEntitySeoPanel from "./MediaEntitySeoPanel";
@@ -87,6 +91,7 @@ type MediaContentFormProps = {
   }>;
   returnPath?: string;
   errorMessage?: string | null;
+  draftSession?: TopicDraftSession;
 };
 
 const DEFAULT_CONTENT =
@@ -94,10 +99,12 @@ const DEFAULT_CONTENT =
 
 function getVideoDefaults(payload?: MediaTopicPayload | null) {
   if (!payload || payload.kind !== "video") {
-    return { videoUrl: "", duration: "", thumbnail: "" };
+    return { videoUrl: "", provider: "youtube" as const, startSeconds: "", duration: "", thumbnail: "" };
   }
   return {
     videoUrl: payload.video_url,
+    provider: payload.provider,
+    startSeconds: payload.start_seconds ? String(payload.start_seconds) : "",
     duration: payload.duration ?? "",
     thumbnail: payload.thumbnail ?? "",
   };
@@ -116,13 +123,14 @@ export default function MediaContentForm({
   series,
   returnPath = "/admin/content/topics",
   errorMessage,
+  draftSession,
 }: MediaContentFormProps) {
   const adapter = getContentEditorAdapter(contentType);
+  const videoPanel = contentType === "video";
   const content = mode === "edit"
     ? values?.content ?? ""
     : values?.content?.trim() ? values.content : DEFAULT_CONTENT;
   const videoDefaults = getVideoDefaults(values?.media_payload);
-  const galleryDefaults = getGalleryDefaults(values?.media_payload);
   const formId = mode === "edit" ? "content-edit-form" : "content-create-form";
   const templateContext = { target: "media", mediaContentType: contentType } as const;
   const initialModelValue = {
@@ -132,10 +140,14 @@ export default function MediaContentForm({
     seoTitle: values?.seo_title ?? "",
     seoDescription: values?.seo_description ?? "",
     focusKeyword: values?.focus_keyword ?? "",
+    ...(videoPanel ? {
+      videoUrl: videoDefaults.videoUrl,
+      image: values?.image ?? "",
+      videoProvider: videoDefaults.provider,
+      videoStartSeconds: videoDefaults.startSeconds,
+      videoThumbnail: videoDefaults.thumbnail,
+    } : {}),
   };
-  const selectedCategory = categories.find(
-    (category) => category.id === values?.category_id,
-  );
   const availableSeries = series
     .filter(
       (item) =>
@@ -148,45 +160,70 @@ export default function MediaContentForm({
       slug,
       category_id,
     }));
-  const publishInitial = mediaRowToPublishInput({
-    title: values?.title,
-    slug: values?.slug,
-    excerpt: values?.excerpt,
-    content: values?.content,
-    image: values?.image,
-    image_alt: values?.image_alt,
-    category_slug: selectedCategory?.slug ?? values?.category_slug ?? "",
-    content_type: contentType,
-    media_payload: values?.media_payload,
-    seo_title: values?.seo_title,
-    seo_description: values?.seo_description,
-    focus_keyword: values?.focus_keyword,
-    canonical_url: values?.canonical_url,
-    og_image: values?.og_image,
-    og_image_alt: values?.og_image_alt,
-  }) ?? {
-    title: "",
-    slug: "",
-    excerpt: "",
-    content: "",
-    image: "",
-    imageAlt: "",
-    categorySlug: selectedCategory?.slug ?? "",
-    contentType,
-    mediaPayload: null,
-    seoTitle: "",
-    seoDescription: "",
-    focusKeyword: "",
-    canonicalUrl: "",
-    ogImage: "",
-    ogImageAlt: "",
-  };
-
   function renderTabs(model: ContentEditorModel) {
+    const effectiveValues = applyTopicFormDraftFields<MediaContentFormValues>(values ?? {}, model.recoveryFields, contentType);
+    const videoDefaults = getVideoDefaults(effectiveValues.media_payload);
+    const galleryDefaults = getGalleryDefaults(effectiveValues.media_payload);
+    const selectedCategory = categories.find(category => category.id === effectiveValues.category_id);
+    const selectedSeries = availableSeries.find(item => item.id === effectiveValues.series_id);
+    const publishInitial = mediaRowToPublishInput({
+      title: effectiveValues.title,
+      slug: effectiveValues.slug,
+      excerpt: effectiveValues.excerpt,
+      content: effectiveValues.content,
+      image: effectiveValues.image,
+      image_alt: effectiveValues.image_alt,
+      category_slug: selectedCategory?.slug ?? effectiveValues.category_slug ?? "",
+      content_type: contentType,
+      media_payload: effectiveValues.media_payload,
+      seo_title: effectiveValues.seo_title,
+      seo_description: effectiveValues.seo_description,
+      focus_keyword: effectiveValues.focus_keyword,
+      canonical_url: effectiveValues.canonical_url,
+      og_image: effectiveValues.og_image,
+      og_image_alt: effectiveValues.og_image_alt,
+    }) ?? {
+      title: "",
+      slug: "",
+      excerpt: "",
+      content: "",
+      image: "",
+      imageAlt: "",
+      categorySlug: selectedCategory?.slug ?? "",
+      contentType,
+      mediaPayload: null,
+      seoTitle: "",
+      seoDescription: "",
+      focusKeyword: "",
+      canonicalUrl: "",
+      ogImage: "",
+      ogImageAlt: "",
+    };
+
     const specializedBodyEditor =
       adapter.body === "video" ? (
         <div className="space-y-5">
           <MediaVideoFields
+            requestMetaEmbed={readMediaVideoEmbed}
+            presentation="panel"
+            videoUrl={model.value.videoUrl ?? ""}
+            onVideoUrlChange={(nextValue) => model.setField("videoUrl", nextValue)}
+            videoProvider={model.value.videoProvider ?? "youtube"}
+            onVideoProviderChange={(nextProvider) => {
+              if (nextProvider === (model.value.videoProvider ?? "youtube")) return;
+              model.setField("videoProvider", nextProvider);
+              if (model.value.videoUrl && !normalizeVideoUrl(nextProvider, model.value.videoUrl)) {
+                model.setField("videoUrl", "");
+              }
+              if (!VIDEO_PROVIDERS.find((provider) => provider.value === nextProvider)?.supportsStartTime) {
+                model.setField("videoStartSeconds", "");
+              }
+            }}
+            videoStartSeconds={model.value.videoStartSeconds ?? ""}
+            onVideoStartSecondsChange={(nextValue) => model.setField("videoStartSeconds", nextValue)}
+            videoThumbnail={model.value.videoThumbnail ?? ""}
+            mainImage={model.value.image ?? ""}
+            onVideoThumbnailChange={(nextValue) => model.setField("videoThumbnail", nextValue)}
             defaultVideoUrl={videoDefaults.videoUrl}
             defaultDuration={videoDefaults.duration}
             defaultThumbnail={videoDefaults.thumbnail}
@@ -196,12 +233,23 @@ export default function MediaContentForm({
       ) : adapter.body === "gallery" ? (
         <div className="space-y-5">
           <AdminMediaGalleryField
-        mediaSlot={mediaContentSlot("galleryImage")}
-valueMode="items"
+            mediaSlot={mediaContentSlot("galleryImage")}
+            valueMode="items"
             name="gallery_image_url"
             altName="gallery_image_alt"
             captionName="gallery_image_caption"
             label="صور المعرض"
+            presentation="panel"
+            actionPresentation="card"
+            desktopColumns={4}
+            allowAdd
+            allowReplace
+            allowRemove
+            allowReorder
+            showAlt
+            showCaption
+            enableDragDrop
+            dragFromImage
             defaultItems={galleryDefaults}
             focusTargetId="gallery_image_url"
             altFocusTargetId="gallery_image_alt"
@@ -210,30 +258,34 @@ valueMode="items"
         </div>
       ) : (
         <TopicMarkdownEditor
-          defaultValue={content}
+          defaultValue={effectiveValues.content ?? content}
           value={model.value.content}
           onValueChange={(nextValue) => model.setField("content", nextValue)}
           variant="compact"
+          presentation="panel"
           draftIdentity={`topic:${contentType}:${values?.id ?? "create"}`}
           baselineRevision={values?.updated_at ?? null}
+          formDraftManaged={model.recoveryEnabled}
         />
       );
     const bodyEditor = (
       <div className="space-y-5">
         {specializedBodyEditor}
         {contentType === "news" || contentType === "site_update" ? (
+          <AdminCard presentation="premium" className="min-w-0 p-3">
           <label className="block space-y-2">
             <span className="text-sm font-semibold text-white/75">المشروع المرتبط</span>
             <input
               name="media_project"
-              defaultValue={values?.media_project ?? ""}
+              defaultValue={effectiveValues.media_project ?? ""}
               placeholder="مثال: D174"
               className={adminFormFieldClassName()}
             />
             <AdminFormError name="media_project" />
           </label>
+          </AdminCard>
         ) : (
-          <input type="hidden" name="media_project" value={values?.media_project ?? ""} readOnly />
+          <input type="hidden" name="media_project" value={effectiveValues.media_project ?? ""} readOnly />
         )}
       </div>
     );
@@ -242,59 +294,80 @@ valueMode="items"
       {
         id: "basic",
         navigationLabel: "المحتوى",
-        sectionHeading: "البيانات الأساسية والمحتوى",
-        sectionDescription:
-          "حرر البيانات المشتركة ثم أكمل الحقول المتخصصة التي يملكها هذا النوع فقط.",
         icon: adapter.body === "markdown" ? "content" as const : "media" as const,
         content: (
           <ContentBasicDataPanel
+            presentation="panel"
+            heading="البيانات الأساسية والمحتوى"
+            description="حرر البيانات المشتركة ثم أكمل الحقول المتخصصة التي يملكها هذا النوع فقط."
             formId={formId}
             contentType={contentType}
             mode={mode}
+            slugDraftRestored={Object.hasOwn(model.recoveryFields ?? {}, "slug")}
             categories={categories}
             series={availableSeries}
-            contentEditor={bodyEditor}
+            contentEditor={adapter.body === "markdown" ? bodyEditor : null}
             controlledValues={{
               title: model.value.title,
               excerpt: model.value.excerpt,
             }}
             onControlledValueChange={model.setField}
-            displaySettings={
-              <ContentDisplaySettings
-                showTitle={values?.show_title_on_page}
-                showImage={values?.show_image_on_page}
-                showExcerpt={values?.show_excerpt_on_page}
-                showDate={values?.show_date_on_page}
-                showCategory={values?.show_category_on_page}
-                showSeries={values?.show_series_on_page}
-                showIntroCard={values?.show_intro_card_on_page}
-              />
-            }
+            onImageValueChange={videoPanel ? (nextValue) => model.setField("image", nextValue) : undefined}
             values={{
-              title: values?.title,
-              slug: values?.slug,
-              excerpt: values?.excerpt,
-              image: values?.image,
-              imageAlt: values?.image_alt,
-              categoryId: values?.category_id,
-              seriesId: values?.series_id,
-              series: values?.series,
-              seriesSlug: values?.series_slug,
+              title: effectiveValues.title,
+              slug: effectiveValues.slug,
+              excerpt: effectiveValues.excerpt,
+              image: effectiveValues.image,
+              imageAlt: effectiveValues.image_alt,
+              categoryId: effectiveValues.category_id,
+              seriesId: effectiveValues.series_id,
+              series: selectedSeries?.name ?? effectiveValues.series,
+              seriesSlug: selectedSeries?.slug ?? effectiveValues.series_slug,
             }}
+          />
+        ),
+      },
+      ...(contentType === "video" || contentType === "gallery" ? [
+        {
+          id: contentType,
+          navigationLabel: contentType === "video" ? "الفيديو" : "معرض الصور",
+          icon: "media" as const,
+          content: (
+            <AdminCard presentation="premium" className="min-w-0 p-3">
+              {bodyEditor}
+            </AdminCard>
+          ),
+        },
+      ] : []),
+      {
+        id: "display",
+        navigationLabel: "إعدادات العرض",
+        icon: "settings" as const,
+        content: (
+          <ContentDisplaySettings
+            sectionHeading="إعدادات العرض"
+            columns={4}
+            introCardSpan={1}
+            presentation="premium-inline"
+            showTitle={effectiveValues.show_title_on_page}
+            showImage={effectiveValues.show_image_on_page}
+            showExcerpt={effectiveValues.show_excerpt_on_page}
+            showDate={effectiveValues.show_date_on_page}
+            showCategory={effectiveValues.show_category_on_page}
+            showSeries={effectiveValues.show_series_on_page}
+            showIntroCard={effectiveValues.show_intro_card_on_page}
           />
         ),
       },
       {
         id: "seo",
         navigationLabel: "SEO",
-        sectionHeading: "تحسين محركات البحث والمشاركة",
-        sectionDescription:
-          "استخدم عقد Entity SEO الموحد ومعايناته ومسار التصحيح نفسه.",
         icon: "seo" as const,
         content: (
           <MediaEntitySeoPanel seoSettings={seoSettings}
+            presentation="panel"
             contentType={contentType}
-            values={values}
+            values={effectiveValues}
             controlledValues={{
               title: model.value.title,
               excerpt: model.value.excerpt,
@@ -310,9 +383,11 @@ valueMode="items"
       {
         id: "publish",
         navigationLabel: "المراجعة",
+        sectionHeaderPresentation: "premium" as const,
         icon: "publish" as const,
         content: (
           <ContentReviewPanel
+            presentation="panel"
             formId={formId}
             initial={publishInitial}
             controlledValues={{
@@ -325,30 +400,32 @@ valueMode="items"
             }}
             publishingOptions={
               <ContentPublishingOptions
-                status={values?.status ?? "unpublished"}
-                featured={Boolean(values?.is_featured)}
-                popular={Boolean(values?.is_popular)}
+                presentation="panel"
+                status={effectiveValues.status ?? "unpublished"}
+                featured={Boolean(effectiveValues.is_featured)}
+                popular={Boolean(effectiveValues.is_popular)}
                 publishedAt={values?.published_at}
-                dateLabel={values?.date_label}
+                dateLabel={effectiveValues.date_label}
+                draftDisplayDate={getTopicDraftDisplayDate(model.recoveryFields, values?.published_at)}
               />
             }
-            status={values?.status ?? "unpublished"}
+            status={effectiveValues.status ?? "unpublished"}
             publishedAt={values?.published_at}
-            dateLabel={values?.date_label}
-            featured={Boolean(values?.is_featured)}
-            popular={Boolean(values?.is_popular)}
+            dateLabel={effectiveValues.date_label}
+            featured={Boolean(effectiveValues.is_featured)}
+            popular={Boolean(effectiveValues.is_popular)}
             updatedAt={values?.updated_at}
             contentTypeLabel={getContentTypeLabel(contentType)}
             categoryLabel={selectedCategory?.name ?? "—"}
-            seriesLabel={values?.series ?? "—"}
+            seriesLabel={selectedSeries?.name ?? effectiveValues.series ?? "—"}
             initialDisplay={{
-              title: values?.show_title_on_page,
-              image: values?.show_image_on_page,
-              excerpt: values?.show_excerpt_on_page,
-              date: values?.show_date_on_page,
-              category: values?.show_category_on_page,
-              series: values?.show_series_on_page,
-              introCard: values?.show_intro_card_on_page,
+              title: effectiveValues.show_title_on_page,
+              image: effectiveValues.show_image_on_page,
+              excerpt: effectiveValues.show_excerpt_on_page,
+              date: effectiveValues.show_date_on_page,
+              category: effectiveValues.show_category_on_page,
+              series: effectiveValues.show_series_on_page,
+              introCard: effectiveValues.show_intro_card_on_page,
             }}
           />
         ),
@@ -358,6 +435,7 @@ valueMode="items"
 
   return (
       <ContentEditorShell
+        draftSession={draftSession}
         action={saveContentForm}
         contentType={contentType}
         mode={mode}

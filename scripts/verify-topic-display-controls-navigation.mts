@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFile(resolve(root, path), "utf8");
@@ -10,6 +13,125 @@ function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+function hasVisibleSafeArticleDisplayDefaults(create: string, edit: string, shared: string) {
+  const parse = (source: string) => ts.createSourceFile("display.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const bindings = [
+    ["showTitle", "show_title_on_page"],
+    ["showImage", "show_image_on_page"],
+    ["showCategory", "show_category_on_page"],
+    ["showSeries", "show_series_on_page"],
+    ["showExcerpt", "show_excerpt_on_page"],
+    ["showDate", "show_date_on_page"],
+    ["showIntroCard", "show_intro_card_on_page"],
+  ] as const;
+  const elements = (tree: ts.SourceFile, tag: string) => {
+    const result: ts.JsxOpeningLikeElement[] = [];
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(tree) === tag) result.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    return result;
+  };
+  const attribute = (node: ts.JsxOpeningLikeElement, name: string) => {
+    const value = node.attributes.properties.find((property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText() === name)?.initializer;
+    return value && ts.isStringLiteral(value) ? value.text : value && ts.isJsxExpression(value) ? value.expression?.getText() : undefined;
+  };
+  const [createTree, editTree, sharedTree] = [create, edit, shared].map(parse);
+  const createUses = elements(createTree!, "ContentDisplaySettings"), editUses = elements(editTree!, "ContentDisplaySettings"), controls = elements(sharedTree!, "TopicFormSwitch");
+  const canonical = [createTree!, editTree!].every((tree) => tree.statements.some((node) => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./ContentDisplaySettings" && node.importClause?.name?.text === "ContentDisplaySettings" && !node.importClause.isTypeOnly));
+  const definition = sharedTree!.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ContentDisplaySettings");
+  const params = definition?.parameters[0]?.name;
+  const recoveryProjection = (tree: ts.SourceFile, name: string, original: string) => {
+    const canonicalImport = tree.statements.some((node) => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./content-form-definition" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => binding.name.text === "applyTopicFormDraftFields" && !binding.propertyName));
+    let projected = false;
+    const visit = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && node.name.getText(tree) === name && node.initializer && ts.isCallExpression(node.initializer)) {
+        projected = node.initializer.expression.getText(tree) === "applyTopicFormDraftFields" && node.initializer.arguments.map(argument => argument.getText(tree)).join("|") === `${original}|model.recoveryFields|"article"`;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    return canonicalImport && projected;
+  };
+  const defaultValues = createTree!.statements.flatMap(node => ts.isFunctionDeclaration(node) && node.body ? [...node.body.statements] : [])
+    .flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
+    .find(node => node.name.getText(createTree) === "defaultValues")?.initializer;
+  const createDisplayDefaultsOmitted = defaultValues && ts.isObjectLiteralExpression(defaultValues) && !defaultValues.properties.some(node => ts.isSpreadAssignment(node) || (ts.isPropertyAssignment(node) && bindings.some(([, field]) => node.name.getText(createTree) === field)));
+  return canonical && createUses.length === 1 && editUses.length === 1 && controls.length === bindings.length && Boolean(params && ts.isObjectBindingPattern(params) && bindings.every(([prop, field]) => params.elements.some((node) => node.name.getText(sharedTree) === prop && node.initializer?.kind === ts.SyntaxKind.TrueKeyword) && controls.filter((node) => attribute(node, "name") === field && attribute(node, "defaultChecked") === `${prop} !== false`).length === 1)) &&
+    createDisplayDefaultsOmitted && recoveryProjection(createTree!, "values", "defaultValues") && recoveryProjection(editTree!, "effectiveTopic", "topic") &&
+    createUses[0]!.attributes.properties.every((node) => ts.isJsxAttribute(node) && ["columns", "introCardSpan", "presentation", "sectionHeading", ...bindings.map(([prop]) => prop)].includes(node.name.getText(createTree))) &&
+    bindings.every(([prop, field]) => attribute(createUses[0]!, prop) === `values.${field}`) &&
+    [createUses[0]!, editUses[0]!].every((node) => attribute(node, "sectionHeading") === "إعدادات العرض" && attribute(node, "introCardSpan") === "1") &&
+    editUses[0]!.attributes.properties.every(ts.isJsxAttribute) && bindings.every(([prop, field]) => attribute(editUses[0]!, prop) === `effectiveTopic.${field}`);
+}
+
+/** Execute selected real source owners; presentation dependencies are opaque React element types. */
+function executeArticleDisplayProjection(create: string, edit: string, shared: string) {
+  const nativeRequire = createRequire(import.meta.url);
+  const cache = new Map<string, Record<string, unknown>>();
+  const loadSource = (file: string): Record<string, unknown> => {
+    const absolute = resolve(root, file);
+    const cached = cache.get(absolute);
+    if (cached) return cached;
+    const sourceModule = { exports: {} as Record<string, unknown> };
+    cache.set(absolute, sourceModule.exports);
+    const requireSource = (specifier: string) => {
+      if (specifier.startsWith(".")) {
+        const target = resolve(dirname(absolute), specifier);
+        const source = [target, `${target}.ts`, `${target}.tsx`].find(candidate => existsSync(candidate));
+        if (source) return loadSource(source);
+      }
+      return nativeRequire(specifier);
+    };
+    const compiled = ts.transpileModule(readFileSync(absolute, "utf8"), { fileName: absolute, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
+    new Function("require", "module", "exports", compiled.outputText)(requireSource, sourceModule, sourceModule.exports);
+    return sourceModule.exports;
+  };
+  const hydrate = loadSource("src/components/admin/content/editors/content-form-definition.ts").applyTopicFormDraftFields as (values: Record<string, unknown>, fields: Record<string, string[]> | null, type: string) => Record<string, unknown>;
+  const tree = ts.createSourceFile("display.tsx", shared, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ContentDisplaySettings");
+  assert.ok(owner, "The real shared display function must be present");
+  const compiled = ts.transpileModule(owner.getText(tree), { fileName: "display.tsx", compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } });
+  const displayModule = { exports: {} as Record<string, unknown> };
+  const dependencies = ["AdminFormGrid", "AdminFormGridItem", "AdminCard", "AdminModuleSectionHeader", "AdminModuleTabIcon", "TopicFormSwitch"];
+  new Function("require", "module", "exports", ...dependencies, "ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", compiled.outputText)(nativeRequire, displayModule, displayModule.exports, ...dependencies, "canonical-header-token");
+  const display = displayModule.exports.default as (props: Record<string, unknown>) => unknown;
+  const propsFromActualConsumer = (source: string, values: Record<string, unknown>) => {
+    const sourceTree = ts.createSourceFile("consumer.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let usage: ts.JsxOpeningLikeElement | undefined;
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(sourceTree) === "ContentDisplaySettings") usage = node;
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceTree);
+    assert.ok(usage);
+    return Object.fromEntries(usage.attributes.properties.filter(ts.isJsxAttribute).filter(attribute => /^show[A-Z]/.test(attribute.name.getText(sourceTree))).map(attribute => {
+      assert.ok(attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression);
+      return [attribute.name.getText(sourceTree), new Function("values", "effectiveTopic", `return (${attribute.initializer.expression.getText(sourceTree)});`)(values, values)];
+    }));
+  };
+  const controls = (value: unknown): Record<string, boolean> => {
+    const result: Record<string, boolean> = {};
+    const visit = (node: unknown) => {
+      if (Array.isArray(node)) { node.forEach(visit); return; }
+      if (!node || typeof node !== "object" || !("props" in node)) return;
+      const element = node as { type: unknown; props: Record<string, unknown> };
+      if (element.type === "TopicFormSwitch") result[String(element.props.name)] = Boolean(element.props.defaultChecked);
+      visit(element.props.children);
+    };
+    visit(value);
+    return result;
+  };
+  const nativeFields = Object.keys(controls(display({})));
+  return {
+    freshCreate: controls(display(propsFromActualConsumer(create, hydrate({}, null, "article")))),
+    recoveredCreate: controls(display(propsFromActualConsumer(create, hydrate({}, Object.fromEntries(nativeFields.map(field => [field, []])), "article")))),
+    savedEdit: controls(display(propsFromActualConsumer(edit, hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), null, "article")))),
+    recoveredEdit: controls(display(propsFromActualConsumer(edit, hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), Object.fromEntries(nativeFields.map(field => [field, ["on"]])), "article")))),
+  };
 }
 
 const fields = [
@@ -122,10 +244,39 @@ check(
 
 check(
   "Article create and edit adopt the extension from the same owner with visible-safe defaults",
-  articleCreate.includes("<ContentDisplaySettings />") &&
-    ["showDate", "showCategory", "showSeries", "showIntroCard"].every((field) =>
-      articleEdit.includes(`${field}={topic.`),
-    ),
+  hasVisibleSafeArticleDisplayDefaults(articleCreate, articleEdit, displaySettings),
+);
+
+check(
+  "Article display defaults reject hidden create values, lost persisted values, changed shared defaults and parallel ownership",
+  !hasVisibleSafeArticleDisplayDefaults(articleCreate.replace("<ContentDisplaySettings", "<ContentDisplaySettings showDate={false}"), articleEdit, displaySettings) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate, articleEdit.replace("showDate={effectiveTopic.show_date_on_page}", "showDate={true}"), displaySettings) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate, articleEdit, displaySettings.replace("showDate = true", "showDate = false")) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate, articleEdit, displaySettings.replace("defaultChecked={showDate !== false}", "defaultChecked={true}")) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate.replace('from "./ContentDisplaySettings"', 'from "./ParallelDisplaySettings"'), articleEdit, displaySettings) &&
+    !hasVisibleSafeArticleDisplayDefaults(`${articleCreate}\nconst duplicate = <ContentDisplaySettings />;`, articleEdit, displaySettings),
+);
+
+const actualDisplayProjection = executeArticleDisplayProjection(articleCreate, articleEdit, displaySettings);
+check(
+  "the real shared display function keeps fresh Create visible and restores explicit unchecked draft controls",
+  Object.keys(actualDisplayProjection.freshCreate).length > 0 &&
+    Object.values(actualDisplayProjection.freshCreate).every(Boolean) &&
+    Object.values(actualDisplayProjection.recoveredCreate).every(value => value === false) &&
+    Object.keys(actualDisplayProjection.freshCreate).join("|") === Object.keys(actualDisplayProjection.recoveredCreate).join("|"),
+);
+check(
+  "the real hydration adapter and Edit JSX preserve saved false values and restore explicit checked draft controls",
+  Object.values(actualDisplayProjection.savedEdit).every(value => value === false) &&
+    Object.values(actualDisplayProjection.recoveredEdit).every(Boolean) &&
+    Object.keys(actualDisplayProjection.savedEdit).join("|") === Object.keys(actualDisplayProjection.freshCreate).join("|"),
+);
+check(
+  "display adoption rejects hidden Create defaults, disconnected recovery projections and missing explicit recovered props",
+  !hasVisibleSafeArticleDisplayDefaults(articleCreate.replace("{ content: defaultContent }", "{ content: defaultContent, show_date_on_page: false }"), articleEdit, displaySettings) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate.replace("defaultValues, model.recoveryFields", "defaultValues, null"), articleEdit, displaySettings) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate, articleEdit.replace("topic, model.recoveryFields", "topic, null"), displaySettings) &&
+    !hasVisibleSafeArticleDisplayDefaults(articleCreate.replace("showDate={values.show_date_on_page}", ""), articleEdit, displaySettings),
 );
 
 check(
@@ -138,7 +289,7 @@ check(
 check(
   "all five media Admin types adopt the same seven-field owner and persistence contract",
   ["showDate", "showCategory", "showSeries", "showIntroCard"].every((field) =>
-    mediaEditor.includes(`${field}={values?.show_`),
+    mediaEditor.includes(`${field}={effectiveValues.show_`),
   ) &&
     fields.every(
       (field) =>

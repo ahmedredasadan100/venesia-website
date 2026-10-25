@@ -75,6 +75,7 @@ export default async function TopicCategoriesPage({
     return (
       <AdminPageExperience state="error">
         <AdminPageContextHeader
+          visualPreset="categories"
           eyebrow="CATEGORIES CONTROL"
           title="إدارة التصنيفات"
           description="من هنا تُدار تصنيفات موضوعات تهمك، مع تنظيم الظهور والربط بالمقالات والسلاسل وتحسين بنية المحتوى من مكان واحد."
@@ -94,6 +95,7 @@ export default async function TopicCategoriesPage({
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
+        visualPreset="categories"
         eyebrow="CATEGORIES CONTROL"
         title="إدارة التصنيفات"
         description="من هنا تُدار تصنيفات موضوعات تهمك، مع تنظيم الظهور والربط بالمقالات والسلاسل وتحسين بنية المحتوى من مكان واحد."

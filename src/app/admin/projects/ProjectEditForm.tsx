@@ -27,6 +27,7 @@ import {
   AdminFormActions,
   AdminFormError,
   AdminFormField,
+  AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormRuntime,
   AdminFormSection,
@@ -97,7 +98,7 @@ function SectionCard({
       }
       description={description}
     >
-      {children}
+      <div className={ADMIN_FORM_STACK_CLASS_NAME}>{children}</div>
     </AdminFormSection>
   );
 }
@@ -211,10 +212,10 @@ function BasicTab({
   const project = bundle.project;
   const [slug, setSlug] = useState(project.slug);
   return (
-    <div className="space-y-4">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <SectionCard>
         <div className="grid gap-5 xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.1fr)]">
-          <div className="space-y-4">
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
             <Field name="arabic_name" label="اسم المشروع بالعربية" required>
               <input
                 id="arabic_name"
@@ -251,7 +252,7 @@ function BasicTab({
               />
               <AdminFormError name="slug" />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <AdminFormGrid columns={2} presentation="aligned-fields">
               <Field name="homepage_order" label="ترتيب الصفحة الرئيسية">
                 <input
                   id="homepage_order"
@@ -270,10 +271,9 @@ function BasicTab({
                 value="true"
                 uncheckedValue="false"
                 defaultChecked={project.show_on_homepage}
-                surface
-                className="self-end"
+                embedded
               />
-            </div>
+            </AdminFormGrid>
             <Field name="brochure_url" label="رابط كتيّب المشروع">
               <input
                 id="brochure_url"
@@ -366,7 +366,7 @@ function BasicTab({
             alt={project.image_alt}
           />
         </div>
-        <div className="mt-5">
+        <div>
           <Field
             name="short_description"
             label="وصف الهيرو والبوكس الصغير"
@@ -391,9 +391,9 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
   const project = bundle.project;
   const [mediaType, setMediaType] = useState(project.overview_media_type);
   return (
-    <div className="space-y-4">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <SectionCard>
-        <div className="space-y-4">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           <Field name="overview_title" label="عنوان القسم (اختياري)">
             <input
               id="overview_title"
@@ -422,7 +422,7 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
 
       <SectionCard number={3} title="وسائط النظرة العامة">
         <div
-          className="mb-4 flex flex-wrap gap-3"
+          className="flex flex-wrap gap-3"
           role="radiogroup"
           aria-label="نوع الوسيط الرئيسي"
         >
@@ -465,7 +465,7 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
             maxItems={1}
           />
         </div>
-        <div className="mt-5 border-t border-white/10 pt-5">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           <h3 className="mb-3 text-sm font-bold text-white/80">صور داعمة</h3>
           <ProjectImageCollectionEditor
             section="overview"
@@ -481,7 +481,7 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
 function DeliveryTab({ bundle }: { bundle: ProjectEntryBundle }) {
   const project = bundle.project;
   return (
-    <div className="space-y-4">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <SectionCard>
         <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.36fr)_minmax(0,1fr)]">
           <Field name="delivery_title" label="عنوان القسم (اختياري)">
@@ -583,12 +583,12 @@ export default function ProjectEditForm({
         "حدّد الموقع الإداري والإحداثيات والطرق والمعالم المحيطة بالمشروع.",
       icon: "location" as const,
       content: (
-        <div className="space-y-4">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           <SectionCard
             title="إعدادات عرض قسم الموقع"
             description="تخص هذه الخيارات قسم «عن الموقع» داخل صفحة هذا المشروع فقط، ولا تؤثر على Hero أو Featured أو Listing أو أي Module آخر."
           >
-            <div className="grid gap-4 sm:grid-cols-2">
+            <AdminFormGrid columns={2} presentation="aligned-fields">
               <AdminFormSwitch
                 name="show_location_label"
                 label="إظهار العنوان التفصيلي"
@@ -609,7 +609,7 @@ export default function ProjectEditForm({
                 }
                 surface
               />
-            </div>
+            </AdminFormGrid>
           </SectionCard>
           <SectionCard>
             <Field name="location_title" label="عنوان قسم الموقع (اختياري)">
@@ -657,7 +657,7 @@ export default function ProjectEditForm({
         "مخططات الوحدات والمساحات وصور المعماري والفرش المرتبطة بها.",
       icon: "plans" as const,
       content: (
-        <div className="space-y-4">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           <SectionCard>
             <Field
               name="plans_title"
@@ -694,7 +694,7 @@ export default function ProjectEditForm({
         "معرض المشروع الكامل من الصور ومقاطع الفيديو المرتبة.",
       icon: "media" as const,
       content: (
-        <div className="space-y-4">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           <SectionCard>
             <Field name="gallery_title" label="عنوان قسم المعرض (اختياري)">
               <input
@@ -756,6 +756,7 @@ export default function ProjectEditForm({
       formId={formId}
       className={ADMIN_FORM_STACK_CLASS_NAME}
     >
+      <div className={ADMIN_FORM_STACK_CLASS_NAME} data-project-entry-form-stack="">
       {bundle.project.id ? (
         <input type="hidden" name="id" value={bundle.project.id} />
       ) : null}
@@ -792,6 +793,7 @@ export default function ProjectEditForm({
         title={mode === "create" ? "إنشاء المشروع" : "حفظ التغييرات"}
         description="يحفظ المشروع وجميع العناصر التابعة كعملية ذرية واحدة."
       />
+      </div>
     </AdminFormRuntime>
   );
 }

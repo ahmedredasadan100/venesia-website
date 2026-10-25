@@ -1,13 +1,13 @@
 "use client";
 
+import { adminFormLabelClassName, adminFormHintClassName } from "../../../../lib/admin/admin-ui-styles";
 import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
-import {
+import { ADMIN_FORM_STACK_CLASS_NAME,
   AdminCard,
   AdminFormControlHeader,
   AdminFormGrid,
@@ -59,7 +59,7 @@ export default function ProjectsHubListingModuleEditor({
     bold: true,
   });
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <input type="hidden" name="config_schema" value="projects-hub-listing" />
       <input
         type="hidden"
@@ -68,7 +68,7 @@ export default function ProjectsHubListingModuleEditor({
       />
 
       <>
-        <p className="text-xs leading-6 text-white/45">
+        <p className={adminFormHintClassName({ textInset: true })}>
           يتحكّم في عنوان قسم القائمة فقط، وليس في بيانات المشروعات.
         </p>
 
@@ -76,7 +76,6 @@ export default function ProjectsHubListingModuleEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="النص التمهيدي"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_eyebrow"
               boldName="eyebrow_bold"
@@ -99,7 +98,6 @@ export default function ProjectsHubListingModuleEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="عنوان القسم"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_title"
               boldName="title_bold"
@@ -119,19 +117,14 @@ export default function ProjectsHubListingModuleEditor({
         </ModuleEditorFieldGrid>
       </>
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading
-          intent="domain"
-          actions={
+      <ModuleEditorSection presentation="panel" title="فلاتر المشروعات" actions={
             <VisibilityToggle
               name="show_filter_bar"
               label="إظهار شريط الفلاتر"
               defaultChecked={config.showFilterBar !== false}
             />
-          }
-        >
-          فلاتر المشروعات
-        </ModuleEditorSectionHeading>
+          }>
+
 
         <ModuleEditorFieldGrid className="mt-4">
           <ModuleEditorField nature="standard" span={4}>
@@ -178,11 +171,9 @@ export default function ProjectsHubListingModuleEditor({
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="domain">
-          البيانات الظاهرة داخل بطاقة المشروع
-        </ModuleEditorSectionHeading>
-        <p className="text-xs leading-6 text-white/45">
+      <ModuleEditorSection presentation="panel" title="البيانات الظاهرة داخل بطاقة المشروع">
+
+        <p className={adminFormHintClassName({ textInset: true })}>
           إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة فقط. لا يغيّر قيم
           المشروع في قاعدة البيانات.
         </p>
@@ -226,14 +217,12 @@ export default function ProjectsHubListingModuleEditor({
         </AdminFormGrid>
       </ModuleEditorSection>
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="settings">
-          إعدادات عرض القائمة
-        </ModuleEditorSectionHeading>
+      <ModuleEditorSection presentation="panel" title="إعدادات عرض القائمة">
+
 
         <AdminFormGrid columns={3} className="mt-4">
           <AdminCard presentation="premium" className="self-start p-3">
-          <label className="block space-y-2">
+          <label className={adminFormLabelClassName({ textInset: true })}>
             <AdminFormControlHeader title="عدد المشروعات في الصفحة" presentation="compact-inline" icon={<AdminModuleTabIcon name="overview" />} />
             <input
               name="page_size"

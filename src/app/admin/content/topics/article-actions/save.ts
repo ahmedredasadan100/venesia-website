@@ -39,9 +39,12 @@ import {
   getAdminContentSeriesCategoryError,
 } from "../../../../../lib/admin/content/category-hierarchy";
 import {
-  ArticleSlugConflictError,
   createArticleDomainRecord,
 } from "./create-domain";
+import {
+  isTopicSlugUniqueViolation,
+  TopicSlugConflictError,
+} from "../../../../../lib/admin/content/topic-write-errors";
 import {
   parseTopicRevisionToken,
   TOPIC_REVISION_CONFLICT_CODE,
@@ -321,7 +324,10 @@ export async function saveArticleContentAdapter(
           const { data, error } = await guardedQuery
             .select("id, slug")
             .maybeSingle();
-          if (error) throw new Error(error.message);
+          if (isTopicSlugUniqueViolation(error)) {
+            throw new TopicSlugConflictError(payload.slug, { cause: error });
+          }
+          if (error) throw new Error(error.message, { cause: error });
           if (!data) throw new TopicRevisionConflictError();
           return data;
         },
@@ -332,7 +338,7 @@ export async function saveArticleContentAdapter(
     if (error instanceof TopicRevisionConflictError) {
       return revisionConflict();
     }
-    if (error instanceof ArticleSlugConflictError) {
+    if (error instanceof TopicSlugConflictError) {
       return formFailure("هذا الـ Slug مستخدم بالفعل في موضوع آخر.", {
         slug: ["اختر Slug مختلفًا."],
       });

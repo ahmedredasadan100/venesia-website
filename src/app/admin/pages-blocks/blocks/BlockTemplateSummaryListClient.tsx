@@ -10,6 +10,7 @@ import {
   useAdminFeedback,
 } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminEntityListFilters from "../../../../components/admin/entity-list/AdminEntityListFilters";
+import { ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH } from "../../../../components/admin/ui/AdminDataGrid";
 import MediaSynchronizationWarningNotice from "../../../../components/admin/media/MediaSynchronizationWarningNotice";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
@@ -18,6 +19,7 @@ import {
   AdminBulkActionBar,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
+  AdminDataGridActionsHeaderCell,
   AdminDataGridCenterCell,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
@@ -129,7 +131,7 @@ export default function BlockTemplateSummaryListClient({
         ADMIN_DATA_GRID_COLUMNS.checkbox,
         ADMIN_DATA_GRID_COLUMNS.primaryStandard,
         visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slug : null,
-        visibleColumnSet.has("detail") ? "160px" : null,
+        visibleColumnSet.has("detail") ? `${ADMIN_DATA_GRID_REFERENCE_COLUMN_WIDTH}px` : null,
         visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
       ]
@@ -320,6 +322,7 @@ export default function BlockTemplateSummaryListClient({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="media"
         eyebrow="إدارة الموديولات"
         title={title}
         description={description}
@@ -410,8 +413,8 @@ export default function BlockTemplateSummaryListClient({
         onQueryPatch={pagination.applyQueryPatch}
       />
 
-      <AdminDataGrid className="!rounded-t-none !border-t-0">
-        <AdminDataGridHeader columns={columns}>
+      <AdminDataGrid className="!rounded-t-none !border-t-0" scrollLabel={`جدول ${title}`}>
+        <AdminDataGridHeader columns={columns} horizontalScroll>
           <AdminDataGridCheckboxCell>
             <AdminDataGridCheckbox
               checked={selection.allSelected}
@@ -475,7 +478,7 @@ export default function BlockTemplateSummaryListClient({
               </AdminDataGridSortLabel>
             </AdminDataGridCenterCell>
           ) : null}
-          <div className="text-center">الإجراءات</div>
+          <AdminDataGridActionsHeaderCell>الإجراءات</AdminDataGridActionsHeaderCell>
         </AdminDataGridHeader>
 
         {paginatedRows.map((row) => {
@@ -530,7 +533,7 @@ export default function BlockTemplateSummaryListClient({
           };
 
           return (
-            <AdminDataGridRow key={row.id} columns={columns}>
+            <AdminDataGridRow key={row.id} columns={columns} horizontalScroll>
               <AdminDataGridCheckboxCell>
                 <AdminDataGridCheckbox
                   checked={selection.selectedSet.has(row.id)}

@@ -14,8 +14,9 @@ import { ModuleEditorStatusSwitch } from "../../../../../components/admin/page-b
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
-  ADMIN_FORM,
+  ADMIN_FORM_STACK_CLASS_NAME,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminActionButton,
   AdminBulkActionBar,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
@@ -30,19 +31,22 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
+  AdminFormActions,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormSection,
   AdminFormListboxSelect,
   AdminFormRuntime,
-  AdminModalCancelButton,
-  AdminModalPrimaryButton,
   AdminPageExperience,
   AdminPageContextHeader,
   AdminTablePagination,
   VenesiaModal,
   adminFormFieldClassName,
-  adminFormLabelClassName,
   type AdminRowActionsCapability,
   useAdminGridSelection,
 } from "../../../../../components/admin/ui";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../../components/admin/ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../../lib/admin/admin-ui-styles";
 import { useAdminTable } from "../../../../../components/admin/table-engine";
 import type { AdminFormRuntimeHandle } from "../../../../../components/admin/ui/AdminFormRuntime";
 import { PlusIcon } from "../../../../../components/admin/AdminRowActions";
@@ -361,19 +365,20 @@ export default function HeroManagerClient({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="blocks"
         eyebrow="إدارة الموديولات"
         title="إدارة الهيرو"
         description="جدول موحّد لقوالب Hero: القوالب الصفحية تُربط بالصفحات، والـvariants الديناميكية تُدار من الشاشة نفسها."
         actions={
-          <button
+          <AdminActionButton
             type="button"
             onClick={() => setShowCreateModal(true)}
             disabled={Boolean(loadError)}
-            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-2xl bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d]"
+            variant="primary"
           >
             <PlusIcon />
             إضافة هيرو
-          </button>
+          </AdminActionButton>
         }
       />
 
@@ -471,7 +476,7 @@ export default function HeroManagerClient({
         />
 
         <AdminDataGrid className="!rounded-t-none !border-t-0">
-          <AdminDataGridHeader columns={gridColumns}>
+          <AdminDataGridHeader columns={gridColumns} horizontalScroll>
             <AdminDataGridCheckboxCell>
               <AdminDataGridCheckbox
                 inputRef={selection.selectAllRef}
@@ -642,6 +647,7 @@ export default function HeroManagerClient({
               <AdminDataGridRow
                 key={hero.id}
                 columns={gridColumns}
+                horizontalScroll
                 className="border-b border-white/8 last:border-b-0"
               >
                 <AdminDataGridCheckboxCell>
@@ -729,13 +735,13 @@ export default function HeroManagerClient({
           onSuccess={() => setShowCreateModal(false)}
           runtimeRef={createRuntimeRef}
           formId="create-hero-template-form"
-          className={ADMIN_FORM.gridTwoCol}
         >
-          {({ fieldErrors, pending, requestClose }) => (
-            <>
-              <AdminFormError className="md:col-span-2" />
-              <label className={adminFormLabelClassName()}>
-                اسم الهيرو
+          {({ fieldErrors }) => (
+            <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+              <AdminFormError />
+              <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="hero-create-identity" sectionHeading="بيانات الهيرو" icon="overview" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+              <AdminFormGrid columns={2}>
+              <AdminFormField label="اسم الهيرو" required presentation="panel">
                 <input
                   name="name"
                   required
@@ -749,9 +755,8 @@ export default function HeroManagerClient({
                   }
                 />
                 <AdminFormError name="name" />
-              </label>
-              <label className={adminFormLabelClassName()}>
-                المعرّف التقني
+              </AdminFormField>
+              <AdminFormField label="المعرّف التقني" presentation="panel">
                 <input
                   name="slug"
                   placeholder="hero-about"
@@ -765,18 +770,18 @@ export default function HeroManagerClient({
                   }
                 />
                 <AdminFormError name="slug" />
-              </label>
-              <label className={`${adminFormLabelClassName()} md:col-span-2`}>
-                وصف داخلي
+              </AdminFormField>
+              <AdminFormField label="وصف داخلي" presentation="panel" className="md:col-span-2">
                 <input
                   name="template_description"
                   placeholder="وصف مختصر يظهر في جدول الإدارة"
                   className={adminFormFieldClassName()}
                 />
-              </label>
+              </AdminFormField>
               <AdminFormListboxSelect
                 name="variant"
                 label="نمط العرض"
+                presentation="panel"
                 defaultValue="internal-page"
                 options={HERO_TEMPLATE_VARIANT_OPTIONS_AR}
               />
@@ -785,18 +790,10 @@ export default function HeroManagerClient({
                 className="md:col-span-2"
               />
               <input type="hidden" name="style_preset" value="cinematic-gold" />
-              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end md:col-span-2">
-                <AdminModalCancelButton
-                  onClick={requestClose}
-                  disabled={pending}
-                >
-                  إلغاء
-                </AdminModalCancelButton>
-                <AdminModalPrimaryButton type="submit" disabled={pending}>
-                  {pending ? "جار الإنشاء..." : "إنشاء وفتح"}
-                </AdminModalPrimaryButton>
-              </div>
-            </>
+              </AdminFormGrid>
+              </AdminFormSection>
+              <AdminFormActions submitLabel="إنشاء وفتح" pendingLabel="جار الإنشاء..." closeLabel="إلغاء" description={null} icon={<AdminModuleTabIcon name="settings" />} />
+            </div>
           )}
         </AdminFormRuntime>
       </VenesiaModal>

@@ -17,6 +17,7 @@ export default function ProjectLocationsPage() {
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="locations"
         eyebrow="PROJECT LOCATION DOMAIN"
         title="إدارة مواقع المشاريع"
         description="إدارة المحافظات والمدن والمناطق الرئيسية والفرعية داخل تسلسل واحد معتمد للمشاريع."

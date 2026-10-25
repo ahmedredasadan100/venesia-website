@@ -1,19 +1,29 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ReactNode, useRef, useState, useTransition } from "react";
-import { AdminFormPendingFields } from "../../../../components/admin/ui/AdminFormRuntime";
+import { useRef, useState, useTransition } from "react";
+import { AdminFormActions, AdminFormPendingFields } from "../../../../components/admin/ui/AdminFormRuntime";
+import { AdminStickyFormBar } from "../../../../components/admin/ui/AdminForm";
 import { shouldAcceptAdminFormSource } from "../../../../lib/admin/form-runtime";
 
 import {
   AdminFeedbackChannelViewport,
   useAdminFeedback,
 } from "../../../../components/admin/AdminFeedbackProvider";
-import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
+import AdminModuleTabs, { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
 import {
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminActionButton,
+  AdminCard,
   AdminConfirmDialog,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormSection,
   AdminPageContextHeader,
+  AdminPageExperience,
+  adminFormFieldClassName,
 } from "../../../../components/admin/ui";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
 import {
   hasAdminSelfAccountFieldErrors,
   normalizeAdminEmail,
@@ -38,25 +48,10 @@ type SecuritySettingsClientProps = {
 
 const FEEDBACK_CHANNEL = "settings-security";
 
-const fieldClassName =
-  "w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-white outline-none focus:border-[#D8B87A]/45";
+const fieldClassName = adminFormFieldClassName();
 
 function fieldClassNameWithError(hasError: boolean) {
-  return [
-    fieldClassName,
-    hasError ? "border-red-400/40 bg-red-500/[0.03] focus:border-red-400/55" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function FormFieldError({ error, children }: { error?: string; children: ReactNode }) {
-  return (
-    <div>
-      {children}
-      {error ? <p className="mt-1 text-right text-[11px] leading-5 text-red-300/90">{error}</p> : null}
-    </div>
-  );
+  return adminFormFieldClassName(hasError ? "border-red-400/40 bg-red-500/[0.03] focus:border-red-400/55" : "");
 }
 
 export default function SecuritySettingsClient({
@@ -168,9 +163,7 @@ export default function SecuritySettingsClient({
       sectionDescription: "عيّن كلمة مرور جديدة بعد التحقق من كلمة المرور الحالية.",
       icon: "settings" as const,
       content: (
-        <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
           <form
-            className="grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               resetFeedback();
@@ -204,6 +197,12 @@ export default function SecuritySettingsClient({
               });
             }}
           >
+            <AdminFormPendingFields pending={isPending}>
+              <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+              <AdminFormGrid columnRatio="3:2" presentation="equal-height-columns">
+              <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="security-password" sectionHeading="تغيير كلمة المرور" sectionDescription="عيّن كلمة مرور جديدة بعد التحقق من كلمة المرور الحالية." icon="settings" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+              <AdminFormGrid columns={1}>
+            <AdminFormField label="كلمة المرور الحالية" required presentation="panel">
             <input
               type="password"
               required
@@ -212,6 +211,8 @@ export default function SecuritySettingsClient({
               placeholder="كلمة المرور الحالية"
               className={fieldClassName}
             />
+            </AdminFormField>
+            <AdminFormField label="كلمة المرور الجديدة" required presentation="panel">
             <input
               type="password"
               required
@@ -221,6 +222,8 @@ export default function SecuritySettingsClient({
               placeholder="كلمة المرور الجديدة"
               className={fieldClassName}
             />
+            </AdminFormField>
+            <AdminFormField label="تأكيد كلمة المرور الجديدة" required presentation="panel">
             <input
               type="password"
               required
@@ -230,15 +233,15 @@ export default function SecuritySettingsClient({
               placeholder="تأكيد كلمة المرور الجديدة"
               className={fieldClassName}
             />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="w-fit rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 py-3 text-sm font-semibold text-[#06101C] disabled:opacity-60"
-            >
-              حفظ كلمة المرور
-            </button>
+            </AdminFormField>
+              </AdminFormGrid>
+              </AdminFormSection>
+              <div aria-hidden="true" className="hidden md:grid"><AdminCard presentation="premium">{null}</AdminCard></div>
+              </AdminFormGrid>
+              <AdminFormActions pending={isPending} showClose={false} title="إجراءات النموذج" submitLabel="حفظ كلمة المرور" description={null} icon={<AdminModuleTabIcon name="content" />} />
+              </div>
+            </AdminFormPendingFields>
           </form>
-        </section>
       ),
     },
     {
@@ -248,9 +251,7 @@ export default function SecuritySettingsClient({
       sectionDescription: "حدّث الاسم الكامل والبريد الإلكتروني؛ تغيير البريد يتطلب كلمة المرور الحالية.",
       icon: "content" as const,
       content: (
-        <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
           <form
-            className="grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
               if (isPending) return;
@@ -310,22 +311,18 @@ export default function SecuritySettingsClient({
               });
             }}
           >
-            <AdminFormPendingFields pending={isPending} className="grid max-w-xl gap-4">
-              <div className="space-y-2 text-right">
-                <span className="block text-xs font-medium text-white/48">اسم المستخدم</span>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3">
-                  <p className="text-sm text-white/85" dir="ltr">
+            <AdminFormPendingFields pending={isPending}>
+              <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+              <AdminFormGrid columnRatio="3:2" presentation="equal-height-columns">
+              <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="security-account" sectionHeading="بيانات الحساب الحالي" sectionDescription="حدّث الاسم الكامل والبريد الإلكتروني؛ تغيير البريد يتطلب كلمة المرور الحالية." icon="content" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+              <AdminFormGrid columns={1}>
+              <AdminFormField label="اسم المستخدم" presentation="panel" hint="لا يمكن تغيير اسم المستخدم من هذه الصفحة.">
+                  <p className={fieldClassName} dir="ltr">
                     {username}
                   </p>
-                </div>
-                <p className="text-[11px] leading-5 text-white/45">
-                  لا يمكن تغيير اسم المستخدم من هذه الصفحة.
-                </p>
-              </div>
+              </AdminFormField>
 
-              <label className="block space-y-2 text-right text-xs font-medium text-white/48">
-                <span>الاسم الكامل</span>
-                <FormFieldError error={accountFieldErrors.full_name}>
+              <AdminFormField label="الاسم الكامل" presentation="panel" error={accountFieldErrors.full_name}>
                   <input
                     type="text"
                     value={accountForm.full_name}
@@ -334,12 +331,9 @@ export default function SecuritySettingsClient({
                     aria-invalid={Boolean(accountFieldErrors.full_name)}
                     className={fieldClassNameWithError(Boolean(accountFieldErrors.full_name))}
                   />
-                </FormFieldError>
-              </label>
+              </AdminFormField>
 
-              <label className="block space-y-2 text-right text-xs font-medium text-white/48">
-                <span>البريد الإلكتروني</span>
-                <FormFieldError error={accountFieldErrors.email}>
+              <AdminFormField label="البريد الإلكتروني" presentation="panel" error={accountFieldErrors.email}>
                   <input
                     type="email"
                     value={accountForm.email}
@@ -349,13 +343,10 @@ export default function SecuritySettingsClient({
                     className={`${fieldClassNameWithError(Boolean(accountFieldErrors.email))} font-en`}
                     dir="ltr"
                   />
-                </FormFieldError>
-              </label>
+              </AdminFormField>
 
               {emailChanged ? (
-                <label className="block space-y-2 text-right text-xs font-medium text-white/48">
-                  <span>كلمة المرور الحالية</span>
-                  <FormFieldError error={accountFieldErrors.currentPassword}>
+                <AdminFormField label="كلمة المرور الحالية" presentation="panel" error={accountFieldErrors.currentPassword}>
                     <input
                       type="password"
                       value={accountForm.currentPassword}
@@ -364,20 +355,17 @@ export default function SecuritySettingsClient({
                       aria-invalid={Boolean(accountFieldErrors.currentPassword)}
                       className={fieldClassNameWithError(Boolean(accountFieldErrors.currentPassword))}
                     />
-                  </FormFieldError>
-                </label>
+                </AdminFormField>
               ) : null}
 
-              <button
-                type="submit"
-                disabled={isPending}
-                className="w-fit rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 py-3 text-sm font-semibold text-[#06101C] disabled:opacity-60"
-              >
-                حفظ بيانات الحساب
-              </button>
+              </AdminFormGrid>
+              </AdminFormSection>
+              <div aria-hidden="true" className="hidden md:grid"><AdminCard presentation="premium">{null}</AdminCard></div>
+              </AdminFormGrid>
+              <AdminFormActions pending={isPending} showClose={false} title="إجراءات النموذج" submitLabel="حفظ بيانات الحساب" description={null} icon={<AdminModuleTabIcon name="content" />} />
+              </div>
             </AdminFormPendingFields>
           </form>
-        </section>
       ),
     },
     {
@@ -387,9 +375,9 @@ export default function SecuritySettingsClient({
       sectionDescription: "راجع آخر دخول وأدر الجلسات النشطة للحساب الحالي.",
       icon: "publish" as const,
       content: (
-        <div className="space-y-5">
-          <section className="rounded-[28px] border border-white/10 bg-[#080B10]/78 p-5 md:p-6">
-            <div className="grid max-w-xl gap-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4 text-sm text-white/62">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+          <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="security-sessions" sectionHeading="الأمان والجلسات" sectionDescription="راجع آخر دخول وأدر الجلسات النشطة للحساب الحالي." icon="publish" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+            <AdminFormGrid columns={1}>
               <p>
                 <span className="text-white/45">آخر دخول: </span>
                 <span className="text-white/80">{formatAdminDateTime(lastLoginAt)}</span>
@@ -398,22 +386,21 @@ export default function SecuritySettingsClient({
                 عند تغيير كلمة المرور أو البريد أو إلغاء الجلسات، يتم إبطال الجلسات النشطة الأخرى حسب
                 السياسة الحالية للنظام.
               </p>
-            </div>
-          </section>
+            </AdminFormGrid>
+          </AdminFormSection>
 
-          <section className="rounded-[28px] border border-red-400/15 bg-red-500/5 p-5 md:p-6">
-            <h2 className="text-lg font-semibold text-red-100">تسجيل الخروج من جميع الجلسات</h2>
-            <p className="mt-2 text-sm leading-7 text-red-100/70">
-              يلغي جميع الجلسات النشطة على الأجهزة الأخرى ويُخرجك من الجلسة الحالية.
-            </p>
             <form
-              className="mt-5 grid max-w-xl gap-4"
               onSubmit={(event) => {
                 event.preventDefault();
                 resetFeedback();
                 setConfirmRevoke(true);
               }}
             >
+              <AdminFormPendingFields pending={isPending || revokePending}>
+                <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+                <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="security-revoke-sessions" sectionHeading="تسجيل الخروج من جميع الجلسات" sectionDescription="يلغي جميع الجلسات النشطة على الأجهزة الأخرى ويُخرجك من الجلسة الحالية." icon="security" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
+                <AdminFormGrid columns={1}>
+              <AdminFormField label="كلمة المرور الحالية" required presentation="panel">
               <input
                 type="password"
                 required
@@ -422,31 +409,38 @@ export default function SecuritySettingsClient({
                 placeholder="كلمة المرور الحالية"
                 className={fieldClassName}
               />
-              <button
-                ref={revokeTriggerRef}
+              </AdminFormField>
+                </AdminFormGrid>
+                </AdminFormSection>
+                <AdminStickyFormBar title="إجراءات النموذج" description={null} icon={<AdminModuleTabIcon name="content" />}>
+              <AdminActionButton
+                buttonRef={revokeTriggerRef}
                 type="submit"
                 disabled={isPending || revokePending}
-                className="w-fit rounded-2xl border border-red-400/25 bg-red-500/10 px-5 py-3 text-sm font-semibold text-red-100 disabled:opacity-60"
+                variant="danger"
               >
                 إلغاء جميع الجلسات
-              </button>
+              </AdminActionButton>
+                </AdminStickyFormBar>
+                </div>
+              </AdminFormPendingFields>
             </form>
-          </section>
         </div>
       ),
     },
   ];
 
   return (
-    <div className="space-y-7 pb-10" dir="rtl">
+    <AdminPageExperience as="div" className="pb-10" dir="rtl">
       <AdminPageContextHeader
+        visualPreset="security"
         eyebrow="ADMIN SETTINGS"
         title="الأمان"
         description="إدارة بيانات الدخول للحساب الحالي. يُشترط إدخال كلمة المرور الحالية قبل أي تغيير حساس."
       />
 
       <AdminModuleTabs
-        tabs={tabs}
+        tabs={tabs.map(tab => ({ ...tab, sectionHeading: undefined, sectionDescription: undefined }))}
         activePanelContext={
           <AdminFeedbackChannelViewport
             channel={FEEDBACK_CHANNEL}
@@ -465,6 +459,6 @@ export default function SecuritySettingsClient({
         onCancel={() => setConfirmRevoke(false)}
         onConfirm={revokeAllSessions}
       />
-    </div>
+    </AdminPageExperience>
   );
 }

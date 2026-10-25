@@ -26,6 +26,7 @@ export default async function NewProjectPage({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="projects"
         eyebrow="إدارة المشاريع"
         title="إضافة مشروع جديد"
         description="المشاريع / إضافة مشروع جديد — نموذج واحد لإنشاء بيانات المشروع والموقع والنظرة العامة والمخططات والتسليم والوسائط وتحسين محركات البحث."

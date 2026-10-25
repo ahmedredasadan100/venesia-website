@@ -2,7 +2,10 @@ import Link from "next/link";
 
 import AssignTemplateUsageWarning from "../../../../../../components/admin/page-blocks/AssignTemplateUsageWarning";
 import {
-  ADMIN_FORM,
+  AdminCard,
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminFormField,
+  AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormSwitch,
   AdminListboxSelect,
@@ -12,6 +15,8 @@ import {
   adminFormFieldClassName,
   adminFormLabelClassName,
 } from "../../../../../../components/admin/ui";
+import { AdminFormPendingFields } from "../../../../../../components/admin/ui/AdminFormRuntime";
+import { adminFormHintClassName } from "../../../../../../lib/admin/admin-ui-styles";
 import { getContentStatusMetadata } from "../../../../../../lib/admin/content/content-status-metadata";
 import type { PageBlockActionResult } from "../../../../../../lib/page-blocks/action-result";
 import {
@@ -120,7 +125,7 @@ export default function PageBlocksAssignModal({
                 ? assignMediaHubAction
                 : assignBlockAction
         }
-        className={ADMIN_FORM.gridTwoCol}
+        className={ADMIN_FORM_STACK_CLASS_NAME}
       >
         <input type="hidden" name="page_id" value={pageId} />
         {assignModuleKind !== "hero" &&
@@ -134,147 +139,166 @@ export default function PageBlocksAssignModal({
           value={assignVisible ? "true" : "false"}
         />
 
-        <div className={`${adminFormLabelClassName()} md:col-span-2`}>
-          <span id="assign-module-kind-label">نوع الموديول</span>
-          <AdminListboxSelect
-            value={assignModuleKind}
-            onChange={(value) => {
-              onAssignModuleKindChange(value as AssignableModuleKind);
-              onAssignTemplateIdChange(null);
-            }}
-            options={REGISTERED_SLOT_MODULE_KINDS.map((kind) => ({
-              value: kind,
-              label: moduleKindLabel(kind),
-            }))}
-            ariaLabelledBy="assign-module-kind-label"
-          />
-        </div>
+        <AdminFormPendingFields pending={assignPending} className="min-w-0">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+        <AdminFormGrid columns={2}>
+          <AdminCard presentation="premium" className="p-3 md:col-span-2">
+            <AdminFormGrid columns={1} density="compact">
+              <span id="assign-module-kind-label" className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>نوع الموديول</span></span>
+              <AdminListboxSelect
+                disabled={assignPending}
+                value={assignModuleKind}
+                onChange={(value) => {
+                  onAssignModuleKindChange(value as AssignableModuleKind);
+                  onAssignTemplateIdChange(null);
+                }}
+                options={REGISTERED_SLOT_MODULE_KINDS.map((kind) => ({
+                  value: kind,
+                  label: moduleKindLabel(kind),
+                }))}
+                ariaLabelledBy="assign-module-kind-label"
+              />
+            </AdminFormGrid>
+          </AdminCard>
 
-        <div className={`${adminFormLabelClassName()} md:col-span-2`}>
-          <AdminFormListboxSelect
-            name="template_id"
-            label="القالب"
-            required
-            disabled={templatesLoading || Boolean(templatesError) || assignPending}
-            loading={templatesLoading}
-            error={templatesError}
-            value={assignTemplateId ? String(assignTemplateId) : ""}
-            onChange={(next) => {
-              const value = Number(next);
-              onAssignTemplateIdChange(
-                Number.isFinite(value) && value > 0 ? value : null,
-              );
-            }}
-            placeholder="اختر قالب موديول…"
-            options={assignableTemplates.map((template) => ({
-              value: String(template.id),
-              label: `${template.name} (${getContentStatusMetadata(template.status).label})`,
-            }))}
-          />
-          {templatesError ? (
-            <AdminModalCancelButton onClick={onRetryTemplates}>
-              إعادة المحاولة
-            </AdminModalCancelButton>
-          ) : null}
-          <AssignTemplateUsageWarning
-            moduleKind={assignModuleKind}
-            templateId={assignTemplateId}
-            currentPageId={pageId}
-          />
-          <p className="text-xs leading-6 text-white/42">
-            القوالب المرتبطة بهذه الصفحة لا تظهر في القائمة. لإعادة استخدام
-            قالب، احذف الربط الحالي أو عدّله.
-          </p>
-          {!templatesLoading && !templatesError && !assignableTemplates.length ? (
-            <p className="text-xs text-amber-200/70">
-              {assignModuleKind === "hero" && heroAssignmentExists ? (
-                "هذه الصفحة مرتبطة بهيرو واحد بالفعل. عدّل الربط الحالي أو أزله أولًا."
-              ) : templateOptions.length ? (
-                "كل القوالب مرتبطة بهذه الصفحة بالفعل."
-              ) : (
-                <>
-                  لا توجد قوالب.{" "}
-                  <Link
-                    href={
-                      assignModuleKind === "hero"
-                        ? "/admin/pages-blocks/blocks/hero"
-                        : blockModuleListHref(assignModuleKind as PageBlockType)
-                    }
-                    className="text-[#D8B87A] underline"
-                  >
-                    أنشئ موديولًا أولًا
-                  </Link>
-                </>
-              )}
+          <AdminCard presentation="premium" className="p-3 md:col-span-2">
+            <AdminFormGrid columns={1} density="compact">
+              <AdminFormListboxSelect
+                name="template_id"
+                label="القالب"
+                presentation="panel"
+                required
+                disabled={templatesLoading || Boolean(templatesError) || assignPending}
+                loading={templatesLoading}
+                error={templatesError}
+                value={assignTemplateId ? String(assignTemplateId) : ""}
+                onChange={(next) => {
+                  const value = Number(next);
+                  onAssignTemplateIdChange(
+                    Number.isFinite(value) && value > 0 ? value : null,
+                  );
+                }}
+                placeholder="اختر قالب موديول…"
+                options={assignableTemplates.map((template) => ({
+                  value: String(template.id),
+                  label: `${template.name} (${getContentStatusMetadata(template.status).label})`,
+                }))}
+              />
+              {templatesError ? (
+                <AdminModalCancelButton onClick={onRetryTemplates}>
+                  إعادة المحاولة
+                </AdminModalCancelButton>
+              ) : null}
+              <AssignTemplateUsageWarning
+                moduleKind={assignModuleKind}
+                templateId={assignTemplateId}
+                currentPageId={pageId}
+              />
+              <p className={adminFormHintClassName({ textInset: true })}>
+                القوالب المرتبطة بهذه الصفحة لا تظهر في القائمة. لإعادة استخدام
+                قالب، احذف الربط الحالي أو عدّله.
+              </p>
+              {!templatesLoading && !templatesError && !assignableTemplates.length ? (
+                <p className={adminFormHintClassName({ textInset: true })}><span className="text-amber-200/70">
+                  {assignModuleKind === "hero" && heroAssignmentExists ? (
+                    "هذه الصفحة مرتبطة بهيرو واحد بالفعل. عدّل الربط الحالي أو أزله أولًا."
+                  ) : templateOptions.length ? (
+                    "كل القوالب مرتبطة بهذه الصفحة بالفعل."
+                  ) : (
+                    <>
+                      لا توجد قوالب.{" "}
+                      <Link
+                        href={
+                          assignModuleKind === "hero"
+                            ? "/admin/pages-blocks/blocks/hero"
+                            : blockModuleListHref(assignModuleKind as PageBlockType)
+                        }
+                        className="text-[#D8B87A] underline"
+                      >
+                        أنشئ موديولًا أولًا
+                      </Link>
+                    </>
+                  )}
+                </span></p>
+              ) : null}
+            </AdminFormGrid>
+          </AdminCard>
+
+          <AdminCard presentation="premium" className="p-3">
+            <AdminFormListboxSelect
+              name="slot"
+              label="موضع العرض"
+              presentation="panel"
+              defaultValue={slotOptions[0] ?? ""}
+              disabled={assignPending || slotOptions.length <= 1}
+              options={slotOptions.map((slot) => ({
+                value: slot,
+                label: regionLabels[slot] ?? slot,
+              }))}
+              sizing="full"
+            />
+            {!slotOptions.length ? (
+              <p className={adminFormHintClassName({ textInset: true })}><span className="text-amber-200/75">
+                هذا النوع لا يملك Position متوافقًا مع بنية الصفحة الحالية.
+              </span></p>
+            ) : null}
+          </AdminCard>
+
+          {assignModuleKind === "hero" ? (
+            <input type="hidden" name="sort_order" value="0" />
+          ) : (
+            <AdminCard presentation="premium" className="p-3">
+              <AdminFormField label="Order" presentation="panel">
+                <input
+                  name="sort_order"
+                  type="number"
+                  min={0}
+                  step={10}
+                  placeholder="تلقائي"
+                  className={adminFormFieldClassName()}
+                />
+              </AdminFormField>
+            </AdminCard>
+          )}
+
+          <AdminCard presentation="premium" className="p-3 md:col-span-2">
+            <AdminFormSwitch
+              label={<span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>ظاهر على الموقع</span></span>}
+              disabled={assignPending}
+              checked={assignVisible}
+              onChange={(event) => onAssignVisibleChange(event.target.checked)}
+              embedded
+            />
+          </AdminCard>
+
+          <p className={`${adminFormHintClassName({ textInset: true })} md:col-span-2`}><span className="text-amber-200/75">
+            الربط الظاهر لا يكفي وحده — القالب يجب أن يكون{" "}
+            <span className="font-semibold">منشورًا</span> ليظهر على الموقع العام.
+          </span></p>
+
+          {!assignState.ok && assignState.message ? (
+            <p className="text-sm text-red-300 md:col-span-2">
+              {assignState.message}
             </p>
           ) : null}
+          {!assignHeroState.ok && assignHeroState.message ? (
+            <p className="text-sm text-red-300 md:col-span-2">
+              {assignHeroState.message}
+            </p>
+          ) : null}
+          {!assignMediaSidebarState.ok && assignMediaSidebarState.message ? (
+            <p className="text-sm text-red-300 md:col-span-2">
+              {assignMediaSidebarState.message}
+            </p>
+          ) : null}
+          {!assignMediaHubState.ok && assignMediaHubState.message ? (
+            <p className="text-sm text-red-300 md:col-span-2">
+              {assignMediaHubState.message}
+            </p>
+          ) : null}
+        </AdminFormGrid>
         </div>
-
-        <AdminFormListboxSelect
-          name="slot"
-          label="موضع العرض"
-          defaultValue={slotOptions[0] ?? ""}
-          disabled={slotOptions.length <= 1}
-          options={slotOptions.map((slot) => ({
-            value: slot,
-            label: regionLabels[slot] ?? slot,
-          }))}
-        />
-        {!slotOptions.length ? (
-          <p className="text-xs leading-6 text-amber-200/75">
-            هذا النوع لا يملك Position متوافقًا مع بنية الصفحة الحالية.
-          </p>
-        ) : null}
-
-        {assignModuleKind === "hero" ? (
-          <input type="hidden" name="sort_order" value="0" />
-        ) : (
-          <label className={adminFormLabelClassName()}>
-            Order
-            <input
-              name="sort_order"
-              type="number"
-              min={0}
-              step={10}
-              placeholder="تلقائي"
-              className={adminFormFieldClassName()}
-            />
-          </label>
-        )}
-
-        <AdminFormSwitch
-          label="ظاهر على الموقع"
-          checked={assignVisible}
-          onChange={(event) => onAssignVisibleChange(event.target.checked)}
-          surface
-          className="md:col-span-2"
-        />
-
-        <p className="text-xs leading-6 text-amber-200/75 md:col-span-2">
-          الربط الظاهر لا يكفي وحده — القالب يجب أن يكون{" "}
-          <span className="font-semibold">منشورًا</span> ليظهر على الموقع العام.
-        </p>
-
-        {!assignState.ok && assignState.message ? (
-          <p className="text-sm text-red-300 md:col-span-2">
-            {assignState.message}
-          </p>
-        ) : null}
-        {!assignHeroState.ok && assignHeroState.message ? (
-          <p className="text-sm text-red-300 md:col-span-2">
-            {assignHeroState.message}
-          </p>
-        ) : null}
-        {!assignMediaSidebarState.ok && assignMediaSidebarState.message ? (
-          <p className="text-sm text-red-300 md:col-span-2">
-            {assignMediaSidebarState.message}
-          </p>
-        ) : null}
-        {!assignMediaHubState.ok && assignMediaHubState.message ? (
-          <p className="text-sm text-red-300 md:col-span-2">
-            {assignMediaHubState.message}
-          </p>
-        ) : null}
+        </AdminFormPendingFields>
       </form>
     </VenesiaModal>
   );

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import AdminPageContextHeader from "../../components/admin/ui/AdminPageContextHeader";
+import AdminActionButton from "../../components/admin/ui/AdminActionButton";
 import AdminPageExperience from "../../components/admin/ui/AdminPageExperience";
 import { logError } from "../../lib/logging";
 
@@ -29,13 +30,13 @@ export default function AdminError({
         status="error"
         variant="minimal"
         actions={
-          <button
+          <AdminActionButton
             type="button"
             onClick={retry}
-            className="rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+            variant="dark"
           >
             إعادة المحاولة
-          </button>
+          </AdminActionButton>
         }
       />
     </AdminPageExperience>

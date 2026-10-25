@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation, ADMIN_DATA_GRID_SELECTION, type AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import {
   AdminDataGrid,
@@ -54,6 +55,8 @@ export type AdminEntityListSizingStrategy<TKey extends string> =
   | {
       mode: "flexible";
       columnKey: TKey;
+      /** Preserve an explicitly declared reading width instead of responsive compression. */
+      preserveMinimumWidth?: boolean;
     }
   | {
       mode: "fixed";
@@ -65,6 +68,7 @@ export type AdminEntityListTableProps<
   TSortKey extends string,
   TId extends AdminGridId = AdminGridId,
 > = {
+  presentation?: AdminCollectionPresentation;
   rows: readonly TRow[];
   queryPending?: boolean;
   columns: readonly AdminEntityColumnDef<TRow, TKey, TSortKey>[];
@@ -103,6 +107,7 @@ export default function AdminEntityListTable<
   TId extends AdminGridId = AdminGridId,
 >({
   rows,
+  presentation: requestedPresentation = "default",
   queryPending = false,
   columns,
   getRowId,
@@ -121,6 +126,7 @@ export default function AdminEntityListTable<
   rowClassName,
   onMutationResult,
 }: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const selectionColumnWidth = 46;
   const showSelection = Boolean(selection);
   const flexibleColumnKey =
@@ -225,7 +231,9 @@ export default function AdminEntityListTable<
       column.key === flexibleColumnKey
         ? Math.min(
             currentWidth,
-            ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH,
+            // Cinematic tables keep the declared reading width and use the
+            // existing horizontal scrollport instead of squeezing the title.
+            sizingStrategy.mode === "flexible" && sizingStrategy.preserveMinimumWidth ? currentWidth : ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH,
           )
         : Math.min(
             currentWidth,
@@ -400,6 +408,7 @@ export default function AdminEntityListTable<
 
   return (
     <AdminDataGrid
+      presentation={presentation}
       queryPending={queryPending}
       scrollLabel={scrollLabel}
       className={`max-w-full ${className}`.trim()}
@@ -414,7 +423,7 @@ export default function AdminEntityListTable<
           width: tableWidth,
           minWidth: constrainedMinimumTableWidth,
         }}
-        className="w-full table-fixed border-separate border-spacing-0 text-right"
+        className={`w-full table-fixed border-separate border-spacing-0 text-right ${presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.dataGrid.table : ADMIN_DATA_GRID_SELECTION.table}`}
       >
         <colgroup>
           {showSelection ? (
@@ -444,6 +453,7 @@ export default function AdminEntityListTable<
                 className="sticky start-0 z-40 w-[46px] min-w-[46px] bg-[#10151C] text-center"
               >
                 <AdminDataGridCheckbox
+                  presentation={presentation}
                   inputRef={selection.selectAllRef}
                   checked={selection.allSelected}
                   onChange={(event) =>
@@ -563,12 +573,14 @@ export default function AdminEntityListTable<
                 className={`group ${ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES} border-b border-white/8 transition hover:bg-white/[0.035] ${
                   rowClassName?.(row) ?? ""
                 }`}
+                data-selected={selection?.selectedSet.has(rowId) ? "true" : undefined}
                 data-entity-row-id={String(rowId)}
                 data-entity-depth={depth}
               >
                 {showSelection && selection ? (
                   <td className="sticky start-0 z-30 w-[46px] min-w-[46px] border-b border-white/8 bg-[#080B10] text-center transition group-last:border-b-0 group-hover:bg-[#0D1117]">
                     <AdminDataGridCheckbox
+                      presentation={presentation}
                       checked={selection.selectedSet.has(rowId)}
                       onChange={(event) =>
                         selection.toggleOne(rowId, event.currentTarget.checked)

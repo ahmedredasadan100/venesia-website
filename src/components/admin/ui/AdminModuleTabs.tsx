@@ -1,10 +1,76 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AdminFormControlHeader } from "./AdminForm";
+import { AdminDataGridActionIcon } from "./AdminDataGrid";
+import {
+  ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
+  ADMIN_PREMIUM_SECTION_HEADER_ACCENT_CLASS_NAME,
+  ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME,
+  ADMIN_PREMIUM_SECTION_HEADER_CLASS_NAME,
+  ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME,
+} from "../../../lib/admin/admin-ui-styles";
 import type { ModuleEditorIconToken } from "../../../lib/page-composition/slot-module-registry";
 
-export type AdminModuleTabIconName = ModuleEditorIconToken | "database" | "statistics";
+type AdminFormControlHeaderProps = {
+  title: ReactNode;
+  description?: ReactNode;
+  icon?: ReactNode;
+  presentation?: "default" | "leading-icon" | "compact-inline";
+};
+
+/** Label-safe presentation; the field owner supplies the accessible association. */
+export function AdminFormControlHeader({
+  title,
+  description,
+  icon,
+  presentation = "default",
+}: AdminFormControlHeaderProps) {
+  const compact = presentation === "compact-inline";
+  const leadingIcon = presentation === "leading-icon" || compact;
+  const iconFrame = icon ? (
+    <span
+      aria-hidden="true"
+      className={compact
+        ? "inline-flex size-6 shrink-0 items-center justify-center rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] [&>svg]:size-4"
+        : leadingIcon
+        ? "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] [&>svg]:size-5"
+        : "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.045] text-white/85 [&>svg]:size-5"}
+    >
+      {icon}
+    </span>
+  ) : null;
+
+  return (
+    <span
+      data-admin-form-control-header=""
+      data-admin-form-control-presentation={leadingIcon ? presentation : undefined}
+      className={compact
+        ? "flex min-w-0 items-center gap-1"
+        : leadingIcon
+        ? "flex min-w-0 items-center gap-3"
+        : "flex min-w-0 items-start justify-between gap-3"}
+    >
+      {leadingIcon ? iconFrame : null}
+      {leadingIcon && icon ? (
+        <span
+          aria-hidden="true"
+          className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent"
+        />
+      ) : null}
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className={`${compact ? "break-words " : ""}text-sm font-semibold text-white`}>{title}</span>
+        {description ? (
+          <span className="text-xs leading-5 text-white/55">{description}</span>
+        ) : null}
+      </span>
+      {!leadingIcon ? iconFrame : null}
+    </span>
+  );
+}
+
+export type AdminModuleTabIconName = ModuleEditorIconToken | "database" | "statistics" | "link" |
+  "categories" | "users" | "security" | "navigation" | "activity" |
+  "youtube" | "vimeo" | "facebook" | "tiktok" | "instagram";
 
 type AdminModuleTabNavigationLabel =
   | {
@@ -23,10 +89,10 @@ export type AdminModuleTab = AdminModuleTabNavigationLabel & {
   /** Full descriptive heading rendered inside the active panel. */
   sectionHeading?: ReactNode;
   sectionDescription?: ReactNode;
-  /** Optional composition styling for this panel header only. */
+  /** Optional surface/layout composition; section identity retains the canonical scale. */
   sectionHeaderClassName?: string;
-  /** Opt into the shared control-header scale; existing section headers stay unchanged. */
-  sectionHeaderPresentation?: "default" | "control";
+  /** Premium embeds at the edges of a canonical p-3 AdminCard; all variants share the identity scale. */
+  sectionHeaderPresentation?: "default" | "control" | "panel" | "premium";
   /** Optional compact context rendered opposite the active section title. */
   sectionSummary?: ReactNode;
   /** Semantic icon rendered by the shared owner. */
@@ -68,8 +134,49 @@ const ADMIN_EDITOR_TAB_ACTIVE_INDICATOR_CLASS_NAME =
   "pointer-events-none absolute bottom-0 start-6 end-6 h-0.5 rounded-t-full bg-[#D8B87A]";
 
 export function AdminModuleTabIcon({ name }: { name: AdminModuleTabIconName }) {
+  if (name === "link") return <AdminDataGridActionIcon action="copy-link" />;
+  if (name === "activity") return <AdminDataGridActionIcon action="activity" />;
   const glyph =
-    name === "database" ? (
+    name === "categories" ? (
+      <>
+        <rect x="9" y="2.5" width="6" height="5" rx="1" />
+        <path d="M12 7.5v4M5 11.5h14M5 11.5v4M19 11.5v4" />
+        <rect x="2" y="15.5" width="6" height="6" rx="1" />
+        <rect x="16" y="15.5" width="6" height="6" rx="1" />
+      </>
+    ) : name === "users" ? (
+      <>
+        <circle cx="9" cy="7" r="3.5" />
+        <path d="M2.5 21v-3a6.5 6.5 0 0 1 13 0v3M16 3.8a3.5 3.5 0 0 1 0 6.6M18 12.5a5.5 5.5 0 0 1 3.5 5.1V21" />
+      </>
+    ) : name === "security" ? (
+      <>
+        <path d="m12 2.5 8 3v6c0 4.5-3.4 7.9-8 10-4.6-2.1-8-5.5-8-10v-6Z" />
+        <path d="m8 11.8 2.6 2.6 5.4-5.6" />
+      </>
+    ) : name === "navigation" ? (
+      <>
+        <path d="M4 5h16M4 12h10M4 19h10m3-10 3 3-3 3" />
+        <circle cx="4" cy="5" r=".5" />
+      </>
+    ) : name === "youtube" ? (
+      <>
+        <rect x="2.5" y="5" width="19" height="14" rx="4" />
+        <path d="m10 9 5 3-5 3Z" fill="currentColor" stroke="none" />
+      </>
+    ) : name === "vimeo" ? (
+      <path d="M3 8c2-2 3-3 4-2s2 10 4 10c1 0 4-5 4-7 0-1-1-1-2 0 1-5 7-5 7-1 0 5-8 13-11 12C6 19 5 9 4 10l-1 1" />
+    ) : name === "facebook" ? (
+      <path d="M18 3h-3a5 5 0 0 0-5 5v2H7v4h3v7h4v-7h3l1-4h-4V8a1 1 0 0 1 1-1h3Z" />
+    ) : name === "tiktok" ? (
+      <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+    ) : name === "instagram" ? (
+      <>
+        <rect x="2" y="2" width="20" height="20" rx="5" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M17.5 6.5h.01" strokeWidth="2.5" />
+      </>
+    ) : name === "database" ? (
       <>
         <ellipse cx="12" cy="5" rx="8" ry="3" />
         <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
@@ -182,6 +289,42 @@ function focusNavigationTarget(targetId: string) {
       focusTarget?.focus({ preventScroll: true });
     });
   });
+}
+
+export function AdminModuleSectionHeader(tab: Pick<AdminModuleTab,
+  "id" | "sectionHeading" | "sectionDescription" | "sectionHeaderClassName" |
+  "sectionHeaderPresentation" | "sectionSummary" | "icon"
+> & {
+  /** Header-only premium composition; embedded card headers retain their margins. */
+  standalone?: boolean;
+}) {
+  // Existing embedded callers retain their geometry; the system chrome is shared.
+  const standalone = tab.standalone ?? !(tab.sectionHeaderPresentation === "premium" || tab.sectionHeaderPresentation === "panel");
+  return tab.sectionHeading ? (
+    <header
+      dir="rtl"
+      className={`${standalone
+        ? `relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`
+        : ADMIN_PREMIUM_SECTION_HEADER_CLASS_NAME} ${tab.sectionHeaderClassName ?? ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}`.trim()}
+      data-admin-tab-section-heading={tab.id}
+      data-admin-tab-section-presentation="premium"
+    >
+      <span aria-hidden="true" data-admin-tab-section-accent="premium" className={ADMIN_PREMIUM_SECTION_HEADER_ACCENT_CLASS_NAME} />
+      <div className="min-w-0 flex-auto">
+        <AdminFormControlHeader
+          presentation="leading-icon"
+          title={<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}
+          description={tab.sectionDescription}
+          icon={<AdminModuleTabIcon name={tab.icon ?? "section"} />}
+        />
+      </div>
+      {tab.sectionSummary ? (
+        <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 sm:ms-auto sm:w-auto" data-admin-tab-section-summary={tab.id}>
+          {tab.sectionSummary}
+        </div>
+      ) : null}
+    </header>
+  ) : null;
 }
 
 export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId, activeTabId, onActiveTabChange, nowrap = false, variant = "editor", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
@@ -329,52 +472,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
           hidden={tab.id !== activeId}
           className={tab.id === activeId ? "block" : "hidden"}
         >
-          {tab.sectionHeading ? (
-            <header
-              className={`mb-4 flex min-h-[76px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5 ${tab.sectionHeaderClassName ?? ""}`.trim()}
-              data-admin-tab-section-heading={tab.id}
-            >
-              {tab.sectionHeaderPresentation === "control" ? (
-                <div className="min-w-0 flex-1">
-                  <AdminFormControlHeader
-                    presentation="leading-icon"
-                    title={<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}
-                    description={tab.sectionDescription}
-                    icon={<AdminModuleTabIcon name={tab.icon ?? "section"} />}
-                  />
-                </div>
-              ) : (
-                <>
-                  <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">
-                    <AdminModuleTabIcon name={tab.icon ?? "section"} />
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent sm:h-9"
-                    data-admin-tab-section-accent
-                  />
-                  <span className="min-w-0 flex-1">
-                    <h2 className="text-lg font-semibold leading-6 text-white sm:text-xl sm:leading-7">
-                      {tab.sectionHeading}
-                    </h2>
-                    {tab.sectionDescription ? (
-                      <span className="mt-1 block max-w-3xl text-sm leading-5 text-white/45 sm:leading-6">
-                        {tab.sectionDescription}
-                      </span>
-                    ) : null}
-                  </span>
-                </>
-              )}
-              {tab.sectionSummary ? (
-                <div
-                  className="flex w-full min-w-0 flex-wrap items-center gap-2 border-t border-white/8 pt-3 sm:ms-auto sm:w-auto sm:max-w-[46%] sm:border-s sm:border-t-0 sm:ps-4 sm:pt-0"
-                  data-admin-tab-section-summary={tab.id}
-                >
-                  {tab.sectionSummary}
-                </div>
-              ) : null}
-            </header>
-          ) : null}
+          <AdminModuleSectionHeader {...tab} />
           {tab.id === activeId && activePanelContext ? (
             <div className="mb-4" data-admin-active-panel-context>
               {activePanelContext}

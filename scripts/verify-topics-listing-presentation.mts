@@ -394,16 +394,15 @@ check(
     !topicsEditor.includes('value: "topics"'),
 );
 check(
-  "Collection editor preserves standard defaults and four-column controls with opt-in shared premium surfaces",
-  collectionEditor.match(/const Section = premium \? AdminCard : ModuleEditorSection/gu)?.length === 2 &&
-    collectionEditor.match(/surfacePresentation = "default"/gu)?.length === 2 &&
-    collectionEditor.includes('const ControlCard = premium ? AdminCard : "div"') &&
-    topicsEditor.includes('surfacePresentation="premium"') &&
-    collectionEditor.includes('className="space-y-6"') &&
-    collectionEditor.includes("<ModuleEditorSectionHeading") &&
+  "Collection editor uses unified shared sections and four-column controls without a visual opt-in",
+  !collectionEditor.includes("surfacePresentation") &&
+    !topicsEditor.includes("surfacePresentation") &&
+    collectionEditor.includes("<ModuleEditorSection") &&
+    collectionEditor.includes("<AdminCard") &&
+    collectionEditor.includes("<AdminModuleSectionHeader") &&
+    collectionEditor.includes("className={ADMIN_FORM_STACK_CLASS_NAME}") &&
     collectionEditor.includes("<AdminFormGrid columns={4}") &&
-    collectionEditor.match(/MODULE_EDITOR_CONTROL_CARD_CLASS_NAME/gu)
-      ?.length === 5 &&
+    !collectionEditor.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME") &&
     !collectionEditor.includes("ModuleEditorFieldGrid") &&
     !collectionEditor.includes("data-collection-editor-layer") &&
     !collectionEditor.includes("eyebrow="),
@@ -427,7 +426,7 @@ check(
   "Listing adopts seven uniform shared Module Editor display cards",
   collectionEditor.match(/<ModuleEditorVisibilityAlignRow/gu)?.length === 7 &&
     collectionEditor.includes('data-collection-display-settings=""') &&
-    collectionEditor.includes("md:grid-cols-3") &&
+    collectionEditor.includes("<AdminFormGrid columns={3}>") &&
     !collectionEditor.includes("ContentDisplaySettings") &&
     [
       "show_title_on_page",

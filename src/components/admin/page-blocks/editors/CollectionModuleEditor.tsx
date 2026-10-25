@@ -4,12 +4,11 @@ import { useState } from "react";
 
 import {
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorVisibilityAlignRow,
-  MODULE_EDITOR_CONTROL_CARD_CLASS_NAME,
 } from "../ModuleEditorPresentation";
-import { AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect } from "../../ui";
-import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminCard, AdminFormGrid, AdminFormListboxSelect } from "../../ui";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   resolveCollectionDisplayTextFormatting,
@@ -41,8 +40,6 @@ export type CollectionModuleEditorProps<
   ItemsPerRow extends number,
   ItemLimit extends number,
 > = {
-  /** Visual opt-in only; domain presentation and persisted values stay unchanged. */
-  surfacePresentation?: "default" | "premium";
   /** Configuration-only composition delegates its header to the parent tab and display fields to a sibling panel. */
   section?: "all" | "configuration";
   selection: CollectionSelectionField<Collection>;
@@ -67,22 +64,17 @@ export type CollectionModuleEditorProps<
 export function CollectionModuleDisplayFormattingFields({
   display,
   heading = "إعدادات العرض",
-  surfacePresentation = "default",
 }: {
   display: CollectionDisplayOverrides;
   heading?: string;
-  surfacePresentation?: "default" | "premium";
 }) {
   const textFormatting = resolveCollectionDisplayTextFormatting(display);
-  const premium = surfacePresentation === "premium";
-  const Section = premium ? AdminCard : ModuleEditorSection;
 
   const cards = (
     <>
       <ModuleEditorVisibilityAlignRow
         label="العنوان"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="content" /> : undefined}
+        icon={<AdminModuleTabIcon name="content" />}
         showName="show_title_on_page"
         boldName="title_bold"
         alignmentName="title_alignment"
@@ -92,16 +84,14 @@ export function CollectionModuleDisplayFormattingFields({
       />
       <ModuleEditorVisibilityAlignRow
         label="الصورة"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="media" /> : undefined}
+        icon={<AdminModuleTabIcon name="media" />}
         showName="show_image_on_page"
         showDefault={display.image}
         controlMode="visibility-only"
       />
       <ModuleEditorVisibilityAlignRow
         label="التصنيف"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="section" /> : undefined}
+        icon={<AdminModuleTabIcon name="section" />}
         showName="show_category_on_page"
         boldName="category_bold"
         alignmentName="category_alignment"
@@ -111,8 +101,7 @@ export function CollectionModuleDisplayFormattingFields({
       />
       <ModuleEditorVisibilityAlignRow
         label="السلسلة"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="plans" /> : undefined}
+        icon={<AdminModuleTabIcon name="plans" />}
         showName="show_series_on_page"
         boldName="series_bold"
         alignmentName="series_alignment"
@@ -122,8 +111,7 @@ export function CollectionModuleDisplayFormattingFields({
       />
       <ModuleEditorVisibilityAlignRow
         label="المقتطف"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="content" /> : undefined}
+        icon={<AdminModuleTabIcon name="content" />}
         showName="show_excerpt_on_page"
         boldName="excerpt_bold"
         alignmentName="excerpt_alignment"
@@ -133,8 +121,7 @@ export function CollectionModuleDisplayFormattingFields({
       />
       <ModuleEditorVisibilityAlignRow
         label="التاريخ"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="overview" /> : undefined}
+        icon={<AdminModuleTabIcon name="overview" />}
         showName="show_date_on_page"
         boldName="date_bold"
         alignmentName="date_alignment"
@@ -144,8 +131,7 @@ export function CollectionModuleDisplayFormattingFields({
       />
       <ModuleEditorVisibilityAlignRow
         label="زر التفاصيل"
-        presentation={premium ? "premium" : "card"}
-        icon={premium ? <AdminModuleTabIcon name="publish" /> : undefined}
+        icon={<AdminModuleTabIcon name="publish" />}
         showName="show_details"
         boldName="details_bold"
         alignmentName="details_alignment"
@@ -166,20 +152,19 @@ export function CollectionModuleDisplayFormattingFields({
   );
 
   return (
-    <Section {...(premium ? { presentation: "premium" as const, className: "p-4" } : {})} data-collection-display-formatting-capability="">
-      {premium ? (
-        <AdminFormControlHeader title={heading} icon={<AdminModuleTabIcon name="settings" />} presentation="leading-icon" />
-      ) : (
-        <ModuleEditorSectionHeading intent="settings">{heading}</ModuleEditorSectionHeading>
-      )}
+    <ModuleEditorSection
+      presentation="panel"
+      data-collection-display-formatting-capability=""
+      header={<AdminModuleSectionHeader id="collection-display-formatting" sectionHeading={heading} icon="settings" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}
+    >
+
 
       <div
-        className={premium ? undefined : "mt-4 grid items-start gap-4 md:grid-cols-3"}
         data-collection-display-settings=""
       >
-        {premium ? <AdminFormGrid columns={3} className="mt-4">{cards}</AdminFormGrid> : cards}
+        <AdminFormGrid columns={3}>{cards}</AdminFormGrid>
       </div>
-    </Section>
+    </ModuleEditorSection>
   );
 }
 
@@ -196,7 +181,6 @@ export default function CollectionModuleEditor<
   selection,
   presentation,
   display,
-  surfacePresentation = "default",
   section = "all",
 }: CollectionModuleEditorProps<
   Collection,
@@ -204,9 +188,6 @@ export default function CollectionModuleEditor<
   ItemsPerRow,
   ItemLimit
 >) {
-  const premium = surfacePresentation === "premium";
-  const Section = premium ? AdminCard : ModuleEditorSection;
-  const ControlCard = premium ? AdminCard : "div";
   const [activePresentation, setActivePresentation] =
     useState<Presentation>(presentation.value);
   const [itemsPerRow, setItemsPerRow] =
@@ -215,19 +196,14 @@ export default function CollectionModuleEditor<
     display.itemsPerRow.supportedPresentations.includes(activePresentation);
 
   return (
-    <div className="space-y-6" data-collection-module-editor="">
-      <Section {...(premium ? { presentation: "premium" as const, className: "p-4" } : {})}>
-        {section === "all" ? (
-          premium ? (
-            <AdminFormControlHeader title="إعدادات القائمة" icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
-          ) : (
-            <ModuleEditorSectionHeading intent="settings">إعدادات القائمة</ModuleEditorSectionHeading>
-          )
-        ) : null}
+    <div className={ADMIN_FORM_STACK_CLASS_NAME} data-collection-module-editor="">
+      <ModuleEditorSection surface={section === "all" ? "panel" : "neutral"} header={section === "all" ? <AdminModuleSectionHeader id="collection-configuration" sectionHeading="إعدادات القائمة" icon="section" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} /> : undefined}>
 
-        <AdminFormGrid columns={4} className={section === "all" ? "mt-4" : undefined}>
-          <ControlCard {...(premium ? { presentation: "premium" as const } : {})} className={premium ? "h-full p-3" : `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
+
+        <AdminFormGrid columns={4}>
+          <AdminCard className="h-full p-3">
             <AdminFormListboxSelect
+              presentation="panel"
               name={selection.name}
               label={selection.label}
               defaultValue={selection.value}
@@ -235,10 +211,11 @@ export default function CollectionModuleEditor<
               required
               sizing="full"
             />
-          </ControlCard>
+          </AdminCard>
 
-          <ControlCard {...(premium ? { presentation: "premium" as const } : {})} className={premium ? "h-full p-3" : `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
+          <AdminCard className="h-full p-3">
             <AdminFormListboxSelect
+              presentation="panel"
               name="presentation"
               label="طريقة العرض"
               value={activePresentation}
@@ -249,11 +226,12 @@ export default function CollectionModuleEditor<
               required
               sizing="full"
             />
-          </ControlCard>
+          </AdminCard>
 
           {supportsItemsPerRow ? (
-            <ControlCard {...(premium ? { presentation: "premium" as const } : {})} className={premium ? "h-full p-3" : `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
+            <AdminCard className="h-full p-3">
               <AdminFormListboxSelect
+              presentation="panel"
                 name="items_per_row"
                 label="عدد العناصر في الصف"
                 value={String(itemsPerRow)}
@@ -267,13 +245,14 @@ export default function CollectionModuleEditor<
                 required
                 sizing="full"
               />
-            </ControlCard>
+            </AdminCard>
           ) : (
             <input type="hidden" name="items_per_row" value={itemsPerRow} />
           )}
 
-          <ControlCard {...(premium ? { presentation: "premium" as const } : {})} className={premium ? "h-full p-3" : `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
+          <AdminCard className="h-full p-3">
             <AdminFormListboxSelect
+              presentation="panel"
               name="item_limit"
               label="عدد العناصر التي يتم عرضها"
               defaultValue={String(display.itemLimit.value)}
@@ -284,12 +263,12 @@ export default function CollectionModuleEditor<
               required
               sizing="full"
             />
-          </ControlCard>
+          </AdminCard>
         </AdminFormGrid>
-      </Section>
+      </ModuleEditorSection>
 
       {section === "all" ? (
-        <CollectionModuleDisplayFormattingFields display={display.overrides} surfacePresentation={surfacePresentation} />
+        <CollectionModuleDisplayFormattingFields display={display.overrides} />
       ) : null}
     </div>
   );

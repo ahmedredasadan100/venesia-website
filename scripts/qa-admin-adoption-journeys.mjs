@@ -120,7 +120,7 @@ function retainedTrackingMediaCases() {
  return [...tracking,...readonly,...confirmation,...readonlyConfirmation,...updateListbox];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
- const additionKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar"];
+ const additionKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar","form:integrations-server-configuration:capability:feedback","form:projects-create-edit:capability:scrollbar","collection:project-editor-pages:capability:scrollbar"];
  const additions=cases.filter(row=>additionKeys.includes(row.key));
  for(const key of additionKeys){
   const matching=additions.filter(row=>row.key===key);

@@ -48,12 +48,14 @@ export type MediaEntitySeoValues = {
 export default function MediaEntitySeoPanel({
   seoSettings,
   contentType,
+  presentation,
   values,
   controlledValues,
   onControlledValueChange,
 }: {
   seoSettings?: GlobalSeoSettings;
   contentType: MediaEditableContentType;
+  presentation?: "default" | "premium" | "panel";
   values?: MediaEntitySeoValues | null;
   controlledValues?: {
     title: string;
@@ -77,6 +79,7 @@ export default function MediaEntitySeoPanel({
 
   return (
     <AdminEntitySeoPanel
+      presentation={presentation ?? (contentType === "video" ? "panel" : "premium")}
       seoSettings={seoSettings}
       id="media-entity-seo-panel"
       entityLabel={getContentTypeLabel(contentType)}

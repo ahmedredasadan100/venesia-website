@@ -14,6 +14,9 @@ type AdminPageHeaderProps = {
   badge?: ReactNode;
   status?: AdminPageContextHeaderProps["status"];
   display?: AdminPageContextHeaderProps["variant"];
+  icon?: AdminPageContextHeaderProps["icon"];
+  artwork?: AdminPageContextHeaderProps["artwork"];
+  visualPreset?: AdminPageContextHeaderProps["visualPreset"];
 };
 
 export default function AdminPageHeader({
@@ -27,6 +30,9 @@ export default function AdminPageHeader({
   badge,
   status,
   display,
+  icon,
+  artwork,
+  visualPreset,
 }: AdminPageHeaderProps) {
   return (
     <AdminPageContextHeader
@@ -40,6 +46,9 @@ export default function AdminPageHeader({
       badge={badge}
       status={status}
       variant={display}
+      icon={icon}
+      artwork={artwork}
+      visualPreset={visualPreset}
     />
   );
 }

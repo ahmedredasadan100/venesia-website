@@ -23,6 +23,7 @@ import {
   resolveContentEditor,
 } from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { resolveTopicDraftSession } from "../../../../../lib/admin/content/topic-draft-session";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
 import { parseMediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import {
@@ -43,7 +44,8 @@ type PageProps = {
 };
 
 export default async function UnifiedContentEditorPage(props: PageProps) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
+  const draftSession = await resolveTopicDraftSession(actor);
   const seoSettings = await loadGlobalSeoSettings();
   const { id } = await props.params;
   const query = await props.searchParams;
@@ -74,6 +76,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   if (editorKind === "article") {
     return (
       <ArticleEditor seoSettings={seoSettings}
+        draftSession={draftSession}
         topic={topic}
         categories={selectableCategories}
         series={selectableSeries}
@@ -93,6 +96,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="topics"
         eyebrow="UNIFIED CONTENT ENGINE"
         title="تعديل موضوع"
         description={`${topic.title || "بدون عنوان"} — المحرر الحالي: ${getContentTypeLabel(contentType)}. اختيار المحرر يعتمد على content_type فقط.`}
@@ -108,7 +112,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
                 contentType,
                 slug: topic.slug,
                 publicationStatus: topic.status,
-                allowedActions: ["internal-preview"],
+                allowedActions: ["internal-preview", "public-view"],
               })}
             />
           </>
@@ -124,6 +128,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
         <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." />
       ) : null}
       <MediaContentForm seoSettings={seoSettings}
+        draftSession={draftSession}
         mode="edit"
         contentType={contentType}
         categories={flattenedCategories}

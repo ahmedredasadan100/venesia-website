@@ -5,7 +5,7 @@ import {
   GLOBAL_SEO_PUBLIC_CONSUMERS,
   GLOBAL_SEO_SPECIALIZED_OWNERS,
 } from "../admin/seo/global-seo-adoption-manifest";
-import { normalizeYouTubeUrl } from "../admin/media-topic-payload";
+import { parseMediaTopicPayload, validateVideoPayload } from "../admin/media-topic-payload";
 import type { Json } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { validateRedirectInput } from "../redirects/validate-redirect";
@@ -353,9 +353,8 @@ async function buildPublicMediaDataChecks(): Promise<GlobalSeoHealthCheck[]> {
   });
   const videosWithoutUrl = rows.filter((row) => {
     if (row.content_type !== "video") return false;
-    const payload = row.media_payload;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload) || payload.kind !== "video") return false;
-    return !normalizeYouTubeUrl(typeof payload.video_url === "string" ? payload.video_url : "");
+    const payload = parseMediaTopicPayload(row.media_payload);
+    return !payload || payload.kind !== "video" || Boolean(validateVideoPayload(payload, { published: true }));
   });
 
   return [

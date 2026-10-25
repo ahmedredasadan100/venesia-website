@@ -118,7 +118,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
   async function faqControls() {
     await tab("faq"); const owner = form().locator("[data-topic-faq-editor]"), rows = () => owner.locator("[data-faq-item]");
     for (let index = 0; index < 3; index++) {
-      await owner.getByRole("button", { name: "＋ إضافة سؤال جديد", exact: true }).click();
+      await owner.getByRole("button", { name: "إضافة سؤال جديد", exact: true }).click();
       await rows().last().locator('input[name="faq_question"]').fill(index < 2 ? v.faq[index].question : "سؤال محذوف");
       await rows().last().locator('textarea[name="faq_answer"]').fill(index < 2 ? v.faq[index].answer : "إجابة محذوفة");
     }
@@ -144,13 +144,15 @@ export async function runCoreTopicControlsJourneys(ctx) {
   async function assertDraft(kind, persisted = false) {
     await tab("basic"); await expect(field("category_id")).toHaveValue(String(f.category.id)); await expect(field("series_id")).toHaveValue(String(f.series.id));
     await expect(field("image")).toHaveValue(f.assets[1].publicUrl); await expect(field("image_alt")).toHaveValue(v.imageAlt);
+    await tab("display");
     for (const [name, value] of Object.entries(v.display)) { const input = form().locator('input[type="checkbox"][name="' + name + '"]'); if (value) await expect(input).toBeChecked(); else await expect(input).not.toBeChecked(); }
+    await tab(["video", "gallery"].includes(kind) ? kind : "basic");
     if (kind === "gallery") await assertGallery();
-    if (kind === "video") { await expect(field("video_url")).toHaveValue(persisted ? v.storedVideoUrl : v.videoUrl); await expect(field("video_duration")).toHaveValue(v.duration); await expect(field("video_thumbnail")).toHaveValue(f.assets[2].publicUrl); }
+    if (kind === "video") { await expect(field("video_url")).toHaveValue(persisted ? v.storedVideoUrl : v.videoUrl); await expect(field("video_duration")).toHaveAttribute("type", "hidden"); await expect(field("video_duration")).toHaveValue(v.duration ?? ""); await expect(field("video_thumbnail")).toHaveValue(f.assets[2].publicUrl); }
     if (!["video", "gallery"].includes(kind)) await expect(field("content")).toHaveValue(v.markdown);
   }
   async function semanticNegative(recipe) {
-    await tab("basic");
+    await tab(["video", "gallery"].includes(recipe.kind) ? recipe.kind : "basic");
     if (["video", "gallery"].includes(recipe.kind)) {
       const target = recipe.kind === "video" ? field("video_url") : field("gallery_image_alt").first();
       const prior = await target.inputValue(); await target.fill(recipe.kind === "video" ? "https://example.invalid/not-youtube" : "");
@@ -201,10 +203,12 @@ export async function runCoreTopicControlsJourneys(ctx) {
     await expect(form()).toHaveCount(1); await checkpoint(recipe.kind, "baseline"); await tab("basic");
     await select("category_id", f.category.id); await select("series_id", f.series.id); await select("category_id", f.otherCategory.id); await expect(field("series_id")).toHaveValue("");
     await select("category_id", f.category.id); await select("series_id", f.series.id);
+    await tab("display");
     for (const [name, value] of Object.entries(v.display)) { await checked(name, !value); await checked(name, value); }
+    await tab("basic");
     await imageControls("image", 1); await field("image_alt").fill(v.imageAlt);
-    if (recipe.kind === "gallery") await galleryControls();
-    else if (recipe.kind === "video") { await field("video_url").fill(v.videoUrl); await field("video_duration").fill(v.duration); await imageControls("video_thumbnail", 2); }
+    if (recipe.kind === "gallery") { await tab("gallery"); await galleryControls(); }
+    else if (recipe.kind === "video") { await tab("video"); await field("video_url").fill(v.videoUrl); await expect(field("video_duration")).toHaveAttribute("type", "hidden"); await expect(field("video_duration")).toHaveValue(v.duration ?? ""); await imageControls("video_thumbnail", 2); }
     else { const editor = form().locator('[data-topic-content-editor] [contenteditable="true"]'); await expect(editor).toHaveCount(1); await editor.fill(v.markdown); await form().getByRole("button", { name: "فقرة", exact: true }).click(); await expect(field("content")).toHaveValue(v.markdown); }
     if (["news", "site_update"].includes(recipe.kind)) await field("media_project").fill(v.mediaProject);
     if (recipe.kind === "article") await faqControls(); await publishControls(); await dirtyCloseCancel(); await assertDraft(recipe.kind);

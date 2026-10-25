@@ -20,6 +20,8 @@ type TopicSeriesFieldsProps = {
   defaultSeriesId?: number | string | null;
   defaultSeries?: string | null;
   defaultSeriesSlug?: string | null;
+  /** Optional shared label/stack classes; omitted consumers retain their current presentation. */
+  labelClassName?: string;
 };
 
 export default function TopicSeriesFields({
@@ -28,6 +30,7 @@ export default function TopicSeriesFields({
   defaultSeriesId = "",
   defaultSeries = "",
   defaultSeriesSlug = "",
+  labelClassName,
 }: TopicSeriesFieldsProps) {
   const defaultId = defaultSeriesId ? String(defaultSeriesId) : "";
   const [categoryId, setCategoryId] = useState(
@@ -84,9 +87,9 @@ export default function TopicSeriesFields({
   return (
     <div
       ref={containerRef}
-      className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5"
+      className={labelClassName ?? "inline-grid min-w-0 max-w-full shrink-0 space-y-1.5"}
     >
-      <span className="text-xs font-medium text-white/58">
+      <span data-admin-form-label-text className={labelClassName === undefined ? "text-xs font-medium text-white/58" : undefined}>
         السلسلة (اختياري)
       </span>
       <AdminFormListboxSelect

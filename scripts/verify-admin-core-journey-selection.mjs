@@ -30,7 +30,7 @@ const retainedCaseFunctions=tree.statements.filter(node=>ts.isFunctionDeclaratio
 const requiredCases=new Function("assert","forms","collections","canonical","createHash",retainedCaseFunctions.map(node=>node.getText(tree)).join("\n")+"\n"+inventory.getText(tree)+";const requiredCases=[];"+loops.map(node=>node.getText(tree)).join("\n")+";requiredCases.push(...retainedTrackingMediaCases());assertHistoricalCoreCaseIdentity(requiredCases);return requiredCases;")(assert,forms,collections,canonical,createHash);
 const assertCurrentLedger=new Function("assert","createHash",retainedCaseFunctions.map(node=>node.getText(tree)).join("\n")+";return assertHistoricalCoreCaseIdentity;")(assert,createHash);
 assert.equal(assertCurrentLedger(requiredCases).historicalRequiredCases,959);
-const postHistoricalKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar"];
+const postHistoricalKeys=["form:activity-sitemap-media-commands:capability:listbox","collection:media-library:capability:scrollbar","form:integrations-server-configuration:capability:feedback","form:projects-create-edit:capability:scrollbar","collection:project-editor-pages:capability:scrollbar"];
 assert.deepEqual(assertCurrentLedger(requiredCases).postHistoricalAdditionCases.toSorted(),postHistoricalKeys.toSorted());
 for(const key of postHistoricalKeys){
  assert.throws(()=>assertCurrentLedger(requiredCases.filter(row=>row.key!==key)));

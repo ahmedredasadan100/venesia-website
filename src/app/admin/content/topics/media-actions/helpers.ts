@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import {
   assertPayloadMatchesContentType,
+  getVideoFormStructureIssue,
   normalizeVideoPayloadForStorage,
   parseMediaPayloadFromForm,
   resolveCoverImageForGallery,
@@ -158,9 +159,13 @@ export function resolveWriteMediaPayload(
   formData: FormData,
   payload: MediaPayload,
 ) {
+  const videoStructureIssue = contentType === "video" ? getVideoFormStructureIssue(formData) : null;
+  if (videoStructureIssue) {
+    return { ok: false as const, ...videoStructureIssue };
+  }
   const mediaPayload = parseMediaPayloadFromForm(contentType, formData);
   const matchError = assertPayloadMatchesContentType(contentType, mediaPayload);
-  if (matchError) return { ok: false as const, message: matchError };
+  if (matchError) return { ok: false as const, message: matchError, field: undefined };
 
   if (contentType === "video" && mediaPayload?.kind === "video") {
     const normalized = normalizeVideoPayloadForStorage(mediaPayload);

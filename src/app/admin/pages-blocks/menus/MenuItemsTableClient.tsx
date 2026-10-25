@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import VenesiaModal from "../../../../components/admin/VenesiaModal";
@@ -16,11 +16,15 @@ import {
   AdminColumnVisibilityMenu,
   AdminDataGrid,
   AdminDataGridActionButton,
+  AdminDataGridActionsHeaderCell,
+  AdminDataGridCenterCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
+  AdminDataGridReorderHandle,
   AdminDataGridRow,
   AdminDataGridRowActions,
-  AdminStatusPill,
+  AdminDataGridStatusCell,
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -217,6 +221,7 @@ export default function MenuItemsTableClient({
     [activeItems],
   );
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const draggedItemIdRef = useRef<number | null>(null);
   const columnConfig = getPageCompositionColumnPreferenceConfig("menuItems");
   const defaultColumns = getPageCompositionDefaultColumnKeys("menuItems");
   const [visibleColumns, setVisibleColumns] = useState(() =>
@@ -232,12 +237,13 @@ export default function MenuItemsTableClient({
   const columns = useMemo(
     () =>
       [
-        visibleColumnSet.has("order") ? "72px" : null,
-        "minmax(0,1fr)",
+        ADMIN_DATA_GRID_COLUMNS.primaryCompact,
+        visibleColumnSet.has("order") ? ADMIN_DATA_GRID_COLUMNS.reorder : null,
+        visibleColumnSet.has("order") ? ADMIN_DATA_GRID_COLUMNS.count : null,
         visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusCompact : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
       ]
-        .filter((column): column is string => Boolean(column))
+        .filter((column) => column !== null)
         .join(" "),
     [visibleColumnSet],
   );
@@ -301,6 +307,36 @@ export default function MenuItemsTableClient({
   const visibility = pagination.filterValues.visibility;
   const itemType = pagination.filterValues.item_type;
   const paginatedRows = pagination.rows;
+  const manualReorderEnabled = !search && visibility === "all" && itemType === "all";
+  const { getRowInteraction } = instant;
+  const keyboardReorderFocusRef = useRef<{
+    itemId: number;
+    trigger: HTMLButtonElement;
+    region: HTMLElement | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const intent = keyboardReorderFocusRef.current;
+    if (
+      !intent || getRowInteraction(intent.itemId).isPending ||
+      (intent.trigger.isConnected && intent.trigger.disabled)
+    ) return;
+    keyboardReorderFocusRef.current = null;
+    if (document.activeElement === document.body) {
+      const target = intent.trigger.isConnected ? intent.trigger : intent.region;
+      if (target?.isConnected) target.focus({ preventScroll: true });
+    }
+  }, [getRowInteraction, rows]);
+
+  function itemSiblings(item: MenuItem) {
+    return activeItems
+      .filter((candidate) => candidate.parent_id === item.parent_id)
+      .sort((left, right) => left.sort_order - right.sort_order || left.id - right.id);
+  }
+
+  function siblingMutationPending(item: MenuItem) {
+    return itemSiblings(item).some((candidate) => instant.getRowInteraction(candidate.id).isPending);
+  }
 
   async function runMenuItemMutation(
     request: AdminEntityMutationRequest<MenuItem>,
@@ -346,15 +382,14 @@ export default function MenuItemsTableClient({
     }
   }
 
-  async function moveSibling(item: MenuItem, direction: -1 | 1) {
-    const siblings = activeItems
-      .filter((candidate) => candidate.parent_id === item.parent_id)
-      .sort((left, right) => left.sort_order - right.sort_order || left.id - right.id);
+  async function moveSiblingTo(item: MenuItem, target: number, action = "reorder") {
+    if (!manualReorderEnabled || siblingMutationPending(item)) return;
+    const siblings = itemSiblings(item);
     const index = siblings.findIndex((candidate) => candidate.id === item.id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= siblings.length) return;
+    if (index < 0 || !Number.isSafeInteger(target) || target < 0 || target >= siblings.length || target === index) return;
     const ordered = [...siblings];
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    const [moved] = ordered.splice(index, 1);
+    ordered.splice(target, 0, moved);
     const sortOrderById = new Map(
       ordered.map((candidate, position) => [
         candidate.id,
@@ -363,7 +398,7 @@ export default function MenuItemsTableClient({
     );
     await runMenuItemMutation({
       rowId: item.id,
-      action: direction < 0 ? "reorder-up" : "reorder-down",
+      action,
       optimistic: (cache) =>
         cache.patchRows((candidate) =>
           sortOrderById.has(candidate.id)
@@ -383,8 +418,25 @@ export default function MenuItemsTableClient({
     });
   }
 
+  async function moveSibling(item: MenuItem, direction: -1 | 1) {
+    const index = itemSiblings(item).findIndex((candidate) => candidate.id === item.id);
+    if (index < 0) return;
+    await moveSiblingTo(item, index + direction, direction < 0 ? "reorder-up" : "reorder-down");
+  }
+
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      onFocusCapture={(event) => {
+        const control = event.target;
+        if (
+          control instanceof HTMLElement &&
+          (control.matches("[data-admin-grid-reorder-handle]") ||
+            control.closest("[data-menu-item-reorder-arrows]") ||
+            control.closest('[data-admin-row-action="visibility"]'))
+        ) control.scrollIntoView({ block: "nearest", inline: "start" });
+      }}
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-white">القائمة الرئيسية</h3>
@@ -392,34 +444,10 @@ export default function MenuItemsTableClient({
             الهرمية والرابط داخل اسم العنصر، وإعادة الترتيب تُحفظ عبر عقد القائمة الذري.
           </p>
         </div>
-        <span className="rounded-full border border-[#D8B87A]/20 px-4 py-2 text-xs text-[#D8B87A]">
-          {activeItems.length} عنصر
-        </span>
-      </div>
-
-      <AdminFeedbackRegion
-        channel={`menu-builder:${menu.id}:columns`}
-        label="حالة تفضيلات أعمدة عناصر القائمة"
-        feedback={
-          preferenceError
-            ? {
-                variant: "warning",
-                title: "تعذر تحميل تفضيلات الأعمدة",
-                message: preferenceError,
-                layout: "inline",
-                dismissible: true,
-                lifecycle: "persistent",
-              }
-            : null
-        }
-      />
-
-      <AdminEntityListFilters
-        basePath={`/admin/pages-blocks/menus/${menu.id}`}
-        search={{ value: search, placeholder: "ابحث بعنوان العنصر أو الرابط أو الكيان المرتبط…", minLength: 1 }}
-        filters={filters}
-        values={{ visibility, item_type: itemType }}
-        columnsControl={
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-full border border-[#D8B87A]/20 px-4 py-2 text-xs text-[#D8B87A]">
+            {activeItems.length} عنصر
+          </span>
           <AdminColumnVisibilityMenu
             columns={columnConfig.columns}
             visibleColumns={visibleColumns}
@@ -432,24 +460,51 @@ export default function MenuItemsTableClient({
               restorePageCompositionColumnPreferences("menuItems")
             }
           />
+        </div>
+      </div>
+
+      <AdminFeedbackRegion
+        channel={`menu-builder:${menu.id}:columns`}
+        label="حالة تفضيلات أعمدة عناصر القائمة"
+        feedback={
+          preferenceError
+            ? {
+              variant: "warning",
+              title: "تعذر تحميل تفضيلات الأعمدة",
+              message: preferenceError,
+              layout: "inline",
+              dismissible: true,
+              lifecycle: "persistent",
+            }
+            : null
         }
+      />
+
+      <AdminEntityListFilters
+        basePath={`/admin/pages-blocks/menus/${menu.id}`}
+        search={{ value: search, placeholder: "ابحث بعنوان العنصر أو الرابط أو الكيان المرتبط…", minLength: 1 }}
+        filters={filters}
+        values={{ visibility, item_type: itemType }}
         onQueryPatch={pagination.applyQueryPatch}
       />
 
-      <AdminDataGrid className="!rounded-t-none !border-t-0">
-        <AdminDataGridHeader columns={columns} className="gap-3">
+      <AdminDataGrid surface="standalone">
+        <AdminDataGridHeader columns={columns} horizontalScroll>
+          <AdminDataGridPrimaryCell presentation="text-only">اسم العنصر</AdminDataGridPrimaryCell>
           {visibleColumnSet.has("order") ? (
-            <span className="text-center">#</span>
+            <>
+              <AdminDataGridCenterCell>سحب</AdminDataGridCenterCell>
+              <AdminDataGridCenterCell>ترتيب</AdminDataGridCenterCell>
+            </>
           ) : null}
-          <span className="text-right">اسم العنصر</span>
           {visibleColumnSet.has("status") ? (
-            <span className="text-center">الحالة</span>
+            <AdminDataGridStatusCell>الحالة</AdminDataGridStatusCell>
           ) : null}
-          <span className="text-center">الإجراءات</span>
+          <AdminDataGridActionsHeaderCell>الإجراءات</AdminDataGridActionsHeaderCell>
         </AdminDataGridHeader>
 
         {paginatedRows.length ? (
-          paginatedRows.map(({ item, level, isLastSibling, ancestorLines }) => {
+          paginatedRows.map(({ item, level, isLastSibling, ancestorLines }, rowIndex) => {
             const hasChildren = activeItems.some(
               (row) => row.parent_id === item.id,
             );
@@ -457,6 +512,9 @@ export default function MenuItemsTableClient({
             const hidden = { access: "hidden" as const };
             const interaction = instant.getRowInteraction(item.id);
             const pendingAction = interaction.pendingAction;
+            const siblings = itemSiblings(item);
+            const reorderPosition = siblings.findIndex((candidate) => candidate.id === item.id);
+            const reorderPending = siblingMutationPending(item);
             const capability: AdminRowActionsCapability = {
               entityType: "menu_item",
               entityId: item.id,
@@ -491,9 +549,9 @@ export default function MenuItemsTableClient({
                         cache.patchRows((candidate) =>
                           candidate.id === item.id
                             ? {
-                                ...candidate,
-                                is_visible: !item.is_visible,
-                              }
+                              ...candidate,
+                              is_visible: !item.is_visible,
+                            }
                             : candidate,
                         ),
                       execute: () =>
@@ -544,53 +602,105 @@ export default function MenuItemsTableClient({
             };
 
             return (
-              <AdminDataGridRow key={item.id} columns={columns} className="gap-3">
+              <AdminDataGridRow key={item.id} columns={columns} horizontalScroll divided={rowIndex > 0}>
+                <AdminDataGridPrimaryCell presentation="text-only">
+                  <MenuItemNameCell
+                    label={item.label}
+                    href={item.href}
+                    level={level}
+                    isLastSibling={isLastSibling}
+                    ancestorLines={ancestorLines}
+                    hasChildren={hasChildren}
+                  />
+                </AdminDataGridPrimaryCell>
                 {visibleColumnSet.has("order") ? (
-                  <span className="flex items-center justify-center gap-1">
-                    <AdminDataGridActionButton
-                      size="compact"
-                      title="تحريك لأعلى"
-                      disabled={
-                        !activeItems.some(
-                          (candidate) =>
-                            candidate.parent_id === item.parent_id &&
-                            candidate.sort_order < item.sort_order,
-                        )
-                      }
-                      pending={pendingAction === "reorder-up"}
-                      onClick={() => void moveSibling(item, -1)}
-                    >↑</AdminDataGridActionButton>
-                    <AdminDataGridActionButton
-                      size="compact"
-                      title="تحريك لأسفل"
-                      disabled={
-                        !activeItems.some(
-                          (candidate) =>
-                            candidate.parent_id === item.parent_id &&
-                            candidate.sort_order > item.sort_order,
-                        )
-                      }
-                      pending={pendingAction === "reorder-down"}
-                      onClick={() => void moveSibling(item, 1)}
-                    >↓</AdminDataGridActionButton>
-                  </span>
+                  <>
+                    <AdminDataGridCenterCell>
+                      <AdminDataGridReorderHandle
+                        label={item.label}
+                        position={reorderPosition}
+                        count={siblings.length}
+                        disabled={!manualReorderEnabled || reorderPending}
+                        pending={pendingAction?.startsWith("reorder") ?? false}
+                        disabledReason={reorderPending ? "انتظر انتهاء الإجراء الحالي على عناصر المستوى نفسه." : siblings.length < 2 ? "لا يوجد عنصر آخر في المستوى نفسه لإعادة ترتيبه." : "ألغِ البحث والفلاتر لاستخدام الترتيب اليدوي."}
+                        onMoveTo={(position) => {
+                          const trigger = document.activeElement;
+                          keyboardReorderFocusRef.current =
+                            trigger instanceof HTMLButtonElement
+                              ? {
+                                  itemId: item.id,
+                                  trigger,
+                                  region: trigger.closest<HTMLElement>("[data-admin-data-grid-scroll]"),
+                                }
+                              : null;
+                          void moveSiblingTo(item, position);
+                        }}
+                        onDragStart={(event) => {
+                          if (!manualReorderEnabled || reorderPending) {
+                            event.preventDefault();
+                            return;
+                          }
+                          draggedItemIdRef.current = item.id;
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", String(item.id));
+                        }}
+                        onDragOver={(event) => {
+                          const source = activeItems.find((candidate) => candidate.id === draggedItemIdRef.current);
+                          if (!manualReorderEnabled || reorderPending || !source || source.parent_id !== item.parent_id) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const source = activeItems.find((candidate) => candidate.id === draggedItemIdRef.current);
+                          draggedItemIdRef.current = null;
+                          if (!manualReorderEnabled || reorderPending || !source || source.parent_id !== item.parent_id) return;
+                          void moveSiblingTo(source, reorderPosition);
+                        }}
+                        onDragEnd={() => {
+                          draggedItemIdRef.current = null;
+                        }}
+                      />
+                    </AdminDataGridCenterCell>
+                    <AdminDataGridCenterCell>
+                      <span data-menu-item-reorder-arrows="" className="inline-flex items-center justify-center gap-1">
+                        <AdminDataGridActionButton
+                          size="inline"
+                          title="تحريك لأعلى"
+                          disabled={
+                            !manualReorderEnabled || reorderPending ||
+                            !activeItems.some(
+                              (candidate) =>
+                                candidate.parent_id === item.parent_id &&
+                                candidate.sort_order < item.sort_order,
+                            )
+                          }
+                          pending={pendingAction === "reorder-up"}
+                          onClick={() => void moveSibling(item, -1)}
+                        >↑</AdminDataGridActionButton>
+                        <AdminDataGridActionButton
+                          size="inline"
+                          title="تحريك لأسفل"
+                          disabled={
+                            !manualReorderEnabled || reorderPending ||
+                            !activeItems.some(
+                              (candidate) =>
+                                candidate.parent_id === item.parent_id &&
+                                candidate.sort_order > item.sort_order,
+                            )
+                          }
+                          pending={pendingAction === "reorder-down"}
+                          onClick={() => void moveSibling(item, 1)}
+                        >↓</AdminDataGridActionButton>
+                      </span>
+                    </AdminDataGridCenterCell>
+                  </>
                 ) : null}
 
-                <MenuItemNameCell
-                  label={item.label}
-                  href={item.href}
-                  level={level}
-                  isLastSibling={isLastSibling}
-                  ancestorLines={ancestorLines}
-                  hasChildren={hasChildren}
-                />
-
                 {visibleColumnSet.has("status") ? (
-                  <span className="flex justify-center">
-                    <AdminStatusPill tone={item.is_visible ? "green" : "muted"}>
-                      {item.is_visible ? "ظاهر" : "مخفي"}
-                    </AdminStatusPill>
-                  </span>
+                  <AdminDataGridStatusCell>
+                    <AdminDataGridRowActions capability={capability} display="visibility" size="compact" />
+                  </AdminDataGridStatusCell>
                 ) : null}
 
                 <AdminDataGridRowActions capability={capability} size="compact" />
