@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import * as ts from "typescript";
 
@@ -1158,12 +1158,40 @@ function statementExecutesForModuleInitialization(statement: ts.Statement) {
   );
 }
 
+/** The cache key can change module identity, but cannot change this local pathname. */
+function fixedCachedUrlImportSpecifier(
+  expression: ts.Expression,
+  parsed: ts.SourceFile,
+): string | null {
+  const current = unwrapStaticExpression(expression);
+  if (!ts.isPropertyAccessExpression(current) || current.name.text !== "href") return null;
+  const constructor = unwrapStaticExpression(current.expression);
+  if (!ts.isNewExpression(constructor) || !ts.isIdentifier(constructor.expression) ||
+    constructor.expression.text !== "URL" || lexicalBindingForReference(parsed, constructor.expression) ||
+    constructor.arguments?.length !== 2) return null;
+  const [path, base] = constructor.arguments;
+  if (!ts.isPropertyAccessExpression(base) || base.name.text !== "url" ||
+    !ts.isMetaProperty(base.expression) || base.expression.keywordToken !== ts.SyntaxKind.ImportKeyword ||
+    base.expression.name.text !== "meta" || !ts.isTemplateExpression(path) || path.templateSpans.length !== 1) return null;
+  const match = /^(\.\.?\/[a-zA-Z0-9_./-]+\.(?:mts|mjs|tsx|jsx|ts|js))\?fixture=$/u.exec(path.head.text);
+  const span = path.templateSpans[0];
+  if (!match || match[1].includes("//") || span.literal.text !== "" || !ts.isIdentifier(span.expression)) return null;
+  const cacheBinding = lexicalBindingForReference(parsed, span.expression);
+  if (cacheBinding?.kind !== "variable" || !cacheBinding.declaration.initializer ||
+    (cacheBinding.declarationList.flags & ts.NodeFlags.Const) === 0) return null;
+  const target = normalizeSourcePath(join(dirname(parsed.fileName), match[1]));
+  if (isAbsolute(target) || target === ".." || target.startsWith("../")) return null;
+  return match[1];
+}
+
 function staticDynamicImportSpecifiers(
   expression: ts.Expression,
   parsed: ts.SourceFile,
   seen = new Set<string>(),
 ): ReadonlySet<string> | null {
   const current = unwrapStaticExpression(expression);
+  const cachedUrl = fixedCachedUrlImportSpecifier(current, parsed);
+  if (cachedUrl) return new Set([cachedUrl]);
   if (
     ts.isStringLiteralLike(current) ||
     ts.isNoSubstitutionTemplateLiteral(current)

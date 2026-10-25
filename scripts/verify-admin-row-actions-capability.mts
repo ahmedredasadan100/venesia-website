@@ -79,6 +79,57 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+function verifyFixedCachedUrlImportGraph() {
+  const entry = "src/fixtures/governance/fixed-cache-consumer.mts";
+  const owner = "src/fixtures/governance/fixed-cache-owner.mts";
+  const source = 'const fixtureHash = cacheFingerprint(); export async function Consumer() { const { Widget } = await import(new URL(`./fixed-cache-owner.mts?fixture=${fixtureHash}`, import.meta.url).href); return Widget(); }';
+  const overrides = (text: string) => new Map([[entry, text], [owner, "export function Widget() { return true; } export function Unused() { return false; }"]]);
+  const collect = (text: string, symbolAware: boolean) => collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], symbolAware,
+    sourceOverrides: overrides(text) });
+  for (const symbolAware of [false, true]) {
+    for (const hashSource of [source, source.replace("cacheFingerprint()", '"different-cache-value"')]) {
+      const graph = collect(hashSource, symbolAware);
+      assert.deepEqual([...graph.keys()].sort(), [entry, owner].sort());
+      assert.ok(graphUsesExecutableBinding({ root: ROOT, graph, bindings: [{ sourceFile: owner, exportNames: ["Widget"] }], sourceOverrides: overrides(hashSource) }));
+    }
+    const alias = source.replace('const { Widget } = await import(new URL(`./fixed-cache-owner.mts?fixture=${fixtureHash}`, import.meta.url).href);', 'const cachedUrl = new URL(`./fixed-cache-owner.mts?fixture=${fixtureHash}`, import.meta.url).href; const { Widget } = await import(cachedUrl);');
+    assert.ok(collect(alias, symbolAware).has(owner), "An immutable URL alias retains the same statically proven pathname");
+    const mutants = [
+      source.replace("./fixed-cache-owner.mts?fixture=", "https://example.invalid/fixed-cache-owner.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "/fixed-cache-owner.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "../../../../outside.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./%66ixed-cache-owner.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./fixed-cache-owner.mts#fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./fixed-cache-owner.mts?unreviewed="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./${moduleName}.mts?fixture="),
+      source.replace("${fixtureHash}", "${fixtureHash}/another.mts"),
+      source.replace("${fixtureHash}", "${fixtureHash}${other}"),
+      source.replace("${fixtureHash}", "${cacheFingerprint()}"),
+      source.replace("import.meta.url", "callerBase"),
+      source.replace("import.meta.url", "other.url"),
+      source.replace("new URL(", "new AlternateURL("),
+      source.replace("function Consumer()", "function Consumer(URL: typeof globalThis.URL)"),
+      source.replace("const fixtureHash", "let fixtureHash"),
+      source.replace("const fixtureHash = cacheFingerprint();", ""),
+      source.replace(").href", ").pathname"),
+      source.replace("import.meta.url)", "import.meta.url, extra)"),
+    ];
+    for (const mutant of mutants) {
+      assert.notEqual(mutant, source);
+      assert.throws(() => collect(mutant, symbolAware), /unresolved dynamic import/u,
+        "Unsupported cache imports remain unresolved rather than expanding executable source admission");
+    }
+  }
+  check("fixed local cache-query imports retain pathname and executable binding in both graph modes without evaluating query code", true);
+  check("cache-query graph rejects dynamic/remote/absolute/escaping paths, altered bases, shadowed URL, mutable hashes and expanded query forms", true);
+}
+
+if (process.argv.includes("--fixed-cache-import-graph")) {
+  verifyFixedCachedUrlImportGraph();
+  console.log(`Fixed cache import graph verification passed (${passed} affected checks; source graph only).`);
+  process.exit(0);
+}
+
 function closureStateIsConsistent(
   globalClosed: boolean,
   blockers: readonly unknown[],
@@ -4127,6 +4178,7 @@ check(
     ) &&
     unresolvedDynamicImportFailedClosed,
 );
+verifyFixedCachedUrlImportGraph();
 check(
   "dead aliases, uncalled functions, and statically false branches do not satisfy executable Source Proof",
   deadBindingGraph.has(deadBindingOwner) &&

@@ -744,9 +744,11 @@ async function verifyOwnedPublicImageConfig(network = false) {
     const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(file) === "verifySource") verifyNode = node; ts.forEachChild(node, visit); };
     visit(file); assert.ok(verifyNode?.initializer);
     const verifyCode = ts.transpileModule("const verify = " + verifyNode.initializer.getText(file) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    const verifySnapshot = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture", verifyCode + ";return verify;")(
+    // This image fixture has no reviewed local-risk request; preserve that
+    // production branch explicitly when evaluating its extracted closure.
+    const verifySnapshot = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture", "localImpact", verifyCode + ";return verify;")(
       [{ file: "next.config.ts", sha256: originalSha256 }], sha256, readFileSync, () => path.join(beforeDirectory, "next.config.ts"),
-      path.join, afterDirectory, { file: "next.config.mjs", sha256: generatedConfigSha256 }, readdirSync, assert, null);
+      path.join, afterDirectory, { file: "next.config.mjs", sha256: generatedConfigSha256 }, readdirSync, assert, null, null);
     verifySnapshot();
     writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated + "\n// tampered\n"); assert.throws(verifySnapshot, /changed after binding/u);
     writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated);
@@ -1295,7 +1297,7 @@ function verifyLocalRiskVerificationPlan() {
     assert.ok(found, `Missing canonical local verification declaration: ${name}`);
     return found.getText(file).replace(/^export /u, "");
   };
-  const declarations = ["GATES", "finalQualityScriptNames", "planLocalVerification", "assertLocalVerificationRequest", "localVerificationCoverage"];
+  const declarations = ["GATES", "finalQualityScriptNames", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
   const code = ts.transpileModule(declarations.map(statement).join("\n"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -1305,9 +1307,10 @@ function verifyLocalRiskVerificationPlan() {
   type Actual = import("./lib/isolated-public-verification.mts").LocalVerificationInputs & {
     changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
   type Plan = { risk: string; mode: "bounded" | "full"; prefix: string[]; tail: string[]; unresolvedVerificationInputs?: string[] };
-  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", code + ";return {planLocalVerification,assertLocalVerificationRequest,localVerificationCoverage};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name)) as {
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name)) as {
     planLocalVerification(scripts: Readonly<Record<string, string>>, impact: Impact, actual: Actual): Plan;
     assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
+    registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[];
     localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: Impact, manifest: Array<{ file: string; sha256: string }>): NonNullable<Actual["verificationCoverage"]>;
   };
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
@@ -1438,6 +1441,61 @@ function verifyLocalRiskVerificationPlan() {
       const plan = run(value); assert.equal(plan.mode, "bounded"); assert.ok(plan.prefix.includes("verify:admin-core-residual-search"));
     });
   }
+  check("literal registered npm chains expose their actual Node entries recursively without executing or duplicating leaves", () => {
+    const entry = "scripts/verify-admin-core-residual-search.mjs";
+    const commands = { ...scripts,
+      "verify:coverage-parent": "npm run verify:coverage-middle && node " + entry + " --literal=boundary",
+      "verify:coverage-middle": "npm run verify:admin-core-residual-search" };
+    assert.deepEqual(api.registeredVerificationNodeEntries(commands, "verify:coverage-parent"), [entry]);
+    assert.ok(api.registeredVerificationNodeEntries(scripts, "verify:admin-runtime").includes("scripts/verify-page-block-editor-presentation.mts"),
+      "The actual current Admin aggregate positively reaches its registered nested Page Block guard.");
+  });
+  check("canonical parent coverage retains its parent key and the complete existing full prefix without appending nested execution", () => {
+    const value = fixture(), entry = "scripts/verify-admin-core-residual-search.mjs", changed = "scripts/fixtures/admin-core-residual-search.mjs";
+    value.impact.changes[0].file = changed; value.actual.changes[0].file = changed;
+    value.impact.changes[0].risk = "E"; value.impact.changes[0].checks = ["verify:admin-core-closure"];
+    value.impact.verificationEntries = [{ check: "verify:admin-core-closure", entry }];
+    value.actual.verificationCoverage = api.localVerificationCoverage(scripts, value.impact,
+      [{ file: entry, sha256: sha256(readSource(entry)) }]);
+    assert.deepEqual(value.actual.verificationCoverage.find(row => row.file === changed)?.checks, ["verify:admin-core-closure"]);
+    const plan = run(value); assert.equal(plan.mode, "full"); assert.deepEqual(plan.prefix, fullPrefix);
+    assert.ok(!plan.prefix.includes("verify:admin-core-residual-search"), "Coverage discovery cannot add a duplicate child command to execution.");
+    api.assertLocalVerificationRequest({ localVerification: value.impact, finalQualityGate: true, selection: "admin-adoption", adoptionScope: "core-closure" }, plan);
+  });
+  const coverageEntry = "scripts/verify-admin-core-residual-search.mjs";
+  const unsafeChains: Array<{ name: string; command: string; child?: string }> = [
+    { name: "missing child", command: "npm run verify:coverage-missing" },
+    { name: "self cycle", command: "npm run verify:coverage-parent" },
+    { name: "nested cycle", command: "npm run verify:coverage-child", child: "npm run verify:coverage-parent" },
+    { name: "wrapper arguments", command: "npm run verify:admin-core-residual-search -- --candidate" },
+    { name: "wrapper options", command: "npm run --silent verify:admin-core-residual-search" },
+    { name: "environment wrapper", command: "NODE_OPTIONS=unsafe node " + coverageEntry },
+    { name: "environment Node option", command: "node --env-file=.env.local " + coverageEntry },
+    { name: "dynamic npm command", command: "npm run ${CHECK_NAME}" },
+    { name: "shell substitution", command: "node " + coverageEntry + " $(echo unsafe)" },
+    { name: "shell continuation", command: "node " + coverageEntry + "; echo unsafe" },
+    { name: "pipe", command: "node " + coverageEntry + " | cat" },
+    { name: "failure fallback", command: "node " + coverageEntry + " || echo skipped" },
+    { name: "background execution", command: "node " + coverageEntry + " & echo skipped" },
+    { name: "redirection", command: "node " + coverageEntry + " > result.log" },
+    { name: "newline", command: "node " + coverageEntry + "\necho unsafe" },
+    { name: "empty chain step", command: "node " + coverageEntry + " && " },
+    { name: "private path", command: "node scripts/../private/coverage.mjs" },
+    { name: "valid match cannot conceal invalid sibling", command: "node " + coverageEntry + " && echo skipped" },
+  ];
+  for (const probe of unsafeChains) check("registered coverage rejects " + probe.name, () => {
+    const commands = { ...scripts, "verify:coverage-parent": probe.command,
+      ...(probe.child ? { "verify:coverage-child": probe.child } : {}) };
+    assert.throws(() => api.registeredVerificationNodeEntries(commands, "verify:coverage-parent"));
+  });
+  check("registered coverage rejects a missing root command and unresolved executable graphs after valid wrapper reachability", () => {
+    assert.throws(() => api.registeredVerificationNodeEntries(scripts, "verify:coverage-missing"));
+    const value = fixture(); value.impact.changes[0].checks = ["verify:admin-core-closure"];
+    value.impact.verificationEntries = [{ check: "verify:admin-core-closure", entry: coverageEntry }];
+    const unresolved = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", code + ";return localVerificationCoverage;")(
+      assert, sourceIncluded, () => { throw Error("Unresolved executable source edge"); }, root, () => "current bound source", (name: string) => name) as typeof api.localVerificationCoverage;
+    assert.throws(() => unresolved(scripts, value.impact, [{ file: coverageEntry, sha256: "a".repeat(64) }]), /Unresolved executable source edge/u);
+  });
   check("verification coverage rejects an entry not registered by its claimed package command", () => {
     const value = fixture(); value.impact.verificationEntries = [{ check: "verify:dashboard-truth", entry: "scripts/verify-admin-core-residual-search.mjs" }];
     assert.throws(() => api.localVerificationCoverage(scripts, value.impact, [{ file: "scripts/verify-admin-core-residual-search.mjs", sha256: "a".repeat(64) }]));
@@ -1975,7 +2033,11 @@ function verifyRetainedFinalQualityReconciliationSourceControls(seed: {
   const oldPublic = oldCorrection.owners.find(row => row.path === publicPath)!; assert.ok(oldPublic);
   oldPublic.beforeSha256 = sha256(oldPublic.beforeSource); oldAuthority.owners[publicPath] = oldPublic.beforeSha256;
   for (const source of [retained, baseline]) source.manifest.find(row => row.file === publicPath)!.sha256 = oldPublic.beforeSha256;
-  const after = new Map(paths.map(file => [file, file === manifestPath || file === declared.authorizationNavigation.path ? readSource(file).replace(/\r\n/gu, "\n") : readSource(file)]));
+  // Historical authorization eligibility is a controlled source fixture. Current
+  // Product presentation is not the reviewed historical seam or retained proof.
+  const authorizationSource = "export function HistoricalAuthorizationFixture(item: { key: string; connectionId?: string }) {\n  return (" + declared.authorizationNavigation.afterElement + ");\n}\n";
+  const after = new Map(paths.map(file => [file, file === declared.authorizationNavigation.path ? authorizationSource
+    : file === manifestPath ? readSource(file).replace(/\r\n/gu, "\n") : readSource(file)]));
   const before = new Map<string, string>();
   for (const file of paths) {
     const old = oldCorrection.owners.find(row => row.path === file);

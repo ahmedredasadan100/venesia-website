@@ -251,6 +251,14 @@ expand verification or block the unsupported claim, never prove exclusion.
 The existing focused contract guard is
 `node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
 
+Positive command coverage may follow literal `npm run <registered-name>` chains
+joined by `&&` in the bound `package.json`, retaining the selected parent check
+as the execution boundary. Cycles, unknown names, dynamic commands and unsupported
+shell syntax cannot establish coverage. Resolving a child entry must not append
+another child execution to the canonical Full Local Gate. Likewise, a dynamic
+cache query can preserve a proven fixed local module pathname; a dynamic pathname,
+URL base or shadowed constructor cannot establish an executable graph edge.
+
 Run every affected check in the same task and maintain proven stale expectations
 under Section 3.2.2. A changed Test/Guard/Fixture invalidates its affected proof
 and dependent coverage; do not leave it outside the selected set. Use current

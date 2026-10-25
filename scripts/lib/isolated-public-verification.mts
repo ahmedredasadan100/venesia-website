@@ -175,6 +175,34 @@ function readLocalVerificationInputs(context: PrivatePublicVerificationContext, 
   return { baselineHead: impact.baselineHead, finalHead, sourceSha256: digest(JSON.stringify(manifest)), changes, verificationCoverage };
 }
 
+/** Inspect literal registered command chains without executing or expanding the gate prefix. */
+export function registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[] {
+  const resolved = new Map<string, Set<string>>(), active = new Set<string>();
+  const visit = (name: string): Set<string> => {
+    assert.ok(/^[a-zA-Z0-9:_-]+$/u.test(name) && Object.hasOwn(scripts, name) && typeof scripts[name] === "string",
+      "Verification wrappers must name an existing literal package command.");
+    assert.ok(!active.has(name), "Verification package command cycles cannot prove executable coverage.");
+    const cached = resolved.get(name); if (cached) return cached;
+    active.add(name);
+    const command = scripts[name];
+    assert.ok(!/[\r\n]/u.test(command), "Verification commands cannot contain shell line separators.");
+    const entries = new Set<string>();
+    for (const part of command.split("&&")) {
+      const step = part.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
+      if (wrapper) {
+        for (const entry of visit(wrapper[1])) entries.add(entry);
+      } else {
+        const node = /^node (?:--experimental-strip-types )?([a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts))(?: [a-zA-Z0-9_./:=+,-]+)*$/u.exec(step);
+        assert.ok(node && sourceIncluded(node[1]),
+          "Verification coverage requires literal Node entries or argument-free npm run wrappers; shell, environment and dynamic commands are unsupported.");
+        entries.add(node[1]);
+      }
+    }
+    active.delete(name); resolved.set(name, entries); return entries;
+  };
+  return [...visit(check)];
+}
+
 /** Positive executable proof only; dynamic/non-import fixture use cannot authorize a bounded gate. */
 export function localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact,
   manifest: readonly { file: string; sha256: string }[]) {
@@ -186,9 +214,8 @@ export function localVerificationCoverage(scripts: Readonly<Record<string, strin
     assert.ok(/^scripts\/[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)$/u.test(binding.entry) && sourceIncluded(binding.entry));
     assert.ok(manifest.some(row => row.file === binding.entry), "A verification entry must belong to the bound source snapshot.");
     assert.ok(impact.changes.some(row => row.checks.includes(binding.check)), "An executable binding must be a selected fresh check.");
-    const invocation = new RegExp("^node (?:--experimental-strip-types )?" + binding.entry.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&") + "(?: |$)", "u");
-    assert.ok(scripts[binding.check].split(/\s*&&\s*/u).some(step => invocation.test(step)),
-      "Use an existing directly registered Node entry/aggregate; npm wrapper reachability is not inferred.");
+    assert.ok(registeredVerificationNodeEntries(scripts, binding.check).includes(binding.entry),
+      "A verification entry must be positively reachable through its selected literal registered command chain.");
     const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [binding.entry], symbolAware: false, sourceOverrides });
     for (const [file, checks] of coverage) if (graph.has(file)) checks.add(binding.check);
   }
