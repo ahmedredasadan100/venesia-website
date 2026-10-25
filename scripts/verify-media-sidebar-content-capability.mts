@@ -232,6 +232,48 @@ function hasSidebarControlsOnly(input: string) {
   const calls = find(tree, ts.isJsxSelfClosingElement).filter((node) => node.tagName.getText(tree) === "ContentDisplaySettings");
   return calls.length === 1 && !attribute(calls[0]!, "sectionHeading") && value(calls[0]!, "columns") === "3" && value(calls[0]!, "presentation") === "premium" && value(calls[0]!, "includeIntroCard") === "false";
 }
+function hasSidebarCanonicalSections(input: string) {
+  const { tree, find, attribute, value } = displaySyntax(input);
+  const canonical = (name: string, path: string) => find(tree, ts.isImportDeclaration).some(node =>
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === path && node.importClause?.namedBindings &&
+    ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => !binding.propertyName && binding.name.text === name));
+  const elements = find(tree, (node): node is ts.JsxOpeningLikeElement => ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node));
+  const sections = elements.filter(node => node.tagName.getText(tree) === "ModuleEditorSection");
+  const inside = (node: ts.Node, parent: ts.JsxOpeningLikeElement) => node.pos > parent.pos && node.end < parent.parent.end;
+  const selection = sections.find(node => value(node, "title") === "اختيار المحتوى");
+  const display = sections.find(node => value(node, "title") === "إعدادات العرض");
+  if (!canonical("ModuleEditorSection", "./ModuleEditorPresentation") ||
+      !["AdminCard", "AdminFormGrid", "AdminFormListboxSelect", "AdminFormField"].every(name => canonical(name, "../ui")) ||
+      sections.length !== 2 || !selection || !display || selection.pos >= display.pos) return false;
+  const controls = (section: ts.JsxOpeningLikeElement) => elements.filter(node => inside(node, section) && ["AdminFormListboxSelect", "input"].includes(node.tagName.getText(tree)));
+  const selectionControls = controls(selection), displayControls = controls(display);
+  if (selectionControls.map(node => value(node, "name")).join("|") !== "source_kind|category_slug|content_type|widget_key|limit" ||
+      displayControls.map(node => value(node, "name")).join("|") !== "presentation") return false;
+  const rows = [
+    ["source_kind", "مصدر المحتوى", "sourceKind", "setSourceKind"],
+    ["category_slug", "التصنيف", "categorySlug", "setCategorySlug"],
+    ["content_type", "نوع محتوى المركز الإعلامي", "contentType", "setContentType"],
+    ["widget_key", "طريقة الاختيار", "widgetKey", "handleWidgetChange"],
+    ["presentation", "شكل العرض", "presentation", "setPresentation"],
+  ];
+  for (const [name, label, state, setter] of rows) {
+    const control = [...selectionControls, ...displayControls].find(node => value(node, "name") === name);
+    if (!control || value(control, "label") !== label || value(control, "value") !== state || value(control, "sizing") !== "full") return false;
+    const change = attribute(control, "onChange")?.initializer;
+    const expression = change && ts.isJsxExpression(change) ? change.expression : undefined;
+    if (!expression || !(ts.isIdentifier(expression) && expression.text === setter || find(expression, ts.isCallExpression).some(call => call.expression.getText(tree) === setter))) return false;
+    if (!elements.some(card => card.tagName.getText(tree) === "AdminCard" && value(card, "presentation") === "premium" && inside(control, card))) return false;
+  }
+  const limit = selectionControls.find(node => value(node, "name") === "limit");
+  const limitField = elements.find(node => node.tagName.getText(tree) === "AdminFormField" && limit && inside(limit, node));
+  const limitChange = limit && attribute(limit, "onChange")?.initializer;
+  return Boolean(limit && limitField && value(limitField, "label") === "عدد العناصر" && attribute(limitField, "required") &&
+    value(limit, "type") === "number" && value(limit, "min") === "1" && value(limit, "max") === "60" && value(limit, "value") === "limit" && attribute(limit, "required") &&
+    limitChange && find(limitChange, ts.isCallExpression).some(call => call.expression.getText(tree) === "setLimit") &&
+    elements.some(node => node.tagName.getText(tree) === "AdminFormGrid" && inside(node, selection) && value(node, "columns") === "2") &&
+    elements.some(node => node.tagName.getText(tree) === "AdminFormGrid" && inside(node, display) && value(node, "columns") === "3") &&
+    elements.some(node => node.tagName.getText(tree) === "ContentDisplaySettings" && inside(node, display)));
+}
 const pagesComposition = sharedPresentation.slice(
   sharedPresentation.indexOf("export function ModuleEditorPagesTab("),
   sharedPresentation.indexOf("export function ModuleEditorFeedbackSlot("),
@@ -248,16 +290,27 @@ check(
     !editor.includes("<AdminModuleTabs"),
 );
 check(
-  "family cards, grids and section headers directly adopt existing shared premium owners",
-  (editor.match(/<AdminCard\b/gu) ?? []).length === 7 &&
-    editor.includes('<AdminFormGrid columns={2}>') &&
+  "family Sections, labelled fields, ordered controls and callbacks directly adopt existing shared premium owners",
+  hasSidebarCanonicalSections(editor) &&
     (editor.match(/sectionHeaderPresentation: "control"/gu) ?? []).length === 2 &&
-    (editor.match(/<AdminFormControlHeader\b/gu) ?? []).length === 2 &&
-    (editor.match(/presentation="leading-icon"/gu) ?? []).length === 2 &&
-    !editor.includes("<ModuleEditorSection") &&
     !editor.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME") &&
     !/import[^;]*\.(?:css|scss)["']/u.test(editor),
 );
+const sidebarSyntax = displaySyntax(editor);
+const sidebarFields = sidebarSyntax.find(sidebarSyntax.tree, ts.isJsxSelfClosingElement);
+const sourceField = sidebarFields.find(node => sidebarSyntax.value(node, "name") === "source_kind");
+const widgetField = sidebarFields.find(node => sidebarSyntax.value(node, "name") === "widget_key");
+assert.ok(sourceField && widgetField && sourceField.pos < widgetField.pos);
+const reorderedSidebar = editor.slice(0, sourceField.getStart(sidebarSyntax.tree)) + widgetField.getText(sidebarSyntax.tree) +
+  editor.slice(sourceField.end, widgetField.getStart(sidebarSyntax.tree)) + sourceField.getText(sidebarSyntax.tree) + editor.slice(widgetField.end);
+check("Sidebar composition negatives reject removed Sections/Fields, lost or renamed labels, detached callbacks and reordered native controls", [
+  editor.replaceAll("ModuleEditorSection", "UnownedSection"),
+  editor.replaceAll("AdminFormField", "UnownedField"),
+  editor.replace('label="مصدر المحتوى"', 'aria-label="مصدر المحتوى"'),
+  editor.replace('label="شكل العرض"', 'label="عنوان غير صحيح"'),
+  editor.replace("onChange={setCategorySlug}", "onChange={unownedChange}"),
+  reorderedSidebar,
+].every(input => { assert.notEqual(input, editor, "Negative must change actual Sidebar source"); return !hasSidebarCanonicalSections(input); }));
 check(
   "family display switches stay mounted through source changes but excluded from navigation FormData",
   (editor.match(/<ContentDisplaySettings\b/gu) ?? []).length === 1 &&

@@ -191,52 +191,160 @@ check(
     topicsPage.includes("المحذوفات") &&
     !metricItems.includes("المحذوفات"),
 );
-const topicMetricAst = ts.createSourceFile("TopicsListClient.tsx", listClient, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let topicMetricRows: ts.ArrayLiteralExpression | undefined;
-const findMetricRows = (node: ts.Node) => {
-  if (ts.isVariableDeclaration(node) && node.name.getText(topicMetricAst) === "metricItems" && node.initializer && ts.isArrayLiteralExpression(node.initializer)) topicMetricRows = node.initializer;
-  ts.forEachChild(node, findMetricRows);
-};
-findMetricRows(topicMetricAst);
-assert.ok(topicMetricRows);
-const expectedMetricLabels = [
-    "إجمالي الموضوعات",
-    "منشور",
-    "غير منشور",
-    "بدون صورة",
-    "مرتبطة بسلسلة",
-    "مميزة",
-    "متوسط SEO",
-];
-const metricProperty = (node: ts.Expression, name: string) => {
-  assert.ok(ts.isObjectLiteralExpression(node));
-  return node.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && property.name.getText(topicMetricAst) === name)?.initializer;
-};
-const actualMetricLabels = topicMetricRows.elements.map(node => {
-  const label = metricProperty(node, "label");
-  assert.ok(label && ts.isStringLiteral(label));
-  return label.text;
-});
-check(
-  "The core seven Topic metrics retain their exact order while layout can wrap responsively",
-  JSON.stringify(actualMetricLabels) === JSON.stringify(expectedMetricLabels) &&
-    !listClient.includes('className="min-w-[1146px]"'),
-);
-const metricCommands: unknown[][] = [];
-const metricController = { setFilter: (...args: unknown[]) => metricCommands.push(args) };
-for (const item of topicMetricRows.elements) {
-  const onClick = metricProperty(item, "onClick");
-  if (!onClick) continue;
-  const compiled = ts.transpileModule(`const callback = ${onClick.getText(topicMetricAst)}; callback();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  new Function("controller", "resetToView", compiled)(metricController, (view: string) => metricCommands.push(["view", view]));
+function matchingNodes<T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T) {
+  const matches: T[] = [];
+  function visit(node: ts.Node) { if (predicate(node)) matches.push(node); ts.forEachChild(node, visit); }
+  visit(root);
+  return matches;
 }
-check(
-  "Responsive Topic metrics execute their original six query commands and leave SEO non-interactive",
-  JSON.stringify(metricCommands) === JSON.stringify([
-    ["view", "active"], ["status", "published"], ["status", "unpublished"],
-    ["image", "without"], ["seriesId", "any"], ["featured", "yes"],
-  ]) && !metricProperty(topicMetricRows.elements[6], "onClick"),
-);
+function objectProperty(node: ts.Node, name: string, tree: ts.SourceFile) {
+  assert.ok(ts.isObjectLiteralExpression(node));
+  return node.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && property.name.getText(tree) === name)?.initializer;
+}
+function literalText(node: ts.Node | undefined) { assert.ok(node && ts.isStringLiteral(node)); return node.text; }
+function metricSource(source: string) {
+  const tree = ts.createSourceFile("TopicsListClient.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = matchingNodes(tree, ts.isVariableDeclaration).filter(node => node.name.getText(tree) === "metricItems");
+  assert.equal(declarations.length, 1);
+  const rows = declarations[0].initializer;
+  assert.ok(rows && ts.isArrayLiteralExpression(rows));
+  return { tree, rows };
+}
+// The existing manifest records the approved six-card row; image=without remains a separate filter.
+const metricManifest = ts.createSourceFile("adoption-manifest.ts", read("src/lib/admin/interaction-system/adoption-manifest.ts"), ts.ScriptTarget.Latest, true);
+const topicDeclarations = matchingNodes(metricManifest, ts.isObjectLiteralExpression).filter(node => objectProperty(node, "id", metricManifest)?.getText(metricManifest) === '"content-topics"');
+assert.equal(topicDeclarations.length, 1);
+const visualContract = objectProperty(topicDeclarations[0], "visualPresentation", metricManifest);
+assert.ok(visualContract);
+const metricContracts = objectProperty(visualContract, "metricCards", metricManifest);
+assert.ok(metricContracts && ts.isArrayLiteralExpression(metricContracts));
+const topicMetricContracts = metricContracts.elements.filter(node => literalText(objectProperty(node, "sourceFile", metricManifest)) === "src/components/admin/content/TopicsListClient.tsx");
+assert.equal(topicMetricContracts.length, 1);
+const declaredItems = objectProperty(topicMetricContracts[0], "items", metricManifest);
+assert.ok(declaredItems && ts.isArrayLiteralExpression(declaredItems));
+const expectedMetricLabels = declaredItems.elements.map(node => literalText(objectProperty(node, "label", metricManifest)));
+
+function assertTopicMetrics(source: string) {
+  const { tree, rows } = metricSource(source);
+  assert.deepEqual(rows.elements.map(node => literalText(objectProperty(node, "label", tree))), expectedMetricLabels, "Exact current manifest metric order");
+  assert.ok(!source.includes('className="min-w-[1146px]"'), "Metric layout remains responsive");
+  const gridImports = tree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../ui" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => !binding.isTypeOnly && binding.name.text === "AdminMetricCardsGrid" && !binding.propertyName));
+  assert.equal(gridImports.length, 1, "Canonical shared Grid import");
+  const grids = matchingNodes(tree, ts.isJsxSelfClosingElement).filter(node => node.tagName.getText(tree) === "AdminMetricCardsGrid");
+  assert.equal(grids.length, 1);
+  const items = grids[0].attributes.properties.find((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === "items")?.initializer;
+  assert.ok(items && ts.isJsxExpression(items) && items.expression && ts.isIdentifier(items.expression) && items.expression.text === "metricItems", "Actual declared rows reach the canonical Grid");
+  const preparation = ["metricsError", "seoAverage", "seoAverageUnavailable"].map(name => {
+    const declarations = matchingNodes(tree, ts.isVariableDeclaration).filter(node => node.name.getText(tree) === name);
+    assert.equal(declarations.length, 1);
+    return "const " + declarations[0].getText(tree) + ";";
+  }).join("\n");
+  const values = rows.elements.map(node => {
+    const value = objectProperty(node, "value", tree), suffix = objectProperty(node, "suffix", tree);
+    assert.ok(value);
+    return `{value:(${value.getText(tree)}),suffix:(${suffix?.getText(tree) ?? "undefined"})}`;
+  });
+  const evaluate = new Function("controller", preparation + "return [" + values.join(",") + "];" ) as (controller: unknown) => Array<{ value: unknown; suffix: unknown }>;
+  const ready = { total: 101, published: 23, unpublished: 78, withSeries: 17, featured: 9, withoutImage: 42, seoAverage: 86, error: null };
+  assert.deepEqual(evaluate({ result: { metrics: ready } }).map(row => row.value), [ready.total, ready.published, ready.unpublished, ready.withSeries, ready.featured, ready.seoAverage], "Exact native metric value bindings");
+  assert.deepEqual(evaluate({ result: { metrics: ready } }).map(row => row.suffix), [undefined, undefined, undefined, undefined, undefined, "/100"]);
+  assert.deepEqual(evaluate({ result: { metrics: { ...ready, error: "unavailable" } } }).map(row => row.value), expectedMetricLabels.map(() => "—"));
+  assert.deepEqual(evaluate({ result: {} }).map(row => row.value), [0, 0, 0, 0, 0, "—"]);
+  assert.ok(evaluate({ result: {} }).every(row => row.suffix === undefined), "Unknown SEO has no fabricated denominator");
+  const commands: unknown[][] = [];
+  for (const item of rows.elements) {
+    const onClick = objectProperty(item, "onClick", tree);
+    if (!onClick) continue;
+    const compiled = ts.transpileModule(`const callback = ${onClick.getText(tree)}; callback();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    new Function("controller", "resetToView", compiled)({ setFilter: (...args: unknown[]) => commands.push(args) }, (view: string) => commands.push(["view", view]));
+  }
+  assert.deepEqual(commands, [["view", "active"], ["status", "published"], ["status", "unpublished"], ["seriesId", "any"], ["featured", "yes"]], "Exact existing metric query commands");
+  assert.ok(!objectProperty(rows.elements.at(-1)!, "onClick", tree), "SEO remains non-interactive");
+}
+assertTopicMetrics(listClient);
+check("Current manifest Topic metrics retain exact order, native values and canonical responsive Grid", true);
+check("Topic metric callbacks retain Reset and four native filters while SEO remains static", true);
+const { tree: topicMetricAst, rows: topicMetricRows } = metricSource(listClient);
+const replaceMetricRows = (rows: string[]) => listClient.slice(0, topicMetricRows.getStart(topicMetricAst)) + "[" + rows.join(",") + "]" + listClient.slice(topicMetricRows.end);
+const originalMetricRows = topicMetricRows.elements.map(node => node.getText(topicMetricAst));
+for (const [name, source] of [
+  ["missing metric", replaceMetricRows(originalMetricRows.slice(1))],
+  ["duplicate metric", replaceMetricRows([...originalMetricRows, originalMetricRows[0]])],
+  ["reordered metrics", replaceMetricRows([originalMetricRows[1], originalMetricRows[0], ...originalMetricRows.slice(2)])],
+  ["wrong native value", listClient.replace("controller.result.metrics?.total ?? 0", "controller.result.metrics?.published ?? 0")],
+  ["wrong query command", listClient.replace('controller.setFilter("status", "published")', 'controller.setFilter("status", "unpublished")')],
+  ["interactive SEO", replaceMetricRows([...originalMetricRows.slice(0, -1), originalMetricRows.at(-1)!.replace("compact: true", 'compact: true, onClick: () => controller.setFilter("image", "without")')])],
+  ["disconnected Grid items", listClient.replace("items={metricItems}", "items={[]}")],
+  ["parallel Grid import", listClient.replace('from "../ui";', 'from "./ParallelMetricGrid";')],
+  ["fixed metric width", listClient.replace("<AdminMetricCardsGrid ", '<AdminMetricCardsGrid className="min-w-[1146px]" ')],
+] as const) {
+  assert.notEqual(source, listClient, "Effective negative probe " + name);
+  assert.throws(() => assertTopicMetrics(source), name);
+  check("Topic metric source proof rejects " + name, true);
+}
+
+const toolbarSource = read("src/components/admin/content/UnifiedContentFilters.tsx");
+function assertIndependentImageFilter(consumer: string, toolbar: string, querySource: string) {
+  const { tree } = metricSource(consumer);
+  const calls = matchingNodes(tree, ts.isCallExpression).filter(node => ts.isIdentifier(node.expression) && node.expression.text === "useUnifiedContentToolbar");
+  assert.equal(calls.length, 1);
+  const input = calls[0].arguments[0], values = objectProperty(input, "values", tree);
+  assert.ok(values);
+  assert.equal(objectProperty(values, "image", tree)?.getText(tree), "controller.query.filters.image");
+  assert.equal(objectProperty(input, "onQueryPatch", tree)?.getText(tree), "controller.applyQueryPatch");
+  const toolbarTree = ts.createSourceFile("UnifiedContentFilters.tsx", toolbar, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const hook = toolbarTree.statements.filter(ts.isFunctionDeclaration).find(node => node.name?.text === "useUnifiedContentToolbar");
+  assert.ok(hook?.body);
+  const declarations = matchingNodes(hook, ts.isVariableDeclaration).filter(node => node.name.getText(toolbarTree) === "filters");
+  assert.equal(declarations.length, 1);
+  const memo = declarations[0].initializer;
+  assert.ok(memo && ts.isCallExpression(memo) && ts.isIdentifier(memo.expression) && memo.expression.text === "useMemo");
+  const factory = memo.arguments[0];
+  assert.ok(factory && ts.isArrowFunction(factory) && ts.isArrayLiteralExpression(factory.body));
+  const imageFilters = factory.body.elements.filter(node => objectProperty(node, "id", toolbarTree)?.getText(toolbarTree) === '"image"');
+  assert.equal(imageFilters.length, 1);
+  const imageFilter = new Function("return (" + imageFilters[0].getText(toolbarTree) + ");")();
+  assert.deepEqual(imageFilter, { id: "image", paramKey: "image", label: "الصورة", placeholder: "الصورة", type: "boolean", options: [{ value: "without", label: "بدون صورة" }] });
+  const returned = hook.body.statements.filter(ts.isReturnStatement);
+  assert.equal(returned.length, 1);
+  const props = returned[0].expression;
+  assert.ok(props && ts.isObjectLiteralExpression(props));
+  for (const name of ["filters", "onQueryPatch"]) assert.ok(props.properties.some(node => ts.isShorthandPropertyAssignment(node) && node.name.text === name), "Actual toolbar return retains " + name);
+  const controlledValues = objectProperty(props, "values", toolbarTree);
+  assert.ok(controlledValues);
+  assert.equal(objectProperty(controlledValues, "image", toolbarTree)?.getText(toolbarTree), "values.image", "Returned toolbar keeps controlled native image state");
+  const queryTree = ts.createSourceFile("topics.ts", querySource, ts.ScriptTarget.Latest, true);
+  const methods = ["parseFilters", "writeFilters"].map(name => {
+    const nodes = matchingNodes(queryTree, ts.isMethodDeclaration).filter(node => node.name.getText(queryTree) === name);
+    assert.equal(nodes.length, 1);
+    return nodes[0].getText(queryTree);
+  });
+  const compiled = ts.transpileModule(exportedFunction(querySource, "positiveId") + ";const query={" + methods.join(",") + "};", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const query = new Function(compiled + ";return query;")() as { parseFilters(params: URLSearchParams): { image: string }; writeFilters(filters: unknown, params: URLSearchParams): void };
+  for (const view of ["active", "trash"]) {
+    const filters = query.parseFilters(new URLSearchParams({ image: "without", view }));
+    assert.equal(filters.image, "without");
+    const params = new URLSearchParams();
+    query.writeFilters(filters, params);
+    assert.equal(params.get("image"), "without", "Native image filter survives both Topic views");
+  }
+}
+assertIndependentImageFilter(listClient, toolbarSource, contract);
+check("Without Image remains a controlled shared toolbar filter with native query round-trip in active and Trash views", true);
+for (const [name, consumer, toolbar, query] of [
+  ["missing Without Image option", listClient, toolbarSource.replace('value: "without"', 'value: "all"'), contract],
+  ["disconnected image state", listClient.replace("image: controller.query.filters.image,", 'image: "all",'), toolbarSource, contract],
+  ["disconnected query callback", listClient.replace("onQueryPatch: controller.applyQueryPatch,", "onQueryPatch: () => undefined,"), toolbarSource, contract],
+  ["detached filter declarations", listClient, toolbarSource.replace("    filters,", "    filters: [],"), contract],
+  ["detached returned image state", listClient, toolbarSource.replace("image: values.image,", 'image: "all",'), contract],
+  ["detached returned query callback", listClient, toolbarSource.replace("    onQueryPatch,", "    onQueryPatch: () => undefined,"), contract],
+  ["lost native image parsing", listClient, toolbarSource, contract.replace('image: image === "without" ? "without" : "all"', 'image: "all"')],
+  ["lost native image serialization", listClient, toolbarSource, contract.replace('if (filters.image !== "all") params.set("image", filters.image);', "")],
+] as const) {
+  assert.ok(consumer !== listClient || toolbar !== toolbarSource || query !== contract, "Effective negative probe " + name);
+  assert.throws(() => assertIndependentImageFilter(consumer, toolbar, query), name);
+  check("Independent Topic image filter proof rejects " + name, true);
+}
 check(
   "Trash bulk selection exposes the formal restore and permanent-delete labels",
   bulkLabels.includes('restoreSelected: "استعادة المحدد"') &&
