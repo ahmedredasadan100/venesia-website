@@ -60,8 +60,9 @@ if (process.argv.includes("--video-native-binding")) {
     ['name="video_duration" defaultValue={defaultDuration ?? ""}', 'name="video_duration" defaultValue=""'],
     ["requestMetaEmbed={requestMetaEmbed}", "requestMetaEmbed={undefined}"],
   ]) {
-    assert.ok(source.includes(from), `Affected negative probe must mutate current source: ${from}`);
-    assert.ok(!hasCanonicalVideoPanelFields(source.replace(from, to)), `Omitted Topic preservation rejects ${from}`);
+    const mutated = source.replace(from, to);
+    assert.notEqual(mutated, source, `Affected negative probe must mutate current source: ${from}`);
+    assert.ok(!hasCanonicalVideoPanelFields(mutated), `Omitted Topic preservation rejects ${from}`);
   }
   console.log("PASS existing Topic Video Panel owner retains native controls, provider/start/model/Meta/playback/default contracts and rejects six regressions; URL-only Project binding has separate targeted proof.");
   process.exit(0);
@@ -1208,8 +1209,44 @@ assert.ok(
 );
 const topicDraftQaRunner = readSource("scripts/qa-home-story-presentation.mjs");
 const topicDraftQualityWorkflow = readSource(".github/workflows/quality-gate.yml");
+const qualityGateYaml = createRequire(import.meta.url)("js-yaml") as {
+  load(source: string): unknown;
+  dump(value: unknown, options?: { lineWidth: number }): string;
+};
+function qualityWorkflowHasRequiredRun(workflow: string) {
+  const record = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+  let document: unknown;
+  try { document = qualityGateYaml.load(workflow); } catch { return false; }
+  if (!record(document) || !record(document.jobs)) return false;
+  const job = document.jobs["quality-gate"];
+  const active = (value: Record<string, unknown>) => !Object.hasOwn(value, "if")
+    && (!Object.hasOwn(value, "continue-on-error") || value["continue-on-error"] === false);
+  if (!record(job) || !active(job) || !Array.isArray(job.steps)) return false;
+  const commands = job.steps.filter((step): step is Record<string, unknown> =>
+    record(step) && typeof step.run === "string" && step.run.trim() === "npm run ci:check");
+  return commands.length === 1 && active(commands[0]!) && !Object.hasOwn(commands[0]!, "uses");
+}
+function disconnectedQaBranch(runner: string, flag: string, callName: string) {
+  const tree = parseTypeScriptSource("qa-home-story-presentation.mjs", runner);
+  const owner = functionDeclaration(tree, "verifyTopicContentPresentation");
+  assert.ok(owner, "The negative fixture binds the actual existing runner");
+  const branches = collectNodes(owner, ts.isIfStatement).filter(node =>
+    ts.isIdentifier(node.expression) && node.expression.text === flag
+    && ts.isBlock(node.thenStatement) && node.thenStatement.statements.some(statement =>
+      ts.isExpressionStatement(statement) && ts.isAwaitExpression(statement.expression)
+      && ts.isCallExpression(statement.expression.expression)
+      && ts.isIdentifier(statement.expression.expression.expression)
+      && statement.expression.expression.expression.text === callName));
+  assert.equal(branches.length, 1, "The negative fixture disconnects one actual awaited runner branch");
+  const expression = branches[0]!.expression;
+  const mutated = runner.slice(0, expression.getStart(tree)) + "false" + runner.slice(expression.end);
+  assert.notEqual(mutated, runner, "The actual runner branch mutation takes effect");
+  assert.equal((parseTypeScriptSource("disconnected-runner.mjs", mutated) as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "The disconnected runner mutation remains syntax-valid");
+  return mutated;
+}
 function topicDraftBrowserQaIsIntegrated(scripts: Record<string, string>, workflow: string, runner: string) {
-  const commands = (name: string) => (scripts[name] ?? "").split(/\s*&&\s*/);
+  const commands = (name: string) => (scripts[name] ?? "").split("&&").map(command => command.trim());
   const editorGate = commands("verify:content-editor-adoption");
   const sourceIndex = editorGate.indexOf("node --experimental-strip-types scripts/verify-unified-content-editors-adoption.mts");
   const galleryIndex = editorGate.indexOf("npm run qa:shared-gallery-authoring");
@@ -1224,7 +1261,7 @@ function topicDraftBrowserQaIsIntegrated(scripts: Record<string, string>, workfl
     && sourceIndex >= 0 && galleryIndex > sourceIndex && draftIndex > galleryIndex
     && commands("verify").includes("npm run verify:content-editor-adoption")
     && commands("ci:check").includes("npm run verify:content-editor-adoption")
-    && /^\s+run:\s+npm run ci:check\s*$/m.test(workflow)
+    && qualityWorkflowHasRequiredRun(workflow)
     && Boolean(fullEntry && hasCall(fullEntry.thenStatement, "verifyTopicContentPresentation") && fullBranch);
 }
 assert.ok(topicDraftBrowserQaIsIntegrated(packageScripts, topicDraftQualityWorkflow, topicDraftQaRunner),
@@ -1243,8 +1280,8 @@ for (const [label, scripts, workflow, runner] of [
   assert.ok(!topicDraftBrowserQaIsIntegrated(scripts, workflow, runner), `Full Draft browser CI integration rejects ${label}.`);
 }
 function contentPanelGalleryQaIsIntegrated(scripts: Record<string, string>, workflow: string, runner: string) {
-  if (/[|;\r\n]/.test(scripts["verify:content-editor-adoption"] ?? "")) return false;
-  const commands = (name: string) => (scripts[name] ?? "").split(/\s*&&\s*/);
+  if ([...(scripts["verify:content-editor-adoption"] ?? "")].some(character => ["|", ";", "\r", "\n"].includes(character))) return false;
+  const commands = (name: string) => (scripts[name] ?? "").split("&&").map(command => command.trim());
   const editorGate = commands("verify:content-editor-adoption");
   const sourceIndex = editorGate.indexOf("node --experimental-strip-types scripts/verify-unified-content-editors-adoption.mts");
   const galleryIndex = editorGate.indexOf("npm run qa:shared-gallery-authoring");
@@ -1269,7 +1306,7 @@ function contentPanelGalleryQaIsIntegrated(scripts: Record<string, string>, work
     && sourceIndex >= 0 && galleryIndex > sourceIndex && draftIndex > galleryIndex && panelIndex > draftIndex
     && commands("verify").includes("npm run verify:content-editor-adoption")
     && commands("ci:check").includes("npm run verify:content-editor-adoption")
-    && /^\s+run:\s+npm run ci:check\s*$/m.test(workflow)
+    && qualityWorkflowHasRequiredRun(workflow)
     && Boolean(entry && awaits(entry.thenStatement, "verifyTopicContentPresentation")
       && flag && branch
       && functionDeclaration(tree, "verifyContentPanelGalleryAdoption"));
@@ -1286,13 +1323,32 @@ for (const [label, scripts, workflow, runner] of [
   ["panel CI gate disconnected", { ...packageScripts, "ci:check": packageScripts["ci:check"].replace("npm run verify:content-editor-adoption", "npm run lint") }, topicDraftQualityWorkflow, topicDraftQaRunner],
   ["panel workflow disconnected", packageScripts, topicDraftQualityWorkflow.replace("run: npm run ci:check", "run: npm run lint"), topicDraftQaRunner],
   ["panel runner flag disconnected", packageScripts, topicDraftQualityWorkflow, topicDraftQaRunner.replaceAll("--content-panel-gallery-only", "--disconnected-panel-flag")],
-  ["panel runner branch disconnected", packageScripts, topicDraftQualityWorkflow, topicDraftQaRunner.replace(/if \(contentPanelGalleryOnly\)(?= \{\r?\n\s+await verifyContentPanelGalleryAdoption\()/, "if (false)")],
+  ["panel runner branch disconnected", packageScripts, topicDraftQualityWorkflow, disconnectedQaBranch(topicDraftQaRunner, "contentPanelGalleryOnly", "verifyContentPanelGalleryAdoption")],
   ["panel failure no longer awaited", packageScripts, topicDraftQualityWorkflow, topicDraftQaRunner.replace("await verifyContentPanelGalleryAdoption({", "void verifyContentPanelGalleryAdoption({")],
 ] as const) {
   assert.ok(JSON.stringify(scripts) !== JSON.stringify(packageScripts) || workflow !== topicDraftQualityWorkflow || runner !== topicDraftQaRunner,
     `Content Panel/Gallery CI negative fixture must mutate current bytes: ${label}.`);
   assert.ok(!contentPanelGalleryQaIsIntegrated(scripts, workflow, runner), `Content Panel/Gallery CI integration rejects ${label}.`);
 }
+const currentQualityWorkflow = qualityGateYaml.load(topicDraftQualityWorkflow) as { jobs: Record<string, Record<string, unknown> & { steps: Array<Record<string, unknown>> }> };
+assert.ok(qualityWorkflowHasRequiredRun(qualityGateYaml.dump(currentQualityWorkflow, { lineWidth: -1 })), "Equivalent native YAML formatting preserves the actual canonical workflow command");
+for (const [label, mutate] of [
+  ["missing canonical job", (workflow: typeof currentQualityWorkflow) => { delete workflow.jobs["quality-gate"]; }],
+  ["missing canonical command", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!.steps = []; }],
+  ["command only in unrelated job", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!.steps = []; workflow.jobs.unrelated = { steps: [{ run: "npm run ci:check" }] }; }],
+  ["disabled canonical job", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!.if = false; }],
+  ["ignored job failure", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!["continue-on-error"] = true; }],
+  ["disabled canonical step", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!.steps.find(step => step.run === "npm run ci:check")!.if = false; }],
+  ["ignored step failure", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!.steps.find(step => step.run === "npm run ci:check")!["continue-on-error"] = true; }],
+  ["duplicate canonical command", (workflow: typeof currentQualityWorkflow) => { workflow.jobs["quality-gate"]!.steps.push({ run: "npm run ci:check" }); }],
+] as const) {
+  const changed = structuredClone(currentQualityWorkflow); mutate(changed);
+  assert.notDeepEqual(changed, currentQualityWorkflow, label + " changes the actual workflow structure");
+  const serialized = qualityGateYaml.dump(changed, { lineWidth: -1 });
+  assert.ok(!topicDraftBrowserQaIsIntegrated(packageScripts, serialized, topicDraftQaRunner)
+    && !contentPanelGalleryQaIsIntegrated(packageScripts, serialized, topicDraftQaRunner), "Canonical workflow structure rejects " + label);
+}
+console.log("PASS canonical workflow YAML owner: actual quality-gate job/run, equivalent formatting and eight missing/disconnected/disabled/ignored/duplicate command controls.");
 
 function draftNoticeQaIsIntegrated(scripts: Record<string, string>, workflow: string, runner: string) {
   if (!contentPanelGalleryQaIsIntegrated(scripts, workflow, runner)) return false;
@@ -1324,7 +1380,7 @@ for (const [label, scripts, runner] of [
   ["orphaned alias", { ...packageScripts, "verify:content-editor-adoption": packageScripts["verify:content-editor-adoption"].replace(" && npm run qa:draft-notices", "") }, topicDraftQaRunner],
   ["ignored gate failure", { ...packageScripts, "verify:content-editor-adoption": `${packageScripts["verify:content-editor-adoption"]} || true` }, topicDraftQaRunner],
   ["disconnected flag", packageScripts, topicDraftQaRunner.replaceAll("--draft-notice-only", "--disconnected-notice-flag")],
-  ["disconnected branch", packageScripts, topicDraftQaRunner.replace(/if \(draftNoticeOnly\)(?= \{\r?\n\s+await verifyDraftNoticeUnification\()/, "if (false)")],
+  ["disconnected branch", packageScripts, disconnectedQaBranch(topicDraftQaRunner, "draftNoticeOnly", "verifyDraftNoticeUnification")],
   ["unawaited failure", packageScripts, topicDraftQaRunner.replace("await verifyDraftNoticeUnification({", "void verifyDraftNoticeUnification({")],
 ] as const) {
   assert.ok(JSON.stringify(scripts) !== JSON.stringify(packageScripts) || runner !== topicDraftQaRunner,
@@ -1335,7 +1391,7 @@ for (const [label, scripts, runner] of [
 function unifiedImageQaIsIntegrated(scripts: Record<string, string>, workflow: string, runner: string) {
   if (!draftNoticeQaIsIntegrated(scripts, workflow, runner)) return false;
   const gate = scripts["verify:content-editor-adoption"] ?? "";
-  if (/[|;\r\n]/u.test(gate)) return false;
+  if ([...gate].some(character => ["|", ";", "\r", "\n"].includes(character))) return false;
   const commands = gate.split("&&").map(command => command.trim());
   const tree = parseTypeScriptSource("qa-home-story-presentation.mjs", runner);
   const owner = functionDeclaration(tree, "verifyTopicContentPresentation");
@@ -2185,6 +2241,15 @@ function assertCanonicalVideoRuntimeErrors(input: string) {
   }
 }
 assertCanonicalVideoRuntimeErrors(mediaVideoFields.text);
+function renderedVideoNativeTags(html: string) {
+  const tree = parseTypeScriptSource("VideoRuntimeRendered.tsx", `const rendered = <>${html}</>;`);
+  assert.equal((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "Actual rendered Video HTML must parse as structured JSX");
+  const elements = collectNodes(tree, (node): node is ts.JsxOpeningElement | ts.JsxSelfClosingElement => ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node));
+  return elements.filter(element => ["input", "button", "p"].includes(element.tagName.getText(tree))).map(element =>
+    new Map(element.attributes.properties.flatMap(attribute => ts.isJsxAttribute(attribute)
+      && attribute.initializer && ts.isStringLiteral(attribute.initializer)
+      ? [[attribute.name.getText(tree), attribute.initializer.text] as const] : [])));
+}
 function verifyVideoRuntimeErrorRendering(input: string) {
   assertCanonicalVideoRuntimeErrors(input);
   const tree = parseTypeScriptSource("MediaVideoFields.tsx", input);
@@ -2228,13 +2293,12 @@ function verifyVideoRuntimeErrorRendering(input: string) {
     { name: "Topic panel", props: { presentation: "panel" }, panel: true, bound: false },
     { name: "bound panel", props: { presentation: "panel", nativeBinding: bound }, panel: true, bound: true },
   ];
-  const attributes = (tag: string) => new Map(Array.from(tag.matchAll(/\s([\w:-]+)="([^"]*)"/gu), match => [match[1]!, match[2]!]));
   let cases = 0;
   for (const mode of modes) for (const errors of [false, true]) {
     const names = mode.bound ? [bound.thumbnailName] : mode.panel ? ["video_url", "video_start_seconds", "video_duration", "video_thumbnail"] : ["video_url", "video_duration", "video_thumbnail"];
     fieldErrors = errors ? Object.fromEntries([...names, bound.urlErrorName, bound.thumbnailAltErrorName].map(name => [name, [`Error ${name}`]])) : {};
     const html = renderToStaticMarkup(createElement(Video, { defaultVideoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoProvider: "youtube", videoStartSeconds: "15", defaultDuration: "12:34", defaultThumbnail: "/saved-poster.jpg", onVideoUrlChange() {}, onVideoThumbnailChange() {}, ...mode.props }));
-    const tags = Array.from(html.matchAll(/<(?:input|button|p)\b[^>]*>/gu), match => attributes(match[0]));
+    const tags = renderedVideoNativeTags(html);
     const alerts = tags.filter(tag => tag.get("role") === "alert");
     assert.equal(alerts.length, errors ? names.length : 0, `${mode.name} error count`);
     for (const name of names) assert.equal(alerts.filter(tag => tag.get("id") === `${name}-error`).length, errors ? 1 : 0, `${mode.name} canonical error name/id exactly once`);
