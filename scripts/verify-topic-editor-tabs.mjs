@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
+import { createElement, Fragment } from "react";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const editor = read("src/components/admin/content/editors/article/TopicMarkdownEditor.tsx");
@@ -63,20 +64,113 @@ check("article adapters slot the shared publishing owner into the shared dashboa
 check("create and edit use exactly one unified shell", [create, edit].every((source) => source.match(/<ContentEditorShell\b/g)?.length === 1));
 check("shell owns one shared tab renderer and one action row", shell.match(/<AdminModuleTabs\b/g)?.length === 1 && shell.match(/<AdminFormActions\b/g)?.length === 1);
 check("shared content shell preserves the existing Review Section Hero default and shared context owner", ["مراجعة المحتوى وحالة النشر", "راجع جاهزية المحتوى وإعدادات الظهور، ثم عالج الملاحظات قبل النشر."].every((label) => shell.includes(label)) && shell.includes('if (tab.id !== "publish") return tab;') && shell.includes("...CONTENT_REVIEW_TAB_SECTION") && shell.includes("tabs={presentedTabs}") && !review.includes("data-admin-tab-section-heading"));
-function hasScopedReviewSection(source, selected) {
-  const tree = ts.createSourceFile("ReviewTabs.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), tabs = [], selectors = [];
-  const visit = node => { if (ts.isObjectLiteralExpression(node) && node.properties.some(property => ts.isPropertyAssignment(property) && property.name.getText(tree) === "id" && ts.isStringLiteral(property.initializer) && property.initializer.text === "publish")) tabs.push(node); if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "videoPanel") selectors.push(node); ts.forEachChild(node, visit); }; visit(tree);
-  const presentation = tabs[0]?.properties.find(property => ts.isPropertyAssignment(property) && property.name.getText(tree) === "sectionHeaderPresentation")?.initializer;
-  if (selected === "video") {
-    const predicate = selectors[0]?.initializer;
-    const premium = presentation && ts.isConditionalExpression(presentation) ? presentation.whenTrue : undefined;
-    return tabs.length === 1 && selectors.length === 1 && predicate && ts.isBinaryExpression(predicate) && ts.isIdentifier(predicate.left) && predicate.left.text === "contentType" && predicate.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken && ts.isStringLiteral(predicate.right) && predicate.right.text === "video" &&
-      presentation && ts.isConditionalExpression(presentation) && ts.isIdentifier(presentation.condition) && presentation.condition.text === "videoPanel" && premium && ts.isAsExpression(premium) && ts.isStringLiteral(premium.expression) && premium.expression.text === "premium" && ts.isIdentifier(presentation.whenFalse) && presentation.whenFalse.text === "undefined";
+function assertUnifiedReviewTransport(create, edit, media, shell, publishing) {
+  const parse = source => ts.createSourceFile("ReviewTabs.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const nodes = (root, predicate) => { const found = []; const visit = node => { if (predicate(node)) found.push(node); ts.forEachChild(node, visit); }; visit(root); return found; };
+  const unwrap = node => { while (node && (ts.isParenthesizedExpression(node) || ts.isAsExpression(node))) node = node.expression; return node; };
+  const property = (node, name) => node.properties.filter(ts.isPropertyAssignment).find(value => value.name.getText() === name)?.initializer;
+  const elements = (root, name) => nodes(root, node => (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText() === name);
+  const attribute = (node, name) => { const value = node.attributes.properties.find(value => ts.isJsxAttribute(value) && value.name.getText() === name)?.initializer; return value && ts.isStringLiteral(value) ? value.text : value && ts.isJsxExpression(value) ? value.expression?.getText() : undefined; };
+  const importOwner = (tree, name, path) => assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === path && node.importClause?.name?.text === name), `Canonical ${name} import`);
+  const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.React, jsxFactory: "createElement", jsxFragmentFactory: "Fragment" } }).outputText;
+  const typesTree = parse(read("src/lib/admin/content/content-types.ts"));
+  const typeDeclarations = ["CONTENT_TYPES", "MEDIA_EDITABLE_CONTENT_TYPES"].map(name => { const statement = typesTree.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(value => value.name.getText(typesTree) === name)); assert.ok(statement); return statement.getText(typesTree).replace(/^export\s+/u, ""); });
+  const mediaTypes = new Function(compile(typeDeclarations.join("\n")) + ";return MEDIA_EDITABLE_CONTENT_TYPES;")();
+  assert.ok(mediaTypes.length > 0 && new Set(mediaTypes).size === mediaTypes.length);
+  function consumer(source, kind) {
+    const tree = parse(source), mediaConsumer = kind === "media";
+    importOwner(tree, "ContentEditorShell", mediaConsumer ? "../ContentEditorShell" : "./ContentEditorShell");
+    importOwner(tree, "ContentReviewPanel", mediaConsumer ? "../../../content-workflow/ContentReviewPanel" : "../../content-workflow/ContentReviewPanel");
+    importOwner(tree, "ContentPublishingOptions", mediaConsumer ? "../ContentPublishingOptions" : "./ContentPublishingOptions");
+    const builders = nodes(tree, node => ts.isFunctionDeclaration(node) && node.name?.text === "renderTabs"); assert.equal(builders.length, 1);
+    const returns = builders[0].body.statements.filter(ts.isReturnStatement); assert.equal(returns.length, 1); const array = unwrap(returns[0].expression); assert.ok(array && ts.isArrayLiteralExpression(array));
+    const tabs = array.elements.filter(ts.isObjectLiteralExpression).filter(node => { const id = unwrap(property(node, "id")); return id && ts.isStringLiteral(id) && id.text === "publish"; }); assert.equal(tabs.length, 1);
+    const tab = tabs[0], metadata = {};
+    assert.ok(tab.properties.every(ts.isPropertyAssignment)); assert.equal(new Set(tab.properties.map(value => value.name.getText(tree))).size, tab.properties.length, "Publish metadata has no duplicate or spread override");
+    for (const name of ["id", "navigationLabel", "sectionHeaderPresentation", "icon"]) { const value = unwrap(property(tab, name)); assert.ok(value && ts.isStringLiteral(value)); metadata[name] = value.text; }
+    assert.deepEqual(metadata, { id: "publish", navigationLabel: "المراجعة", sectionHeaderPresentation: "premium", icon: "publish" });
+    const shellUses = elements(tree, "ContentEditorShell"); assert.equal(shellUses.length, 1); assert.equal(attribute(shellUses[0], "tabs"), "renderTabs");
+    const content = unwrap(property(tab, "content")); assert.ok(content && ts.isJsxSelfClosingElement(content) && content.tagName.getText(tree) === "ContentReviewPanel", "Actual returned publish tab keeps its Review owner");
+    assert.equal(attribute(content, "presentation"), "panel");
+    assert.equal(attribute(content, "formId"), mediaConsumer ? "formId" : kind === "create" ? "topic-create-form" : "topic-edit-form");
+    const option = content.attributes.properties.find(node => ts.isJsxAttribute(node) && node.name.getText(tree) === "publishingOptions")?.initializer;
+    const publisher = option && ts.isJsxExpression(option) ? unwrap(option.expression) : undefined;
+    assert.ok(publisher && ts.isJsxSelfClosingElement(publisher) && publisher.tagName.getText(tree) === "ContentPublishingOptions");
+    assert.equal(attribute(publisher, "presentation"), "panel");
+    for (const name of ["status", "featured", "popular", "publishedAt", "dateLabel"]) assert.equal(attribute(publisher, name), attribute(content, name), `Review and native Publish retain the same ${name}`);
+    assert.ok(attribute(publisher, "status") && attribute(publisher, "draftDisplayDate")?.startsWith("getTopicDraftDisplayDate("));
+    if (mediaConsumer) assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../../../lib/admin/content/content-types" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(value => !value.propertyName && value.name.text === "MediaEditableContentType")) && source.includes("contentType: MediaEditableContentType;"), "All Media kinds use the canonical type owner");
+    return metadata;
   }
-  return tabs.length === 1 && (selected ? presentation?.getText(tree) === '"premium" as const' : presentation === undefined);
+  const metadata = [consumer(create, "create"), consumer(edit, "edit"), consumer(media, "media")];
+  const tree = parse(shell);
+  for (const [name, path] of [["AdminCard", "../../ui/AdminCard"]]) importOwner(tree, name, path);
+  for (const name of ["AdminModuleSectionHeader", "AdminModuleTabs"]) assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../ui/AdminModuleTabs" && (name === "AdminModuleTabs" ? node.importClause?.name?.text === name : node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(value => !value.propertyName && value.name.text === name))), `Canonical Shell ${name}`);
+  for (const [name, path] of [["ADMIN_ENTITY_REVIEW_TAB_LABEL", "../../../../lib/admin/review/entity-review-presentation"], ["ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", "../../../../lib/admin/admin-ui-styles"], ["ADMIN_FORM_STACK_CLASS_NAME", "../../ui"]]) assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === path && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(value => !value.propertyName && value.name.text === name)), `Canonical Shell metadata ${name}`);
+  const frames = tree.statements.filter(ts.isFunctionDeclaration).filter(node => node.name?.text === "ContentEditorShellFrame"); assert.equal(frames.length, 1);
+  const statements = frames[0].body.statements.filter(ts.isVariableStatement).filter(node => node.declarationList.declarations.some(value => value.name.getText(tree) === "presentedTabs")); assert.equal(statements.length, 1);
+  const map = statements[0].declarationList.declarations[0].initializer; assert.ok(map && ts.isCallExpression(map) && map.expression.getText(tree) === "tabs.map" && map.arguments.length === 1 && ts.isArrowFunction(map.arguments[0]));
+  const renderedTabs = elements(frames[0], "AdminModuleTabs"); assert.equal(renderedTabs.length, 1); assert.equal(attribute(renderedTabs[0], "tabs"), "presentedTabs");
+  const section = tree.statements.filter(ts.isVariableStatement).find(node => node.declarationList.declarations.some(value => value.name.getText(tree) === "CONTENT_REVIEW_TAB_SECTION")); assert.ok(section);
+  const Card = () => null, Header = () => null, reviewLabel = "المراجعة", surface = "canonical-charcoal", stack = "canonical-stack";
+  const run = new Function("tabs", "formId", "createElement", "Fragment", "AdminCard", "AdminModuleSectionHeader", "ADMIN_ENTITY_REVIEW_TAB_LABEL", "ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", "ADMIN_FORM_STACK_CLASS_NAME", compile(section.getText(tree) + "\n" + statements[0].getText(tree)) + ";return presentedTabs;");
+  const ordinary = { id: "basic", content: createElement("input", { name: "title", defaultValue: "retained" }) }, content = createElement("input", { name: "status", defaultValue: "unpublished" }), indicator = createElement("span", null, "retained");
+  let cases = 0;
+  for (const [kind, selected] of [["article-create", metadata[0]], ["article-edit", metadata[1]], ...mediaTypes.map(kind => [kind, metadata[2]])]) {
+    const input = { ...selected, content, indicator }, result = run([ordinary, input], kind, createElement, Fragment, Card, Header, reviewLabel, surface, stack);
+    assert.equal(result[0], ordinary); const publish = result[1]; assert.equal(publish.id, "publish"); assert.equal(publish.indicator, indicator); assert.equal(publish.navigationLabel, reviewLabel);
+    assert.equal(publish.sectionHeading, undefined); assert.equal(publish.sectionDescription, undefined); assert.equal(publish.icon, "publish");
+    assert.equal(publish.content.type, "div"); assert.equal(publish.content.props.className, stack); assert.equal(publish.content.props.children.length, 2);
+    const [card, preserved] = publish.content.props.children; assert.equal(preserved, content); assert.equal(card.type, Card); assert.equal(card.props.presentation, "premium");
+    const header = card.props.children; assert.equal(header.type, Header); assert.equal(header.props.id, `${kind}-review-publish`); assert.equal(header.props.sectionHeading, reviewLabel); assert.equal(header.props.sectionDescription, "راجع جاهزية المحتوى وإعدادات الظهور، ثم عالج الملاحظات قبل النشر.");
+    assert.equal(header.props.icon, "publish"); assert.equal(header.props.sectionHeaderPresentation, "premium"); assert.equal(header.props.sectionHeaderClassName, surface); assert.equal(header.props.standalone, true); cases += 1;
+  }
+  const aliasProperties = nodes(parse(tabsOwner), node => ts.isPropertySignature(node) && node.name.getText() === "sectionHeaderPresentation"); assert.equal(aliasProperties.length, 1); assert.ok(aliasProperties[0].type && ts.isUnionTypeNode(aliasProperties[0].type));
+  const aliases = aliasProperties[0].type.types.map(value => { assert.ok(ts.isLiteralTypeNode(value) && ts.isStringLiteral(value.literal)); return value.literal.text; });
+  const fallbackAliases = [undefined, ...aliases.filter(value => value !== "premium")];
+  for (const presentation of fallbackAliases) {
+    const input = { id: "publish", content, indicator, ...(presentation === undefined ? {} : { sectionHeaderPresentation: presentation }) };
+    const [publish] = run([input], "unselected", createElement, Fragment, Card, Header, reviewLabel, surface, stack);
+    assert.equal(publish.id, input.id); assert.equal(publish.content, content); assert.equal(publish.indicator, indicator); assert.equal(publish.navigationLabel, reviewLabel); assert.equal(publish.sectionHeading, "مراجعة المحتوى وحالة النشر"); assert.equal(publish.sectionDescription, "راجع جاهزية المحتوى وإعدادات الظهور، ثم عالج الملاحظات قبل النشر."); cases += 1;
+  }
+  const publishTree = parse(publishing), functions = publishTree.statements.filter(ts.isFunctionDeclaration).filter(node => node.name?.text === "ContentPublishingOptions"); assert.equal(functions.length, 1);
+  importOwner(publishTree, "AdminFormSwitch", "../../ui/AdminFormSwitch"); importOwner(publishTree, "TopicFormSwitch", "./article/TopicFormSwitch");
+  const state = nodes(functions[0], node => ts.isVariableDeclaration(node) && ts.isArrayBindingPattern(node.name) && node.name.elements.map(value => value.name?.getText()).join(",") === "published,setPublished"); assert.equal(state.length, 1); assert.equal(state[0].initializer?.getText(), 'useState(status === "published")');
+  const native = elements(functions[0], "input").filter(node => attribute(node, "name") === "status"); assert.equal(native.length, 1); assert.equal(attribute(native[0], "type"), "hidden"); assert.equal(attribute(native[0], "value"), 'published ? "published" : "unpublished"');
+  const toggles = elements(functions[0], "AdminFormSwitch"); assert.equal(toggles.length, 1); assert.equal(attribute(toggles[0], "checked"), "published"); assert.equal(attribute(toggles[0], "onChange"), "(event) => setPublished(event.target.checked)");
+  assert.deepEqual(elements(functions[0], "TopicFormSwitch").map(node => [attribute(node, "name"), attribute(node, "defaultChecked")]), [["is_featured", "featured"], ["is_popular", "popular"]]);
+  assert.equal(attribute(elements(functions[0], "TopicDateLabelField")[0], "defaultValue"), "dateLabel");
+  return { mediaTypes, cases, fallbackAliases };
 }
-check("Article and Video Review select one canonical Premium Shell Header while other Media retain the existing Section Hero default", hasScopedReviewSection(create, true) && hasScopedReviewSection(edit, true) && hasScopedReviewSection(media, "video") && shell.includes('if (tab.sectionHeaderPresentation !== "premium") return reviewTab;') && shell.includes('sectionHeading: undefined') && shell.includes('sectionDescription: undefined') && shell.includes('sectionHeading={ADMIN_ENTITY_REVIEW_TAB_LABEL}') && shell.includes('sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}'));
-check("Review Shell context rejects omitted Article adoption, other Media leakage, changed Video scope and unsupported section presentations", !hasScopedReviewSection(create.replace('sectionHeaderPresentation: "premium" as const,', ''), true) && !hasScopedReviewSection(media.replace('id: "publish",', 'id: "publish", sectionHeaderPresentation: "premium" as const,'), "video") && !hasScopedReviewSection(media.replace('const videoPanel = contentType === "video";', 'const videoPanel = contentType === "gallery";'), "video") && !hasScopedReviewSection(edit.replace('sectionHeaderPresentation: "premium" as const,', 'sectionHeaderPresentation: "panel" as const,'), true));
+const unifiedReview = assertUnifiedReviewTransport(create, edit, media, shell, publishing);
+check("Article Create/Edit and every canonical Media type select one shared Premium Review Header with intact native Publish and generic Shell fallback", unifiedReview.cases === unifiedReview.mediaTypes.length + 2 + unifiedReview.fallbackAliases.length);
+const reviewShellTree = ts.createSourceFile("Shell.tsx", shell, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let reviewHeader;
+const findReviewHeader = node => { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(reviewShellTree) === "AdminModuleSectionHeader") reviewHeader = node; ts.forEachChild(node, findReviewHeader); }; findReviewHeader(reviewShellTree); assert.ok(reviewHeader);
+const inactiveShellHeader = shell.slice(0, reviewHeader.getStart(reviewShellTree)) + `{false && ${reviewHeader.getText(reviewShellTree)}}` + shell.slice(reviewHeader.end);
+for (const [name, values] of [
+  ["omitted Article selection", [create.replace('sectionHeaderPresentation: "premium" as const,', ''), edit, media, shell, publishing]],
+  ["Video-only Media selection", [create, edit, media.replace('sectionHeaderPresentation: "premium" as const,', 'sectionHeaderPresentation: videoPanel ? "premium" as const : undefined,'), shell, publishing]],
+  ["unsupported Article selection", [create, edit.replace('sectionHeaderPresentation: "premium" as const,', 'sectionHeaderPresentation: "panel" as const,'), media, shell, publishing]],
+  ["disconnected tab producer", [create.replace('tabs={renderTabs}', 'tabs={[]}'), edit, media, shell, publishing]],
+  ["parallel Review owner", [create, edit, media.replace('from "../../../content-workflow/ContentReviewPanel"', 'from "../../../content-workflow/ParallelReview"'), shell, publishing]],
+  ["disconnected native Publish", [create, edit, media.replace('<ContentPublishingOptions', '<ParallelPublishingOptions'), shell, publishing]],
+  ["wrong publish identity", [create.replace('id: "publish",', 'id: "other-publish",'), edit, media, shell, publishing]],
+  ["lost context indicator", [create, edit, media, shell.replace('indicator: tab.indicator,', 'indicator: undefined,'), publishing]],
+  ["lost Shell content", [create, edit, media, shell.replace('{tab.content}', '{null}'), publishing]],
+  ["inactive Shell Header", [create, edit, media, inactiveShellHeader, publishing]],
+  ["duplicate Shell heading", [create, edit, media, shell.replace('sectionHeading: undefined,', 'sectionHeading: "duplicate",'), publishing]],
+  ["changed generic Shell fallback", [create, edit, media, shell.replace('if (tab.sectionHeaderPresentation !== "premium") return reviewTab;', 'if (false) return reviewTab;'), publishing]],
+  ["wrong native status", [create, edit, media, shell, publishing.replace('name="status"', 'name="other_status"')]],
+  ["lost unchecked status", [create, edit, media, shell, publishing.replace('published ? "published" : "unpublished"', 'published ? "published" : "published"')]],
+  ["disconnected native toggle", [create, edit, media, shell, publishing.replace('setPublished(event.target.checked)', 'setPublished(false)')]],
+  ["wrong featured binding", [create, edit, media, shell, publishing.replace('defaultChecked={featured}', 'defaultChecked={popular}')]],
+  ["wrong native initial status", [create, edit, media, shell, publishing.replace('useState(status === "published")', 'useState(true)')]],
+  ["duplicate Review selection", [create, edit, media.replace('id: "publish",', 'id: "publish", sectionHeaderPresentation: "premium" as const,'), shell, publishing]],
+]) {
+  assert.ok(values.some((value, index) => value !== [create, edit, media, shell, publishing][index]), `Effective negative ${name}`);
+  assert.throws(() => assertUnifiedReviewTransport(...values), name); check(`Unified Review rejects ${name}`, true);
+}
 check("shell binds tab navigation to one shared event", shell.includes("navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}") && navigationEvent.includes('"content-editor:navigate"'));
 check("create and edit mount every article tab capability once", [create, edit].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "ContentReviewPanel"].every((token) => source.match(new RegExp(`<${token}\\b`, "g"))?.length === 1)));
 function hasDisplayTabTransfer(source, expectedTabs) {

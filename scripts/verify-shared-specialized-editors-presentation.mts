@@ -4,7 +4,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 import ts from "typescript";
-import { Children, createElement, isValidElement, type ReactNode } from "react";
+import { Children, Fragment, createElement, isValidElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
@@ -36,6 +37,7 @@ import {
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
 const normalizePath = (path: string) => path.replaceAll("\\", "/");
+const mediaContentOwnerPath = "src/components/admin/content/editors/media/MediaContentForm.tsx";
 
 function discoverSourceFiles(directory: string): string[] {
   return readdirSync(resolve(ROOT, directory), { withFileTypes: true }).flatMap(
@@ -55,21 +57,31 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+if (process.argv.includes("--unified-header-owner")) {
+  await verifyUnifiedSectionHeaderRuntime();
+  verifyCurrentAlignedGridSelectors();
+  verifyModuleSectionForwarding();
+  verifyGalleryHeaderContexts();
+  verifyExplicitEmbeddedHeaderContexts();
+  verifyCurrentEditorNavigation();
+  verifyCurrentModuleIdentity();
+  console.log(`Unified Section Header verification passed (${passed} affected checks; source/SSR only).`);
+  process.exit(0);
+}
+
 if (process.argv.includes("--unified-owner-composition")) {
   const owner = read("src/components/admin/ui/AdminForm.tsx");
-  const ownerTree = ts.createSourceFile("AdminForm.tsx", owner, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const sectionOwner = ownerTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormSection")!.getText(ownerTree);
   check("Unified Section delegates header and children to the actual default Card owner", Boolean(canonicalPanelSectionCard(owner)) &&
     !canonicalPanelSectionCard(owner.replace('from "./AdminCard"', 'from "./ParallelCard"')) &&
-    !canonicalPanelSectionCard(owner.replace("{sectionHeader}", "{null}")) &&
-    !canonicalPanelSectionCard(owner.replace(sectionOwner, sectionOwner.replace("{children}", "{null}"))));
+    !canonicalPanelSectionCard(withoutCanonicalSectionChild(owner, "sectionHeader")) &&
+    !canonicalPanelSectionCard(withoutCanonicalSectionChild(owner, "children")));
   for (const path of ["src/app/admin/content/categories/CategoryForm.tsx", "src/app/admin/content/series/SeriesForm.tsx"]) {
     const source = read(path);
     check(`${path} retains canonical embedded header ownership for omitted/default/panel callers`,
       fullSectionHeadersStayOutsideCards(path, source, false, owner) &&
       fullSectionHeadersStayOutsideCards(path, source.replaceAll('presentation="panel"', 'presentation="default"'), false, owner) &&
       fullSectionHeadersStayOutsideCards(path, source.replaceAll('presentation="panel"', ''), false, owner) &&
-      !fullSectionHeadersStayOutsideCards(path, source, false, owner.replace("{sectionHeader}", "{null}")) &&
+      !fullSectionHeadersStayOutsideCards(path, source, false, withoutCanonicalSectionChild(owner, "sectionHeader")) &&
       !fullSectionHeadersStayOutsideCards(path, source.replace('sectionHeaderPresentation="premium"', 'sectionHeaderPresentation="default"'), false, owner));
   }
   const faqPath = "src/components/admin/content/editors/article/FaqEditor.tsx", faq = read(faqPath);
@@ -379,9 +391,12 @@ function hasCanonicalModuleSectionHeader(source: string) {
   const legacyReturn = header.body.statements.find(ts.isReturnStatement);
   if (!legacyReturn) return false;
   const markup = header.body.getText(tree);
-  const canonicalControl = tree.statements.some((node) => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminForm" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some((binding) => binding.name.text === "AdminFormControlHeader" && !binding.propertyName));
-  const identity = header.body.statements.flatMap((node) => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : []).find((node) => node.name.getText(tree) === "sectionIdentity")?.initializer;
-  const identityNode = identity && ts.isParenthesizedExpression(identity) ? identity.expression : identity;
+  const canonicalControl = tree.statements.some(node => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormControlHeader" && node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) &&
+    !tree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminForm");
+  const identities: ts.JsxSelfClosingElement[] = [];
+  const findIdentity = (node: ts.Node) => { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "AdminFormControlHeader") identities.push(node); ts.forEachChild(node, findIdentity); };
+  findIdentity(legacyReturn);
+  const identityNode = identities.length === 1 ? identities[0] : undefined;
   if (!canonicalControl || !identityNode || !ts.isJsxSelfClosingElement(identityNode) || identityNode.tagName.getText(tree) !== "AdminFormControlHeader") return false;
   const identityAttributes = identityNode.attributes.properties.filter(ts.isJsxAttribute);
   const identityValue = (name: string) => identityAttributes.find((node) => node.name.getText(tree) === name)?.initializer?.getText(tree);
@@ -402,8 +417,8 @@ function hasCanonicalModuleSectionHeader(source: string) {
     ts.isJsxSpreadAttribute(spread) && spread.expression.getText(tree) === "tab" &&
     markup.includes("return tab.sectionHeading ?") && markup.includes(": null") && markup.includes("data-admin-tab-section-heading={tab.id}") &&
     markup.includes('tab.sectionHeaderPresentation === "panel"') && markup.includes('tab.sectionHeaderPresentation === "premium"') &&
-    markup.includes("tab.sectionHeaderClassName") && markup.match(/tab\.sectionSummary/g)?.length === 6 &&
-    markup.match(/\{sectionIdentity\}/g)?.length === 3 && !/<h[1-6]\b|<svg\b/u.test(markup) &&
+    markup.includes("tab.sectionHeaderClassName") && markup.match(/tab\.sectionSummary/g)?.length === 2 &&
+    identities.length === 1 && !/<h[1-6]\b|<svg\b/u.test(markup) &&
     !tabSource.includes("data-admin-tab-section-heading") && tabSource.indexOf("<AdminModuleSectionHeader") < tabSource.indexOf("data-admin-active-panel-context") &&
     tabSource.indexOf("data-admin-active-panel-context") < tabSource.indexOf("{tab.content}");
 }
@@ -420,11 +435,11 @@ check(
     !hasCanonicalModuleSectionHeader(sharedTabs.replace("<AdminModuleSectionHeader {...tab} />", "<header />")) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replaceAll("data-admin-tab-section-heading={tab.id}", "data-parallel-section-heading={tab.id}")) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replaceAll("tab.sectionSummary", "undefined")) &&
-    !hasCanonicalModuleSectionHeader(sharedTabs.replace('from "./AdminForm"', 'from "./ParallelForm"')) &&
+    !hasCanonicalModuleSectionHeader(sharedTabs.replace("export function AdminFormControlHeader", "export function ParallelControlHeader")) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replace('presentation="leading-icon"', 'presentation="compact-inline"')) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replace('title={<span role="heading"', 'title={<span className="text-xl" role="heading"')) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replace("description={tab.sectionDescription}", "description={null}")) &&
-    !hasCanonicalModuleSectionHeader(sharedTabs.replaceAll("{sectionIdentity}", "{null}")) &&
+    !hasCanonicalModuleSectionHeader(sharedTabs.replace("<AdminFormControlHeader", "<ParallelControlHeader")) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replace('tab.sectionHeaderPresentation === "premium"', 'tab.sectionHeaderPresentation === "panel"')) &&
     !hasCanonicalModuleSectionHeader(sharedTabs.replace(' | "premium";', ';')),
 );
@@ -434,14 +449,58 @@ function hasStandalonePremiumHeader(source: string, styles: string) {
   const header = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminModuleSectionHeader");
   const variables = header?.body?.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : []) ?? [];
   const defaultValue = variables.find(node => node.name.getText(tree) === "standalone")?.initializer;
-  const premiumBranch = header?.body?.statements.find(node => ts.isIfStatement(node) && node.expression.getText(tree) === 'tab.sectionHeaderPresentation === "premium"');
-  const markup = premiumBranch?.getText(tree) ?? "";
+  const markup = header?.body?.getText(tree) ?? "";
   const tokenNames = ["ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME", "ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME", "ADMIN_PREMIUM_SECTION_HEADER_CLASS_NAME"];
-  return hasCanonicalModuleSectionHeader(source) && defaultValue?.getText(tree) === "tab.standalone ?? false" && tokenNames.every(name => tree.statements.some(node => ts.isImportDeclaration(node) && node.moduleSpecifier.getText(tree) === '"../../../lib/admin/admin-ui-styles"' && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => binding.name.text === name && !binding.propertyName))) && markup.includes('? `relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`') && markup.includes(": ADMIN_PREMIUM_SECTION_HEADER_CLASS_NAME}") && styles.includes('"flex min-w-0 flex-wrap items-center justify-between gap-3"') && styles.includes('`relative -mx-3 -mt-3 mb-3 ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`');
+  return hasCanonicalModuleSectionHeader(source) && defaultValue?.getText(tree) === 'tab.standalone ?? !(tab.sectionHeaderPresentation === "premium" || tab.sectionHeaderPresentation === "panel")' && tokenNames.every(name => tree.statements.some(node => ts.isImportDeclaration(node) && node.moduleSpecifier.getText(tree) === '"../../../lib/admin/admin-ui-styles"' && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => binding.name.text === name && !binding.propertyName))) && markup.includes('? `relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`') && markup.includes(": ADMIN_PREMIUM_SECTION_HEADER_CLASS_NAME}") && styles.includes('"flex min-w-0 flex-wrap items-center justify-between gap-3"') && styles.includes('`relative -mx-3 -mt-3 mb-3 ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`');
 }
 const sectionHeaderStyles = read("src/lib/admin/admin-ui-styles.ts");
 check("standalone Premium Header is an optional shared-owner composition preserving canonical identity, chrome and embedded margins", hasStandalonePremiumHeader(sharedTabs, sectionHeaderStyles));
-check("standalone Header rejects default changes, unsupported contracts, detached chrome and lost embedded margins", !hasStandalonePremiumHeader(sharedTabs.replace("tab.standalone ?? false", "tab.standalone ?? true"), sectionHeaderStyles) && !hasStandalonePremiumHeader(sharedTabs.replace("standalone?: boolean", "standalone?: string"), sectionHeaderStyles) && !hasStandalonePremiumHeader(sharedTabs.replace("? `relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`", "? `relative flex p-3`"), sectionHeaderStyles) && !hasStandalonePremiumHeader(sharedTabs, sectionHeaderStyles.replace("relative -mx-3 -mt-3 mb-3 ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME}", "relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME}")));
+check("standalone Header rejects default changes, unsupported contracts, detached chrome and lost embedded margins", !hasStandalonePremiumHeader(sharedTabs.replace('tab.standalone ?? !(tab.sectionHeaderPresentation === "premium" || tab.sectionHeaderPresentation === "panel")', "tab.standalone ?? false"), sectionHeaderStyles) && !hasStandalonePremiumHeader(sharedTabs.replace("standalone?: boolean", "standalone?: string"), sectionHeaderStyles) && !hasStandalonePremiumHeader(sharedTabs.replace("? `relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME} ${ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME}`", "? `relative flex p-3`"), sectionHeaderStyles) && !hasStandalonePremiumHeader(sharedTabs, sectionHeaderStyles.replace("relative -mx-3 -mt-3 mb-3 ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME}", "relative ${ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME}")));
+await verifyUnifiedSectionHeaderRuntime();
+
+async function verifyUnifiedSectionHeaderRuntime() {
+  const source = read("src/components/admin/ui/AdminModuleTabs.tsx"), styleSource = read("src/lib/admin/admin-ui-styles.ts");
+  const styles = await jiti.import<typeof import("../src/lib/admin/admin-ui-styles.ts")>("../src/lib/admin/admin-ui-styles.ts");
+  const inspect = (candidate: string) => {
+    assert.ok(hasCanonicalModuleSectionHeader(candidate) && hasStandalonePremiumHeader(candidate, styleSource));
+    const tree = ts.createSourceFile("AdminModuleTabs.tsx", candidate, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const functions = ["AdminFormControlHeader", "AdminModuleTabIcon", "AdminModuleSectionHeader"].map(name => {
+      const nodes = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name); assert.equal(nodes.length, 1); return nodes[0].getText(tree);
+    });
+    const tokens = ["ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", "ADMIN_PREMIUM_SECTION_HEADER_ACCENT_CLASS_NAME", "ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME", "ADMIN_PREMIUM_SECTION_HEADER_CHROME_CLASS_NAME", "ADMIN_PREMIUM_SECTION_HEADER_CLASS_NAME"] as const;
+    const exports: { AdminModuleSectionHeader?: typeof import("../src/components/admin/ui/AdminModuleTabs.tsx").AdminModuleSectionHeader } = {};
+    new Function("React", "exports", ...tokens, ts.transpileModule(functions.join("\n"), {
+      compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText)({ createElement, Fragment }, exports, ...tokens.map(name => styles[name]));
+    assert.ok(exports.AdminModuleSectionHeader); const Header = exports.AdminModuleSectionHeader;
+    for (const sectionHeaderPresentation of [undefined, "default", "control", "panel", "premium"] as const) for (const standalone of [undefined, false, true]) for (const sectionHeading of [undefined, "Original heading"]) for (const sectionDescription of [undefined, "Original description"]) for (const summary of [false, true]) for (const sectionHeaderClassName of [undefined, "custom-header"]) {
+      const props = { id: "original-section", sectionHeaderPresentation, standalone, sectionHeading, sectionDescription, sectionHeaderClassName, icon: "content" as const, sectionSummary: summary ? createElement("input", { name: "native-summary", defaultValue: "same", required: true, disabled: true }) : undefined };
+      const markup = renderToStaticMarkup(createElement(Header, props));
+      if (!sectionHeading) { assert.equal(markup, ""); continue; }
+      const isolated = standalone ?? !(sectionHeaderPresentation === "premium" || sectionHeaderPresentation === "panel");
+      assert.ok(markup.includes('data-admin-tab-section-heading="original-section"') && markup.includes('data-admin-tab-section-presentation="premium"') && markup.includes('dir="rtl"'));
+      assert.ok(markup.includes('role="heading" aria-level="2"') && markup.includes(sectionHeading));
+      assert.equal(markup.includes("Original description"), Boolean(sectionDescription));
+      assert.equal((markup.match(/data-admin-tab-section-accent=/gu) ?? []).length, 1);
+      assert.equal((markup.match(/name="native-summary"/gu) ?? []).length, Number(summary));
+      if (summary) assert.ok(markup.includes('value="same"') && markup.includes('required=""') && markup.includes('disabled=""'));
+      assert.equal(markup.includes("-mx-3"), !isolated);
+      assert.ok(markup.includes(sectionHeaderClassName ?? styles.ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME));
+      assert.ok(markup.includes('data-admin-form-control-presentation="leading-icon"') && markup.includes('<svg aria-hidden="true"'));
+      if (standalone !== undefined) assert.equal(markup, renderToStaticMarkup(createElement(Header, { ...props, sectionHeaderPresentation: undefined })));
+    }
+  };
+  inspect(source);
+  const mutations = [
+    ["export function AdminFormControlHeader", "export function ParallelControlHeader"], ["<AdminFormControlHeader", "<ParallelControlHeader"],
+    ["{tab.sectionSummary}", "{null}"], ["description={tab.sectionDescription}", "description={null}"], ["data-admin-tab-section-heading={tab.id}", "data-lost-section={tab.id}"],
+    ['title={<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}', 'title={<span role="heading" aria-level={2}>{null}</span>}'],
+    ['tab.standalone ?? !(tab.sectionHeaderPresentation === "premium" || tab.sectionHeaderPresentation === "panel")', "false"],
+    ["ADMIN_PREMIUM_SECTION_HEADER_LAYOUT_CLASS_NAME,", "PARALLEL_HEADER_LAYOUT_CLASS_NAME,"],
+  ];
+  for (const [from, to] of mutations) { const mutant = source.replaceAll(from, to); assert.notEqual(mutant, source); assert.throws(() => inspect(mutant)); }
+  check("Actual unified Section Header preserves 240 alias/inferred/explicit standalone and native metadata states with eight mutation negatives", true);
+}
 
 const faqEditorPath = "src/components/admin/content/editors/article/FaqEditor.tsx";
 const faqEditorSource = read(faqEditorPath);
@@ -733,7 +792,7 @@ function hasBoundedEqualHeightGrid(source: string) {
   if (!presentation) return false;
   visit(presentation);
   return branches.get('presentation === "control-cards"') === "items-stretch [&>*]:rounded-2xl [&>*]:border [&>*]:border-white/10 [&>*]:bg-[#05070B] [&>*]:p-3" &&
-    branches.get('presentation === "aligned-fields"') === "items-start [&>*]:row-span-3 [&>*]:grid [&>*]:grid-rows-subgrid [&>*]:items-start [&>*]:gap-2 [&>*]:space-y-0 [&>*>*]:mt-0" &&
+    branches.get('presentation === "aligned-fields"') === "items-start [&>*]:row-span-3 [&>*]:grid [&>*]:grid-rows-subgrid [&>*]:items-start [&>*]:gap-2 [&>*]:space-y-0 [&>*>*]:mt-0 [&>[data-admin-form-grid-item]_[data-admin-form-field]]:contents [&>[data-admin-form-grid-item]_[data-admin-form-field]>[data-admin-form-field-control]]:min-w-0 [&>[data-admin-form-grid-item]_[data-admin-form-switch-surface]]:row-start-2 [&>[data-admin-form-grid-item]_[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:contents [&>[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:grid-cols-1" &&
     branches.get('presentation === "equal-height-columns"') === "items-stretch [&>*]:self-stretch" &&
     grid.body.statements.some((node) => ts.isReturnStatement(node) && node.expression?.getText(tree).includes("${presentationClassName}"));
 }
@@ -781,6 +840,17 @@ function hasCanonicalFaqEqualHeightColumns(source: string) {
 }
 check("equal-height columns stay selectable at the existing Grid owner with direct-child-only stretch and unchanged existing defaults/branches", hasBoundedEqualHeightGrid(formGridOwnerSource));
 check("negative Grid fixtures reject changed defaults, descendant stretching and fixed column heights", !hasBoundedEqualHeightGrid(formGridOwnerSource.replace('presentation = "plain"', 'presentation = "equal-height-columns"')) && !hasBoundedEqualHeightGrid(formGridOwnerSource.replace('items-stretch [&>*]:self-stretch', 'items-stretch [&_*]:self-stretch')) && !hasBoundedEqualHeightGrid(formGridOwnerSource.replace('items-stretch [&>*]:self-stretch', 'items-stretch [&>*]:h-96')));
+verifyCurrentAlignedGridSelectors();
+function verifyCurrentAlignedGridSelectors() {
+  const source = read("src/components/admin/ui/AdminFormRuntime.tsx"); assert.ok(hasBoundedEqualHeightGrid(source));
+  for (const [from, to] of [
+    ["[&>[data-admin-form-grid-item]_[data-admin-form-field]]:contents", "[&_[data-admin-form-field]]:contents"],
+    ["[&>[data-admin-form-grid-item]_[data-admin-form-switch-surface]]:row-start-2", ""],
+    ["[&>[data-admin-form-grid-item]_[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:contents", "[&>[data-admin-form-grid-item]_[data-admin-form-switch-surface=embedded]]:contents"],
+    ["[&>[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:grid-cols-1", "[&_[data-admin-form-switch-surface]]:grid-cols-1"],
+  ]) { const mutant = source.replaceAll(from, to); assert.notEqual(mutant, source); assert.equal(hasBoundedEqualHeightGrid(mutant), false); }
+  check("Aligned Grid retains current bounded field and embedded Switch routing while rejecting descendant widening and inline loss", true);
+}
 check("FAQ opts its canonical outer Grid into equal-height columns while preserving its two placements and natural inner layouts", hasCanonicalFaqEqualHeightColumns(faqEditorSource));
 check("negative FAQ column fixtures reject parallel/local grids, missing opt-in, extra columns, changed placement, forced inner height and descendant stretch", !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('from "../../../ui"', 'from "../../../ui/ParallelGrid"')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('presentation="equal-height-columns"', 'presentation="plain"')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('gap-5 xl:grid-cols-', 'grid gap-5 xl:items-start xl:grid-cols-')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('<aside className=', '<section /><aside className=')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('min-w-0 xl:col-start-2', 'min-w-0 xl:col-start-1')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('data-topic-faq-list', 'style={{height: 500}} data-topic-faq-list')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('panel ? "min-w-0 p-3" : "p-4 md:p-5"', 'panel ? "min-w-0 h-full p-3" : "p-4 md:p-5"')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('gap-5 xl:grid-cols-', 'gap-5 [&_*]:self-stretch xl:grid-cols-')) && !hasCanonicalFaqEqualHeightColumns(faqEditorSource.replace('<AdminFormGrid columns={1}>', '<AdminFormGrid columns={1} presentation="equal-height-columns">')));
 
@@ -789,13 +859,47 @@ function canonicalSectionBindings(path: string, tree: ts.SourceFile) {
   for (const node of tree.statements) {
     if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier) || node.importClause?.isTypeOnly) continue;
     const owner = normalizePath(resolve(ROOT, dirname(path), node.moduleSpecifier.text));
-    if (!["src/components/admin/ui", "src/components/admin/ui/AdminForm"].some(file => owner === normalizePath(resolve(ROOT, file)))) continue;
     const bindings = node.importClause?.namedBindings;
+    if (owner === normalizePath(resolve(ROOT, "src/components/admin/page-blocks/ModuleEditorPresentation")) && bindings && ts.isNamedImports(bindings) && hasCanonicalModuleSectionForwarding(read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx"))) {
+      for (const binding of bindings.elements) if (!binding.isTypeOnly && (binding.propertyName ?? binding.name).text === "ModuleEditorSection") names.add(binding.name.text);
+    }
+    if (!["src/components/admin/ui", "src/components/admin/ui/AdminForm"].some(file => owner === normalizePath(resolve(ROOT, file)))) continue;
     if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements) {
       if (!binding.isTypeOnly && (binding.propertyName ?? binding.name).text === "AdminFormSection") names.add(binding.name.text);
     }
   }
   return names;
+}
+function hasCanonicalModuleSectionForwarding(source: string, barrelSource = read("src/components/admin/ui/index.ts")) {
+  const tree = ts.createSourceFile("ModuleEditorPresentation.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const barrel = ts.createSourceFile("index.ts", barrelSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const exported = barrel.statements.some(node => ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminForm" && node.exportClause && ts.isNamedExports(node.exportClause) && node.exportClause.elements.some(binding => !binding.isTypeOnly && (binding.propertyName ?? binding.name).text === "AdminFormSection" && binding.name.text === "AdminFormSection"));
+  const canonical = tree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../ui" && !node.importClause?.isTypeOnly && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => binding.name.text === "AdminFormSection" && !binding.propertyName && !binding.isTypeOnly));
+  const declarations = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ModuleEditorSection"), section = declarations[0];
+  const bindings = section?.parameters[0]?.name;
+  if (!canonical || !exported || declarations.length !== 1 || !section.modifiers?.some(node => node.kind === ts.SyntaxKind.ExportKeyword) || section.parameters.length !== 1 || !bindings || !ts.isObjectBindingPattern(bindings) || bindings.elements.length !== 2 || bindings.elements[0].name.getText(tree) !== "children" || bindings.elements[0].initializer || bindings.elements[0].propertyName || bindings.elements[0].dotDotDotToken || bindings.elements[1].name.getText(tree) !== "props" || !bindings.elements[1].dotDotDotToken || bindings.elements[1].initializer || bindings.elements[1].propertyName || section?.body?.statements.length !== 1) return false;
+  const returned = section.body.statements[0]; let expression = ts.isReturnStatement(returned) ? returned.expression : undefined;
+  while (expression && ts.isParenthesizedExpression(expression)) expression = expression.expression;
+  if (!expression || !ts.isJsxElement(expression) || expression.openingElement.tagName.getText(tree) !== "AdminFormSection") return false;
+  const props = expression.openingElement.attributes.properties, children = expression.children.filter(node => !ts.isJsxText(node) || node.text.trim());
+  return props.length === 2 && ts.isJsxSpreadAttribute(props[0]) && props[0].expression.getText(tree) === "props" && ts.isJsxAttribute(props[1]) && props[1].name.getText(tree) === "variant" && props[1].initializer && ts.isStringLiteral(props[1].initializer) && props[1].initializer.text === "module" && children.length === 1 && ts.isJsxExpression(children[0]) && children[0].expression?.getText(tree) === "children";
+}
+function verifyModuleSectionForwarding() {
+  const source = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx"); assert.ok(hasCanonicalModuleSectionForwarding(source));
+  for (const [from, to] of [
+    ['} from "../ui";', '} from "../ParallelUI";'], ["<AdminFormSection {...props} variant=", "<AdminFormSection variant="],
+    ["    <AdminFormSection {...props} variant=", "    false && <AdminFormSection {...props} variant="],
+    [/\{children\}(\s*<\/AdminFormSection>)/gu, "{null}$1"],
+    ["<AdminFormSection {...props} variant=", '<AdminFormSection {...props} header={undefined} variant='],
+    ['  AdminFormSection,', '  type AdminFormSection,'],
+    [/export function ModuleEditorSection\(\{\s*children,/gu, 'export function ModuleEditorSection({ other: children,'],
+    ['export function ModuleEditorSection(', 'function ModuleEditorSection('],
+  ] as const) { const mutant = source.replaceAll(from, to); assert.ok(mutant !== source, "Module Section negative must change the actual forwarding source"); assert.equal((ts.createSourceFile("mutant.tsx", mutant, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.equal(hasCanonicalModuleSectionForwarding(mutant), false); }
+  const typeImport = source.replace('  AdminFormSection,', '') + '\nimport type { AdminFormSection } from "../ui";\n'; assert.notEqual(typeImport, source); assert.equal((ts.createSourceFile("mutant.tsx", typeImport, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.equal(hasCanonicalModuleSectionForwarding(typeImport), false);
+  const barrel = read("src/components/admin/ui/index.ts"), barrelTree = ts.createSourceFile("index.ts", barrel, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const valueExport = barrelTree.statements.find((node):node is ts.ExportDeclaration => ts.isExportDeclaration(node) && node.moduleSpecifier?.getText(barrelTree) === '"./AdminForm"'); assert.ok(valueExport);
+  for (const mutant of [barrel.replace('  AdminFormSection,', '  type AdminFormSection,'), barrel.slice(0, valueExport.getStart(barrelTree)) + valueExport.getText(barrelTree).replace('export {', 'export type {') + barrel.slice(valueExport.end)]) { assert.notEqual(mutant, barrel); assert.equal((ts.createSourceFile("mutant.ts", mutant, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.equal(hasCanonicalModuleSectionForwarding(source, mutant), false); }
+  check("Module Section resolves through its actual canonical Section import and forwards header, surface and children without inactive or parallel rendering", true);
 }
 function canonicalCardBindings(path: string, tree: ts.SourceFile) {
   const names = new Set<string>();
@@ -825,6 +929,11 @@ function canonicalPanelSectionCard(source: string) {
   return forwarded && children.length === 2 &&
     children.every((node, index) => ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression) && node.expression.text === ["sectionHeader", "children"][index])
     ? element.openingElement : undefined;
+}
+function withoutCanonicalSectionChild(source: string, name: "sectionHeader" | "children") {
+  const card = canonicalPanelSectionCard(source); assert.ok(card && ts.isJsxElement(card.parent));
+  const child = card.parent.children.find((node): node is ts.JsxExpression => ts.isJsxExpression(node) && node.expression?.getText() === name); assert.ok(child);
+  return source.slice(0, child.getStart()) + "{null}" + source.slice(child.end);
 }
 function fullSectionHeadersStayOutsideCards(path: string, source: string, inheritedPremiumCard = false, sectionSource = formFieldOwnerSource) {
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -867,7 +976,11 @@ function fullSectionHeadersStayOutsideCards(path: string, source: string, inheri
   const inspectHeader = (node: ts.JsxOpeningLikeElement, cardStack: readonly ts.JsxOpeningLikeElement[], selectors: ReadonlyMap<string, boolean>) => {
     count++;
     const nearestCard = cardStack[cardStack.length - 1];
-    nested ||= ["panel", "premium"].includes(literal(node, "sectionHeaderPresentation", selectors) ?? "")
+    const standalone = node.attributes.properties.find((property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText(tree) === "standalone");
+    const value = standalone?.initializer && ts.isJsxExpression(standalone.initializer) ? standalone.initializer.expression : undefined;
+    const explicitStandalone = standalone && !standalone.initializer ? true : value?.kind === ts.SyntaxKind.TrueKeyword ? true : value?.kind === ts.SyntaxKind.FalseKeyword ? false : undefined;
+    const embedded = explicitStandalone === false || ["panel", "premium"].includes(literal(node, "sectionHeaderPresentation", selectors) ?? "");
+    nested ||= embedded
       ? !nearestCard && !inheritedPremiumCard
       : cardStack.length > 0 || inheritedPremiumCard;
   };
@@ -912,13 +1025,23 @@ function fullSectionHeadersStayOutsideCards(path: string, source: string, inheri
   visit(tree, []);
   return count > 0 && !nested;
 }
+function verifyExplicitEmbeddedHeaderContexts() {
+  const owner = read("src/components/admin/ui/AdminForm.tsx");
+  for (const path of ["src/components/admin/page-blocks/FeaturedModuleEditClient.tsx", "src/components/admin/page-blocks/FeedModuleFilterFields.tsx"]) {
+    const source = read(path); assert.ok(fullSectionHeadersStayOutsideCards(path, source, false, owner));
+    for (const mutant of [source.replaceAll("standalone={false}", "standalone={true}"), source.replace('from "./ModuleEditorPresentation"', 'from "./ParallelSection"')]) {
+      assert.notEqual(mutant, source); assert.equal((ts.createSourceFile(path, mutant, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0);
+      assert.equal(fullSectionHeadersStayOutsideCards(path, mutant, false, owner), false);
+    }
+  }
+  check("Explicit embedded Headers retain canonical Section Cards independently of presentation aliases and reject standalone or parallel context drift", true);
+}
 const directFullSectionHeaderSources = allAdminPresentationSources.flatMap((path) => {
   const source = read(path);
   return source.includes("<AdminModuleSectionHeader") ? [{ path, source }] : [];
 });
-const mediaContentOwnerPath = "src/components/admin/content/editors/media/MediaContentForm.tsx";
 const mediaContentOwnerSource = read(mediaContentOwnerPath);
-function resolveMediaVideoPremiumSlot(source: string) {
+function resolveMediaVideoPremiumSlot(source: string, kind: "video" | "gallery" = "video") {
   const tree = ts.createSourceFile(mediaContentOwnerPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), nodes: ts.Node[] = [];
   const visit = (node: ts.Node) => { nodes.push(node); ts.forEachChild(node, visit); }; visit(tree);
   const imports = new Map(tree.statements.filter(ts.isImportDeclaration).flatMap(node => ts.isStringLiteral(node.moduleSpecifier) && node.importClause?.name && !node.importClause.isTypeOnly ? [[node.importClause.name.text, normalizePath(resolve(ROOT, dirname(mediaContentOwnerPath), node.moduleSpecifier.text))] as const] : []));
@@ -927,6 +1050,7 @@ function resolveMediaVideoPremiumSlot(source: string) {
   const property = (node: ts.ObjectLiteralExpression, name: string) => node.properties.find((row): row is ts.PropertyAssignment => ts.isPropertyAssignment(row) && row.name.getText(tree) === name)?.initializer;
   const attribute = (node: ts.JsxOpeningLikeElement, name: string) => node.attributes.properties.find((row): row is ts.JsxAttribute => ts.isJsxAttribute(row) && row.name.getText(tree) === name)?.initializer;
   const variable = (name: string) => nodes.filter(ts.isVariableDeclaration).filter(node => ts.isIdentifier(node.name) && node.name.text === name);
+  const active = (node: ts.Node, scope: ts.Node) => { let cursor: ts.Node | undefined = node; while (cursor && cursor !== scope) { if (ts.isConditionalExpression(cursor) || ts.isBinaryExpression(cursor) || ts.isCallExpression(cursor) || ts.isArrowFunction(cursor) || ts.isFunctionExpression(cursor)) return false; cursor = cursor.parent; } return cursor === scope; };
   const refCount = (node: ts.Node, name: string) => { let count = 0; const walk = (row: ts.Node) => { if (ts.isJsxExpression(row) && row.expression && ts.isIdentifier(row.expression) && row.expression.text === name) count++; ts.forEachChild(row, walk); }; walk(node); return count; };
   const render = nodes.filter(ts.isFunctionDeclaration).filter(node => node.name?.text === "renderTabs"), returned = render[0]?.body?.statements.find(ts.isReturnStatement)?.expression;
   if (render.length !== 1 || !returned || !ts.isArrayLiteralExpression(returned) || returned.elements.length !== 5) return null;
@@ -940,13 +1064,180 @@ function resolveMediaVideoPremiumSlot(source: string) {
   if (!card || !ts.isJsxElement(card) || !canonical(card.openingElement.tagName.getText(tree), "src/components/admin/ui/AdminCard") || attribute(card.openingElement, "className")?.getText(tree) !== '"min-w-0 p-3"' || refCount(card, "bodyEditor") !== 1) return null;
   const body = variable("bodyEditor"), specialized = variable("specializedBodyEditor");
   const branch = specialized[0]?.initializer;
-  const calls = nodes.filter((node): node is ts.JsxOpeningLikeElement => ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)).filter(node => canonical(node.tagName.getText(tree), "src/components/admin/content/editors/media/MediaVideoFields"));
+  const leafPath = kind === "video" ? "src/components/admin/content/editors/media/MediaVideoFields" : "src/components/admin/media/AdminMediaGalleryField";
+  const calls = nodes.filter((node): node is ts.JsxOpeningLikeElement => ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)).filter(node => canonical(node.tagName.getText(tree), leafPath));
   const basicCalls = nodes.filter((node): node is ts.JsxOpeningLikeElement => ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)).filter(node => canonical(node.tagName.getText(tree), "src/components/admin/content/editors/ContentBasicDataPanel"));
   const basicSlot = basicCalls[0] && attribute(basicCalls[0], "contentEditor");
-  if (body.length !== 1 || !body[0]!.initializer || refCount(body[0]!.initializer, "specializedBodyEditor") !== 1 || specialized.length !== 1 || !branch || !ts.isConditionalExpression(branch) || branch.condition.getText(tree) !== 'adapter.body === "video"' || calls.length !== 1 || calls[0]!.pos < branch.whenTrue.pos || calls[0]!.end > branch.whenTrue.end || attribute(calls[0]!, "presentation")?.getText(tree) !== '"panel"' || basicCalls.length !== 1 || basicCalls[0]!.pos < basic.pos || basicCalls[0]!.end > basic.end || !basicSlot || !ts.isJsxExpression(basicSlot) || basicSlot.expression?.getText(tree) !== 'adapter.body === "markdown" ? bodyEditor : null') return null;
-  return { path: "src/components/admin/content/editors/media/MediaVideoFields.tsx", card: card.getText(tree) };
+  const selectedBranch = branch && ts.isConditionalExpression(branch) && branch.condition.getText(tree) === 'adapter.body === "video"' ? kind === "video" ? branch : ts.isConditionalExpression(branch.whenFalse) && branch.whenFalse.condition.getText(tree) === 'adapter.body === "gallery"' ? branch.whenFalse : undefined : undefined;
+  if (body.length !== 1 || !body[0]!.initializer || refCount(body[0]!.initializer, "specializedBodyEditor") !== 1 || specialized.length !== 1 || !selectedBranch || calls.length !== 1 || calls[0]!.pos < selectedBranch.whenTrue.pos || calls[0]!.end > selectedBranch.whenTrue.end || attribute(calls[0]!, "presentation")?.getText(tree) !== '"panel"' || basicCalls.length !== 1 || basicCalls[0]!.pos < basic.pos || basicCalls[0]!.end > basic.end || !basicSlot || !ts.isJsxExpression(basicSlot) || basicSlot.expression?.getText(tree) !== 'adapter.body === "markdown" ? bodyEditor : null' || card.openingElement.attributes.properties.some(ts.isJsxSpreadAttribute) || calls[0].attributes.properties.some(ts.isJsxSpreadAttribute)) return null;
+  if (!active(calls[0], selectedBranch.whenTrue)) return null;
+  const root = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "MediaContentForm");
+  const roots = root?.body?.statements.filter(ts.isReturnStatement) ?? [], rootReturn = roots[0]?.expression;
+  const shell = nodes.filter((node): node is ts.JsxSelfClosingElement => ts.isJsxSelfClosingElement(node) && canonical(node.tagName.getText(tree), "src/components/admin/content/editors/ContentEditorShell"));
+  if (roots.length !== 1 || !rootReturn || shell.length !== 1 || !active(shell[0], rootReturn) || attribute(shell[0], "tabs")?.getText(tree) !== "{renderTabs}" || shell[0].attributes.properties.some(ts.isJsxSpreadAttribute)) return null;
+  return { path: `${leafPath}.tsx`, card: card.getText(tree) };
 }
 const mediaVideoPremiumSlot = resolveMediaVideoPremiumSlot(mediaContentOwnerSource);
+function proveProjectGalleryContexts(project: string, editor: string, repeaters: string, sectionOwner = read("src/components/admin/ui/AdminForm.tsx")) {
+  const projectPath = "src/app/admin/projects/ProjectEditForm.tsx", editorPath = "src/components/admin/projects/entry/ProjectMediaEditors.tsx", repeatersPath = "src/components/admin/projects/entry/ProjectRepeaters.tsx";
+  assert.ok(canonicalPanelSectionCard(sectionOwner), "Project contexts require the actual default Section Card");
+  const tree = (path: string, source: string) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const projectTree = tree(projectPath, project), editorTree = tree(editorPath, editor), repeatersTree = tree(repeatersPath, repeaters);
+  const inside = (node: ts.Node, scope: ts.Node) => node.pos >= scope.pos && node.end <= scope.end;
+  const all = (scope: ts.Node) => { const nodes: ts.Node[] = []; const walk = (node: ts.Node) => { nodes.push(node); ts.forEachChild(node, walk); }; walk(scope); return nodes; };
+  const active = (node: ts.Node, scope: ts.Node) => {
+    let cursor: ts.Node | undefined = node;
+    while (cursor && cursor !== scope) { if (ts.isConditionalExpression(cursor) || ts.isBinaryExpression(cursor) || ts.isCallExpression(cursor) || ts.isArrowFunction(cursor) || ts.isFunctionExpression(cursor)) return false; cursor = cursor.parent; }
+    return cursor === scope;
+  };
+  const unwrap = (node: ts.Expression): ts.Expression => ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node;
+  const fn = (tree: ts.SourceFile, name: string) => { const rows = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name); assert.equal(rows.length, 1); assert.ok(rows[0].body); return rows[0]; };
+  const returned = (value: ts.FunctionDeclaration) => { const nodes = value.body!.statements.filter(ts.isReturnStatement); assert.equal(nodes.length, 1); assert.ok(nodes[0].expression); return unwrap(nodes[0].expression); };
+  const imports = (file: string, value: ts.SourceFile, exported: string, owner: string) => {
+    const bindings: string[] = [];
+    for (const node of value.statements.filter(ts.isImportDeclaration)) {
+      if (!ts.isStringLiteral(node.moduleSpecifier) || node.importClause?.isTypeOnly) continue;
+      const actual = resolve(ROOT, dirname(file), node.moduleSpecifier.text);
+      if (owner === "react" ? node.moduleSpecifier.text !== "react" : actual !== resolve(ROOT, owner)) continue;
+      if (exported === "default" && node.importClause?.name) bindings.push(node.importClause.name.text);
+      const named = node.importClause?.namedBindings;
+      if (named && ts.isNamedImports(named)) for (const binding of named.elements) if (!binding.isTypeOnly && (binding.propertyName ?? binding.name).text === exported) bindings.push(binding.name.text);
+    }
+    assert.equal(bindings.length, 1); return bindings[0];
+  };
+  const elements = (scope: ts.Node, name: string) => all(scope).filter((node): node is ts.JsxOpeningElement | ts.JsxSelfClosingElement => (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText() === name);
+  const attr = (element: ts.JsxOpeningElement | ts.JsxSelfClosingElement, name: string) => element.attributes.properties.find((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText() === name)?.initializer;
+  const noSpreads = (element: ts.JsxOpeningElement | ts.JsxSelfClosingElement) => !element.attributes.properties.some(ts.isJsxSpreadAttribute);
+  const field = imports(editorPath, editorTree, "default", "src/components/admin/media/AdminMediaGalleryField");
+  const images = fn(editorTree, "ProjectImageCollectionEditor"), imagesReturn = returned(images);
+  const imageCalls = elements(editorTree, field); assert.equal(imageCalls.length, 1); assert.ok(inside(imageCalls[0], imagesReturn) && active(imageCalls[0], imagesReturn));
+  for (let cursor = imageCalls[0].parent; cursor && cursor !== imagesReturn; cursor = cursor.parent) if (ts.isJsxElement(cursor)) assert.match(cursor.openingElement.tagName.getText(), /^[a-z]/u, "Gallery forwarding cannot introduce an unproven nearer component");
+  assert.ok(noSpreads(imageCalls[0])); assert.equal(attr(imageCalls[0], "presentation")?.getText(), '"panel"');
+
+  const localSection = fn(projectTree, "SectionCard"), repeatedSection = fn(repeatersTree, "RepeaterSection");
+  const sectionContexts = [[projectPath, projectTree, localSection], [repeatersPath, repeatersTree, repeatedSection]] as const;
+  for (const [file, scope, wrapper] of sectionContexts) {
+    const section = imports(file, scope, "AdminFormSection", file === projectPath ? "src/components/admin/ui" : "src/components/admin/ui/AdminForm");
+    const actualReturn = returned(wrapper); assert.ok(ts.isJsxElement(actualReturn));
+    assert.equal(actualReturn.openingElement.tagName.getText(), section);
+    assert.ok(noSpreads(actualReturn.openingElement));
+    assert.ok(canonicalSectionBindings(file, scope).has(section));
+    assert.equal(Boolean(attr(actualReturn.openingElement, "children")), false);
+    for (const name of ["presentation", "surface", "variant"]) assert.equal(attr(actualReturn.openingElement, name) === undefined, true);
+    const forwardedChildren = all(actualReturn).filter(node => ts.isJsxExpression(node) && node.expression?.getText() === "children");
+    assert.equal(forwardedChildren.length, 1); assert.ok(active(forwardedChildren[0], actualReturn));
+    for (let cursor = forwardedChildren[0].parent; cursor && cursor !== actualReturn; cursor = cursor.parent) if (ts.isJsxElement(cursor)) assert.match(cursor.openingElement.tagName.getText(), /^[a-z]/u);
+    assert.ok(wrapper.parameters[0] && ts.isObjectBindingPattern(wrapper.parameters[0].name) && wrapper.parameters[0].name.elements.some(node => node.name.getText() === "children" && !node.propertyName));
+  }
+  const imageBinding = imports(projectPath, projectTree, "ProjectImageCollectionEditor", "src/components/admin/projects/entry/ProjectMediaEditors");
+  const repeaterBinding = imports(projectPath, projectTree, "RepeaterSection", "src/components/admin/projects/entry/ProjectRepeaters");
+  const memoBinding = imports(projectPath, projectTree, "useMemo", "react");
+  const root = fn(projectTree, "ProjectEditForm"), rootReturn = returned(root);
+  const tabsBinding = imports(projectPath, projectTree, "default", "src/components/admin/ui/AdminModuleTabs");
+  const tabsUse = elements(rootReturn, tabsBinding); assert.equal(tabsUse.length, 1); assert.ok(active(tabsUse[0], rootReturn)); assert.equal(attr(tabsUse[0], "tabs")?.getText(), "{tabs}");
+  const tabsDeclarations = all(root).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "tabs"); assert.equal(tabsDeclarations.length, 1);
+  const memo = tabsDeclarations[0].initializer; assert.ok(memo && ts.isCallExpression(memo) && memo.expression.getText() === memoBinding && memo.arguments[0] && ts.isArrowFunction(memo.arguments[0]) && memo.arguments[0].parameters.length === 0);
+  for (const node of all(projectTree)) if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node)) && node.name && [memoBinding, imageBinding, repeaterBinding, tabsBinding].includes(node.name.getText(projectTree))) assert.fail("Imported Project context owners must not be shadowed");
+  for (const node of all(projectTree)) if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node)) && node.name && ["OverviewTab", "DeliveryTab", "SectionCard"].includes(node.name.getText(projectTree))) assert.ok(ts.isFunctionDeclaration(node) && node.parent === projectTree, "Actual local Project context functions must not be shadowed");
+  const tabArray = memo.arguments[0].body; assert.ok(ts.isArrayLiteralExpression(tabArray));
+  const activeScopes: ts.Node[] = [tabArray];
+  for (const name of ["OverviewTab", "DeliveryTab"]) { const uses = elements(tabArray, name); assert.equal(uses.length, 1); assert.ok(active(uses[0], tabArray)); activeScopes.push(returned(fn(projectTree, name))); }
+  const calls = elements(projectTree, imageBinding); assert.equal(calls.length, 3);
+  for (const call of calls) {
+    assert.ok(activeScopes.some(scope => inside(call, scope) && active(call, scope))); assert.ok(noSpreads(call));
+    let ancestor: ts.Node | undefined = call.parent;
+    while (ancestor && !(ts.isJsxElement(ancestor) && ["SectionCard", repeaterBinding].includes(ancestor.openingElement.tagName.getText()))) {
+      if (ts.isJsxElement(ancestor)) assert.match(ancestor.openingElement.tagName.getText(), /^[a-z]/u, "An unproven nearer component cannot lend Card ownership");
+      ancestor = ancestor.parent;
+    }
+    assert.ok(ancestor && ts.isJsxElement(ancestor));
+    assert.ok(noSpreads(ancestor.openingElement));
+    assert.equal(attr(ancestor.openingElement, "children") === undefined, true);
+  }
+  return { projectContexts: calls.length, projectGalleryCalls: imageCalls.length, wrappers: sectionContexts.map(([, , value]) => value.name!.text), canonicalDefaultSectionRequired: true };
+}
+
+function resolveGalleryHeaderContexts(sources: readonly { path: string; source: string }[], owner: string, media: string, project: string, editor: string, repeaters: string) {
+  const galleryPath = "src/components/admin/media/AdminMediaGalleryField.tsx";
+  const tree = ts.createSourceFile(galleryPath, owner, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), nodes: ts.Node[] = [];
+  const walk = (node: ts.Node) => { nodes.push(node); ts.forEachChild(node, walk); }; walk(tree);
+  const gallery = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminMediaGalleryField");
+  assert.ok(gallery?.body);
+  const defaults = nodes.filter(ts.isBindingElement).filter(node => node.name.getText(tree) === "presentation");
+  assert.equal(defaults.length, 1); assert.equal(defaults[0].initializer?.getText(tree), '"default"');
+  const panel = nodes.filter(ts.isVariableDeclaration).filter(node => node.name.getText(tree) === "panel");
+  assert.equal(panel.length, 1); assert.equal(panel[0].initializer?.getText(tree), 'presentation === "panel"');
+  const headers = nodes.filter((node): node is ts.JsxSelfClosingElement => ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "AdminModuleSectionHeader");
+  assert.equal(headers.length, 1);
+  let branch: ts.Node | undefined = headers[0].parent; while (branch && !ts.isConditionalExpression(branch)) branch = branch.parent;
+  assert.ok(branch && ts.isConditionalExpression(branch)); assert.equal(branch.condition.getText(tree), "panel");
+  assert.ok(headers[0].pos >= branch.whenTrue.pos && headers[0].end <= branch.whenTrue.end);
+  assert.equal(branch.whenFalse.getText(tree), '<span className="block text-xs font-semibold text-white/55">{label}</span>');
+  const callers = sources.flatMap(({path, source}) => {
+    const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), bindings = new Set<string>();
+    for (const node of file.statements) if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && !node.importClause?.isTypeOnly && node.importClause?.name && normalizePath(resolve(ROOT, dirname(path), node.moduleSpecifier.text)) === normalizePath(resolve(ROOT, galleryPath.slice(0, -4)))) bindings.add(node.importClause.name.text);
+    const calls: ts.JsxOpeningLikeElement[] = [];
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && bindings.has(node.tagName.getText(file))) calls.push(node);
+      if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node)) && node.name && bindings.has(node.name.getText(file))) assert.fail("Gallery canonical import must not be shadowed");
+      ts.forEachChild(node, visit);
+    }; visit(file);
+    return calls.map(call => ({path, call, file}));
+  });
+  assert.equal(callers.length, 3, "Every current canonical Gallery invocation must have a proven disposition");
+  const mediaSlot = resolveMediaVideoPremiumSlot(media, "gallery"); assert.ok(mediaSlot);
+  const projectProof = proveProjectGalleryContexts(project, editor, repeaters);
+  const expected = new Set([mediaContentOwnerPath, "src/components/admin/projects/entry/ProjectMediaEditors.tsx", "src/components/admin/projects/tracking/TrackingForms.tsx"]);
+  for (const {path, call, file} of callers) {
+    assert.ok(expected.delete(path), "No duplicate or unresolved Gallery caller may borrow a context");
+    assert.equal(call.attributes.properties.some(ts.isJsxSpreadAttribute), false);
+    const presentation = call.attributes.properties.find((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(file) === "presentation");
+    if (path === mediaContentOwnerPath || path === "src/components/admin/projects/entry/ProjectMediaEditors.tsx") assert.equal(presentation?.initializer?.getText(file), '"panel"');
+    else assert.equal(Boolean(presentation), false, "Tracking intentionally retains the plain omitted-default header");
+  }
+  assert.equal(expected.size, 0);
+  return {path: galleryPath, callers: callers.map(row => row.path), mediaSlot, projectProof};
+}
+function verifyGalleryHeaderContexts() {
+  const sources = [...discoverSourceFiles("src/app/admin"), ...discoverSourceFiles("src/components/admin")].map(path => ({path, source:read(path)}));
+  const galleryPath = "src/components/admin/media/AdminMediaGalleryField.tsx", projectPath = "src/app/admin/projects/ProjectEditForm.tsx", editorPath = "src/components/admin/projects/entry/ProjectMediaEditors.tsx", repeatersPath = "src/components/admin/projects/entry/ProjectRepeaters.tsx";
+  const inputs = [read(galleryPath), read(mediaContentOwnerPath), read(projectPath), read(editorPath), read(repeatersPath)] as const;
+  const prove = (values: readonly string[], rows = sources) => resolveGalleryHeaderContexts(rows, values[0], values[1], values[2], values[3], values[4]);
+  const result = prove(inputs);
+  const mutations: readonly [number, string | RegExp, string][] = [
+    [0, 'presentation = "default"', 'presentation = "panel"'], [0, 'const panel = presentation === "panel"', 'const panel = true'],
+    [1, 'from "../../../media/AdminMediaGalleryField"', 'from "./ParallelGalleryField"'],
+    [1, 'adapter.body === "gallery" ? (', 'adapter.body === "video" ? ('],
+    [1, '{specializedBodyEditor}', '{null}'], [1, result.mediaSlot.card, '<section>{bodyEditor}</section>'],
+    [2, 'from "../../../components/admin/projects/entry/ProjectMediaEditors"', 'from "./ParallelMediaEditors"'],
+    [2, 'from "../../../components/admin/projects/entry/ProjectRepeaters"', 'from "./ParallelRepeaters"'],
+    [2, '<ProjectImageCollectionEditor', '<ParallelImageCollectionEditor'], [2, 'tabs={tabs}', 'tabs={[]}'],
+    [2, 'content: <DeliveryTab bundle={bundle} />', 'content: null'],
+    [2, 'useMemo, useRef', 'useRef'],
+    [2, 'const tabs = useMemo', 'const useMemo = (callback: () => unknown) => callback(); const tabs = useMemo'],
+    [2, 'const tabs = useMemo', 'const OverviewTab = (_props: unknown) => null; const tabs = useMemo'],
+    [2, 'const tabs = useMemo', 'const DeliveryTab = (_props: unknown) => null; const tabs = useMemo'],
+    [2, 'const tabs = useMemo', 'const SectionCard = (_props: unknown) => null; const tabs = useMemo'],
+    [2, /(<AdminFormSection)\s/u, '$1 surface="neutral" '],
+    [3, 'presentation="panel"', 'presentation="default"'], [3, 'from "../../media/AdminMediaGalleryField"', 'from "./ParallelGalleryField"'],
+    [4, '<AdminFormSection title=', '<AdminFormSection surface="neutral" title='],
+  ];
+  for (const [index, from, to] of mutations) {
+    const values = [...inputs]; values[index] = values[index].replace(from, to); assert.notEqual(values[index], inputs[index], `Gallery context mutation ${index} must be effective`);
+    assert.equal((ts.createSourceFile("mutant.tsx", values[index], ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0);
+    assert.throws(() => prove(values), `Gallery context mutation ${index} must be rejected`);
+  }
+  const trackingPath = "src/components/admin/projects/tracking/TrackingForms.tsx";
+  for (const rows of [sources.map(row => row.path === trackingPath ? {...row,source:row.source.replace('<AdminMediaGalleryField', '<AdminMediaGalleryField presentation="panel"')} : row), [...sources, {path:"src/components/admin/projects/UnprovenGalleryCaller.tsx",source:'import Gallery from "../media/AdminMediaGalleryField"; export const Unproven = () => <Gallery presentation="panel" />;'}]]) assert.throws(() => prove(inputs, rows));
+  const repeaters = ts.createSourceFile(repeatersPath, inputs[4], ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), wrapper = repeaters.statements.find((node):node is ts.FunctionDeclaration=>ts.isFunctionDeclaration(node)&&node.name?.text === "RepeaterSection"); assert.ok(wrapper);
+  const values = [...inputs]; values[4] = inputs[4].slice(0, wrapper.getStart(repeaters)) + wrapper.getText(repeaters).replace('{children}', '{null}') + inputs[4].slice(wrapper.end); assert.throws(() => prove(values));
+  const editorTree = ts.createSourceFile(editorPath, inputs[3], ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX); let galleryCall: ts.JsxSelfClosingElement | undefined;
+  const findGallery = (node: ts.Node) => { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(editorTree) === "AdminMediaGalleryField") galleryCall = node; ts.forEachChild(node, findGallery); }; findGallery(editorTree); assert.ok(galleryCall);
+  const inactive = [...inputs]; inactive[3] = inputs[3].slice(0, galleryCall.getStart(editorTree)) + `{false && ${galleryCall.getText(editorTree)}}` + inputs[3].slice(galleryCall.end);
+  assert.equal((ts.createSourceFile("mutant.tsx", inactive[3], ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.throws(() => prove(inactive));
+  check("All actual Gallery calls bind the canonical import, gated plain default, active Media tab and three inherited Project Section contexts with 24 effective negatives", true);
+  return result;
+}
 function hasNoLocalSectionHeaderIdentityOverrides(source: string) {
   const tree = ts.createSourceFile("HeaderConsumer.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const identityClasses = /\b(?:text-|font-|leading-|tracking-)|\[&[^\]]*\]:(?:size-|[wh]-|text-|font-|leading-|stroke-|fill-)/u;
@@ -982,7 +1273,10 @@ check(
     !hasNoLocalSectionHeaderIdentityOverrides(faqEditorSource.replace("<AdminModuleSectionHeader", '<AdminModuleSectionHeader style={{fontSize: 20}}')) &&
     !hasNoLocalSectionHeaderIdentityOverrides(read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").replace('sectionHeaderPresentation: "control"', 'sectionHeaderClassName: "[&_svg]:size-8", sectionHeaderPresentation: "control"')),
 );
-const invalidDirectHeaderScopes = directFullSectionHeaderSources.filter(({ path, source }) => !fullSectionHeadersStayOutsideCards(path, source, mediaVideoPremiumSlot?.path === path));
+const galleryHeaderContexts = verifyGalleryHeaderContexts();
+const invalidDirectHeaderScopes = directFullSectionHeaderSources.filter(({ path, source }) => !fullSectionHeadersStayOutsideCards(path, source, mediaVideoPremiumSlot?.path === path || galleryHeaderContexts.path === path));
+verifyModuleSectionForwarding();
+verifyExplicitEmbeddedHeaderContexts();
 const panelSectionConsumers = directFullSectionHeaderSources.filter(({ path, source }) => {
   const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), bindings = canonicalSectionBindings(path, tree);
   let found = false;
@@ -998,16 +1292,32 @@ check("Section header slots resolve through the unified canonical default Card w
   Boolean(canonicalPanelSectionCard(formFieldOwnerSource)) && panelSectionConsumers.length > 0 &&
     panelSectionConsumers.every(({ path, source }) => fullSectionHeadersStayOutsideCards(path, source)));
 check("Section compatibility selectors all retain the unified Card/header owner", panelSectionConsumers.every(({ path, source }) => fullSectionHeadersStayOutsideCards(path, source.replace('presentation="panel"', 'presentation="default"'))));
-const sectionTree = ts.createSourceFile("AdminForm.tsx", formFieldOwnerSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const sectionFunction = sectionTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormSection")!.getText(sectionTree);
 check("Section slot negatives reject parallel owners, unused header props and broken canonical header/Card delegation",
-  panelSectionConsumers.every(({ path, source }) => [
-    fullSectionHeadersStayOutsideCards(path, source.replace("header={<AdminModuleSectionHeader", "title={<AdminModuleSectionHeader")),
-    fullSectionHeadersStayOutsideCards(path, source.replace('components/admin/ui"', 'components/admin/ParallelUI"')),
-    fullSectionHeadersStayOutsideCards(path, source.replace('sectionHeaderPresentation="premium"', 'sectionHeaderPresentation="default"')),
-    fullSectionHeadersStayOutsideCards(path, source, false, formFieldOwnerSource.replace(sectionFunction, sectionFunction.replace("{sectionHeader}", "{null}"))),
-    fullSectionHeadersStayOutsideCards(path, source, false, formFieldOwnerSource.replace('from "./AdminCard"', 'from "./ParallelCard"')),
-  ].every(result => result === false)));
+  panelSectionConsumers.every(({ path, source }) => hasEffectiveSectionSlotNegatives(path, source, formFieldOwnerSource)));
+function hasEffectiveSectionSlotNegatives(path: string, source: string, owner: string) {
+  const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), sections = canonicalSectionBindings(path, tree);
+  const slots: ts.JsxAttribute[] = [];
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && sections.has(node.tagName.getText(tree)))
+      for (const property of node.attributes.properties) if (ts.isJsxAttribute(property) && property.name.getText(tree) === "header") slots.push(property);
+    ts.forEachChild(node, visit);
+  }; visit(tree); assert.ok(slots.length > 0);
+  const imports = tree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => sections.has(binding.name.text)));
+  assert.equal(imports.length, 1);
+  const replace = (node: ts.Node, value: string) => source.slice(0, node.getStart(tree)) + value + source.slice(node.end);
+  const candidates = [replace(slots[0].name, "title"), replace(imports[0].moduleSpecifier, '"./ParallelSectionOwner"'), source.replace('sectionHeaderPresentation="premium"', 'sectionHeaderPresentation="default"')];
+  for (const [index, candidate] of candidates.entries()) {
+    assert.notEqual(candidate, source);
+    assert.equal((ts.createSourceFile(path, candidate, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+    assert.equal(fullSectionHeadersStayOutsideCards(path, candidate, false, owner), false, `${path} Section slot/import negative ${index}`);
+  }
+  for (const candidate of [withoutCanonicalSectionChild(owner, "sectionHeader"), owner.replace('from "./AdminCard"', 'from "./ParallelCard"')]) {
+    assert.notEqual(candidate, owner);
+    assert.equal((ts.createSourceFile("AdminForm.tsx", candidate, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+    assert.equal(fullSectionHeadersStayOutsideCards(path, source, false, candidate), false);
+  }
+  return true;
+}
 check(
   `direct full Section Headers stay outside Cards while explicit panel and premium Headers belong to their nearest Premium Card${invalidDirectHeaderScopes.length ? `: ${invalidDirectHeaderScopes.map(({ path }) => path).join(", ")}` : ""}`,
   directFullSectionHeaderSources.length > 0 && invalidDirectHeaderScopes.length === 0,
@@ -1028,8 +1338,9 @@ const seoHeaderScopePath = "src/components/admin/seo/AdminEntitySeoPanel.tsx";
 const seoHeaderScopeSource = read(seoHeaderScopePath);
 const seoNonPremiumNearestCard = seoHeaderScopeSource.replace(/(<AdminModuleSectionHeader\s+id=\{`\$\{social\.fieldIds\.imageSection\}-media`\}[\s\S]*?\/>)/u, '<AdminCard presentation="default">$1</AdminCard>');
 check(
-  "nested SEO sections reject a non-Premium nearest Card or detached canonical Card ownership",
-  seoNonPremiumNearestCard !== seoHeaderScopeSource && !fullSectionHeadersStayOutsideCards(seoHeaderScopePath, seoNonPremiumNearestCard) &&
+  "nested SEO sections preserve the canonical Card default alias and reject standalone Header or detached canonical Card ownership",
+  seoNonPremiumNearestCard !== seoHeaderScopeSource && fullSectionHeadersStayOutsideCards(seoHeaderScopePath, seoNonPremiumNearestCard) &&
+    !fullSectionHeadersStayOutsideCards(seoHeaderScopePath, seoNonPremiumNearestCard.replace(/(<AdminModuleSectionHeader\s+id=\{`\$\{social\.fieldIds\.imageSection\}-media`\}[\s\S]*?)sectionHeaderPresentation="premium"/u, '$1sectionHeaderPresentation="default"')) &&
     !fullSectionHeadersStayOutsideCards(seoHeaderScopePath, seoHeaderScopeSource.replaceAll("<AdminCard", "<section").replaceAll("</AdminCard>", "</section>")),
 );
 
@@ -1935,12 +2246,23 @@ check(
     !sharedRichTextEditor.includes('label="يسار"'),
 );
 
-check(
-  "shared editor navigation preserves its controls while adopting the denser panel cadence",
-  sharedTabs.includes('className="space-y-4"') &&
-    sharedTabs.includes("min-h-[76px]") &&
-    sharedTabs.includes('className="mb-4" data-admin-active-panel-context'),
-);
+function hasCurrentEditorNavigation(source: string) {
+  const tree = ts.createSourceFile("AdminModuleTabs.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declaration = tree.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(tree) === "ADMIN_EDITOR_TAB_CLASS_NAME");
+  if (!declaration?.initializer || !ts.isStringLiteral(declaration.initializer) || declaration.initializer.text !== "relative inline-flex h-14 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-xl border border-transparent ps-6 pe-6 text-[15px] font-semibold leading-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#D8B87A]/70") return false;
+  const tabs = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminModuleTabs"); let applied = 0;
+  const visit = (node: ts.Node) => { if (ts.isConditionalExpression(node) && node.condition.getText(tree) === 'variant === "editor"' && node.whenTrue.getText(tree) === "ADMIN_EDITOR_TAB_CLASS_NAME") { let owner: ts.Node | undefined = node.parent; while (owner && !ts.isJsxAttribute(owner)) owner = owner.parent; if (owner?.name.getText(tree) === "className") applied++; } ts.forEachChild(node, visit); };
+  if (tabs) visit(tabs);
+  return applied === 1 && source.includes('className="space-y-4"') && source.includes('className="mb-4" data-admin-active-panel-context');
+}
+function verifyCurrentEditorNavigation() {
+  const source = read("src/components/admin/ui/AdminModuleTabs.tsx"); assert.ok(hasCurrentEditorNavigation(source));
+  for (const [from, to] of [['inline-flex h-14', 'inline-flex h-20'], ['? ADMIN_EDITOR_TAB_CLASS_NAME', '? "legacy"'], ['className="space-y-4"', 'className="space-y-6"'], ['className="mb-4" data-admin-active-panel-context', 'className="mb-6" data-admin-active-panel-context']]) {
+    const mutant = source.replace(from, to); assert.notEqual(mutant, source); assert.equal((ts.createSourceFile("mutant.tsx", mutant, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.equal(hasCurrentEditorNavigation(mutant), false);
+  }
+  check("shared editor navigation retains the actual canonical h-14 control branch and existing panel cadence with four effective negatives", true);
+}
+verifyCurrentEditorNavigation();
 
 check(
   "every Page Blocks module editor root adopts the thin shared header, tabs, feedback, pages, and save composition",
@@ -2446,6 +2768,41 @@ check(
     misclassifiedInfrastructureTabs.length === 0,
 );
 
+function hasCurrentModuleIdentity(source: string) {
+  const tree = ts.createSourceFile("ModuleEditorPresentation.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const identity = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ModuleEditorIdentitySection");
+  const returned = identity?.body?.statements.filter(ts.isReturnStatement) ?? []; let element = returned[0]?.expression;
+  while (element && ts.isParenthesizedExpression(element)) element = element.expression;
+  if (returned.length !== 1 || !element || !ts.isJsxElement(element) || element.openingElement.tagName.getText(tree) !== "ModuleEditorSection" || !hasCanonicalModuleSectionForwarding(source)) return false;
+  const all: ts.Node[] = []; const visit = (node: ts.Node) => { all.push(node); ts.forEachChild(node, visit); }; visit(element);
+  const attribute = (node: ts.JsxOpeningLikeElement, name: string) => node.attributes.properties.find((row): row is ts.JsxAttribute => ts.isJsxAttribute(row) && row.name.getText(tree) === name);
+  const value = (node: ts.JsxOpeningLikeElement, name: string) => attribute(node, name)?.initializer?.getText(tree);
+  const elements = (name: string) => all.filter((node): node is ts.JsxElement => ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === name);
+  const fields = elements("ModuleEditorField"), grids = elements("ModuleEditorFieldGrid"), labels = elements("AdminFormField");
+  const status = all.filter((node): node is ts.JsxSelfClosingElement => ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "ModuleEditorStatusSwitch");
+  const input = identity?.body?.statements.filter(ts.isVariableStatement).flatMap(row => [...row.declarationList.declarations]).find(row => row.name.getText(tree) === "nameControl")?.initializer;
+  if (!input || !ts.isJsxSelfClosingElement(input) || input.tagName.getText(tree) !== "input" || value(input, "name") !== '"name"' || value(input, "defaultValue") !== "{name}" || value(input, "className") !== "{inputClassName}" || !attribute(input, "required") || input.attributes.properties.some(ts.isJsxSpreadAttribute)) return false;
+  if (fields.length !== 3 || grids.length !== 1 || labels.length !== 1 || status.length !== 1 || fields.some(node => node.openingElement.attributes.properties.some(ts.isJsxSpreadAttribute))) return false;
+  const within = (node: ts.Node, scope: ts.Node) => node.pos >= scope.pos && node.end <= scope.end;
+  const active = (node: ts.Node, scope: ts.Node) => { let cursor: ts.Node | undefined = node; while (cursor && cursor !== scope) { if (ts.isConditionalExpression(cursor) || ts.isBinaryExpression(cursor) || ts.isCallExpression(cursor) || ts.isArrowFunction(cursor) || ts.isFunctionExpression(cursor)) return false; cursor = cursor.parent; } return cursor === scope; };
+  let optional = fields[1].parent; while (ts.isParenthesizedExpression(optional)) optional = optional.parent;
+  if (grids[0].parent !== element || fields[0].parent !== grids[0] || fields[2].parent !== grids[0] || !ts.isConditionalExpression(optional) || optional.condition.getText(tree) !== "children" || optional.whenFalse.kind !== ts.SyntaxKind.NullKeyword || !within(fields[1], optional.whenTrue) || !ts.isJsxExpression(optional.parent) || optional.parent.parent !== grids[0]) return false;
+  return fields.every((node, index) => within(node, grids[0]) && value(node.openingElement, "nature") === (index === 2 ? '"binary-state"' : '"standard"') && value(node.openingElement, "span") === (index === 1 ? "{4}" : "{children ? 4 : 6}")) &&
+    within(labels[0], fields[0]) && active(labels[0], fields[0]) && value(labels[0].openingElement, "label") === "{nameLabel}" && Boolean(attribute(labels[0].openingElement, "required")) && labels[0].children.filter(node => ts.isJsxExpression(node) && node.expression?.getText(tree) === "nameControl").length === 1 &&
+    all.filter(node => ts.isJsxExpression(node) && node.expression?.getText(tree) === "children" && within(node, fields[1]) && active(node, fields[1])).length === 1 &&
+    within(status[0], fields[2]) && active(status[0], fields[2]) && value(status[0], "status") === "{status}" && value(status[0], "label") === "{statusLabel}" && Boolean(attribute(status[0], "surface")) && !source.includes("grid-cols-[max-content_minmax(0,1fr)]");
+}
+function verifyCurrentModuleIdentity() {
+  const source = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx"); assert.ok(hasCurrentModuleIdentity(source));
+  for (const [from, to] of [['name="name" defaultValue={name}', 'name="foreign_name" defaultValue={name}'], ['{nameControl}', '{null}'], ['label={nameLabel}', 'label={undefined}'], ['nature="binary-state"', 'nature="standard"'], ['span={children ? 4 : 6}', 'span={12}'], ['status={status}', 'status={undefined}']]) {
+    const mutant = source.replace(from, to); assert.notEqual(mutant, source); assert.equal((ts.createSourceFile("mutant.tsx", mutant, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.equal(hasCurrentModuleIdentity(mutant), false);
+  }
+  const tree = ts.createSourceFile("ModuleEditorPresentation.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), identity = tree.statements.find((node):node is ts.FunctionDeclaration=>ts.isFunctionDeclaration(node)&&node.name?.text === "ModuleEditorIdentitySection"); assert.ok(identity);
+  let firstField: ts.JsxElement | undefined; const findField = (node:ts.Node) => { if (!firstField && ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "ModuleEditorField") firstField = node; ts.forEachChild(node, findField); }; findField(identity); assert.ok(firstField);
+  const inactive = source.slice(0, firstField.getStart(tree)) + `{false && (${firstField.getText(tree)})}` + source.slice(firstField.end); assert.notEqual(inactive,source); assert.equal((ts.createSourceFile("mutant.tsx", inactive, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX) as ts.SourceFile & {parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length, 0); assert.equal(hasCurrentModuleIdentity(inactive), false);
+  check("Module identity uses actual active Field Grid name, optional children and publication bindings with seven effective negatives", true);
+}
+verifyCurrentModuleIdentity();
 check(
   "identity composition is shared by every root and no empty Settings tab survives",
   moduleEditorRootSources
@@ -2463,12 +2820,7 @@ check(
     moduleEditorPresentation.includes(
       'data-module-editor-identity-control=""',
     ) &&
-    moduleEditorPresentation.includes(
-      'className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-3"',
-    ) &&
-    moduleEditorPresentation.includes(
-      "[&>[data-admin-form-listbox]]:grid-cols-[max-content_minmax(0,1fr)]",
-    ) &&
+    hasCurrentModuleIdentity(moduleEditorPresentation) &&
     !moduleEditorPresentation.includes(
       "export function ModuleEditorSettingsComposition",
     ),

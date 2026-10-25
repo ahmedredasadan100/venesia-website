@@ -2,8 +2,8 @@ import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 import ts from "typescript";
@@ -153,6 +153,189 @@ function pageCompositionAst(source: string) {
   const marked=(node:ts.JsxOpeningLikeElement)=>node.attributes.properties.some(entry=>ts.isJsxAttribute(entry)&&entry.name.getText(tree)==="data-admin-form-label-text");
   const nestedLabels=()=>{const labels=nodes.filter(node=>attr(node,"className")?.includes("adminFormLabelClassName("));return labels.length>0&&labels.every(node=>!marked(node)&&ts.isJsxElement(node.parent)&&children(node.parent).some(child=>marked(ts.isJsxElement(child)?child.openingElement:child)));};
   return{tree,nodes,attr,owned,children,canonical,inside,inset,nestedLabels,normal:source.replace(/\s+/gu,"")};
+}
+
+function assertCanonicalControlHeaderOwnership(tabs: string, form: string) {
+  const ast = pageCompositionAst(tabs), publicAst = pageCompositionAst(form);
+  const functions = (tree: ts.SourceFile, name: string) => tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  const owners = functions(ast.tree, "AdminFormControlHeader");
+  assert.equal(owners.length, 1, "Tabs owns exactly one local ControlHeader implementation");
+  const owner = owners[0]!;
+  assert.ok(ts.getModifiers(owner)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword), "The canonical local ControlHeader remains public");
+  const reexports = publicAst.tree.statements.filter((node): node is ts.ExportDeclaration => ts.isExportDeclaration(node) && !!node.exportClause && ts.isNamedExports(node.exportClause) && node.exportClause.elements.some(element => element.name.text === "AdminFormControlHeader"));
+  assert.equal(reexports.length, 1, "AdminForm preserves one public compatibility export");
+  const reexport = reexports[0]!;
+  assert.ok(!reexport.isTypeOnly && reexport.moduleSpecifier && ts.isStringLiteral(reexport.moduleSpecifier) && reexport.moduleSpecifier.text === "./AdminModuleTabs");
+  assert.ok(reexport.exportClause && ts.isNamedExports(reexport.exportClause));
+  const alias = reexport.exportClause.elements.find(element => element.name.text === "AdminFormControlHeader")!;
+  assert.ok(!alias.isTypeOnly && (!alias.propertyName || alias.propertyName.text === "AdminFormControlHeader"), "The public name resolves to the same implementation");
+  assert.equal(functions(publicAst.tree, "AdminFormControlHeader").length, 0, "AdminForm does not copy the canonical implementation");
+  const isNamedBinding = (node: ts.Node) => (ts.isImportSpecifier(node) || ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isImportClause(node) || ts.isNamespaceImport(node)) && node.name?.getText() === "AdminFormControlHeader";
+  for (const [tree, allowed] of [[ast.tree, owner], [publicAst.tree, undefined]] as const) {
+    const visit = (node: ts.Node) => {
+      if (isNamedBinding(node)) {
+        const canonicalFormImport = tree === publicAst.tree && ts.isImportSpecifier(node) && !node.propertyName && ts.isImportDeclaration(node.parent.parent.parent) && ts.isStringLiteral(node.parent.parent.parent.moduleSpecifier) && node.parent.parent.parent.moduleSpecifier.text === "./AdminModuleTabs";
+        assert.ok(node === allowed || canonicalFormImport, "Local/imported/destructured bindings cannot replace the canonical ControlHeader");
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+  }
+  const sections = functions(ast.tree, "AdminModuleSectionHeader");
+  assert.equal(sections.length, 1);
+  const section = sections[0]!;
+  const returns = section.body?.statements.filter(ts.isReturnStatement) ?? [];
+  assert.equal(returns.length, 1);
+  const unwrap = (node: ts.Expression): ts.Expression => ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node;
+  const returned = returns[0]!.expression && unwrap(returns[0]!.expression);
+  assert.ok(returned && ts.isConditionalExpression(returned) && returned.condition.getText(ast.tree) === "tab.sectionHeading");
+  const header = unwrap(returned.whenTrue);
+  assert.ok(ts.isJsxElement(header) && header.openingElement.tagName.getText(ast.tree) === "header");
+  const identities = ast.owned("AdminFormControlHeader").filter(node => ast.inside(node, section));
+  assert.equal(identities.length, 1, "The returned Section mounts one shared identity");
+  const identity = identities[0]!;
+  for (let parent = identity.parent; parent !== header; parent = parent.parent) assert.ok(ts.isJsxElement(parent), "The canonical identity is mounted directly in the returned Header, never hidden in an inactive expression");
+  assert.equal(ast.attr(identity, "presentation"), '"leading-icon"');
+  assert.equal(ast.attr(identity, "title"), '{<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}');
+  assert.equal(ast.attr(identity, "description"), "{tab.sectionDescription}");
+  assert.equal(ast.attr(identity, "icon"), '{<AdminModuleTabIcon name={tab.icon ?? "section"} />}');
+  assert.ok(!identity.attributes.properties.some(ts.isJsxSpreadAttribute), "A spread cannot override canonical identity payloads");
+  assert.equal(identity.attributes.properties.length, 4, "Identity attributes are unique and retain native title, description and icon bindings");
+  return true;
+}
+
+function premiumAcceptanceOutput(args: readonly string[]) {
+  const option = "--content-premium-output-dir", selected = args.filter(arg => arg.startsWith(option));
+  if (selected.length === 0) return ".tmp-qa/page-block-editor-presentation/current";
+  assert.equal(selected.length, 1, "The fresh acceptance output selector must be unambiguous");
+  const rootState = lstatSync(ROOT);
+  assert.ok(rootState.isDirectory() && !rootState.isSymbolicLink() && realpathSync(ROOT) === resolve(ROOT), "Fresh acceptance output requires a canonical repository root without linked ancestors");
+  const requested = selected[0]!.slice(option.length + 1);
+  assert.ok(selected[0]!.startsWith(`${option}=`) && /^\.tmp-qa\/[A-Za-z0-9._/-]+$/u.test(requested), "Fresh acceptance output is a literal repository .tmp-qa descendant");
+  const parts = requested.split("/");
+  assert.ok(parts.every(part => part && part !== "." && part !== ".."), "Fresh acceptance output cannot contain empty or traversal segments");
+  let ancestor = ROOT;
+  for (const part of parts.slice(0, -1)) {
+    ancestor = join(ancestor, part);
+    try {
+      const state = lstatSync(ancestor);
+      assert.ok(state.isDirectory() && !state.isSymbolicLink(), "Fresh acceptance output cannot traverse a symlink or junction");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  const output = resolve(ROOT, requested);
+  mkdirSync(dirname(output), { recursive: true });
+  mkdirSync(output); // Exclusive creation preserves every earlier receipt and rejects a linked target.
+  return requested;
+}
+
+function hasHeroCtaDescendants(source: string) {
+  const ast = pageCompositionAst(source);
+  return ast.canonical("ModuleEditorSection", "/ModuleEditorPresentation") && ["primary_cta", "secondary_cta"].every(prefix => ast.owned("ModuleEditorSection").some(section =>
+    Boolean(ast.attr(section, "title")) && ast.owned("AdminLinkField").some(link => ast.attr(link, "prefix") === `"${prefix}"` && ast.inside(link, section.parent)) &&
+    ast.owned("AdminFormField").some(field => Boolean(ast.attr(field, "label")) && ast.inside(field, section.parent) &&
+      ast.owned("input").some(input => ast.attr(input, "name") === `"${prefix}_label"` && ast.inside(input, field.parent)))));
+}
+
+function assertHeroCtaSectionComposition(source: string) {
+  assert.ok(hasHeroCtaDescendants(source), "Both real Hero CTA groups retain canonical Sections, visible Fields and contained native link/input owners");
+  const ast = pageCompositionAst(source), sections = ast.owned("ModuleEditorSection");
+  assert.equal(sections.length, 2);
+  assert.deepEqual(sections.map(section => ast.attr(section, "title")), ['"الزر الأساسي"', '"الزر الثانوي"']);
+  for (const [index, prefix] of ["primary", "secondary"].entries()) {
+    const section = sections[index]!, fields = ast.owned("AdminFormField").filter(field => ast.inside(field, section.parent));
+    assert.equal(ast.attr(section, "className"), '"h-full"');
+    assert.equal(fields.length, 1);
+    assert.equal(ast.attr(fields[0]!, "label"), index === 0 ? '"نص الزر الأساسي"' : '"نص الزر الثانوي"');
+    assert.ok(ast.owned("input").some(input => ast.attr(input, "name") === `"${prefix}_cta_label"` && ast.inside(input, fields[0]!.parent)));
+    assert.ok(ts.isJsxElement(section.parent.parent));
+    assert.equal(ast.attr(section.parent.parent.openingElement, "data-hero-cta-row"), JSON.stringify(prefix));
+  }
+  return true;
+}
+
+function assertDefaultHeroElementOrder(source: string) {
+  const ast = pageCompositionAst(source);
+  const owner = ast.tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "HeroElementOrderEditor");
+  assert.ok(owner?.body);
+  const returned = owner.body.statements.filter(ts.isReturnStatement);
+  assert.equal(returned.length, 1);
+  const root = returned[0]!.expression;
+  assert.ok(root && ts.isParenthesizedExpression(root) && ts.isJsxElement(root.expression));
+  const cards = ast.owned("ModuleEditorRepeaterCard").filter(node => ast.inside(node, root));
+  assert.equal(cards.length, 1);
+  assert.equal(ast.attr(cards[0]!, "title"), "{HERO_ELEMENT_LABELS_AR[key]}");
+  const list = ast.owned("ul").filter(node => ast.inside(node, root));
+  assert.equal(list.length, 1); assert.equal(ast.attr(list[0]!, "className"), '"space-y-3"');
+  assert.ok(ast.inside(cards[0]!, list[0]!.parent));
+  assert.equal(ast.owned("ModuleEditorRepeaterGrid").filter(node => ast.inside(node, root)).length, 0, "The ordinary Hero element list retains its current one-column native order; Project actions own the repeater Grid");
+  const maps: ts.CallExpression[] = [];
+  const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && node.expression.getText(ast.tree) === "order.map") maps.push(node); ts.forEachChild(node, visit); };
+  visit(root); assert.equal(maps.length, 1); assert.ok(ast.inside(cards[0]!, maps[0]!));
+  const inputs = ast.owned("input").filter(node => ast.inside(node, root));
+  assert.equal(inputs.length, 1); assert.equal(ast.attr(inputs[0]!, "name"), '"hero_element_order"'); assert.equal(ast.attr(inputs[0]!, "value"), "{JSON.stringify(order)}");
+  const buttons = ast.owned("AdminActionButton").filter(node => ast.inside(node, cards[0]!.parent));
+  assert.equal(buttons.length, 2);
+  for (const [index, button] of buttons.entries()) {
+    assert.equal(ast.attr(button, "onClick"), index === 0 ? "{() => move(index, -1)}" : "{() => move(index, 1)}");
+    assert.equal(ast.attr(button, "disabled"), index === 0 ? "{index === 0}" : "{index === order.length - 1}");
+  }
+  return true;
+}
+
+function alignedBreadcrumb(source: string) {
+  const ast = pageCompositionAst(source), grid = ast.owned("AdminFormGrid").find(node => ast.attr(node, "columns") === "{3}" && ast.attr(node, "presentation") === '"aligned-fields"');
+  if (!grid) return false;
+  const children = ast.children(grid.parent as ts.JsxElement);
+  return children.map(node => (ts.isJsxElement(node) ? node.openingElement : node).tagName.getText(ast.tree)).join(",") === "AdminFormListboxSelect,AdminFormField,AdminFormSwitch" &&
+    ast.owned("AdminFormSwitch").some(node => ast.attr(node, "name") === '"show_home"' && ast.inside(node, grid.parent) && !ast.attr(node, "label")?.includes("AdminFormControlHeader"));
+}
+
+function hasProjectHeroFields(source: string) {
+  const ast = pageCompositionAst(source), fields = ast.owned("ModuleEditorField");
+  const group = ast.owned("ModuleEditorFieldGrid")[0];
+  return Boolean(group) && fields.filter(node => ast.attr(node, "span") === "{4}" && ast.inside(node, group!.parent)).length === 3 &&
+    ["limit", "autoplay_ms"].every(name => {
+      const input = ast.owned("input").find(node => ast.attr(node, "name") === `"${name}"`);
+      return Boolean(input && ast.attr(input, "className") === "{adminFormFieldClassName()}" && ast.owned("AdminFormField").some(node => ast.inside(input, node.parent)));
+    }) && ast.owned("AdminFormListboxSelect").some(node => ast.attr(node, "name") === '"project_type"' && ast.attr(node, "sizing") === '"full"') &&
+    ast.owned("textarea").some(node => ast.attr(node, "name") === '"empty_state"' && ast.inside(node, group!.parent)) && !source.includes("col-span-2!");
+}
+
+function hasCardsRepeaterHeading(source: string) {
+  const ast = pageCompositionAst(source), headers = ast.owned("AdminFormControlHeader");
+  return ast.canonical("AdminFormControlHeader", "/AdminForm") && headers.length === 1 &&
+    ast.attr(headers[0]!, "title") === '{<span role="heading" aria-level={3}>{label}</span>}' &&
+    ast.attr(headers[0]!, "presentation") === '"leading-icon"' &&
+    ast.attr(headers[0]!, "icon") === '{<AdminModuleTabIcon name="section" />}';
+}
+
+function hasControlHeaderTitleScale(source: string) {
+  const ast = pageCompositionAst(source), owner = ast.tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormControlHeader");
+  return !!owner && ast.owned("span").some(node => ast.inside(node, owner) && ts.isJsxElement(node.parent) && node.parent.children.some(child => ts.isJsxExpression(child) && child.expression?.getText(ast.tree) === "title") &&
+    ast.attr(node, "className") === '{`${compact ? "break-words " : ""}text-sm font-semibold text-white`}');
+}
+
+function hasMediaPreviewEligibility(source: string) {
+  const ast = pageCompositionAst(source), modals = ast.owned("VenesiaModal");
+  return modals.length === 1 && ast.attr(modals[0]!, "open") === '{previewOpen && presentation === "active" && canPreviewValue}' &&
+    ast.attr(modals[0]!, "onClose") === "{() => setPreviewOpen(false)}";
+}
+
+function hasPrinciplesRepeaterDefault(source: string, ownerSource: string) {
+  const ast = pageCompositionAst(source), cards = ast.owned("ModuleEditorRepeaterCard");
+  if (!ast.canonical("ModuleEditorRepeaterCard", "/ModuleEditorPresentation") || cards.length !== 1 || ast.attr(cards[0]!, "presentation") !== undefined || ast.attr(cards[0]!, "icon") !== '{isHomeTrust ? <AdminModuleTabIcon name="section" /> : undefined}') return false;
+  const owner = pageCompositionAst(ownerSource), declaration = owner.tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ModuleEditorRepeaterCard");
+  if (!declaration?.body || !owner.canonical("AdminCard", "/ui") || !owner.canonical("AdminFormControlHeader", "/ui")) return false;
+  const returned = declaration.body.statements.filter(ts.isReturnStatement);
+  const expression = returned.length === 1 ? returned[0]!.expression : undefined;
+  if (!expression || !ts.isParenthesizedExpression(expression) || !ts.isJsxElement(expression.expression)) return false;
+  const root = expression.expression;
+  if (root.openingElement.tagName.getText(owner.tree) !== "AdminCard" || owner.attr(root.openingElement, "presentation") !== '"premium"') return false;
+  const identities = owner.owned("AdminFormControlHeader").filter(node => owner.inside(node, root));
+  if (identities.length !== 1 || owner.attr(identities[0]!, "title") !== '{<span role="heading" aria-level={3}>{title}</span>}' || owner.attr(identities[0]!, "description") !== "{description}" || owner.attr(identities[0]!, "icon") !== "{icon}") return false;
+  return owner.owned("div").some(node => owner.inside(node, root) && ts.isJsxElement(node.parent) && node.parent.children.some(child => ts.isJsxExpression(child) && child.expression?.getText(owner.tree) === "children"));
 }
 
 function hasAlignedFieldAndSwitchSlots(source: string) {
@@ -647,28 +830,11 @@ async function verifyOwnerReviewFinalAdoption() {
     !hasSelectedStyleComposition(featured.replace("{adminFormFieldClassName()}", '{fieldClassName("h-9 w-14")}')));
 
   const projectHero = read("src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx");
-  const hasProjectHeroFields = (source: string) => {
-    const ast = pageCompositionAst(source), fields = ast.owned("ModuleEditorField");
-    const group = ast.owned("ModuleEditorFieldGrid")[0];
-    return Boolean(group) && fields.filter(node => ast.attr(node, "span") === "{4}" && ast.inside(node, group!.parent)).length === 3 &&
-      ["limit", "autoplay_ms"].every(name => {
-        const input = ast.owned("input").find(node => ast.attr(node, "name") === `"${name}"`);
-        return Boolean(input && ast.attr(input, "className") === "{adminFormFieldClassName()}" && ast.owned("AdminFormField").some(node => ast.inside(input, node.parent)));
-      }) && ast.owned("AdminFormListboxSelect").some(node => ast.attr(node, "name") === '"project_type"' && ast.attr(node, "sizing") === '"full"') &&
-      ast.owned("textarea").some(node => ast.attr(node, "name") === '"empty_state"' && ast.inside(node, group!.parent)) && !source.includes("col-span-2!");
-  };
   check("Content Projects Hero actual Select and number row keeps three equal spans, canonical fields and original full-width empty-state", hasProjectHeroFields(projectHero) &&
     !hasProjectHeroFields(projectHero.replace('name="project_type"', 'name="detached_type"')) &&
     !hasProjectHeroFields(projectHero.replace("span={4}", "span={8}")));
 
   const breadcrumb = read("src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx");
-  const alignedBreadcrumb = (source: string) => {
-    const ast = pageCompositionAst(source), grid = ast.owned("AdminFormGrid").find(node => ast.attr(node, "columns") === "{3}" && ast.attr(node, "presentation") === '"aligned-fields"');
-    if (!grid) return false;
-    const children = ast.children(grid.parent as ts.JsxElement);
-    return children.map(node => (ts.isJsxElement(node) ? node.openingElement : node).tagName.getText(ast.tree)).join(",") === "AdminFormListboxSelect,AdminFormField,AdminFormSwitch" &&
-      ast.owned("AdminFormSwitch").some(node => ast.attr(node, "name") === '"show_home"' && ast.inside(node, grid.parent) && !ast.attr(node, "label")?.includes("AdminFormControlHeader"));
-  };
   check("Breadcrumb mixed Select/Input/Switch are actual direct aligned-grid fields; opaque per-field cards cannot masquerade as alignment", alignedBreadcrumb(breadcrumb) &&
     !alignedBreadcrumb(breadcrumb.replace('presentation="aligned-fields"', 'presentation="plain"')));
   const feed = pageCompositionAst(read("src/components/admin/page-blocks/FeedModuleFilterFields.tsx"));
@@ -677,13 +843,6 @@ async function verifyOwnerReviewFinalAdoption() {
     feed.owned("AdminFormSwitch").some(node => feed.attr(node, "name") === '"category_slugs"') &&
     feed.owned("AdminCheckbox").some(node => feed.attr(node, "name") === '"series_slugs"'));
   const heroCta = read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields.tsx");
-  const hasHeroCtaDescendants = (source: string) => {
-    const ast = pageCompositionAst(source);
-    return ast.canonical("ModuleEditorSection", "/ModuleEditorPresentation") && ["primary_cta", "secondary_cta"].every(prefix => ast.owned("ModuleEditorSection").some(section =>
-      Boolean(ast.attr(section, "title")) && ast.owned("AdminLinkField").some(link => ast.attr(link, "prefix") === `"${prefix}"` && ast.inside(link, section.parent)) &&
-      ast.owned("AdminFormField").some(field => Boolean(ast.attr(field, "label")) && ast.inside(field, section.parent) &&
-        ast.owned("input").some(input => ast.attr(input, "name") === `"${prefix}_label"` && ast.inside(input, field.parent)))));
-  };
   check("Hero CTA actual descendant button groups require visible Fields and Section ownership; canonical Hero shell cannot hide the same CTA gap", hasHeroCtaDescendants(heroCta) &&
     !hasHeroCtaDescendants(heroCta.replaceAll("ModuleEditorSection", "UnadoptedSection")) &&
     !hasHeroCtaDescendants(heroCta.replaceAll("AdminFormField", "UnadoptedField")));
@@ -2316,9 +2475,20 @@ check(
     assert.equal(adminRows.length, 1);
     assert.equal(cta.attr(adminRows[0], "presentation"), undefined);
     for (const [name, expected] of [["alignmentName", '"cta_alignment"'], ["showName", '"show_cta"'], ["boldName", '"cta_bold"'], ["alignmentDefault", "{alignmentDefault}"], ["boldDefault", "{boldDefault}"], ["enableAlignment", "{enableAlignment}"], ["showDefault", "{showDefault}"]]) assert.equal(cta.value(adminRows[0], name), expected);
-    assert.equal(cta.tagged("AdminCard").length, 2);
-    assert.ok(cta.tagged("AdminCard").every(node => cta.value(node, "presentation") === '"premium"'));
-    assert.equal(cta.tagged("AdminFormControlHeader").length, 2);
+    assert.equal(cta.tagged("AdminCard").length, 0);
+    assert.equal(cta.tagged("AdminFormControlHeader").length, 0);
+    assertHeroCtaSectionComposition(heroCtaEditor);
+    for (const [original, replacement] of [
+      ["ModuleEditorSection", "UnadoptedSection"], ["AdminFormField", "UnadoptedField"],
+      ['title="الزر الأساسي"', 'title="الزر الثانوي"'], ['label="نص الزر الأساسي"', 'label="Hidden name"'],
+      ['data-hero-cta-row="primary"', 'data-hero-cta-row="secondary"'], ['name="secondary_cta_label"', 'name="foreign_cta_label"'],
+      ['className="h-full"', 'className="detached-height"'], ['prefix="primary_cta"', 'prefix="secondary_cta"'],
+    ]) {
+      const mutant = heroCtaEditor.replaceAll(original, replacement);
+      assert.notEqual(mutant, heroCtaEditor);
+      assert.equal(ts.transpileModule(mutant, { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).diagnostics?.length ?? 0, 0, "Hero CTA mutations are syntax-valid");
+      assert.throws(() => assertHeroCtaSectionComposition(mutant), "Canonical Sections, visible native Fields, group order/context and payloads cannot be lost");
+    }
     assert.deepEqual(cta.tagged("AdminFormGrid").map(node => cta.value(node, "columns")), ["{2}", "{1}", "{1}"]);
     assert.equal(cta.tagged("AdminLinkField").length, 2);
     for (const prefix of ["primary", "secondary"]) {
@@ -2360,7 +2530,18 @@ check(
     assert.ok(defaultOrder.includes('name="hero_element_order"') && defaultOrder.includes("normalizeHeroElementOrder"));
     const defaultOrderBranch = defaultOrder.slice(defaultOrder.lastIndexOf("\n  return ("));
     assert.ok(!defaultOrder.includes('presentation =') && !defaultOrder.includes('if (presentation ==='));
-    assert.ok(defaultOrderBranch.includes("ModuleEditorRepeaterCard") && defaultOrderBranch.includes("ModuleEditorRepeaterGrid"));
+    assert.ok(defaultOrderBranch.includes("ModuleEditorRepeaterCard") && assertDefaultHeroElementOrder(heroOrderEditor));
+    for (const [original, replacement] of [
+      ['<ul className="space-y-3">', '<ul className="grid grid-cols-3">'],
+      ['title={HERO_ELEMENT_LABELS_AR[key]}', 'title="Detached title"'],
+      ['name="hero_element_order"', 'name="foreign_element_order"'],
+      ['onClick={() => move(index, -1)}', 'onClick={() => move(index, 1)}'],
+    ]) {
+      const mutant = heroOrderEditor.replaceAll(original, replacement);
+      assert.notEqual(mutant, heroOrderEditor);
+      assert.equal(ts.transpileModule(mutant, { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).diagnostics?.length ?? 0, 0);
+      assert.throws(() => assertDefaultHeroElementOrder(mutant), "Current ordinary Hero list, canonical item identity and native reorder payload/callbacks remain required");
+    }
     assert.ok(!heroText.includes("<textarea") && !heroCtaEditor.includes("useState"));
     return true;
   })(),
@@ -2549,7 +2730,9 @@ check(
     breadcrumbEditor.includes('sizing="full"') &&
     breadcrumbEditor.includes('embedded') &&
     !breadcrumbEditor.includes('surface className="h-full"') &&
-    (breadcrumbEditor.match(/span=\{4\}/g)?.length ?? 0) >= 3 &&
+    alignedBreadcrumb(breadcrumbEditor) &&
+    !alignedBreadcrumb(breadcrumbEditor.replace('presentation="aligned-fields"', 'presentation="plain"')) &&
+    !alignedBreadcrumb(breadcrumbEditor.replace('name="show_home"', 'name="foreign_home"')) &&
     presentation.includes('data-module-editor-field-span={resolvedSpan}') && presentation.includes('className="contents"') &&
     !breadcrumbEditor.includes("ModuleEditorTechnicalIdentity") &&
     !breadcrumbEditor.includes(
@@ -2935,12 +3118,9 @@ check(
     adminFormGridOwner.includes("xl:grid-cols-5") &&
     presentation.includes("actions?: ReactNode") &&
     presentation.includes('<AdminFormSection {...props}') &&
-    projectsHubHeroEditor.includes(
-      '<ModuleEditorFieldGrid className="mt-4">',
-    ) &&
-    (projectsHubHeroEditor.match(/span=\{3\}/g)?.length ?? 0) === 3 &&
-    (projectsHubHeroEditor.match(/className="xl:col-span-2!"/g)?.length ??
-      0) === 2 &&
+    hasProjectHeroFields(projectsHubHeroEditor) &&
+    !hasProjectHeroFields(projectsHubHeroEditor.replace('name="project_type"', 'name="detached_type"')) &&
+    !hasProjectHeroFields(projectsHubHeroEditor.replace("span={4}", "span={8}")) &&
     projectsHubHeroEditor.includes("<AdminFormGrid columns={2}") &&
     !projectsHubHeroEditor.includes(
       "النصوص والصور والروابط وترتيب المشروعات تُقرأ من Projects Domain",
@@ -3482,7 +3662,16 @@ check(
     for (const token of ["minItems = 1", "maxItems = 12", "showIcon = true", "padItems(items, minItems).slice(0, maxItems)", "key={item.clientKey}", "function updateItem(", "function moveItem(", "function removeItem(", "function addItem(", "if (nextIndex < 0 || nextIndex >= rows.length) return;", "[next[index], next[nextIndex]] = [next[nextIndex], next[index]];", "if (rows.length <= minItems) return;", "if (rows.length >= maxItems) return;", "renderHref(item, index)"]) assert.ok(cardsRepeater.includes(token), token);
     for (const field of ["icon", "title", "body"]) assert.ok(cardsRepeater.includes("item_${index}_" + field));
     for (const condition of ["disabled={index === 0}", "disabled={index === rows.length - 1}", "disabled={rows.length <= minItems}"]) assert.equal(cardsRepeater.split(condition).length - 1, 1);
-    assert.ok(cardsRepeater.includes("<AdminFormControlHeader") && cardsRepeater.includes("title={label}"));
+    assert.ok(hasCardsRepeaterHeading(cardsRepeater));
+    for (const [original, replacement] of [
+      ['{label}</span>', '{null}</span>'], ['aria-level={3}', 'aria-level={2}'],
+      ['from "../../ui/AdminForm"', 'from "../../ui/ForeignForm"'],
+    ]) {
+      const mutant = cardsRepeater.replace(original, replacement);
+      assert.notEqual(mutant, cardsRepeater);
+      assert.equal(ts.transpileModule(mutant, { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).diagnostics?.length ?? 0, 0);
+      assert.ok(!hasCardsRepeaterHeading(mutant), "The canonical Cards repeater preserves its accessible original native label");
+    }
     assert.ok(cardsRepeater.includes("<AdminActionButton") && cardsRepeater.includes("onClick={addItem}"));
     assert.ok(blockManager.includes("<AdminCardsItemsField items={[]} minItems={1} />"));
     assert.ok(!/AdminRichTextEditor|AdminMediaImageField|duplicateItem/.test(cardsRepeater));
@@ -3822,6 +4011,8 @@ check(
       ]) {
         const pairedSource = read(pairedFile);
         const inspectPair = (text: string) => {
+          const ownership = pageCompositionAst(text);
+          assert.ok(ownership.canonical("ModuleEditorSection", "/ModuleEditorPresentation") && ownership.canonical("AdminFormField", "/ui"), `${functionName} retains canonical Section and visible Field owners`);
           const tree = ts.createSourceFile(pairedFile, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
           const declaration = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === functionName);
           assert.ok(declaration?.body);
@@ -3834,18 +4025,22 @@ check(
             const links = nodes.filter(node => tag(node) === "AdminLinkField" && textAttribute(node, "prefix") === prefix);
             assert.equal(labels.length, 1, `${functionName} has one ${prefix} label`);
             assert.equal(links.length, 1, `${functionName} has one ${prefix} link`);
-            const card = nearest(labels[0], node => tag(node) === "AdminCard" && textAttribute(node, "presentation") === "premium");
-            assert.ok(card, `${functionName} ${prefix} label has a shared Premium card`);
-            assert.equal(nearest(links[0], node => tag(node) === "AdminCard" && textAttribute(node, "presentation") === "premium"), card, `${functionName} ${prefix} label and matching link share their closest Premium card`);
+            const card = nearest(labels[0], node => tag(node) === "ModuleEditorSection");
+            assert.ok(card && textAttribute(card, "title"), `${functionName} ${prefix} label has a shared functional Section/Header`);
+            const field = nearest(labels[0], node => tag(node) === "AdminFormField");
+            assert.ok(field && textAttribute(field, "label") && nearest(field, node => tag(node) === "ModuleEditorSection") === card, `${functionName} ${prefix} native label belongs to its own visible Field`);
+            assert.equal(nearest(links[0], node => tag(node) === "ModuleEditorSection") === card, true, `${functionName} ${prefix} label and matching link share their closest functional Section`);
             pairs.push({ card, link: links[0] });
           }
-          assert.notEqual(pairs[0].card, pairs[1].card, `${functionName} keeps its two button data groups distinct`);
+          assert.equal(pairs[0].card !== pairs[1].card, true, `${functionName} keeps its two button data groups distinct`);
           return { tree, pairs };
         };
         const paired = inspectPair(pairedSource);
         const pairedGraph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [pairedFile], symbolAware: true });
         for (const binding of [
           { sourceFile: "src/components/admin/ui/AdminCard.tsx", exportNames: ["default"] },
+          { sourceFile: "src/components/admin/page-blocks/ModuleEditorPresentation.tsx", exportNames: ["ModuleEditorSection"] },
+          { sourceFile: "src/components/admin/ui/AdminForm.tsx", exportNames: ["AdminFormField"] },
           { sourceFile: "src/components/admin/ui/AdminLinkField.tsx", exportNames: ["default"] },
         ]) assert.ok(graphUsesExecutableBinding({ root: ROOT, graph: pairedGraph, bindings: [binding] }), `${functionName} retains ${binding.sourceFile}`);
         const replace = (changes: { node: ts.Node; text: string }[]) => changes.sort((a, b) => b.node.getStart(paired.tree) - a.node.getStart(paired.tree)).reduce(
@@ -3885,7 +4080,7 @@ check(
       !defaultCard.includes('pointer-events-none absolute inset-x-0 top-0 h-px') &&
       defaultCard.includes('ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME') &&
       form.includes('data-admin-form-control-header=""') &&
-      form.includes('className="text-sm font-semibold text-white"') &&
+      hasControlHeaderTitleScale(form) && !hasControlHeaderTitleScale(form.replace("text-sm font-semibold text-white", "text-base font-semibold text-white")) &&
       form.includes('className="text-xs leading-5 text-white/55"') &&
       form.includes('size-10 shrink-0') && form.includes('[&>svg]:size-5') &&
       styles.includes('export function adminChoiceButtonClassName(active: boolean, extra = "", density: "default" | "compact" = "default")') &&
@@ -3908,7 +4103,9 @@ check(
     mediaOwner.includes(': `relative w-full max-w-sm overflow-hidden rounded-2xl border') &&
     mediaOwner.includes('data-admin-media-image-preview-trigger') &&
     mediaOwner.includes('<VenesiaModal') &&
-    mediaOwner.includes('open={previewOpen && presentation === "active"}') &&
+    hasMediaPreviewEligibility(mediaOwner) &&
+    ["presentation === \"active\" && canPreviewValue", "previewOpen && canPreviewValue", "previewOpen && presentation === \"active\"", "previewOpen && presentation === \"active\" && !canPreviewValue"].every(open =>
+      !hasMediaPreviewEligibility(mediaOwner.replace('open={previewOpen && presentation === "active" && canPreviewValue}', `open={${open}}`))) &&
     mediaOwner.includes('aria-haspopup="dialog"') &&
     mediaOwner.includes('className="object-contain"') &&
     mediaOwner.includes('compactAspectClassName = "aspect-[4/3]"') &&
@@ -4133,7 +4330,8 @@ check(
       single.includes('adminChoiceButtonClassName(active, "", "compact")') &&
       !single.includes('presentation="control-cards"') &&
       single.includes('name="image_position" value={imagePosition}') &&
-      single.includes("ADMIN_FORM.labelStack") &&
+      pageCompositionAst(single).inset("adminFormLabelClassName") && pageCompositionAst(single).nestedLabels() &&
+      !pageCompositionAst(single.replaceAll("{ textInset: true }", "{}")).inset("adminFormLabelClassName") &&
       !single.includes('className="block space-y-1.5"') &&
       !intro.includes('className="block space-y-1.5"') &&
       gallery.includes('altName={props.valueMode === "items" ? props.altName : undefined}') && gallery.includes('captionName={props.valueMode === "items" ? props.captionName : undefined}') && mediaOwner.includes('data-admin-media-image-metadata-field={kind}');
@@ -4339,12 +4537,58 @@ check(
       intro.includes('<AdminFormControlHeader presentation="leading-icon" title={fieldLabels.imageMain} icon={<StoryControlIcon icon="image" />} />') &&
       intro.includes('<AdminFormControlHeader presentation="leading-icon" title={fieldLabels.imageSecondary} icon={<StoryControlIcon icon="image" />} />') &&
       (intro.match(/onClick=\{swapHomeStoryImages\}/g) ?? []).length === 2 &&
-      tabs.includes('import { AdminFormControlHeader } from "./AdminForm"') &&
+      assertCanonicalControlHeaderOwnership(tabs, read("src/components/admin/ui/AdminForm.tsx")) &&
       tabs.includes('title={<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}') &&
       tabs.includes('description={tab.sectionDescription}') && tabs.includes('icon={<AdminModuleTabIcon name={tab.icon ?? "section"} />}') &&
       tabs.includes('presentation="leading-icon"') && !tabs.includes('<h2 className=') &&
       link.includes('data-admin-link-actions="" className="inline-flex shrink-0 items-center gap-1"') &&
       link.includes(') : linkActions}') && link.includes('actionPresentation = "default"');
+  })(),
+);
+check(
+  "ControlHeader retains its canonical local owner, public reexport and native identity payload with effective source negatives",
+  await (async () => {
+    const tabs = read("src/components/admin/ui/AdminModuleTabs.tsx"), form = read("src/components/admin/ui/AdminForm.tsx");
+    assertCanonicalControlHeaderOwnership(tabs, form);
+    const owner = await jiti.import<typeof import("../src/components/admin/ui/AdminModuleTabs.tsx")>("../src/components/admin/ui/AdminModuleTabs.tsx");
+    const publicTree = pageCompositionAst(form).tree;
+    const publicExport = publicTree.statements.find((node): node is ts.ExportDeclaration => ts.isExportDeclaration(node) && !!node.exportClause && ts.isNamedExports(node.exportClause) && node.exportClause.elements.some(element => element.name.text === "AdminFormControlHeader"))!;
+    const compatibility: Partial<typeof import("../src/components/admin/ui/AdminForm.tsx")> = {};
+    new Function("require", "exports", ts.transpileModule(publicExport.getText(publicTree), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)((specifier: string) => { assert.equal(specifier, "./AdminModuleTabs"); return owner; }, compatibility);
+    assert.equal(compatibility.AdminFormControlHeader, owner.AdminFormControlHeader, "Existing consumers resolve the same runtime function through AdminForm");
+    const native = createElement("input", { name: "original_control_header", defaultValue: "same-payload", onChange: () => undefined });
+    for (const presentation of [undefined, "default", "leading-icon", "compact-inline"] as const) {
+      const props = { title: native, description: "Original description", icon: createElement("svg", { "data-original-header-icon": "" }), presentation };
+      const html = renderToStaticMarkup(createElement(owner.AdminFormControlHeader, props));
+      assert.equal(renderToStaticMarkup(createElement(compatibility.AdminFormControlHeader, props)), html);
+      assert.ok(html.includes(renderToStaticMarkup(native)) && html.includes("Original description"));
+      assert.equal((html.match(/data-original-header-icon=""/gu) ?? []).length, 1);
+    }
+    const replace = (input: string, before: string, after: string) => { assert.equal(input.split(before).length, 2, "Each source mutation targets one actual owner binding"); return input.replace(before, after); };
+    const identityAst = pageCompositionAst(tabs), identitySource = identityAst.owned("AdminFormControlHeader")[0]!.getText(identityAst.tree);
+    const mutants: [string, string, string][] = [
+      ["reverse import", replace(tabs, "export function AdminFormControlHeader", 'import { AdminFormControlHeader } from "./AdminForm";\nfunction DisconnectedControlHeader'), form],
+      ["private local owner", replace(tabs, "export function AdminFormControlHeader", "function AdminFormControlHeader"), form],
+      ["missing public reexport", tabs, replace(form, 'export { AdminFormControlHeader } from "./AdminModuleTabs";', "")],
+      ["foreign public reexport", tabs, replace(form, 'export { AdminFormControlHeader } from "./AdminModuleTabs";', 'export { AdminFormControlHeader } from "./ForeignHeader";')],
+      ["wrong public identity", tabs, replace(form, 'export { AdminFormControlHeader } from "./AdminModuleTabs";', 'export { AdminModuleSectionHeader as AdminFormControlHeader } from "./AdminModuleTabs";')],
+      ["type-only reexport", tabs, replace(form, 'export { AdminFormControlHeader } from "./AdminModuleTabs";', 'export type { AdminFormControlHeader } from "./AdminModuleTabs";')],
+      ["copied compatibility owner", tabs, `${form}\nfunction AdminFormControlHeader() { return null; }`],
+      ["shadowed runtime owner", replace(tabs, "  const standalone = tab.standalone", "  const { AdminFormControlHeader } = substituteOwner;\n  const standalone = tab.standalone"), form],
+      ["inactive identity", replace(tabs, identitySource, `{false && ${identitySource}}`), form],
+      ["lost native title", replace(tabs, 'title={<span role="heading" aria-level={2}>{tab.sectionHeading}</span>}', 'title={<span role="heading" aria-level={2}>Substitute</span>}'), form],
+      ["lost description", replace(tabs, 'description={tab.sectionDescription}', 'description={null}'), form],
+      ["lost icon owner", replace(tabs, 'icon={<AdminModuleTabIcon name={tab.icon ?? "section"} />}', 'icon={null}'), form],
+      ["lost identity presentation", replace(tabs, identitySource, identitySource.replace('presentation="leading-icon"', 'presentation="default"')), form],
+      ["overriding payload spread", replace(tabs, identitySource, identitySource.replace("<AdminFormControlHeader", "<AdminFormControlHeader {...foreignPayload}")), form],
+      ["duplicate native title", replace(tabs, 'description={tab.sectionDescription}', 'description={tab.sectionDescription} title="Foreign title"'), form],
+    ];
+    for (const [name, candidateTabs, candidateForm] of mutants) {
+      for (const candidate of [candidateTabs, candidateForm]) assert.equal(ts.transpileModule(candidate, { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).diagnostics?.length ?? 0, 0, `${name} is a syntax-valid source mutation`);
+      assert.throws(() => assertCanonicalControlHeaderOwnership(candidateTabs, candidateForm), `${name} must fail the canonical ownership contract`);
+      check(`ControlHeader ownership rejects ${name}`, true);
+    }
+    return true;
   })(),
 );
 check(
@@ -4812,9 +5056,19 @@ check(
       assert.equal(custom.props.className, `grid min-w-0 gap-4 [&>*]:min-w-0 grid-cols-1 ${equalHeightClasses} existing-consumer-layout`, "The existing consumer layout remains an explicit composition input");
     };
     verifyEqualHeightColumns(node.getText(tree));
+    const presentationConditions: ts.BinaryExpression[] = [];
+    const findPresentation = (entry: ts.Node) => {
+      if (ts.isVariableDeclaration(entry) && entry.name.getText(tree) === "presentationClassName" && entry.initializer) {
+        const visit = (child: ts.Node) => { if (ts.isBinaryExpression(child) && child.getText(tree) === 'presentation === "equal-height-columns"') presentationConditions.push(child); ts.forEachChild(child, visit); };
+        visit(entry.initializer);
+      }
+      ts.forEachChild(entry, findPresentation);
+    };
+    findPresentation(node); assert.equal(presentationConditions.length, 1, "The negative targets the actual presentation class selector, not the separate ratio/columns selector");
+    const condition = presentationConditions[0]!, conditionStart = condition.getStart(tree) - node.getStart(tree), conditionEnd = condition.end - node.getStart(tree);
     const equalHeightMutants = [
       node.getText(tree).replace('presentation = "plain"', 'presentation = "equal-height-columns"'),
-      node.getText(tree).replace('presentation === "equal-height-columns"', 'presentation === "missing-equal-height-columns"'),
+      node.getText(tree).slice(0, conditionStart) + 'presentation === "missing-equal-height-columns"' + node.getText(tree).slice(conditionEnd),
       node.getText(tree).replace(equalHeightClasses, "items-start [&>*]:self-start"),
       ...["h-full", "min-h-80", "flex flex-col", "justify-between", "auto-rows-fr", "[&>*]:h-full", "[&>*>*]:self-stretch", "[&>*]:grid [&>*]:grid-rows-subgrid"].map(classes => node.getText(tree).replace(equalHeightClasses, `${equalHeightClasses} ${classes}`)),
       node.getText(tree).replace("{children}", "{null}"),
@@ -4867,7 +5121,15 @@ check(
     assert.ok(editor.includes('controlMode="visibility-only"') && editor.includes('legacyHtmlFormatting={{ boldName: "description_bold"'));
     assert.ok(editor.includes('alignmentName: "description_alignment", alignment: descriptionFormat.alignment'));
     assert.ok(!editor.includes('storageFormat=') && !editor.includes('enableH1') && !editor.includes('dangerouslySetInnerHTML'));
-    assert.ok(editor.includes('presentation="premium"') && editor.includes('icon={isHomeTrust ? <AdminModuleTabIcon'));
+    assert.ok(hasPrinciplesRepeaterDefault(editor, presentation));
+    for (const [consumer, owner] of [
+      [editor.replace("<ModuleEditorRepeaterCard", '<ModuleEditorRepeaterCard presentation="premium"'), presentation],
+      [editor, presentation.replace('<AdminCard presentation="premium" className={`h-full p-3 ${className}`.trim()}>', '<AdminCard presentation="default" className={`h-full p-3 ${className}`.trim()}>')],
+      [editor, presentation.replace('        {children}\n      </div>\n    </AdminCard>', '        {null}\n      </div>\n    </AdminCard>')],
+    ]) {
+      assert.ok(consumer !== editor || owner !== presentation);
+      assert.ok(!hasPrinciplesRepeaterDefault(consumer, owner), "Omitted repeater composition still requires the canonical Premium owner and original native children");
+    }
     assert.equal((editor.match(/<textarea/g) ?? []).length, 1);
     assert.ok(editor.includes('onChange={(event) => updateItem(index, { description: event.target.value })}') && editor.includes('rows={3}'));
     assert.ok(editor.includes('actions={!isHomeTrust ? (') && editor.includes('if (items.length >= 6) return;'));
@@ -5000,15 +5262,15 @@ check(
   (() => {
     const contracts = [
       { file: "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx", groups: [
-        { id: "featured-variant-settings", heading: '"إعدادات النمط المختار"', icon: "settings", body: "data-featured-variant-settings" },
-        { id: "featured-display-formatting", heading: '"تنسيق عناصر المحتوى"', icon: "settings", body: "data-featured-display-settings" },
+        { id: "featured-variant-settings", heading: '"إعدادات النمط المختار"', icon: "settings", body: "data-featured-variant-settings", root: "ModuleEditorSection", premium: false },
+        { id: "featured-display-formatting", heading: '"تنسيق عناصر المحتوى"', icon: "settings", body: "data-featured-display-settings", root: "section", premium: false },
       ] },
       { file: "src/components/admin/page-blocks/CollectionModuleFields.tsx", groups: [
-        { id: "collection-variant-settings", heading: '"إعدادات النمط المختار"', icon: "settings", body: "data-collection-presentation-settings" },
+        { id: "collection-variant-settings", heading: '"إعدادات النمط المختار"', icon: "settings", body: "data-collection-presentation-settings", root: "div", premium: false },
       ] },
       { file: "src/components/admin/page-blocks/editors/CollectionModuleEditor.tsx", groups: [
-        { id: "collection-display-formatting", heading: "{heading}", icon: "settings", body: "data-collection-display-settings" },
-        { id: "collection-configuration", heading: '"إعدادات القائمة"', icon: "section", body: "configuration-grid" },
+        { id: "collection-display-formatting", heading: "{heading}", icon: "settings", body: "data-collection-display-settings", root: "ModuleEditorSection", premium: true },
+        { id: "collection-configuration", heading: '"إعدادات القائمة"', icon: "section", body: "configuration-grid", root: "ModuleEditorSection", premium: true },
       ] },
     ];
     const verify = (source: string, groups: typeof contracts[number]["groups"]) => {
@@ -5024,7 +5286,7 @@ check(
         for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
           if (ts.isJsxElement(ancestor)) {
             assert.notEqual(ancestor.openingElement.tagName.getText(tree), "AdminCard", "A full Section Header stays outside field Cards and their bodies");
-            if (["section", "Section"].includes(ancestor.openingElement.tagName.getText(tree))) return ancestor;
+            if (["section", "div", "ModuleEditorSection"].includes(ancestor.openingElement.tagName.getText(tree))) return ancestor;
           }
         }
         assert.fail("Missing functional section owner");
@@ -5036,8 +5298,18 @@ check(
         const header = matches[0];
         assert.equal(value(header, "sectionHeading"), group.heading);
         assert.equal(value(header, "icon"), JSON.stringify(group.icon));
-        assert.ok(value(header, "sectionHeaderPresentation") === undefined || value(header, "sectionHeaderPresentation") === '"default"', "Full default presentation is explicit or inherited; internal control chrome is not substituted");
+        assert.equal(value(header, "sectionHeaderPresentation"), group.premium ? '"premium"' : undefined, "Each current Header retains its canonical inherited or embedded presentation");
         const root = section(header);
+        assert.equal(tag(root), group.root, "The current functional Section or neutral sibling group remains its actual owner");
+        if (group.root === "ModuleEditorSection") {
+          assert.ok(pageCompositionAst(source).canonical("ModuleEditorSection", "/ModuleEditorPresentation"));
+          const slot = attribute(root, "header")?.initializer;
+          assert.ok(slot && ts.isJsxExpression(slot));
+          if (group.id === "collection-configuration") {
+            assert.ok(slot.expression && ts.isConditionalExpression(slot.expression) && slot.expression.condition.getText(tree) === 'section === "all"' && slot.expression.whenTrue === header && slot.expression.whenFalse.getText(tree) === "undefined", "Configuration Header mounts only in the full Section context");
+            assert.equal(value(root, "surface"), '{section === "all" ? "panel" : "neutral"}', "Already selected tab contexts retain neutral composition");
+          } else assert.equal(slot.expression === header, true, "The canonical Header is the active shared Section slot");
+        }
         assert.equal(attribute(root, "className") !== undefined, false, "The Header alone owns the Header-to-body gap");
         const body = nodes.find(node => group.body === "configuration-grid"
           ? tag(node) === "AdminFormGrid" && value(node, "columns") === "{4}"
@@ -5055,11 +5327,14 @@ check(
         const mutants = [
           source.replace(headerSource, headerSource.replace("AdminModuleSectionHeader", "AdminFormControlHeader")),
           source.replace(headerSource, `<AdminCard presentation="premium">${headerSource}</AdminCard>`),
-          source.replace(headerSource, headerSource.replace(/\/>$/u, ' sectionHeaderPresentation="control" />')),
+          source.replace(headerSource, /sectionHeaderPresentation="[^"]*"/u.test(headerSource) ? headerSource.replace(/sectionHeaderPresentation="[^"]*"/u, 'sectionHeaderPresentation="control"') : headerSource.replace(/\/>$/u, ' sectionHeaderPresentation="control" />')),
           source.slice(0, root.openingElement.getStart(tree)) + rootOpening.replace(/>$/u, ' className="space-y-4">') + source.slice(root.openingElement.end),
-          source.replace(headerSource, "").replace(body.getText(tree), body.getText(tree) + headerSource),
+          (root.openingElement.tagName.getText(tree) === "ModuleEditorSection"
+            ? source.replace(root.openingElement.attributes.properties.find(property => ts.isJsxAttribute(property) && property.name.getText(tree) === "header")!.getText(tree), "header={null}")
+            : source.replace(headerSource, "")).replace(body.getText(tree), body.getText(tree) + headerSource),
         ];
         for (const [index, mutant] of mutants.entries()) {
+          assert.equal(ts.transpileModule(mutant, { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).diagnostics?.length ?? 0, 0, "Each Section grouping mutation is syntax-valid");
           assert.ok(mutant !== source && rejects(() => verify(mutant, contract.groups)), `${id} probe ${index}: reject missing/internal/nested Headers, duplicate gap ownership and Headers placed after the body`);
         }
       }
@@ -5124,23 +5399,24 @@ check(
       const x = inspect(source);
       const content = x.tabs.get("content");
       if (!content) return false;
-      const cards = x.within(content, "AdminCard");
-      if (cards.length !== 3 || cards.some(c => !x.literal(x.attribute(c, "presentation"), "premium"))) return false;
+      if (!alignedBreadcrumb(source) || x.within(content, "AdminCard").length !== 0) return false;
+      const grids = x.within(content, "AdminFormGrid"), sections = x.within(content, "ModuleEditorSection");
+      if (grids.length !== 1 || sections.length !== 1 || !x.literal(x.attribute(sections[0], "surface"), "neutral") || !x.contains(sections[0], grids[0])) return false;
       const controlOwners = ["source", "current_label_override", "show_home"].map(name => {
         const control = x.named(name);
-        return control ? cards.filter(c => x.contains(c, control)) : [];
+        return control ? grids.filter(grid => x.contains(grid, control)) : [];
       });
-      if (controlOwners.some(owners => owners.length !== 1) || new Set(controlOwners.map(owners => owners[0])).size !== 3) return false;
+      if (controlOwners.some(owners => owners.length !== 1)) return false;
       const manual = x.within(content, "BreadcrumbManualItemsField");
-      return manual.length === 1 && !cards.some(c => x.contains(c, manual[0])) && cards.every(c => c.end < manual[0].pos);
+      return manual.length === 1 && !x.contains(sections[0], manual[0]) && sections[0].end < manual[0].pos;
     };
     assert.ok(breadcrumbComposition(breadcrumbEditor));
-    assert.ok(!breadcrumbComposition(breadcrumbEditor.replaceAll("AdminCard", "div")), "Imports or field presence without actual control groups must fail");
+    assert.ok(!breadcrumbComposition(breadcrumbEditor.replaceAll("AdminFormField", "div")), "Imports or field presence without actual control groups must fail");
     assert.ok(!breadcrumbComposition(breadcrumbEditor.replace("<BreadcrumbManualItemsField items={config.manualItems ?? []} />", "")), "The subordinate manual group is required");
     const breadcrumbTree = inspect(breadcrumbEditor);
-    const breadcrumbGrid = breadcrumbTree.elements.find(n => breadcrumbTree.tag(n) === "ModuleEditorFieldGrid")!;
+    const breadcrumbGrid = breadcrumbTree.elements.find(n => breadcrumbTree.tag(n) === "AdminFormGrid")!;
     const flattenedControls = ["source", "current_label_override", "show_home"].map(name => breadcrumbTree.named(name)!.getText(breadcrumbTree.tree)).join("\n");
-    const flattenedBreadcrumb = breadcrumbEditor.replace(breadcrumbGrid.getText(breadcrumbTree.tree), `<ModuleEditorFieldGrid><AdminCard presentation="premium">${flattenedControls}</AdminCard><AdminCard presentation="premium" /><AdminCard presentation="premium" /></ModuleEditorFieldGrid>`);
+    const flattenedBreadcrumb = breadcrumbEditor.replace(breadcrumbGrid.getText(breadcrumbTree.tree), `<AdminFormGrid columns={3} presentation="aligned-fields"><AdminCard presentation="premium">${flattenedControls}</AdminCard><AdminCard presentation="premium" /><AdminCard presentation="premium" /></AdminFormGrid>`);
     assert.ok(!breadcrumbComposition(flattenedBreadcrumb), "Three retained card tokens cannot conceal controls flattened into one card");
     const featuredComposition = (source: string) => {
       const x = inspect(source);
@@ -5169,7 +5445,8 @@ check(
       const variant = x.named("presentation_variant");
       if (!variant || !x.contains(variantGroup, variant)) return false;
       const assignments = x.within(pages, "ModuleEditorPagesTab");
-      return assignments.length === 1 && x.literal(x.attribute(assignments[0], "presentation"), "premium");
+      return assignments.length === 1 && pageCompositionAst(source).canonical("ModuleEditorPagesTab", "/ModuleEditorPresentation") && x.attribute(assignments[0], "presentation") === undefined &&
+        x.attribute(assignments[0], "moduleName")?.getText(x.tree) === "{block.name}" && x.attribute(assignments[0], "assignmentContext")?.getText(x.tree) === "{assignmentContext}";
     };
     const featured = read("src/components/admin/page-blocks/FeaturedModuleEditClient.tsx");
     assert.ok(featuredComposition(featured));
@@ -5177,6 +5454,8 @@ check(
     assert.ok(!featuredComposition(featured.replaceAll("AdminCard", "div")), "Shared imports alone cannot prove actual grouping");
     assert.ok(!featuredComposition(featured.replace("{sourceFields}{variantFields}", "{variantFields}{sourceFields}")), "Presentation configuration must follow source selection");
     assert.ok(!featuredComposition(featured.replace("{variantControls}", "{__swappedControls}").replace("{displayControls}", "{variantControls}").replace("{__swappedControls}", "{displayControls}")), "Counts/navigation and display formatting cannot swap their functional parents");
+    assert.ok(!featuredComposition(featured.replace("<ModuleEditorPagesTab", '<ModuleEditorPagesTab presentation="premium"')), "Featured retains the canonical Pages owner default");
+    assert.ok(!featuredComposition(featured.replace("assignmentContext={assignmentContext}", "assignmentContext={foreignContext}")), "The existing canonical assignment context cannot be disconnected");
     const sourceGroup = inspect(featured).variables.get("sourceFields")!.getText();
     assert.ok(!featuredComposition(featured.replace(sourceGroup, sourceGroup.replaceAll('presentation="premium"', 'presentation="default"'))), "Source groups must retain their actual Premium presentation opt-in");
     return true;
@@ -5406,7 +5685,7 @@ check(
   (() => {
     const output = execFileSync(process.execPath, [
       "scripts/qa-home-story-presentation.mjs", "--premium-adoption-acceptance-offline",
-      "--content-premium-output-dir=.tmp-qa/page-block-editor-presentation/current",
+      `--content-premium-output-dir=${premiumAcceptanceOutput(process.argv.slice(2))}`,
     ], { cwd: ROOT, encoding: "utf8", windowsHide: true, maxBuffer: 4_000_000, timeout: 120_000 });
     // The runner fails closed on any assertion; stdout is scoped technical proof,
     // never a substitute for observed Browser evidence or Owner visual approval.

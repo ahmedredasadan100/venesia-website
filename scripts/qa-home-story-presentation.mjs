@@ -3923,7 +3923,15 @@ function premiumRenderedObservation(html) {
     const panel = ancestors(node).find(groupName), enabled = !disabled(node);
     return { name: node.attrs.name, type, value, checked, mounted: true, visible: type !== 'hidden' && node.attrs['aria-hidden'] !== 'true' && !hidden(node), enabled, submitted: enabled && (!['checkbox', 'radio'].includes(type) || checked), group: panel ? groupName(panel) : null };
   });
-  return { controls, groupOrder: panels.map(groupName), groups: Object.fromEntries(panels.map(panel => [groupName(panel), controls.filter(control => control.group === groupName(panel)).map(control => control.name)])), headings: panels.map(panel => ({ group: groupName(panel), headings: nodes.filter(node => /^h[1-6]$/.test(node.tag) && ancestors(node).includes(panel)).map(textOf), descriptions: nodes.filter(node => node.tag === 'p' && ancestors(node).includes(panel)).map(textOf), directControlHeaders: nodes.filter(node => 'data-admin-form-control-header' in node.attrs && node.parent?.parent === panel).map(node => nodes.filter(child => child.tag === 'span' && ancestors(child).includes(node) && child !== node && !child.children.some(value => typeof value !== 'string')).map(textOf).filter(value => value.trim())), renderedText: textOf(panel) })) };
+  const sectionHeadersFor = panel => nodes.filter(node => node.tag === 'header' && 'data-admin-tab-section-heading' in node.attrs && ancestors(node).find(groupName) === panel).map(header => {
+    const identities = nodes.filter(node => 'data-admin-form-control-header' in node.attrs && ancestors(node).includes(header));
+    const headings = nodes.filter(node => node.attrs.role === 'heading' && identities.length === 1 && ancestors(node).includes(identities[0]));
+    const title = headings.length === 1 ? headings[0] : null, titleWrapper = title?.parent, identityText = titleWrapper?.parent;
+    const descriptions = identityText && identities.length === 1 && ancestors(identityText).includes(identities[0])
+      ? identityText.children.filter(node => typeof node !== 'string' && node !== titleWrapper && node.tag === 'span' && !node.children.some(child => typeof child !== 'string')) : [];
+    return { id: header.attrs['data-admin-tab-section-heading'], presentation: header.attrs['data-admin-tab-section-presentation'], identityCount: identities.length, headings: headings.map(textOf), levels: headings.map(node => node.attrs['aria-level']), descriptions: descriptions.map(textOf), visible: [header, ...identities, ...headings, ...descriptions].every(node => !hidden(node)) };
+  });
+  return { controls, groupOrder: panels.map(groupName), groups: Object.fromEntries(panels.map(panel => [groupName(panel), controls.filter(control => control.group === groupName(panel)).map(control => control.name)])), headings: panels.map(panel => ({ group: groupName(panel), headings: nodes.filter(node => /^h[1-6]$/.test(node.tag) && ancestors(node).includes(panel)).map(textOf), descriptions: nodes.filter(node => node.tag === 'p' && ancestors(node).includes(panel)).map(textOf), directControlHeaders: nodes.filter(node => 'data-admin-form-control-header' in node.attrs && node.parent?.parent === panel).map(node => nodes.filter(child => child.tag === 'span' && ancestors(child).includes(node) && child !== node && !child.children.some(value => typeof value !== 'string')).map(textOf).filter(value => value.trim())), renderedText: textOf(panel), sectionHeaders: sectionHeadersFor(panel) })) };
 }
 
 async function verifyPremiumAdoptionAcceptance() {
@@ -3959,8 +3967,8 @@ async function verifyPremiumAdoptionAcceptance() {
     const referenceSlug = resolved.applicability.reference.moduleSlug;
     const reference = { ...resolved.reference.source, slug: referenceSlug };
     const specs = [
-      { id: 25, slug: referenceSlug, file: reference.sourceFile, exportName: reference.exportName, props: reference.mode, section: reference.section, prefix: 'button', data: ['button_label'], appearance: ['button_open_target', 'button_alignment', 'button_icon', 'button_icon_position'] },
-      { id: 28, slug: 'home-projects', file: resolved.applicability.source.sourceFile, exportName: resolved.applicability.source.exportName, props: resolved.applicability.source.mode, section: resolved.applicability.source.section, prefix: 'footer_cta', data: ['footer_cta_label'], appearance: ['show_footer_cta', 'footer_cta_open_target', 'footer_cta_alignment'] },
+      { id: 25, slug: referenceSlug, file: reference.sourceFile, exportName: reference.exportName, props: reference.mode, section: reference.section, prefix: 'button', data: ['button_label'], appearance: ['button_open_target', 'button_alignment', 'button_icon', 'button_icon_position'], sectionHeaderPrefix: 'home-story-cta-' },
+      { id: 28, slug: 'home-projects', file: resolved.applicability.source.sourceFile, exportName: resolved.applicability.source.exportName, props: resolved.applicability.source.mode, section: resolved.applicability.source.section, prefix: 'footer_cta', data: ['footer_cta_label'], appearance: ['show_footer_cta', 'footer_cta_open_target', 'footer_cta_alignment'], sectionHeaderPrefix: 'home-projects-cta-' },
     ];
     const link = { link_kind: 'static_route', linked_type: 'static_routes', href: '/about', anchor: 'retained-anchor', target: '_self', meta: { route_key: 'about' } };
     const inputs = {
@@ -3987,6 +3995,16 @@ async function verifyPremiumAdoptionAcceptance() {
       assert.ok(observation.controls.filter(control => control.name.startsWith(spec.prefix + '_') && !spec.appearance.includes(control.name) && !spec.data.includes(control.name)).length >= 4, 'Actual canonical link fields mounted');
       if (spec.sharedControlHeader) {
         assert.ok(observation.headings.every(group => group.directControlHeaders.length === 1 && group.directControlHeaders[0].length >= 2), 'Each group has one direct shared header with title and description');
+      } else if (spec.sectionHeaderPrefix) {
+        for (const group of observation.headings) {
+          assert.equal(group.sectionHeaders.length, 1, 'Each functional group has exactly one canonical Section Header');
+          const header = group.sectionHeaders[0];
+          assert.equal(header.id, spec.sectionHeaderPrefix + group.group, 'The actual group retains its own canonical Header identity');
+          assert.equal(header.presentation, 'premium'); assert.equal(header.identityCount, 1);
+          assert.deepEqual(header.levels, ['2']); assert.ok(header.headings[0]?.trim(), 'The semantic group heading remains required');
+          assert.equal(header.descriptions.length, 1); assert.ok(header.descriptions[0]?.trim(), 'The direct shared Header helper remains required');
+          assert.ok(header.visible, 'The shared group heading and helper are mounted visibly');
+        }
       } else assert.ok(observation.headings.every(group => group.headings.length && group.descriptions.some(value => value.trim())), 'Both functional groups have heading and helper');
     };
     const dataFor = (observation, spec) => {
@@ -4011,6 +4029,15 @@ async function verifyPremiumAdoptionAcceptance() {
         if (spec.id === 25) assert.equal((html.match(/data-home-story-button-card="button_icon_position"/g) ?? []).length, state === 'cta-icon-none' ? 0 : 1, 'Conditional visual icon position retains hidden native value');
         cases.push({ consumerId: spec.id, state, editor: { sourceFile: spec.file, exportName: spec.exportName, mode: spec.props, section: spec.section, slug: spec.slug }, observation, savedAction: action, layoutVariationAccepted: true, persistedVia: 'actual buildContentConfig -> actual normalization -> actual editor remount', transition: 'populated/state configuration -> render -> submit -> serialize -> remount', boundary: 'Observed state projection and canonical serialization; no executed Browser event or DB persistence' });
         if (state === 'cta-populated') {
+          const sectionMarker = `data-admin-tab-section-heading="${spec.sectionHeaderPrefix}data"`;
+          assert.ok(html.includes(sectionMarker), 'Header mutations target the actual mounted data group');
+          reject(spec.id + ': missing canonical group Header', () => assertGroups(premiumRenderedObservation(html.replace(sectionMarker, 'data-removed-section-header=""')), spec));
+          reject(spec.id + ': hidden canonical group Header', () => assertGroups(premiumRenderedObservation(html.replace(sectionMarker, `hidden ${sectionMarker}`)), spec));
+          reject(spec.id + ': missing semantic group heading', () => assertGroups(premiumRenderedObservation(html.replace('role="heading" aria-level="2"', 'role="presentation" aria-level="2"')), spec));
+          reject(spec.id + ': missing shared group identity', () => assertGroups(premiumRenderedObservation(html.replace('data-admin-form-control-header=""', 'data-removed-control-header=""')), spec));
+          const description = observation.headings[0].sectionHeaders[0].descriptions[0], encodedDescription = description.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#x27;');
+          assert.ok(encodedDescription && html.includes(encodedDescription), 'Helper mutation targets the real current Header payload');
+          reject(spec.id + ': missing direct Header helper', () => assertGroups(premiumRenderedObservation(html.replace(encodedDescription, '')), spec));
           reject(spec.id + ': missing group', () => assertGroups(premiumRenderedObservation(html.replace(/data-(?:home-story-button|premium-cta)-panel="appearance"/, 'data-removed="appearance"')), spec));
           reject(spec.id + ': duplicate field', () => assertGroups(premiumRenderedObservation(html + '<input name="' + spec.data[0] + '" value="duplicate"/>'), spec));
           reject(spec.id + ': wrong section', () => assertGroups(premiumRenderedObservation(render(spec.file, { ...props, section: 'text' })), spec));
