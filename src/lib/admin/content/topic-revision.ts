@@ -1,4 +1,4 @@
-import { isContentType, type ContentType } from "./content-types";
+import { isContentType, type ContentType } from "./content-types.ts";
 
 const TOPIC_NULL_REVISION_TOKEN = "__venesia_null_topic_revision__";
 export const TOPIC_REVISION_CONFLICT_CODE = "content_revision_conflict";
