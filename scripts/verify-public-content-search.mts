@@ -523,6 +523,8 @@ for (const field of ["placeholder", "empty_results_title", "empty_results_descri
 }
 // The approved split changes layout only: the exact original field inventory
 // remains partitioned once across text/search/presentation, with mounted tabs.
+const searchTextNames = ["title", "description", "help_text", "placeholder", "empty_results_title", "empty_results_description"];
+function assertSearchEditorAdoptionSource(searchEditor: string, contentEditor: string) {
 const searchEditorAst = ts.createSourceFile("SearchPlatformModuleEditor.tsx", searchEditor, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 type SearchJsxNode = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
 function searchJsxNodes(node: ts.Node): SearchJsxNode[] {
@@ -536,7 +538,7 @@ function searchJsxNodes(node: ts.Node): SearchJsxNode[] {
 }
 function searchAttribute(node: SearchJsxNode, name: string) {
   return node.attributes.properties.find((attribute): attribute is ts.JsxAttribute =>
-    ts.isJsxAttribute(attribute) && attribute.name.getText(searchEditorAst) === name);
+    ts.isJsxAttribute(attribute) && attribute.name.getText() === name);
 }
 function searchLiteral(node: SearchJsxNode, name: string) {
   const value = searchAttribute(node, name)?.initializer;
@@ -546,7 +548,6 @@ function searchTag(node: SearchJsxNode) { return node.tagName.getText(searchEdit
 const searchControlTags = new Set(["TextField", "ModuleEditorVisibilityAlignRow", "AdminFormListboxSelect", "AdminCheckbox"]);
 const searchControls = searchJsxNodes(searchEditorAst).filter(node => searchControlTags.has(searchTag(node)));
 const searchNamedAttributes = ["name", "showName", "boldName", "alignmentName"];
-const searchTextNames = ["title", "description", "help_text", "placeholder", "empty_results_title", "empty_results_description"];
 const searchFormattingNames = ["search_title", "search_description", "search_help_text", "search_results_title"].flatMap(field => [`show_${field}`, `${field}_bold`, `${field}_alignment`]);
 const expectedSearchFormNames = [...searchTextNames, ...searchFormattingNames, "show_search_action", "search_scope", "content_types", "search_filters", "result_limit", "search_presentation", "default_sort"];
 const authoredSearchFormNames = searchControls.flatMap(node => searchNamedAttributes.flatMap(name => searchLiteral(node, name) ? [searchLiteral(node, name)!] : []));
@@ -577,7 +578,7 @@ for (const node of searchControls) {
   }
 }
 for (const row of searchControls.filter(node => searchTag(node) === "ModuleEditorVisibilityAlignRow")) {
-  assert.equal(searchLiteral(row, "presentation"), "premium");
+  assert.ok(!searchAttribute(row, "presentation"), "Search consumes the unified shared row without an obsolete visual selector");
   assert.ok(searchAttribute(row, "icon"));
   const showName = searchLiteral(row, "showName")!;
   const key = ({ show_search_title: "title", show_search_description: "description", show_search_help_text: "helpText", show_search_results_title: "resultsTitle", show_search_action: "searchAction" } as Record<string, string>)[showName];
@@ -627,7 +628,12 @@ assert.ok(!searchAttribute(nativeSearchInputs[0], "value") && !searchAttribute(n
 const searchTabsSource = contentEditor.slice(contentEditor.indexOf("const searchPlatformTabs ="), contentEditor.indexOf("const savedMessage ="));
 assert.ok(searchTabsSource.includes('isSearchPlatform') && searchTabsSource.includes('["content", "search", "presentation"] as const') && searchTabsSource.includes('id: "pages"'));
 assert.ok(searchTabsSource.includes('section={section === "content" ? "text" : section}') && searchTabsSource.includes('sectionHeaderPresentation: "control"'));
-assert.ok(searchTabsSource.includes('assignmentContext={assignmentContext} presentation="premium"') && !searchTabsSource.includes("showUsageBanner"), "Premium assignments preserve multi-page usage and position information");
+const searchTabsAst = ts.createSourceFile("SearchPlatformTabs.tsx", searchTabsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const assignmentTabs = searchJsxNodes(searchTabsAst).filter(node => node.tagName.getText(searchTabsAst) === "ModuleEditorPagesTab");
+assert.equal(assignmentTabs.length, 1, "Search delegates assignments to one shared Pages tab");
+assert.equal(searchAttribute(assignmentTabs[0], "moduleName")?.initializer?.getText(searchTabsAst), "{block.name}");
+assert.equal(searchAttribute(assignmentTabs[0], "assignmentContext")?.initializer?.getText(searchTabsAst), "{assignmentContext}");
+assert.ok(!searchAttribute(assignmentTabs[0], "presentation") && !searchAttribute(assignmentTabs[0], "showUsageBanner"), "Shared assignment defaults preserve multi-page usage and position information");
 assert.ok(contentEditor.includes('const isSearchPlatform = editorKey === "search-platform"') && contentEditor.includes('tabs={searchPlatformTabs}'));
 assert.ok(searchJsxNodes(searchEditorAst).every(node => !["AdminModuleTabs", "ModuleEditorTabs"].includes(searchTag(node))), "The parent remains the only rendered tab owner; importing its shared icon does not create tabs");
 const sharedTabsSource = read("src/components/admin/ui/AdminModuleTabs.tsx");
@@ -731,6 +737,123 @@ for (const contract of searchOptionGroupContracts) {
   assert.ok(groupNodes.every(node => !["button", "input", "AdminFormSwitch", "AdminFormListboxSelect"].includes(searchTag(node))), `${contract.group} keeps multi-select checkbox semantics`);
   assert.ok(groupNodes.every(node => !searchAttribute(node, "disabled") && !searchAttribute(node, "onClick")), `${contract.group} adds no disabled group or local click handler`);
 }
+for (const [source, path, names] of [
+  [searchEditorAst, "../ModuleEditorPresentation", ["ModuleEditorVisibilityAlignRow"]],
+  [ts.createSourceFile("ContentModuleEditClient.tsx", contentEditor, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), "./ModuleEditorPresentation", ["ModuleEditorPagesTab"]],
+] as const) {
+  for (const name of names) assert.ok(source.statements.filter(ts.isImportDeclaration).some(node =>
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === path &&
+    node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+    node.importClause.namedBindings.elements.some(binding => !binding.isTypeOnly && !binding.propertyName && binding.name.text === name)), `Search retains canonical ${name} ownership`);
+}
+}
+assertSearchEditorAdoptionSource(searchEditor, contentEditor);
+
+// The removed consumer selectors selected no behavior. Prove their current
+// shared implementation, rather than treating an omitted prop as a surface.
+function assertSearchSharedPresentationSource(presentation: string, card: string, ui: string) {
+  const parse = (name: string, source: string) => ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const tree = parse("ModuleEditorPresentation.tsx", presentation);
+  function nodes<T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T[] {
+    const found: T[] = [];
+    function visit(node: ts.Node) { if (predicate(node)) found.push(node); ts.forEachChild(node, visit); }
+    visit(root); return found;
+  }
+  function attribute(node: ts.JsxOpeningElement | ts.JsxSelfClosingElement, name: string) {
+    const value = node.attributes.properties.find((property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText() === name)?.initializer;
+    return value && ts.isStringLiteral(value) ? value.text : value && ts.isJsxExpression(value) ? value.expression?.getText().replace(/\s+/gu, " ") : undefined;
+  }
+  const elements = (root: ts.Node, name: string) => nodes(root, (node): node is ts.JsxOpeningElement | ts.JsxSelfClosingElement => (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText() === name);
+  function declaration(source: ts.SourceFile, name: string) {
+    const matches = source.statements.filter(ts.isFunctionDeclaration).filter(node => node.name?.text === name);
+    assert.equal(matches.length, 1, `One actual shared ${name} implementation`);
+    assert.ok(matches[0].body); return matches[0];
+  }
+  function namedImport(path: string, name: string) {
+    assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === path && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => !binding.isTypeOnly && !binding.propertyName && binding.name.text === name)), `Shared ${name} resolves to its existing owner`);
+  }
+  for (const name of ["AdminCard", "AdminFormControlHeader", "AdminFormSwitch", "AdminTextFormatControls"]) namedImport("../ui", name);
+  const row = declaration(tree, "ModuleEditorVisibilityAlignRow");
+  assert.ok(row.body!.statements.every(node => ts.isVariableStatement(node) || ts.isReturnStatement(node) || ts.isEmptyStatement(node)), "No alternate row return path precedes the shared surface");
+  const rowReturns = row.body!.statements.filter(ts.isReturnStatement);
+  assert.equal(rowReturns.length, 1);
+  let rowReturn = rowReturns[0].expression;
+  while (rowReturn && ts.isParenthesizedExpression(rowReturn)) rowReturn = rowReturn.expression;
+  assert.ok(rowReturn && ts.isJsxElement(rowReturn) && rowReturn.openingElement.tagName.getText() === "AdminCard", "The actual default row returns the canonical Card directly");
+  assert.equal(attribute(rowReturn.openingElement, "presentation"), "premium");
+  const header = elements(rowReturn, "AdminFormControlHeader");
+  assert.equal(header.length, 1);
+  for (const [name, value] of Object.entries({ title: "label", description: "description", icon: "icon", presentation: "compact-inline" })) assert.equal(attribute(header[0], name), value, `Shared row retains ${name}`);
+  const mountedExpressions = nodes(rowReturn, ts.isJsxExpression).map(node => node.expression?.getText());
+  assert.ok(mountedExpressions.includes("submittedValues") && mountedExpressions.includes("children"), "Shared Card retains submitted values and child fields");
+  const hidden = elements(row, "input");
+  assert.deepEqual(hidden.map(node => [attribute(node, "type"), attribute(node, "name"), attribute(node, "value")]), [
+    ["hidden", "showName", "String(enableVisibility ? show : showDefault)"],
+    ["hidden", "alignmentName", "hasAlignmentControl ? alignment : alignmentDefault"],
+    ["hidden", "boldName", "String(submittedBold)"],
+  ], "Shared row preserves its exact native visibility/formatting submission");
+  const switches = elements(row, "AdminFormSwitch"), formatting = elements(row, "AdminTextFormatControls");
+  assert.equal(switches.length, 1); assert.equal(formatting.length, 1);
+  for (const [name, value] of Object.entries({ checked: "show", onChange: "(event) => setShow(event.target.checked)", surface: "false" })) assert.equal(attribute(switches[0], name), value, `Shared visibility ${name}`);
+  for (const [name, value] of Object.entries({ alignment: "hasAlignmentControl ? alignment : undefined", onAlignmentChange: "hasAlignmentControl ? setAlignment : undefined", bold: "hasBoldControl ? (bold ?? false) : undefined", onBoldChange: "hasBoldControl ? setBold : undefined" })) assert.equal(attribute(formatting[0], name), value, `Shared formatting ${name}`);
+  const cardTree = parse("AdminCard.tsx", card), cardOwner = declaration(cardTree, "AdminCard");
+  assert.ok(cardOwner.body!.statements.length === 1 && ts.isReturnStatement(cardOwner.body!.statements[0]), "Card has one shared surface return, without a legacy branch");
+  const surfaces = elements(cardOwner, "section");
+  assert.equal(surfaces.length, 1);
+  assert.ok(nodes(cardOwner, ts.isJsxExpression).some(node => node.expression?.getText() === "children"), "The shared Card retains its actual children");
+  const className = surfaces[0].attributes.properties.find((property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText() === "className")?.initializer;
+  assert.ok(className && nodes(className, ts.isIdentifier).some(node => node.text === "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME"), "The actual default Card consumes the canonical premium surface token");
+  assert.ok(cardTree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../lib/admin/admin-ui-styles" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => !binding.propertyName && binding.name.text === "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME")));
+  assert.ok(parse("ui/index.ts", ui).statements.filter(ts.isExportDeclaration).some(node => node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminCard" && node.exportClause && ts.isNamedExports(node.exportClause) && node.exportClause.elements.some(binding => binding.propertyName?.text === "default" && binding.name.text === "AdminCard")), "The UI barrel resolves AdminCard to the actual shared owner");
+  const pages = declaration(tree, "ModuleEditorPagesTab");
+  const parameters = pages.parameters[0].name;
+  assert.ok(ts.isObjectBindingPattern(parameters) && parameters.elements.some(node => node.name.getText() === "showUsageBanner" && node.initializer?.kind === ts.SyntaxKind.TrueKeyword), "Shared Pages tab preserves the visible usage banner by default");
+  for (const [name, path] of [["ModuleCrossPageUsageBanner", "./ModuleCrossPageUsageBanner"], ["ModulePageAssignmentsField", "./ModulePageAssignmentsField"]]) assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === path && node.importClause?.name?.text === name), `Canonical shared assignment owner ${name}`);
+  const banners = elements(pages, "ModuleCrossPageUsageBanner"), fields = elements(pages, "ModulePageAssignmentsField");
+  assert.equal(banners.length, 1); assert.equal(fields.length, 2);
+  assert.equal(attribute(banners[0], "moduleName"), "moduleName");
+  assert.equal(attribute(banners[0], "assignments"), "assignmentContext.assignments");
+  assert.ok(nodes(pages, ts.isConditionalExpression).some(node => node.condition.getText() === "showUsageBanner" && elements(node.whenTrue, "ModuleCrossPageUsageBanner").length === 1 && node.whenFalse.kind === ts.SyntaxKind.NullKeyword), "The usage default controls the actual mounted banner");
+  for (const field of fields) {
+    assert.equal(attribute(field, "pages"), "assignmentContext.pages");
+    assert.equal(attribute(field, "assignedPageIds"), "assignmentContext.assignments.map( (row) => row.page_id, )");
+  }
+}
+const searchPresentationSource = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
+const searchCardSource = read("src/components/admin/ui/AdminCard.tsx");
+const searchUiSource = read("src/components/admin/ui/index.ts");
+assertSearchSharedPresentationSource(searchPresentationSource, searchCardSource, searchUiSource);
+const searchPresentationNegatives = [
+  ["parallel visibility owner", searchEditor.replace('from "../ModuleEditorPresentation";', 'from "../ParallelPresentation";'), contentEditor],
+  ["lost visibility setting", searchEditor.replace('showName="show_search_title"', 'showName="missing_search_title"'), contentEditor],
+  ["wrong visibility default", searchEditor.replace("showDefault={config.interfaceDisplay.title.visible}", "showDefault={false}"), contentEditor],
+  ["wrong alignment default", searchEditor.replace("alignmentDefault={config.interfaceDisplay.title.alignment}", 'alignmentDefault="left"'), contentEditor],
+  ["disabled text setting", searchEditor.replace('name="title"', 'name="title" disabled'), contentEditor],
+  ["parallel assignment owner", searchEditor, contentEditor.replace('from "./ModuleEditorPresentation";', 'from "./ParallelPresentation";')],
+  ["disconnected search assignments", searchEditor, contentEditor.replaceAll("assignmentContext={assignmentContext}", "assignmentContext={otherContext}")],
+  ["hidden search usage banner", searchEditor, contentEditor.replaceAll("assignmentContext={assignmentContext}", "assignmentContext={assignmentContext} showUsageBanner={false}")],
+] as const;
+for (const [name, editor, parent] of searchPresentationNegatives) {
+  assert.ok(editor !== searchEditor || parent !== contentEditor, `Effective negative ${name}`);
+  assert.throws(() => assertSearchEditorAdoptionSource(editor, parent), name);
+}
+const searchOwnerNegatives = [
+  ["parallel shared Card", searchPresentationSource.replace('from "../ui";', 'from "../ParallelUi";'), searchCardSource, searchUiSource],
+  ["lost row surface", searchPresentationSource.replace('<AdminCard presentation="premium" className={`self-start p-3 ${className}`.trim()}>', '<section className={`self-start p-3 ${className}`.trim()}>'), searchCardSource, searchUiSource],
+  ["lost submitted values", searchPresentationSource.replace("{submittedValues}", "{null}"), searchCardSource, searchUiSource],
+  ["wrong visibility submission", searchPresentationSource.replace("String(enableVisibility ? show : showDefault)", '"false"'), searchCardSource, searchUiSource],
+  ["disconnected visibility callback", searchPresentationSource.replace("setShow(event.target.checked)", "setShow(false)"), searchCardSource, searchUiSource],
+  ["disconnected formatting callback", searchPresentationSource.replace("hasBoldControl ? setBold : undefined", "undefined"), searchCardSource, searchUiSource],
+  ["lost default Card token", searchPresentationSource, searchCardSource.replaceAll("ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME", "LOCAL_SURFACE"), searchUiSource],
+  ["parallel Card barrel", searchPresentationSource, searchCardSource, searchUiSource.replace('from "./AdminCard";', 'from "./ParallelCard";')],
+  ["hidden usage by default", searchPresentationSource.replace("showUsageBanner = true", "showUsageBanner = false"), searchCardSource, searchUiSource],
+  ["lost assignment IDs", searchPresentationSource.replaceAll("(row) => row.page_id", "(row) => row.id"), searchCardSource, searchUiSource],
+] as const;
+for (const [name, presentation, card, ui] of searchOwnerNegatives) {
+  assert.ok(presentation !== searchPresentationSource || card !== searchCardSource || ui !== searchUiSource, `Effective negative ${name}`);
+  assert.throws(() => assertSearchSharedPresentationSource(presentation, card, ui), name);
+}
+console.log(`PASS Search shared-default presentation: exact current owner/delegation, native bindings, and ${searchPresentationNegatives.length + searchOwnerNegatives.length} source regression negatives.`);
 for (const englishProductCopy of [
   'label="Placeholder"',
   'label="Help Text"',

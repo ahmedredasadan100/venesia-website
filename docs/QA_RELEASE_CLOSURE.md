@@ -259,6 +259,13 @@ another child execution to the canonical Full Local Gate. Likewise, a dynamic
 cache query can preserve a proven fixed local module pathname; a dynamic pathname,
 URL base or shadowed constructor cannot establish an executable graph edge.
 
+The already-owned Admin adoption tail may supply positive coverage through the
+same fixed gate descriptor used by execution, bound to the complete fresh,
+unscoped `admin-adoption` Final Quality Gate request and source snapshot. Its
+native gate name is not an npm prefix command and must not cause early or duplicate
+execution. Scoped, retained, measurement or different selections cannot borrow
+that coverage; cached coverage must retain the exact selected descriptor.
+
 For the existing layout runner, a positively bound file-derived workspace root,
 literal Webpack entry, canonical compiler binding and actual compiler execution
 may establish execution of that entry file only. Replacement/resource hooks make
