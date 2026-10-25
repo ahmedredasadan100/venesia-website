@@ -259,6 +259,16 @@ another child execution to the canonical Full Local Gate. Likewise, a dynamic
 cache query can preserve a proven fixed local module pathname; a dynamic pathname,
 URL base or shadowed constructor cannot establish an executable graph edge.
 
+For the existing layout runner, a positively bound file-derived workspace root,
+literal Webpack entry, canonical compiler binding and actual compiler execution
+may establish execution of that entry file only. Replacement/resource hooks make
+its downstream imports opaque: never credit those dependencies through this edge.
+The registered opt-in `qa:admin-form-layout:taxonomy-current` selects the existing
+portable taxonomy consistency-after branch with fresh workspace-local output.
+It does not select legacy/default, Settings or Meta historical-comparison branches,
+and does not imply their behavior or visual coverage. Existing evidence for those
+branches retains its separate input and contract validity requirements.
+
 Run every affected check in the same task and maintain proven stale expectations
 under Section 3.2.2. A changed Test/Guard/Fixture invalidates its affected proof
 and dependent coverage; do not leave it outside the selected set. Use current

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import { createJiti } from "jiti";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "../lib/isolated-supabase.mts";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
@@ -144,7 +143,7 @@ export async function seedOwnedAdminInteractionFixtures(handle: OwnedLocalHandle
     subAreaId:locations[3],locationIds:locations,editorPath:`/admin/projects/${id}`,listPath:`/admin/projects/${value.type}`,listQuery:`?q=QA&type=${value.type}&page=1&limit=20`});
   const pageFixturePath=resolve(root,"scripts/fixtures/admin-page-interaction-fixtures.mts");
   const pageFixtureHash=createHash("sha256").update(readFileSync(pageFixturePath)).digest("hex");
-  const {seedAdminPageInteractionFixtures}=await import(`${pathToFileURL(pageFixturePath).href}?fixture=${pageFixtureHash}`);
+  const {seedAdminPageInteractionFixtures}=await import(new URL(`./admin-page-interaction-fixtures.mts?fixture=${pageFixtureHash}`, import.meta.url).href);
   const pages = await seedAdminPageInteractionFixtures(handle);
   if (study) {
     // Canonical scoped reference writes make the initial Catalog identity equal

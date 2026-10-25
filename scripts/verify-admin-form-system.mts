@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,6 +119,12 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+if (process.argv.includes("--layout-profile-only")) {
+  await verifyAdminFormLayoutProfile();
+  console.log(`Admin Form Layout profile verification passed (${passed} focused checks; no Browser).`);
+  process.exit(0);
+}
+
 if (process.argv.includes("--field-row-composition")) {
   await verifyProjectFieldRowComposition();
   check("shared Section metadata and native fields survive panel and neutral composition", await verifyUnifiedFormFields());
@@ -138,6 +145,105 @@ if (process.argv.includes("--unified-presentation")) {
   check("Unified Actions retain Pending, native Save/Close, save-only and runtime callback ownership", await verifyUnifiedFormActions());
   console.log(`Unified presentation verification passed (${passed} affected owner checks; source/SSR only).`);
   process.exit(0);
+}
+
+await verifyAdminFormLayoutProfile();
+
+async function verifyAdminFormLayoutProfile() {
+  const source = read("scripts/qa-admin-form-layout.mjs"), path = await import("node:path");
+  const parse = (input: string) => ts.createSourceFile("qa-admin-form-layout.mjs", input, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const tree = parse(source);
+  const helpers = ["selectAdminFormLayoutProfile", "prepareAdminFormLayoutProfileOutput"].map(name => {
+    const found = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.equal(found.length, 1); return found[0].getText(tree);
+  });
+  type Environment = Record<string, string | undefined>;
+  type Profile = { name: string; selectors: Record<string, string> } | null;
+  const actual = new Function("assert", "path", "realpath", "mkdir", "lstat", "mkdtemp", helpers.join("\n") + ";return { selectAdminFormLayoutProfile, prepareAdminFormLayoutProfileOutput };")(
+    assert, path, fs.realpath, fs.mkdir, fs.lstat, fs.mkdtemp,
+  ) as { selectAdminFormLayoutProfile(args: string[], environment: Environment): Profile; prepareAdminFormLayoutProfileOutput(root: string): Promise<string> };
+  const select = actual.selectAdminFormLayoutProfile, prepare = actual.prepareAdminFormLayoutProfileOutput;
+  const argument = "--profile=taxonomy-current-after";
+  const environment = Object.freeze({ ADMIN_FORM_LAYOUT_SCOPE: "legacy-scope", ADMIN_UI_RECOVERY_PHASE: "before", ADMIN_FORM_LAYOUT_OUTPUT: "legacy-output" });
+  assert.equal(select([], environment), null);
+  assert.deepEqual(environment, { ADMIN_FORM_LAYOUT_SCOPE: "legacy-scope", ADMIN_UI_RECOVERY_PHASE: "before", ADMIN_FORM_LAYOUT_OUTPUT: "legacy-output" });
+  const profile = select([argument], {});
+  assert.deepEqual(profile, { name: "taxonomy-current-after", selectors: { ADMIN_FORM_LAYOUT_SCOPE: "consistency", ADMIN_FORM_LAYOUT_FAMILY: "taxonomy", ADMIN_UI_RECOVERY_PHASE: "consistency-after" } });
+  assert.deepEqual(select([argument], { ...profile!.selectors }), profile);
+  for (const args of [["--profile=unknown"], ["--profile=taxonomy-current-before"], [argument, argument], ["--profile", "taxonomy-current-after"], [argument, "--foreign"]]) assert.throws(() => select(args, {}));
+  for (const name of Object.keys(profile!.selectors)) assert.throws(() => select([argument], { [name]: "foreign" }), name);
+  for (const output of [join(ROOT, ".tmp-qa", "existing-layout-receipt"), resolve(ROOT, "outside-layout-evidence")]) assert.throws(() => select([argument], { ADMIN_FORM_LAYOUT_OUTPUT: output }));
+  for (const name of ["ADMIN_FORM_LAYOUT_SETTINGS_REFINE", "ADMIN_FORM_LAYOUT_SCREENSHOT"]) assert.throws(() => select([argument], { [name]: "0" }), name);
+  check("actual Layout selector stays default-off and rejects unknown, duplicate, conflicting and output-override requests", true);
+
+  const topVariables = (file: ts.SourceFile) => new Map(file.statements.filter(ts.isVariableStatement).flatMap(statement => statement.declarationList.declarations.map(node => [node.name.getText(file), node] as const)));
+  const bindingIsCanonical = (input: string) => {
+    const file = parse(input), variables = topVariables(file), root = variables.get("root")?.initializer;
+    const selected = variables.get("selectedProfile"), recovery = variables.get("recoveryPhase");
+    const application = file.statements.find((node): node is ts.IfStatement => ts.isIfStatement(node) && node.expression.getText(file) === "selectedProfile");
+    if (!root || !ts.isCallExpression(root) || root.expression.getText(file) !== "path.resolve" || root.arguments.length !== 2 || root.arguments[0].getText(file) !== "import.meta.dirname" || !ts.isStringLiteral(root.arguments[1]) || root.arguments[1].text !== ".." || !selected?.initializer || !recovery || !application || !(selected.pos < application.pos && application.end < recovery.pos)) return false;
+    const compact = (node: ts.Node) => node.getText(file).replace(/\s+/gu, "");
+    const body: readonly ts.Statement[] = ts.isBlock(application.thenStatement) ? application.thenStatement.statements : [application.thenStatement];
+    const expressions = body.filter(ts.isExpressionStatement).map(node => node.expression);
+    const apply = expressions.find(node => ts.isCallExpression(node) && node.expression.getText(file) === "Object.assign");
+    const output = expressions.find((node): node is ts.BinaryExpression => ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText(file) === "process.env.ADMIN_FORM_LAYOUT_OUTPUT");
+    return compact(selected.initializer) === "selectAdminFormLayoutProfile(process.argv.slice(2),process.env)" &&
+      Boolean(apply && ts.isCallExpression(apply) && apply.arguments.map(compact).join("|") === "process.env|selectedProfile.selectors" && output && apply.pos < output.pos &&
+        ts.isAwaitExpression(output.right) && ts.isCallExpression(output.right.expression) && output.right.expression.expression.getText(file) === "prepareAdminFormLayoutProfileOutput" && output.right.expression.arguments.length === 1 && output.right.expression.arguments[0].getText(file) === "root");
+  };
+  assert.ok(bindingIsCanonical(source));
+  const selectedStatement = tree.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(item => item.name.getText(tree) === "selectedProfile"))!;
+  const application = tree.statements.find((node): node is ts.IfStatement => ts.isIfStatement(node) && node.expression.getText(tree) === "selectedProfile")!;
+  const recovery = topVariables(tree).get("recoveryPhase")!;
+  const lateApplication = source.slice(0, selectedStatement.getStart(tree)) + source.slice(application.end, recovery.parent.parent.end) + "\n" + selectedStatement.getText(tree) + "\n" + application.getText(tree) + source.slice(recovery.parent.parent.end);
+  for (const negative of [
+    source.replace("root = path.resolve(import.meta.dirname, '..')", "root = process.cwd()"),
+    source.replace("Object.assign(process.env, selectedProfile.selectors)", "Object.keys(selectedProfile.selectors)"),
+    source.replace("prepareAdminFormLayoutProfileOutput(root)", "prepareAdminFormLayoutProfileOutput(process.cwd())"),
+    lateApplication,
+  ]) { assert.notEqual(negative, source); assert.equal(bindingIsCanonical(negative), false); }
+  assert.equal((JSON.parse(read("package.json")) as { scripts: Record<string, string> }).scripts["qa:admin-form-layout:taxonomy-current"], "node scripts/qa-admin-form-layout.mjs --profile=taxonomy-current-after");
+  check("registered Layout profile applies canonical selectors and fresh output before native branch capture, rooted at the actual script", true);
+
+  const base = await prepare(ROOT);
+  assert.ok(base.startsWith(join(await fs.realpath(ROOT), ".tmp-qa") + sep));
+  try {
+    const workspace = join(base, "workspace"); await fs.mkdir(workspace);
+    const first = await prepare(workspace), sentinel = join(first, "receipt.json");
+    await fs.writeFile(sentinel, "original receipt", { flag: "wx" });
+    const second = await prepare(workspace);
+    assert.notEqual(first, second);
+    for (const output of [first, second]) {
+      assert.equal(await fs.realpath(dirname(output)), join(await fs.realpath(workspace), ".tmp-qa"));
+      assert.ok(path.basename(output).startsWith("admin-form-layout-taxonomy-current-"));
+      assert.equal((await fs.lstat(output)).isDirectory(), true);
+    }
+    assert.equal(await fs.readFile(sentinel, "utf8"), "original receipt");
+    const captures = ["recoveryPhase", "leanPixelScope", "consistencyScope", "taxonomyConsistencyOnly", "requestedOutput", "out"];
+    const variables = topVariables(tree);
+    const captureSource = captures.map(name => "const " + variables.get(name)!.getText(tree) + ";").join("\n");
+    const evaluate = new Function("selectAdminFormLayoutProfile", "prepareAdminFormLayoutProfileOutput", "process", "root", "path", "console",
+      "return (async () => {" + selectedStatement.getText(tree) + application.getText(tree) + captureSource + ";return { recoveryPhase, consistencyScope, taxonomyConsistencyOnly, out }; })();") as
+      (select: typeof actual.selectAdminFormLayoutProfile, prepare: typeof actual.prepareAdminFormLayoutProfileOutput, process: { argv: string[]; env: Environment }, root: string, path: typeof import("node:path"), console: { log(): void }) => Promise<{ recoveryPhase?: string; consistencyScope: boolean; taxonomyConsistencyOnly: boolean; out: string }>;
+    const defaultEnvironment: Environment = {};
+    const normal = await evaluate(select, prepare, { argv: ["node", "runner"], env: defaultEnvironment }, workspace, path, { log() {} });
+    assert.deepEqual(normal, { recoveryPhase: undefined, consistencyScope: false, taxonomyConsistencyOnly: false, out: join(workspace, ".tmp-qa/admin-form-layout/browser") });
+    assert.deepEqual(defaultEnvironment, {});
+    const current = await evaluate(select, prepare, { argv: ["node", "runner", argument], env: {} }, workspace, path, { log() {} });
+    assert.equal(current.recoveryPhase, "consistency-after"); assert.equal(current.consistencyScope, true); assert.equal(current.taxonomyConsistencyOnly, true);
+    assert.notEqual(current.out, first); assert.notEqual(current.out, second);
+    assert.ok(current.out.startsWith(join(workspace, ".tmp-qa", "admin-form-layout-taxonomy-current-")));
+    const linkedWorkspace = join(base, "linked-workspace"), outside = join(base, "outside-target");
+    await fs.mkdir(linkedWorkspace); await fs.mkdir(outside); await fs.writeFile(join(outside, "sentinel"), "untouched", { flag: "wx" });
+    await fs.symlink(outside, join(linkedWorkspace, ".tmp-qa"), process.platform === "win32" ? "junction" : "dir");
+    await assert.rejects(() => prepare(linkedWorkspace), /symlink or junction/);
+    assert.deepEqual(await fs.readdir(outside), ["sentinel"]); assert.equal(await fs.readFile(join(outside, "sentinel"), "utf8"), "untouched");
+    check("actual Layout output helper creates fresh canonical prefixes without overwrite, preserves native default flow and rejects escaping junctions", true);
+  } finally {
+    assert.ok(base.startsWith(join(await fs.realpath(ROOT), ".tmp-qa") + sep));
+    assert.equal(await fs.realpath(base), base);
+    await fs.rm(base, { recursive: true, force: false });
+  }
 }
 
 async function unifiedPresentationDependencies() {

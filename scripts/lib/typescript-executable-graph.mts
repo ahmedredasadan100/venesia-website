@@ -1798,6 +1798,189 @@ function collectSymbolAwareExecutableSourceGraph(input: {
   return graph;
 }
 
+/** One fixed, actually compiled browser entry; replacement hooks remain opaque. */
+function directWebpackEntries(parsed: ts.SourceFile, workspaceRoot: string): string[] {
+  if (!parsed.text.includes("next/dist/compiled/webpack/webpack")) return [];
+  const nodes = <T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T[] => {
+    const result: T[] = [];
+    const visit = (node: ts.Node) => { if (predicate(node)) result.push(node); ts.forEachChild(node, visit); };
+    visit(root); return result;
+  };
+  const text = (node: ts.Node | undefined) => node?.getText(parsed).replace(/\s+/gu, "").replaceAll('"', "'");
+  const literal = (node: ts.Node | undefined) => node && ts.isStringLiteralLike(node) ? node.text : undefined;
+  const properties = (node: ts.Node | undefined) => {
+    if (!node || !ts.isObjectLiteralExpression(node) || node.properties.some(row => !ts.isPropertyAssignment(row) || ts.isComputedPropertyName(row.name))) return null;
+    const pairs = node.properties.map(row => row as ts.PropertyAssignment).map(row => [literal(row.name) ?? row.name.getText(parsed), row.initializer] as const);
+    return new Set(pairs.map(([name]) => name)).size === pairs.length ? new Map(pairs) : null;
+  };
+  const constant = (node: ts.Node | undefined) => {
+    if (!node || !ts.isIdentifier(node)) return null;
+    const binding = lexicalBindingForReference(parsed, node);
+    return binding?.kind === "variable" && binding.scope === parsed && (binding.declarationList.flags & ts.NodeFlags.Const) !== 0 ? binding.declaration : null;
+  };
+  const imported = (node: ts.Node | undefined, module: string, name: string | "default") => {
+    if (!node || !ts.isIdentifier(node)) return false;
+    const binding = lexicalBindingForReference(parsed, node);
+    if (binding?.kind !== "import") return false;
+    let declaration: ts.Node = binding.declaration;
+    const matches = name === "default" ? ts.isImportClause(declaration) && Boolean(declaration.name) :
+      ts.isImportSpecifier(declaration) && (declaration.propertyName?.text ?? declaration.name.text) === name;
+    while (declaration.parent && !ts.isImportDeclaration(declaration)) declaration = declaration.parent;
+    return matches && ts.isImportDeclaration(declaration) && literal(declaration.moduleSpecifier) === module;
+  };
+  const ownRequire = (node: ts.Node | undefined) => {
+    const declaration = constant(node), call = declaration?.initializer;
+    return Boolean(call && ts.isCallExpression(call) && imported(call.expression, "node:module", "createRequire") &&
+      call.arguments.length === 1 && text(call.arguments[0]) === "import.meta.url");
+  };
+  const declarations = nodes(parsed, ts.isVariableDeclaration);
+  const result: string[] = [];
+  for (const declaration of declarations) {
+    const call = declaration.initializer;
+    if (!ts.isIdentifier(declaration.name) || constant(declaration.name) !== declaration || !call || !ts.isCallExpression(call) || !ts.isIdentifier(call.expression) || call.arguments.length !== 1) continue;
+    const factory = constant(call.expression), factoryValue = factory?.initializer;
+    if (!factory || !factoryValue || !ts.isPropertyAccessExpression(factoryValue) || factoryValue.name.text !== "webpack" ||
+        !ts.isCallExpression(factoryValue.expression) || !ownRequire(factoryValue.expression.expression) ||
+        factoryValue.expression.arguments.length !== 1 || literal(factoryValue.expression.arguments[0]) !== "next/dist/compiled/webpack/webpack") continue;
+    const config = properties(call.arguments[0]);
+    if (!config || [...config.keys()].join("|") !== "mode|target|entry|output|resolve|plugins|module|devtool" ||
+        literal(config.get("mode")) !== "development" || literal(config.get("target")) !== "web" || config.get("devtool")?.kind !== ts.SyntaxKind.FalseKeyword) continue;
+    const entry = config.get("entry");
+    if (!entry || !ts.isCallExpression(entry) || !ts.isPropertyAccessExpression(entry.expression) || entry.expression.name.text !== "join" ||
+        !imported(entry.expression.expression, "node:path", "default") || entry.arguments.length !== 2) continue;
+    const root = constant(entry.arguments[0]), rootValue = root?.initializer, sourceFile = literal(entry.arguments[1]);
+    if (!root || !rootValue || !ts.isCallExpression(rootValue) || !ts.isPropertyAccessExpression(rootValue.expression) || rootValue.expression.name.text !== "resolve" ||
+        !imported(rootValue.expression.expression, "node:path", "default") || rootValue.arguments.length !== 2 || text(rootValue.arguments[0]) !== "import.meta.dirname" ||
+        literal(rootValue.arguments[1]) !== ".." || normalizeSourcePath(join(dirname(parsed.fileName), "..")) !== "." ||
+        !sourceFile || !/^[a-zA-Z0-9_./-]+\.(?:jsx|tsx)$/u.test(sourceFile) || sourceFile.includes("//") || sourceFile.split("/").some(part => part === "." || part === "..") || isAbsolute(sourceFile) || /^src\//iu.test(sourceFile)) continue;
+    // Native object escapes and compiler hooks cannot turn this literal build
+    // into another invocation or substitute its directly credited source.
+    const identities = new Set<ts.Declaration>([root, factory, declaration]);
+    const pathBinding = lexicalBindingForReference(parsed, entry.expression.expression as ts.Identifier);
+    if (pathBinding) identities.add(pathBinding.declaration);
+    const writes = nodes(parsed, ts.isBinaryExpression).some(node => {
+      if (node.operatorToken.kind < ts.SyntaxKind.FirstAssignment || node.operatorToken.kind > ts.SyntaxKind.LastAssignment) return false;
+      let left: ts.Expression = node.left;
+      while (ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) left = left.expression;
+      return ts.isIdentifier(left) && Boolean(lexicalBindingForReference(parsed, left) && identities.has(lexicalBindingForReference(parsed, left)!.declaration));
+    });
+    if (writes) continue;
+    const escapes = nodes(parsed, ts.isIdentifier).some(reference => {
+      if ((ts.isPropertyAccessExpression(reference.parent) && reference.parent.name === reference) ||
+          (ts.isPropertyAssignment(reference.parent) && reference.parent.name === reference) ||
+          (ts.isMethodDeclaration(reference.parent) && reference.parent.name === reference)) return false;
+      const binding = lexicalBindingForReference(parsed, reference)?.declaration;
+      if (binding === declaration) {
+        if (reference === declaration.name) return false;
+        let member: ts.Node = reference;
+        while (ts.isPropertyAccessExpression(member.parent) && member.parent.expression === member) member = member.parent;
+        const invocation = member.parent;
+        if (!ts.isCallExpression(invocation) || invocation.expression !== member) return true;
+        if (text(member) === `${declaration.name.getText(parsed)}.run` || text(member) === `${declaration.name.getText(parsed)}.close`) return false;
+        return text(member) !== `${declaration.name.getText(parsed)}.hooks.shouldEmit.tap` || invocation.arguments.length !== 2 ||
+          literal(invocation.arguments[0]) !== "AdminFormFixtureMemory" || text(invocation.arguments[1]) !== "()=>false";
+      }
+      if (binding === pathBinding?.declaration || binding === factory) {
+        if (reference === factory.name || (pathBinding?.kind === "import" && ts.isImportClause(pathBinding.declaration) && reference === pathBinding.declaration.name)) return false;
+        if (binding === factory && reference === call.expression) return false;
+        return !ts.isPropertyAccessExpression(reference.parent) || reference.parent.expression !== reference;
+      }
+      return binding === root && reference !== root.name && ts.isVariableDeclaration(reference.parent) && reference.parent.initializer === reference;
+    });
+    if (escapes) continue;
+    const replacesEntry = nodes(parsed, ts.isCallExpression).some(candidate => {
+      const target = candidate.arguments[0];
+      if (!ts.isIdentifier(candidate.expression) || !["writeFile", "appendFile", "writeFileSync", "appendFileSync"].some(name => imported(candidate.expression, "node:fs/promises", name) || imported(candidate.expression, "node:fs", name)) ||
+          !target || !ts.isCallExpression(target) || !ts.isPropertyAccessExpression(target.expression) || !["join", "resolve"].includes(target.expression.name.text) ||
+          !imported(target.expression.expression, "node:path", "default") || target.arguments.length !== 2 || constant(target.arguments[0]) !== root) return false;
+      return literal(target.arguments[1]) === sourceFile;
+    });
+    if (replacesEntry) continue;
+    const build = parsed.statements.some(statement => {
+      if (!ts.isExpressionStatement(statement) || !ts.isAwaitExpression(statement.expression) || !ts.isNewExpression(statement.expression.expression)) return false;
+      const promise = statement.expression.expression;
+      if (!ts.isIdentifier(promise.expression) || promise.expression.text !== "Promise" || lexicalBindingForReference(parsed, promise.expression) || promise.arguments?.length !== 1) return false;
+      const executor = promise.arguments[0];
+      return ts.isArrowFunction(executor) && ts.isCallExpression(executor.body) && ts.isPropertyAccessExpression(executor.body.expression) && executor.body.expression.name.text === "run" &&
+        ts.isIdentifier(executor.body.expression.expression) && constant(executor.body.expression.expression) === declaration && executor.body.arguments.length === 1;
+    });
+    if (!build) continue;
+    const resolveConfig = properties(config.get("resolve")), output = properties(config.get("output")), moduleConfig = properties(config.get("module"));
+    if (!resolveConfig || [...resolveConfig.keys()].join("|") !== "extensions|alias" || !output || [...output.keys()].join("|") !== "path|filename" ||
+        literal(output.get("filename")) !== "bundle.js" || !moduleConfig || [...moduleConfig.keys()].join("|") !== "rules") continue;
+    // These are the existing fixed fixture loader/resolver shapes. Unknown
+    // resolvers, rules or plugins require their own positive proof.
+    if (text(resolveConfig.get("extensions")) !== "['.tsx','.ts','.jsx','.js']" ||
+        text(resolveConfig.get("alias")) !== "{'server-only':false,...(leanPixelScope?{}:{'next/navigation$':shim('navigation.js')})}" ||
+        text(moduleConfig.get("rules")) !== "[{test:/\\.module\\.css$/,type:'javascript/auto'},...(leanPixelScope?[]:[{test:/\\.[jt]sx?$/,exclude:/node_modules/,use:path.join(out,'loader.cjs')}])]" ||
+        text(output.get("path")) !== "out") continue;
+    const loader = nodes(parsed, ts.isCallExpression).find(node => text(node.expression) === "writeGeneratedFile" && node.arguments.length === 2 && text(node.arguments[0]) === "path.join(out,'loader.cjs')");
+    if (!loader || literal(loader.arguments[1]) !== "module.exports=s=>require('typescript').transpileModule(s,{compilerOptions:{jsx:4,target:9,module:99}}).outputText;") continue;
+    const writer = declarations.find(node => node.name.getText(parsed) === "writeGeneratedFile");
+    if (text(writer?.initializer) !== "async(file,source)=>leanPixelScope?generatedSources.set(file,source):writeFile(file,source)") continue;
+    const readReference = nodes(parsed, ts.isIdentifier).find(node => node.text === "readFile" && ts.isCallExpression(node.parent) && node.parent.expression === node);
+    const writeReference = nodes(parsed, ts.isIdentifier).find(node => node.text === "writeFile" && ts.isCallExpression(node.parent) && node.parent.expression === node);
+    if (!imported(readReference, "node:fs/promises", "readFile") || !imported(writeReference, "node:fs/promises", "writeFile")) continue;
+    const plugins = config.get("plugins");
+    if (!plugins || !ts.isArrayLiteralExpression(plugins)) continue;
+    let safePlugins = true, resourceCount = 0;
+    const plugin = (node: ts.Node): boolean => {
+      if (ts.isSpreadElement(node)) {
+        const expression = unwrapStaticExpression(node.expression);
+        return ts.isConditionalExpression(expression) && [expression.whenTrue, expression.whenFalse].every(branch => ts.isArrayLiteralExpression(branch) && branch.elements.every(plugin));
+      }
+      if (ts.isIdentifier(node)) {
+        const resource = constant(node), object = resource?.initializer;
+        if (!object || !ts.isObjectLiteralExpression(object) || object.properties.length !== 1 || !ts.isMethodDeclaration(object.properties[0])) return false;
+        const apply = object.properties[0], body = apply.body;
+        if (apply.name.getText(parsed) !== "apply" || apply.parameters.length !== 1 || apply.parameters[0].name.getText(parsed) !== "compiler" || !body || body.statements.length !== 1) return false;
+        const registration = body.statements[0];
+        if (!ts.isExpressionStatement(registration) || !ts.isCallExpression(registration.expression) ||
+            text(registration.expression.expression) !== "compiler.hooks.compilation.tap" || registration.expression.arguments.length !== 2 || literal(registration.expression.arguments[0]) !== "AdminFormFixtureResources") return false;
+        const compilation = registration.expression.arguments[1];
+        if (!ts.isArrowFunction(compilation) || compilation.parameters.length !== 1 || compilation.parameters[0].name.getText(parsed) !== "compilation" ||
+            !ts.isBlock(compilation.body) || compilation.body.statements.length !== 1) return false;
+        const hooks = nodes(body, ts.isCallExpression).filter(candidate => ts.isPropertyAccessExpression(candidate.expression) && candidate.expression.name.text === "tapPromise");
+        if (hooks.length !== 1 || text(hooks[0].expression) !== "webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise" || hooks[0].arguments.length !== 2 || literal(hooks[0].arguments[0]) !== "AdminFormFixtureResources") return false;
+        if (!ts.isExpressionStatement(compilation.body.statements[0]) || compilation.body.statements[0].expression !== hooks[0]) return false;
+        const reader = hooks[0].arguments[1];
+        if (!ts.isArrowFunction(reader) || !ts.isBlock(reader.body) || reader.parameters.length !== 1 || reader.parameters[0].name.getText(parsed) !== "context" || reader.body.statements.length !== 4) return false;
+        const [file, css, before, transpile] = reader.body.statements;
+        if (text(file) !== "constfile=context.resourcePath;" || !ts.isIfStatement(css) || css.elseStatement || text(css.expression) !== "file.endsWith('.module.css')" ||
+            !ts.isIfStatement(before) || before.elseStatement || text(before.expression) !== "settingsBefore&&/\\.[jt]sx?$/.test(file)&&!file.includes('node_modules')" || text(before.thenStatement) !== "return(awaitfixtureSource(file)).toString('utf8');" ||
+            !ts.isIfStatement(transpile) || transpile.elseStatement || text(transpile.expression) !== "leanPixelScope&&/\\.[jt]sx?$/.test(file)&&!file.includes('node_modules')" ||
+            text(transpile.thenStatement) !== "returnrequire('typescript').transpileModule(awaitreadFile(file,'utf8'),{compilerOptions:{jsx:4,target:9,module:99}}).outputText;") return false;
+        // The optional historical resource reader never substitutes a scripts/
+        // entry: only src/ paths can enter its snapshot branch.
+        const readerOwner = parsed.statements.find((candidate): candidate is ts.FunctionDeclaration => ts.isFunctionDeclaration(candidate) && candidate.name?.text === "fixtureSource");
+        const statements = readerOwner?.body?.statements;
+        if (readerOwner?.parameters.length !== 1 || readerOwner.parameters[0].name.getText(parsed) !== "file" || !statements || statements.length !== 3 || text(statements[0]) !== "constrelative=path.relative(root,file),snapshot=path.join(settingsEvidenceRoot,'before',relative);" ||
+            !ts.isIfStatement(statements[1]) || statements[1].elseStatement || text(statements[1].expression) !== "settingsBefore&&relative.replaceAll('\\\\','/').startsWith('src/')" || text(statements[2]) !== "returnreadFile(file);") return false;
+        if (!nodes(reader, ts.isIdentifier).filter(candidate => candidate.text === "require").every(ownRequire) ||
+            !nodes(body, ts.isIdentifier).filter(candidate => candidate.text === "webpack").every(candidate => constant(candidate) === factory) ||
+            ![reader, readerOwner].every(scope => nodes(scope, ts.isCallExpression).filter(candidate => ts.isIdentifier(candidate.expression) && candidate.expression.text === "readFile")
+              .every(candidate => imported(candidate.expression, "node:fs/promises", "readFile")))) return false;
+        resourceCount++; return true;
+      }
+      if (!ts.isNewExpression(node) || !ts.isPropertyAccessExpression(node.expression) || !ts.isIdentifier(node.expression.expression) || constant(node.expression.expression) !== factory) return false;
+      if (node.expression.name.text === "ProvidePlugin") return node.arguments?.length === 1 && text(node.arguments[0]) === "{process:require.resolve('next/dist/build/polyfills/process')}";
+      if (node.expression.name.text !== "NormalModuleReplacementPlugin" || node.arguments?.length !== 2 || !ts.isRegularExpressionLiteral(node.arguments[0])) return false;
+      const regex = node.arguments[0].text, end = regex.lastIndexOf("/");
+      if (end !== regex.length - 1 || !regex.slice(1, end).split("|").every(part => /^\^?(?:[a-zA-Z0-9_/-]|\\[/.])+\$$/u.test(part))) return false;
+      // Only these existing module selectors are proven not to replace a
+      // scripts/ entry in any owned source copy, regardless of its parent path.
+      const moduleSelectors = new Set([String.raw`^next\/navigation$`, String.raw`^\.\/actions$`, "taxonomy-form-actions$",
+        String.raw`lib\/admin\/links\/actions$|^\.\.\/actions$`, "AdminMediaPickerModal$"]);
+      if (!moduleSelectors.has(regex.slice(1, end))) return false;
+      const matcher = new RegExp(regex.slice(1, end), regex.slice(end + 1));
+      return ![sourceFile, `./${sourceFile}`, `/${sourceFile}`, join(workspaceRoot, sourceFile), normalizeSourcePath(join(workspaceRoot, sourceFile))].some(value => matcher.test(value));
+    };
+    try { safePlugins = plugins.elements.every(plugin); } catch { safePlugins = false; }
+    if (safePlugins && resourceCount === 1) result.push(normalizeSourcePath(sourceFile));
+  }
+  return [...new Set(result)];
+}
+
 export function collectExecutableSourceGraph(input: {
   root: string;
   entrySourceFiles: readonly string[];
@@ -1809,6 +1992,7 @@ export function collectExecutableSourceGraph(input: {
     return collectSymbolAwareExecutableSourceGraph(input);
   }
   const graph = new Map<string, ts.SourceFile>();
+  const opaqueBuildEntries = new Set<string>();
   const traversalBoundaries = new Set(
     input.traversalBoundarySourceFiles?.map(normalizeSourcePath) ?? [],
   );
@@ -1831,6 +2015,7 @@ export function collectExecutableSourceGraph(input: {
       : parseWorkspaceModule(input.root, sourceFile);
     graph.set(sourceFile, parsed);
     if (traversalBoundaries.has(sourceFile)) continue;
+    for (const entry of directWebpackEntries(parsed, input.root)) opaqueBuildEntries.add(entry);
     for (const statement of parsed.statements) {
       if (
         ts.isImportDeclaration(statement) &&
@@ -1867,6 +2052,14 @@ export function collectExecutableSourceGraph(input: {
         if (dependency && !graph.has(dependency)) queue.push(dependency);
       }
     }
+  }
+  // A bundler's replacement hooks do not establish the original imports of its
+  // entry. Credit only the positively bound entry, never its transitive graph.
+  for (const sourceFile of opaqueBuildEntries) {
+    if (graph.has(sourceFile)) continue;
+    const source = input.sourceOverrides?.get(sourceFile) ??
+      (existsSync(join(input.root, sourceFile)) ? readFileSync(join(input.root, sourceFile), "utf8") : undefined);
+    if (source !== undefined) graph.set(sourceFile, parseTypeScriptSource(sourceFile, source));
   }
   return graph;
 }

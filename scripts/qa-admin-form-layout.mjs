@@ -1,11 +1,35 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
-const require = createRequire(import.meta.url), root = process.cwd();
+const require = createRequire(import.meta.url), root = path.resolve(import.meta.dirname, '..');
+
+function selectAdminFormLayoutProfile(args, environment) {
+    if (!args.some(argument => argument.startsWith('--profile'))) return null;
+    assert.deepEqual(args, ['--profile=taxonomy-current-after'], 'Only the registered current-after taxonomy profile is supported');
+    const selectors = { ADMIN_FORM_LAYOUT_SCOPE: 'consistency', ADMIN_FORM_LAYOUT_FAMILY: 'taxonomy', ADMIN_UI_RECOVERY_PHASE: 'consistency-after' };
+    for (const [name, value] of Object.entries(selectors)) assert(!environment[name] || environment[name] === value, 'Conflicting layout profile selector: ' + name);
+    for (const name of ['ADMIN_FORM_LAYOUT_OUTPUT', 'ADMIN_FORM_LAYOUT_SETTINGS_REFINE', 'ADMIN_FORM_LAYOUT_SCREENSHOT']) assert(!environment[name], 'Registered layout profiles own their fresh output and configuration: ' + name);
+    return { name: 'taxonomy-current-after', selectors };
+}
+
+async function prepareAdminFormLayoutProfileOutput(workspaceRoot) {
+    const canonicalRoot = await realpath(workspaceRoot), evidenceRoot = path.join(workspaceRoot, '.tmp-qa');
+    await mkdir(evidenceRoot, { recursive: true });
+    assert(!(await lstat(evidenceRoot)).isSymbolicLink(), 'Registered layout evidence cannot follow a symlink or junction');
+    assert.equal(await realpath(evidenceRoot), path.join(canonicalRoot, '.tmp-qa'), 'Registered layout evidence must remain inside the canonical workspace');
+    return mkdtemp(path.join(evidenceRoot, 'admin-form-layout-taxonomy-current-'));
+}
+
+const selectedProfile = selectAdminFormLayoutProfile(process.argv.slice(2), process.env);
+if (selectedProfile) {
+    Object.assign(process.env, selectedProfile.selectors);
+    process.env.ADMIN_FORM_LAYOUT_OUTPUT = await prepareAdminFormLayoutProfileOutput(root);
+    console.log('Admin Form Layout profile ' + selectedProfile.name + ' fresh output: ' + process.env.ADMIN_FORM_LAYOUT_OUTPUT);
+}
 const recoveryPhase = process.env.ADMIN_UI_RECOVERY_PHASE;
 assert(!recoveryPhase || ['before', 'after', 'owner-before', 'owner-after', 'layout-before', 'layout-after', 'consistency-before', 'consistency-after', 'button-refinement-before', 'button-refinement-after', 'pixel-refinement'].includes(recoveryPhase));
 const leanPixelScope = process.env.ADMIN_FORM_LAYOUT_SCOPE === 'pixel-refinement';
@@ -46,7 +70,7 @@ const fingerprintTaxonomySources=async()=>Object.fromEntries(await Promise.all(t
 const taxonomySourceHashes=consistencyScope?await fingerprintTaxonomySources():null;
 const taxonomyPresentationReference = new Map();
 await mkdir(out, { recursive: true });
-if (!leanPixelScope) await writeFile(path.join(out, 'receipt.json'), JSON.stringify({ status: 'RUNNING', phase: recoveryPhase ?? 'regression' }));
+if (!leanPixelScope) await writeFile(path.join(out, 'receipt.json'), JSON.stringify({ status: 'RUNNING', phase: recoveryPhase ?? 'regression', ...(selectedProfile ? { executionProfile: selectedProfile.name } : {}) }));
 await writeGeneratedFile(path.join(out, 'loader.cjs'), `module.exports=s=>require('typescript').transpileModule(s,{compilerOptions:{jsx:4,target:9,module:99}}).outputText;`);
 await writeGeneratedFile(path.join(out, 'navigation.js'), `export {unstable_rethrow} from 'next/dist/client/components/unstable-rethrow.browser';const record=(method,href)=>(window.fixtureNavigation??=[]).push({method,href});export const useRouter=()=>({push(href){record('push',href)},replace(href){record('replace',href)},refresh(){},prefetch(){}});export const useSearchParams=()=>new URLSearchParams(location.search);export const usePathname=()=>'/admin/fixture';`);
 await writeGeneratedFile(path.join(out, 'actions.js'), `const row={id:'pages:42',resourceId:42,resourceType:'pages',title:'من نحن',slug:'about',publicPath:'/about'};export const browseAdminLinksAjax=async()=>({ok:true,results:[row]});export const browseTopicCategoriesPickerAjax=async()=>({ok:true,items:[]});export const browseMenusPickerAjax=async()=>({ok:true,menus:[]});export const browseMenuItemsPickerAjax=async()=>({ok:true,items:[]});export const resolveAdminLinkAjax=async v=>({ok:true,display:{kind:v.link_kind,kindLabel:v.link_kind==='external'?'خارجي':'صفحة',title:v.link_kind==='external'?v.href:'من نحن',publicPath:(v.href||'/about')+(v.anchor?'#'+v.anchor:''),target:v.target||'_self'}});export const updateHeroTemplateDetails=async()=>{throw Error('No persistence transport permitted')};`);
@@ -768,7 +792,7 @@ async function runConsistency(page) {
         }
         const taxonomyCreate=await captureTaxonomyCreate(page),taxonomyPanelJourneys=await exerciseTaxonomyPanels(page);
         assert.deepEqual(errors,[]);assert.deepEqual(await fingerprintTaxonomySources(),taxonomySourceHashes,'Taxonomy source must remain stable throughout the existing fixture run');
-        await writeFile(path.join(out,'receipt.json'),JSON.stringify({status:'PASS',phase:recoveryPhase,familyFilter:'taxonomy',sourceHashes:taxonomySourceHashes,sharedDefaults,presentationReferences,spacing,measurements,taxonomyCreate,taxonomyPanelJourneys,errors,hostedDatabaseWrites:0,productionMutations:0,scope:'Affected Category/Series Create/Edit and shared opt-in default protection only, selected within the existing consistency runner/fixture. Actual ContentEditorShell cadence, Topic Panel identity/label/Actions and canonical helper hint comparisons; Desktop/Mobile normal/sticky/final-section geometry with removed/misplaced-token negative controls; actual canonical components, current CSS, shared taxonomy schema and isolated local transports/read-back; default seven-family consistency and its retained CTA failure are not relabelled PASS. No authenticated live-route, hosted Server Action, Auth, SQL or database persistence proof.'},null,2));
+        await writeFile(path.join(out,'receipt.json'),JSON.stringify({status:'PASS',phase:recoveryPhase,familyFilter:'taxonomy',...(selectedProfile?{executionProfile:selectedProfile.name}:{}),sourceHashes:taxonomySourceHashes,sharedDefaults,presentationReferences,spacing,measurements,taxonomyCreate,taxonomyPanelJourneys,errors,hostedDatabaseWrites:0,productionMutations:0,scope:'Affected Category/Series Create/Edit and shared opt-in default protection only, selected within the existing consistency runner/fixture. Actual ContentEditorShell cadence, Topic Panel identity/label/Actions and canonical helper hint comparisons; Desktop/Mobile normal/sticky/final-section geometry with removed/misplaced-token negative controls; actual canonical components, current CSS, shared taxonomy schema and isolated local transports/read-back; default seven-family consistency and its retained CTA failure are not relabelled PASS. No authenticated live-route, hosted Server Action, Auth, SQL or database persistence proof.'},null,2));
         console.log('PASS consistency-after taxonomy family: 4 actual Create/Edit consumers, 5 RTL widths, 8 Desktop/Mobile lifecycle journeys; no hosted writes');
         return;
     }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import ts from "typescript";
 
 import {
   INTEGRATION_DEFINITIONS,
@@ -224,14 +225,171 @@ assert.doesNotMatch(envExample, /^INTEGRATIONS_OAUTH_BASE_URL=/m);
 assert.doesNotMatch(envExample, /^TIKTOK_BUSINESS_AUTHORIZATION_URL=/m);
 
 const providerHosts = /googleapis\.com|graph\.facebook\.com|business-api\.tiktok\.com|adsapi\.snapchat\.com|api\.snapchat\.com/i;
+const publicVideoCatalogPath = "src/lib/admin/media-topic-payload.ts";
+const publicVideoReadPath = "src/lib/content/public-content-read/owner.ts";
+const publicVideoCatalog = source(publicVideoCatalogPath), publicVideoRead = source(publicVideoReadPath);
+
+/** The Owner-approved public playback read is separate from Marketing/OAuth. */
+function publicOEmbedEndpointSpans(catalogSource: string, readSource: string) {
+  const catalog = ts.createSourceFile(publicVideoCatalogPath, catalogSource, ts.ScriptTarget.Latest, true);
+  const read = ts.createSourceFile(publicVideoReadPath, readSource, ts.ScriptTarget.Latest, true);
+  const nodes = <T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T[] => {
+    const result: T[] = [];
+    const visit = (node: ts.Node) => { if (predicate(node)) result.push(node); ts.forEachChild(node, visit); };
+    visit(root); return result;
+  };
+  const properties = (node: ts.Node | undefined) => {
+    assert.ok(node && ts.isObjectLiteralExpression(node));
+    const rows = node.properties.map(item => {
+      assert.ok(ts.isPropertyAssignment(item));
+      return [item.name.getText(), item.initializer] as const;
+    });
+    assert.equal(new Set(rows.map(([name]) => name)).size, rows.length);
+    return new Map(rows);
+  };
+  const literal = (node: ts.Node | undefined) => node && ts.isStringLiteralLike(node) ? node.text : undefined;
+  const pureConstant = (node: ts.Expression): boolean => {
+    if (ts.isAsExpression(node)) return pureConstant(node.expression);
+    if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) || node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return true;
+    if (ts.isArrayLiteralExpression(node)) return node.elements.every(item => ts.isExpression(item) && pureConstant(item));
+    if (ts.isObjectLiteralExpression(node)) return node.properties.every(item => ts.isPropertyAssignment(item) && !ts.isComputedPropertyName(item.name) && pureConstant(item.initializer));
+    return ts.isNewExpression(node) && node.expression.getText() === "Set" && node.arguments?.length === 1 && pureConstant(node.arguments[0]);
+  };
+  for (const statement of catalog.statements) {
+    assert.ok(ts.isFunctionDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement) ||
+      ts.isImportDeclaration(statement) && statement.importClause?.isTypeOnly ||
+      ts.isVariableStatement(statement) && statement.declarationList.declarations.every(item => item.initializer && pureConstant(item.initializer)),
+    "Public video catalog must remain declarative/pure, without executable module side effects");
+  }
+  const forbiddenCapability = /^(?:fetch|XMLHttpRequest|WebSocket|EventSource|require|process|window|globalThis|global|module|Function|eval|axios|providerJson)$/u;
+  assert.ok(!nodes(catalog, (node): node is ts.Identifier | ts.StringLiteralLike => ts.isIdentifier(node) || ts.isStringLiteralLike(node)).some(node => forbiddenCapability.test(node.text)) &&
+    !nodes(catalog, (node): node is ts.Node => ts.isAwaitExpression(node) || ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword).length,
+  "Public video catalog cannot acquire network or runtime-loading capabilities");
+  assert.ok(!nodes(catalog, (node): node is ts.VariableDeclaration | ts.FunctionDeclaration | ts.ParameterDeclaration | ts.BindingElement =>
+    ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node)).some(node => node.name?.getText() === "Set"),
+  "The catalog's literal Set initializer must use the unshadowed built-in constructor");
+  const declaration = nodes(catalog, ts.isVariableDeclaration).find(node => node.name.getText() === "VIDEO_PROVIDERS");
+  assert.ok(declaration?.initializer && ts.isAsExpression(declaration.initializer) && ts.isArrayLiteralExpression(declaration.initializer.expression));
+  const endpoints = new Map<string, ts.StringLiteralLike>();
+  for (const item of declaration.initializer.expression.elements) {
+    const row = properties(item), meta = row.get("metaEmbed");
+    if (!meta) continue;
+    const provider = literal(row.get("value")), endpoint = properties(meta).get("endpoint");
+    assert.ok(provider && !endpoints.has(provider) && endpoint && ts.isStringLiteralLike(endpoint));
+    assert.equal(endpoint.text, provider === "facebook" ? "https://graph.facebook.com/v25.0/oembed_video" : provider === "instagram" ? "https://graph.facebook.com/v25.0/instagram_oembed" : undefined,
+      "Only the two Owner-approved official public oEmbed catalog endpoints are admitted");
+    endpoints.set(provider, endpoint);
+  }
+  assert.deepEqual([...endpoints.keys()].sort(), ["facebook", "instagram"]);
+  const resolver = catalog.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "resolveMetaVideoEmbedRequest");
+  assert.ok(resolver?.body && resolver.parameters.length === 1 && resolver.parameters[0].name.getText() === "payload");
+  const resolverVariables = nodes(resolver, ts.isVariableDeclaration);
+  assert.deepEqual(resolverVariables.map(node => node.name.getText()), ["sourceUrl", "provider"]);
+  const normalized = resolverVariables[0].initializer, selected = resolverVariables[1].initializer;
+  assert.ok(normalized && ts.isCallExpression(normalized) && normalized.expression.getText() === "normalizeVideoUrl" && normalized.arguments.map(node => node.getText()).join("|") === "payload.provider|payload.video_url");
+  assert.ok(selected && ts.isCallExpression(selected) && selected.expression.getText() === "VIDEO_PROVIDERS.find" && selected.arguments.length === 1 && ts.isArrowFunction(selected.arguments[0]) && selected.arguments[0].body.getText() === "item.value === payload.provider");
+  const returned = resolver.body.statements.at(-1);
+  assert.ok(returned && ts.isReturnStatement(returned) && returned.expression && ts.isConditionalExpression(returned.expression) && ts.isObjectLiteralExpression(returned.expression.whenTrue) && returned.expression.whenFalse.kind === ts.SyntaxKind.NullKeyword);
+  const conjunctions = (node: ts.Expression): ts.Expression[] => ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+    ? [...conjunctions(node.left), ...conjunctions(node.right)] : [node];
+  const conditions = conjunctions(returned.expression.condition);
+  assert.equal(conditions.length, 4);
+  assert.equal(conditions[0].getText(), "sourceUrl");
+  assert.ok(ts.isBinaryExpression(conditions[1]) && conditions[1].operatorToken.kind === ts.SyntaxKind.LessThanEqualsToken && conditions[1].left.getText() === "sourceUrl.length" && ts.isNumericLiteral(conditions[1].right) && Number(conditions[1].right.text) === 2048);
+  assert.equal(conditions[2].getText(), "provider");
+  assert.ok(ts.isBinaryExpression(conditions[3]) && conditions[3].operatorToken.kind === ts.SyntaxKind.InKeyword && literal(conditions[3].left) === "metaEmbed" && conditions[3].right.getText() === "provider",
+    "Only a bounded canonical source and eligible catalog provider may return an endpoint");
+  const descriptor = returned.expression.whenTrue.properties;
+  assert.equal(descriptor.length, 3);
+  assert.ok(ts.isPropertyAssignment(descriptor[0]) && descriptor[0].name.getText() === "provider" && descriptor[0].initializer.getText() === "payload.provider" &&
+    ts.isShorthandPropertyAssignment(descriptor[1]) && descriptor[1].name.text === "sourceUrl" &&
+    ts.isSpreadAssignment(descriptor[2]) && descriptor[2].expression.getText() === "provider.metaEmbed",
+  "The public request must return only the normalized identity and selected catalog metadata");
+  const readFunction = read.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "readMetaVideoEmbed");
+  assert.ok(readFunction?.body && readFunction.parameters.length === 1 && readFunction.parameters[0].name.getText() === "payload");
+  const canonicalImport = read.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../admin/media-topic-payload")
+    .flatMap(node => node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) ? [...node.importClause.namedBindings.elements] : []);
+  for (const name of ["resolveMetaVideoEmbedRequest", "parseMetaVideoEmbedResponse"]) {
+    assert.equal(canonicalImport.filter(node => !node.propertyName && node.name.text === name).length, 1);
+    assert.equal(nodes(read, ts.isVariableDeclaration).filter(node => node.name.getText() === name).length, 0);
+  }
+  const variable = (name: string) => {
+    const matches = nodes(readFunction, ts.isVariableDeclaration).filter(node => node.name.getText() === name);
+    assert.equal(matches.length, 1); return matches[0].initializer;
+  };
+  const request = variable("request"), endpoint = variable("endpoint");
+  assert.ok(request && ts.isCallExpression(request) && request.expression.getText() === "resolveMetaVideoEmbedRequest" && request.arguments.length === 1 && request.arguments[0].getText() === "payload");
+  const rejected = readFunction.body.statements[1];
+  assert.ok(ts.isIfStatement(rejected) && ts.isPrefixUnaryExpression(rejected.expression) && rejected.expression.operator === ts.SyntaxKind.ExclamationToken && rejected.expression.operand.getText() === "request" && ts.isReturnStatement(rejected.thenStatement));
+  assert.deepEqual([...properties(rejected.thenStatement.expression)].map(([key, value]) => [key, literal(value)]), [["status", "unavailable"], ["reason", "unsupported"]]);
+  assert.ok(endpoint && ts.isNewExpression(endpoint) && endpoint.expression.getText() === "URL" && endpoint.arguments?.length === 1 && endpoint.arguments[0].getText() === "request.endpoint");
+  const fetchReferences = nodes(read, (node): node is ts.Identifier | ts.StringLiteralLike => ts.isIdentifier(node) || ts.isStringLiteralLike(node)).filter(node => node.text === "fetch");
+  assert.equal(fetchReferences.length, 1, "The approved public read has one unaliased network call");
+  const fetchCall = fetchReferences[0].parent;
+  assert.ok(ts.isCallExpression(fetchCall) && fetchCall.expression === fetchReferences[0] && fetchCall.pos > readFunction.pos && fetchCall.end < readFunction.end && fetchCall.arguments.length === 2 && fetchCall.arguments[0].getText() === "endpoint");
+  assert.equal(nodes(read, ts.isIdentifier).filter(node => node.text === "URL").length, 1);
+  const options = properties(fetchCall.arguments[1]);
+  assert.deepEqual([...options.keys()], ["method", "redirect", "credentials", "referrerPolicy", "cache", "headers", "signal"]);
+  for (const [key, value] of [["method", "GET"], ["redirect", "error"], ["credentials", "omit"], ["referrerPolicy", "no-referrer"], ["cache", "no-store"]]) assert.equal(literal(options.get(key)), value);
+  assert.deepEqual([...properties(options.get("headers"))].map(([key, value]) => [key, literal(value)]), [["Accept", "application/json"]]);
+  assert.equal(options.get("signal")?.getText(), "controller.signal");
+  const calls = nodes(readFunction, ts.isCallExpression);
+  const queries = calls.filter(node => node.expression.getText().startsWith("endpoint.searchParams."));
+  assert.deepEqual(queries.map(node => [node.expression.getText(), ...node.arguments.map(item => literal(item) ?? item.getText())]), [
+    ["endpoint.searchParams.set", "url", "request.sourceUrl"], ["endpoint.searchParams.set", "omitscript", "true"], ["endpoint.searchParams.set", "maxwidth", "658"],
+  ]);
+  const timeout = variable("timeout");
+  assert.ok(timeout && ts.isCallExpression(timeout) && timeout.expression.getText() === "setTimeout" && timeout.arguments.length === 2 && ts.isNumericLiteral(timeout.arguments[1]) && Number(timeout.arguments[1].text) === 5000);
+  assert.ok(calls.some(node => node.expression.getText() === "controller.abort"));
+  assert.equal(nodes(readFunction, ts.isBinaryExpression).filter(node => node.operatorToken.kind === ts.SyntaxKind.GreaterThanToken && ts.isNumericLiteral(node.right) && Number(node.right.text) === 65536).length, 2);
+  assert.ok(calls.some(node => node.expression.getText() === "parseMetaVideoEmbedResponse" && node.arguments.map(item => item.getText()).join("|") === "value|payload"));
+  return [...endpoints.values()].map(node => [node.getStart(catalog), node.end] as const);
+}
+
+function assertProviderHostBoundary(path: string, input: string, readInput = publicVideoRead) {
+  if (!providerHosts.test(input)) return;
+  if (path === publicVideoCatalogPath) {
+    const spans = publicOEmbedEndpointSpans(input, readInput).sort((a, b) => b[0] - a[0]);
+    const remainder = spans.reduce((text, [start, end]) => text.slice(0, start) + text.slice(end), input);
+    assert.equal(providerHosts.test(remainder), false, "Only proven endpoint literal positions may contain public provider hosts");
+    return;
+  }
+  assert.ok(path.startsWith("src/lib/admin/integrations/providers/") || path === "src/lib/admin/integrations/provider-http.ts",
+    `direct provider API call escaped the Provider Adapter Registry: ${path}`);
+}
+publicOEmbedEndpointSpans(publicVideoCatalog, publicVideoRead);
 const providerFiles = walk("src").filter((path) => /\.(?:ts|tsx)$/.test(path));
 for (const path of providerFiles) {
-  if (!providerHosts.test(source(path))) continue;
-  assert.ok(
-    path.startsWith("src/lib/admin/integrations/providers/") || path === "src/lib/admin/integrations/provider-http.ts",
-    `direct provider API call escaped the Provider Adapter Registry: ${path}`,
-  );
+  assertProviderHostBoundary(path, source(path));
 }
+for (const [label, catalog, read] of [
+  ["endpoint version drift", publicVideoCatalog.replace("/v25.0/oembed_video", "/v26.0/oembed_video"), publicVideoRead],
+  ["foreign endpoint host", publicVideoCatalog.replace("graph.facebook.com/v25.0/instagram_oembed", "unapproved.example/v25.0/instagram_oembed"), publicVideoRead],
+  ["additional catalog host", publicVideoCatalog + '\nexport const extra = "https://graph.facebook.com/me";', publicVideoRead],
+  ["catalog side effect", publicVideoCatalog + '\nfetch(VIDEO_PROVIDERS[2].metaEmbed.endpoint);', publicVideoRead],
+  ["catalog dynamic capability", publicVideoCatalog + '\nexport const remote = () => globalThis["fetch"]("https://example.test");', publicVideoRead],
+  ["catalog dynamic function", publicVideoCatalog + '\nexport function remote() { return Function("return 1")(); }', publicVideoRead],
+  ["shadowed catalog constructor", publicVideoCatalog + '\nfunction Set() { throw new Error("unapproved constructor"); }', publicVideoRead],
+  ["lost canonical source gate", publicVideoCatalog.replace("sourceUrl && sourceUrl.length <= 2_048 && provider", "provider"), publicVideoRead],
+  ["lost Meta eligibility gate", publicVideoCatalog.replace('&& "metaEmbed" in provider', ""), publicVideoRead],
+  ["additional public fetch", publicVideoCatalog, publicVideoRead + '\nfetch("https://example.test");'],
+  ["additional computed fetch", publicVideoCatalog, publicVideoRead + '\nglobalThis["fetch"]("https://example.test");'],
+  ["caller endpoint", publicVideoCatalog, publicVideoRead.replace("new URL(request.endpoint)", "new URL(payload.video_url)")],
+  ["caller endpoint in resolver", publicVideoCatalog.replace("...provider.metaEmbed", "endpoint: payload.video_url"), publicVideoRead],
+  ["foreign resolver owner", publicVideoCatalog, publicVideoRead.replace('from "../../admin/media-topic-payload"', 'from "../../admin/unowned-video-payload"')],
+  ["auth header", publicVideoCatalog, publicVideoRead.replace('headers: { Accept: "application/json" }', 'headers: { Accept: "application/json", Authorization: "Bearer forbidden" }')],
+  ["query credential", publicVideoCatalog, publicVideoRead.replace('endpoint.searchParams.set("omitscript", "true");', 'endpoint.searchParams.set("access_token", "forbidden");')],
+  ["redirect drift", publicVideoCatalog, publicVideoRead.replace('redirect: "error"', 'redirect: "follow"')],
+  ["credential drift", publicVideoCatalog, publicVideoRead.replace('credentials: "omit"', 'credentials: "include"')],
+  ["unbounded deadline", publicVideoCatalog, publicVideoRead.replace("5_000", "50_000")],
+  ["unbounded streamed body", publicVideoCatalog, publicVideoRead.replace("size > 65_536", "size > 655_360")],
+] as const) {
+  assert.ok(catalog !== publicVideoCatalog || read !== publicVideoRead, `${label} must mutate actual source`);
+  assert.throws(() => { publicOEmbedEndpointSpans(catalog, read); assertProviderHostBoundary(publicVideoCatalogPath, catalog, read); }, label);
+}
+assert.throws(() => assertProviderHostBoundary("src/app/unowned-provider-read.ts", 'fetch("https://graph.facebook.com/me")'));
+assert.throws(() => assertProviderHostBoundary("src/lib/admin/integrations/foreign.ts", 'fetch("https://googleapis.com/unowned")'));
+console.log("PASS approved public oEmbed catalog/read source proof and 22 provider-boundary negatives; Marketing/OAuth ownership remains guarded.");
 for (const path of walk("src/lib/admin/integrations").filter((entry) => /\.(?:ts|tsx)$/.test(entry))) {
   if (path === "src/lib/admin/integrations/provider-http.ts") continue;
   assert.doesNotMatch(source(path), /\bfetch\(/, `provider network calls must use the guarded HTTP owner: ${path}`);

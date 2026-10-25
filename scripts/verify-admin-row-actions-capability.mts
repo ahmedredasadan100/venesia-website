@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as ts from "typescript";
 import { buildAdminListSearchOrFilter } from "../src/lib/admin/admin-list-search.ts";
 import { loadNormalizedAdminEntityListPage } from "../src/lib/admin/entity-list/data-engine/adapter.ts";
@@ -124,9 +125,94 @@ function verifyFixedCachedUrlImportGraph() {
   check("cache-query graph rejects dynamic/remote/absolute/escaping paths, altered bases, shadowed URL, mutable hashes and expanded query forms", true);
 }
 
+function verifyActualFixtureCacheImport() {
+  const entry = "scripts/fixtures/admin-interaction-fixtures.mts", owner = "scripts/fixtures/admin-page-interaction-fixtures.mts";
+  const source = read(entry), tree = parseTypeScriptSource(entry, source);
+  let statement: ts.VariableStatement | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableStatement(node) && node.getText(tree).includes("const {seedAdminPageInteractionFixtures}=await import(")) statement = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(tree); assert.ok(statement);
+  const actual = statement.getText(tree);
+  assert.equal(actual, 'const {seedAdminPageInteractionFixtures}=await import(new URL(`./admin-page-interaction-fixtures.mts?fixture=${pageFixtureHash}`, import.meta.url).href);');
+  const actualHash = createHash("sha256").update(readFileSync(join(ROOT, owner))).digest("hex");
+  const moduleUrl = pathToFileURL(join(ROOT, entry)).href;
+  for (const pageFixtureHash of [actualHash, "a".repeat(64), "b".repeat(64)]) {
+    const oldUrl = `${pathToFileURL(resolve(ROOT, "scripts/fixtures/admin-page-interaction-fixtures.mts")).href}?fixture=${pageFixtureHash}`;
+    const newUrl = new URL(`./admin-page-interaction-fixtures.mts?fixture=${pageFixtureHash}`, moduleUrl).href;
+    assert.equal(newUrl, oldUrl, "Actual local path and cache identity remain identical without evaluating the fixture seed");
+    const overrides = new Map([[entry, `const pageFixtureHash = "${pageFixtureHash}"; export async function Consumer() { ${actual} return seedAdminPageInteractionFixtures(); }`],
+      [owner, "export function seedAdminPageInteractionFixtures() { return true; }"]]);
+    for (const symbolAware of [false, true]) assert.ok(collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], sourceOverrides: overrides, symbolAware }).has(owner));
+  }
+  check("actual cached fixture import retains exact native URL/path/hash identity and both graph modes without running any database seed", true);
+}
+
+function verifyOpaqueWebpackEntryGraph() {
+  const entry = "scripts/qa-admin-form-layout.mjs", fixture = "scripts/fixtures/admin-form-layout-browser.jsx", transitive = "scripts/fixtures/uncredited-browser-child.mjs";
+  const source = read(entry).replaceAll("\r\n", "\n");
+  const graph = (input: string, target = fixture, symbolAware = false) => collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], symbolAware,
+    sourceOverrides: new Map([[entry, input], [target, 'import "./uncredited-browser-child.mjs"; export const Fixture = true;'], [transitive, "export const Uncredited = true;"]]) });
+  const positive = graph(source);
+  assert.ok(positive.has(fixture), "The actual canonical Webpack factory, fixed entry and real compile invocation must establish its direct entry");
+  assert.equal(positive.has(transitive), false, "Replacement hooks cannot credit the entry's original transitive imports");
+  assert.equal(graph(source, fixture, true).has(fixture), false, "Opaque build input proof must not establish symbol-aware Product owner binding");
+  const alternative = "scripts/fixtures/another-explicit-entry.jsx";
+  assert.ok(graph(source.replace(`entry:path.join(root,'${fixture}')`, `entry:path.join(root,'${alternative}')`), alternative).has(alternative), "Direct entry proof has no filename allowlist");
+  const tree = parseTypeScriptSource(entry, source);
+  const resourceReader = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "fixtureSource");
+  const snapshotBranch = resourceReader?.body?.statements[1]; assert.ok(snapshotBranch && ts.isIfStatement(snapshotBranch));
+  const mutations = [
+    ["unapproved factory", "next/dist/compiled/webpack/webpack", "unapproved-webpack"],
+    ["shadowed native require", "createRequire } from 'node:module'", "createRequire as originalCreateRequire } from 'node:module'"],
+    ["shadowed native path", "from 'node:path'", "from 'unowned-path'"],
+    ["dynamic execution root", "path.resolve(import.meta.dirname, '..')", "process.cwd()"],
+    ["dynamic entry", "entry:path.join(root,'scripts/fixtures/admin-form-layout-browser.jsx')", "entry:path.join(root,fixturePath)"],
+    ["escaping entry", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'../outside.jsx')"],
+    ["remote entry", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'https://example.invalid/fixture.jsx')"],
+    ["missing actual compile", "compiler.run((error,stats)", "compiler.inspect((error,stats)"],
+    ["uncalled compile", "await new Promise((resolve,reject)=>compiler.run", "if(false) await new Promise((resolve,reject)=>compiler.run"],
+    ["unknown config", "mode:'development',target:'web'", "externals:[],mode:'development',target:'web'"],
+    ["unknown plugin", "plugins:[fixtureResources,", "plugins:[unreviewedResources,fixtureResources,"],
+    ["entry replacement", "plugins:[fixtureResources,", "plugins:[new webpack.NormalModuleReplacementPlugin(/admin-form-layout-browser\\.jsx$/, 'other.jsx'),fixtureResources,"],
+    ["substituted resource", "const file=context.resourcePath;", "const file=otherSource;"],
+    ["wrong compiler hook", "compiler.hooks.compilation.tap('AdminFormFixtureResources'", "otherCompiler.hooks.compilation.tap('AdminFormFixtureResources'"],
+    ["inactive hook", "webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise", "false && webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise"],
+    ["shadowed native read", "readFile, realpath", "readFile as nativeReadFile, realpath"],
+    ["shadowed native write", "writeFile } from 'node:fs/promises'", "writeFile as nativeWriteFile } from 'node:fs/promises'"],
+    ["reader parameter shadow", "function fixtureSource(file)", "function fixtureSource(file, readFile = substitute)"],
+    ["source writer drift", "generatedSources.set(file, source)", "generatedSources.set(file, 'substitute')"],
+    ["loader source drift", "transpileModule(s,{compilerOptions", "transpileModule('substitute',{compilerOptions"],
+    ["historical source category", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'src/unsafe-historical-entry.jsx')"],
+    ["noncanonical historical path", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'./src/unsafe-historical-entry.jsx')"],
+    ["CSS else substitution", "return 'export default '+JSON.stringify(locals)+';';\n            }", "return 'export default '+JSON.stringify(locals)+';';\n            } else return 'substituted source';"],
+    ["historical reader else substitution", "return (await fixtureSource(file)).toString('utf8');", "return (await fixtureSource(file)).toString('utf8'); else return 'substituted source';"],
+    ["transpiler else substitution", "return require('typescript').transpileModule(await readFile(file,'utf8'),{compilerOptions:{jsx:4,target:9,module:99}}).outputText;", "return require('typescript').transpileModule(await readFile(file,'utf8'),{compilerOptions:{jsx:4,target:9,module:99}}).outputText; else return 'substituted source';"],
+    ["snapshot else substitution", snapshotBranch.getText(tree), snapshotBranch.getText(tree) + " else return 'substituted source';"],
+    ["absolute-path replacement", "plugins:[fixtureResources,", "plugins:[new webpack.NormalModuleReplacementPlugin(/^E:/, 'other.jsx'),fixtureResources,"],
+    ["direct native entry overwrite", "const compiler = webpack({", `await writeFile(path.join(root,'${fixture}'),'substituted source');\nconst compiler = webpack({`],
+    ["extra compiler resource hook", "let inMemoryBundle;", "let inMemoryBundle; compiler.hooks.compilation.tap('Other', compilation => webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise('Other', async context => context.resourcePath.endsWith('admin-form-layout-browser.jsx') ? 'substituted source' : undefined));"],
+    ["compiler alias escape", "let inMemoryBundle;", "let inMemoryBundle; const escaped = compiler; escaped.hooks.compilation.tap('Other', substituteSource);"],
+    ["native path alias escape", "const compiler = webpack({", "const nativePath = path; nativePath.join = substitutedPath;\nconst compiler = webpack({"],
+    ["factory alias escape", "const compiler = webpack({", "const escapedWebpack = webpack; escapedWebpack.NormalModule = substitutedModule;\nconst compiler = webpack({"],
+    ["root alias escape", "const compiler = webpack({", "const escapedRoot = root;\nconst compiler = webpack({"],
+    ["source-emitting shouldEmit hook", "'AdminFormFixtureMemory',()=>false", "'AdminFormFixtureMemory',()=>substituteSource()"],
+    ["copied-root entry replacement", "plugins:[fixtureResources,", "plugins:[new webpack.NormalModuleReplacementPlugin(/copied-workspace\\/scripts\\/fixtures\\/admin-form-layout-browser\\.jsx$/, 'other.jsx'),fixtureResources,"],
+  ] as const;
+  for (const [label, from, to] of mutations) {
+    const mutant = source.replace(from, to); assert.notEqual(mutant, source, label + " must mutate actual runner source");
+    assert.equal(graph(mutant).has(fixture), false, label + " cannot establish executable entry coverage");
+  }
+  check("actual fixed Webpack entry is positively bound to native factory/root/compile and remains opaque beyond the entry", true);
+  check("direct build entry negatives reject shadowed native dependencies, dynamic paths, uncalled builds, config/plugins/hooks and source substitution", true);
+}
+
 if (process.argv.includes("--fixed-cache-import-graph")) {
   verifyFixedCachedUrlImportGraph();
-  console.log(`Fixed cache import graph verification passed (${passed} affected checks; source graph only).`);
+  verifyActualFixtureCacheImport();
+  verifyOpaqueWebpackEntryGraph();
+  console.log(`Fixed cache/direct build entry graph verification passed (${passed} affected checks; source graph only).`);
   process.exit(0);
 }
 
@@ -4179,6 +4265,8 @@ check(
     unresolvedDynamicImportFailedClosed,
 );
 verifyFixedCachedUrlImportGraph();
+verifyActualFixtureCacheImport();
+verifyOpaqueWebpackEntryGraph();
 check(
   "dead aliases, uncalled functions, and statically false branches do not satisfy executable Source Proof",
   deadBindingGraph.has(deadBindingOwner) &&

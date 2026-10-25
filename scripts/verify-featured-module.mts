@@ -2,6 +2,7 @@ import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
 
 import { createJiti } from "jiti";
 import { verifyFeaturedReferenceReadContract } from "./fixtures/page-block-performance-harness.mjs";
@@ -902,6 +903,32 @@ check(
     editor.includes("presentationOptions.map") &&
     editor.includes("FEATURED_PRESENTATION_LABELS_AR[value]"),
 );
+type FeaturedJsx = ts.JsxElement | ts.JsxSelfClosingElement;
+function featuredNodes<T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T) {
+  const nodes: T[] = [];
+  function visit(node: ts.Node) { if (predicate(node)) nodes.push(node); ts.forEachChild(node, visit); }
+  visit(root); return nodes;
+}
+function featuredElements(root: ts.Node, tag: string) {
+  return featuredNodes(root, (node): node is FeaturedJsx => ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)).filter(node => (ts.isJsxElement(node) ? node.openingElement : node).tagName.getText() === tag);
+}
+function featuredAttribute(node: FeaturedJsx, name: string, tree: ts.SourceFile) {
+  const opening = ts.isJsxElement(node) ? node.openingElement : node;
+  const attribute = opening.attributes.properties.find((value): value is ts.JsxAttribute => ts.isJsxAttribute(value) && value.name.getText(tree) === name);
+  if (!attribute) return undefined;
+  const value = attribute.initializer;
+  return !value ? "true" : ts.isStringLiteral(value) ? value.text : ts.isJsxExpression(value) ? value.expression?.getText(tree).replace(/\s+/gu, "") : value.getText(tree).replace(/\s+/gu, "");
+}
+function featuredVariable(tree: ts.SourceFile, name: string) {
+  const nodes = featuredNodes(tree, ts.isVariableDeclaration).filter(node => node.name.getText(tree) === name);
+  assert.equal(nodes.length, 1, "Actual Featured declaration " + name);
+  assert.ok(nodes[0].initializer); return nodes[0].initializer;
+}
+function featuredGrid(root: ts.Node, variable: string, columns: string, tree: ts.SourceFile) {
+  const grids = featuredElements(root, "AdminFormGrid").filter(node => featuredAttribute(node, "columns", tree) === columns && ts.isJsxElement(node) && node.children.some(child => ts.isJsxExpression(child) && child.expression && ts.isIdentifier(child.expression) && child.expression.text === variable));
+  assert.equal(grids.length, 1, "Actual shared Grid contains " + variable); return grids[0];
+}
+function assertFeaturedPresentationSource(editor: string) {
 const featuredDisplaySettingsIndex = editor.indexOf(
   "const displayControls =",
 );
@@ -914,8 +941,7 @@ const featuredDisplayCardIndexes = [
   'showName="show_date_on_page"',
   'showName="show_cta"',
 ].map((token) => editor.indexOf(token, featuredDisplaySettingsIndex));
-check(
-  "CMS editor separates profile controls, module heading, and seven ordered payload controls",
+assert.ok(
   [
     '<AdminCard presentation="premium"',
     "<AdminFormControlHeader",
@@ -970,8 +996,6 @@ check(
   ].every((token) => editor.includes(token)) &&
     featuredDisplaySettingsIndex >= 0 &&
     editor.includes('data-featured-display-settings=""') &&
-    editor.includes('<AdminFormGrid columns={3}>{displayControls}</AdminFormGrid>') &&
-    editor.includes('<AdminFormGrid columns={4}>{variantControls}</AdminFormGrid>') &&
     featuredDisplayCardIndexes.every(
       (index, position, indexes) =>
         index > featuredDisplaySettingsIndex &&
@@ -987,6 +1011,59 @@ check(
     !editor.includes('<textarea name="presentation_description"') &&
     !editor.includes(">\n                      Presentation\n"),
 );
+  const tree = ts.createSourceFile("FeaturedModuleEditClient.tsx", editor, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  for (const [owner, names] of [
+    ["../ui", ["AdminFormField", "AdminFormGrid", "AdminFormSwitch"]],
+    ["./ModuleEditorPresentation", ["ModuleEditorSection", "ModuleEditorVisibilityAlignRow"]],
+    ["../ui/AdminModuleTabs", ["AdminModuleSectionHeader"]],
+  ] as const) for (const name of names) assert.ok(tree.statements.filter(ts.isImportDeclaration).some(node => ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === owner && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => !binding.isTypeOnly && !binding.propertyName && binding.name.text === name)), "Canonical Featured owner " + name);
+  const variantFields = featuredVariable(tree, "variantFields"), displayFields = featuredVariable(tree, "displayFields");
+  const sections = featuredElements(variantFields, "ModuleEditorSection").filter(node => featuredAttribute(node, "id", tree) === "featured-variant-settings-panel");
+  assert.equal(sections.length, 1);
+  const headers = featuredElements(sections[0], "AdminModuleSectionHeader").filter(node => featuredAttribute(node, "sectionHeading", tree) === "إعدادات النمط المختار" && featuredAttribute(node, "id", tree) === "featured-variant-settings");
+  assert.equal(headers.length, 1, "Actual selected-style Section owns its shared Header");
+  assert.equal(featuredAttribute(featuredGrid(sections[0], "variantControls", "4", tree), "presentation", tree), "aligned-fields");
+  featuredGrid(displayFields, "displayControls", "3", tree);
+  const controls = featuredVariable(tree, "displayControls"), rows = featuredElements(controls, "ModuleEditorVisibilityAlignRow");
+  const expected = [
+    ["show_title_on_page", "عنوان العنصر", "config.display.title", "display_title_bold", "display_title_alignment", "config.displayFormatting.titleBold", "config.displayFormatting.titleAlignment"],
+    ["show_image_on_page", "الصورة", "config.display.image"],
+    ["show_category_on_page", "التصنيف", "config.display.category", "display_category_bold", "display_category_alignment", "config.displayFormatting.categoryBold", "config.displayFormatting.categoryAlignment"],
+    ["show_series_on_page", "السلسلة", "config.display.series", "display_series_bold", "display_series_alignment", "config.displayFormatting.seriesBold", "config.displayFormatting.seriesAlignment"],
+    ["show_excerpt_on_page", "المقتطف", "config.display.excerpt", "display_excerpt_bold", "display_excerpt_alignment", "config.displayFormatting.excerptBold", "config.displayFormatting.excerptAlignment"],
+    ["show_date_on_page", "التاريخ", "config.display.date", "display_date_bold", "display_date_alignment", "config.displayFormatting.dateBold", "config.displayFormatting.dateAlignment"],
+    ["show_cta", "نص الإجراء", "ctaFormat.visible", "cta_bold", "cta_alignment", "ctaFormat.bold", "ctaFormat.alignment"],
+  ];
+  assert.deepEqual(rows.map(node => featuredAttribute(node, "showName", tree)), expected.map(row => row[0]), "Actual seven payload controls retain native order");
+  for (const [index, row] of rows.entries()) for (const [position, name] of ["showName", "label", "showDefault", "boldName", "alignmentName", "boldDefault", "alignmentDefault"].entries()) assert.equal(featuredAttribute(row, name, tree), expected[index][position], "Exact payload binding " + expected[index][0] + " " + name);
+  assert.equal(featuredAttribute(rows[1], "controlMode", tree), "visibility-only");
+  const variantControls = featuredVariable(tree, "variantControls"), itemControls = featuredElements(variantControls, "FeaturedItemsPerViewControl");
+  assert.equal(itemControls.length, 1);
+  for (const [name, value] of Object.entries({ variant: "presentationVariant", profile: "presentationProfile", value: "itemsPerView", itemLimit: "Number(itemLimit)", onChange: "setItemsPerView" })) assert.equal(featuredAttribute(itemControls[0], name, tree), value);
+  const navigation = featuredNodes(variantControls, ts.isConditionalExpression).filter(node => node.condition.getText(tree) === "presentationProfile.supportsNavigation");
+  assert.equal(navigation.length, 1);
+  const switches = featuredElements(navigation[0].whenTrue, "AdminFormSwitch"), hidden = featuredElements(navigation[0].whenFalse, "input");
+  const names = ["show_navigation_arrows", "show_navigation_dots", "navigation_autoplay"];
+  assert.deepEqual(switches.map(node => featuredAttribute(node, "name", tree)), names);
+  assert.deepEqual(hidden.map(node => featuredAttribute(node, "name", tree)), names);
+  for (const [index, node] of switches.entries()) for (const [name, value] of Object.entries({ value: "true", uncheckedValue: "false", embedded: "true", defaultChecked: ["navigation.showArrows", "navigation.showDots", "navigation.autoplay"][index] })) assert.equal(featuredAttribute(node, name, tree), value);
+  for (const node of hidden) { assert.equal(featuredAttribute(node, "type", tree), "hidden"); assert.equal(featuredAttribute(node, "value", tree), "false"); }
+}
+assertFeaturedPresentationSource(editor);
+check("CMS editor separates canonical profile Section/Header/Grid, module heading, and seven ordered payload controls", true);
+for (const [name, source] of [
+  ["parallel Section owner", editor.replace('from "./ModuleEditorPresentation";', 'from "./ParallelPresentation";')],
+  ["missing selected-style Section", editor.replace("<ModuleEditorSection", "<AdminCard").replace("</ModuleEditorSection>", "</AdminCard>")],
+  ["disconnected variant controls", editor.replace("{variantControls}", "{null}")],
+  ["lost aligned field presentation", editor.replace(' presentation="aligned-fields"', "")],
+  ["wrong payload order", editor.replace('showName="show_title_on_page"', 'showName="temporary"').replace('showName="show_image_on_page"', 'showName="show_title_on_page"').replace('showName="temporary"', 'showName="show_image_on_page"')],
+  ["wrong payload visibility default", editor.replace("showDefault={config.display.title}", "showDefault={config.display.image}")],
+  ["wrong native format name", editor.replace('boldName="display_category_bold"', 'boldName="title_bold"')],
+  ["lost image visibility-only mode", editor.replace('controlMode="visibility-only"', 'controlMode="format-only"')],
+  ["wrong navigation default", editor.replace("defaultChecked={navigation.showDots}", "defaultChecked={navigation.showArrows}")],
+  ["wrong unsupported navigation value", editor.replace('name="show_navigation_arrows"\n          value="false"', 'name="show_navigation_arrows"\n          value="true"')],
+  ["disconnected items-per-view callback", editor.replace("onChange={setItemsPerView}", "onChange={setItemLimit}")],
+] as const) { assert.notEqual(source, editor, "Effective negative " + name); assert.throws(() => assertFeaturedPresentationSource(source), name); check("Featured presentation source rejects " + name, true); }
 check(
   "Featured presentation metadata removes the duplicate outer heading and internal terminology",
   /featured:[\s\S]*?presentation:\s*\{[\s\S]*?sectionHeadingAr: null,[\s\S]*?sectionDescriptionAr: null,[\s\S]*?sectionChrome: "implicit"/u.test(
@@ -1062,17 +1139,66 @@ check(
     component.includes("displayFormatting={module.displayFormatting}") &&
     carousel.includes("displayFormatting={displayFormatting}"),
 );
-check(
-  "CMS editor keeps Featured quantity labels concise and removes redundant source-limit guidance",
+function assertFeaturedQuantitySource(editor: string) {
+assert.ok(
   editor.includes("العناصر الظاهرة") &&
     editor.includes("العدد المسموح به") &&
-    editor.includes('<AdminFormControlHeader title="العناصر الظاهرة"') &&
+    editor.includes('<AdminFormField label="العناصر الظاهرة"') &&
     editor.includes("[color-scheme:dark]") &&
-    editor.includes('<AdminFormControlHeader title="العدد المسموح به"') &&
+    editor.includes('<AdminFormField label="العدد المسموح به"') &&
     !editor.includes("العناصر الظاهرة في كل مرة") &&
     !editor.includes("يحدد حد الاختيار من المصدر") &&
     !editor.includes("هذه الحقول تخص حمولة الخبر أو المادة نفسها"),
 );
+  const tree = ts.createSourceFile("FeaturedModuleEditClient.tsx", editor, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const quantity = tree.statements.filter(ts.isFunctionDeclaration).find(node => node.name?.text === "FeaturedItemsPerViewControl");
+  assert.ok(quantity);
+  const configurable = featuredElements(quantity, "input").filter(node => featuredAttribute(node, "name", tree) === "items_per_view" && featuredAttribute(node, "type", tree) === "number");
+  assert.equal(configurable.length, 1);
+  const native = configurable[0];
+  assert.ok(native.parent && ts.isJsxElement(native.parent) && native.parent.openingElement.tagName.getText(tree) === "AdminFormField");
+  assert.equal(featuredAttribute(native.parent, "label", tree), "العناصر الظاهرة");
+  assert.equal(featuredAttribute(native.parent, "required", tree), "true");
+  for (const [name, value] of Object.entries({ required: "true", value: "value", min: "resolveFeaturedItemsPerView(variant,policy.min,itemLimit)", max: "resolveFeaturedItemsPerView(variant,policy.max,itemLimit)" })) assert.equal(featuredAttribute(native, name, tree), value);
+  const hidden = featuredElements(quantity, "input").filter(node => featuredAttribute(node, "name", tree) === "items_per_view" && featuredAttribute(node, "type", tree) === "hidden");
+  assert.equal(hidden.length, 1); assert.equal(featuredAttribute(hidden[0], "value", tree), "value");
+  const staticOutputs = featuredElements(quantity, "output");
+  assert.equal(staticOutputs.length, 1);
+  assert.ok(staticOutputs[0].parent && ts.isJsxElement(staticOutputs[0].parent));
+  assert.equal(featuredAttribute(staticOutputs[0].parent, "label", tree), "العناصر الظاهرة");
+  const callback = (node: FeaturedJsx, bindings: Record<string, unknown>) => {
+    const opening = ts.isJsxElement(node) ? node.openingElement : node;
+    const attribute = opening.attributes.properties.find((value): value is ts.JsxAttribute => ts.isJsxAttribute(value) && value.name.getText(tree) === "onChange")?.initializer;
+    assert.ok(attribute && ts.isJsxExpression(attribute) && attribute.expression);
+    const compiled = ts.transpileModule("const callback = " + attribute.expression.getText(tree) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    return new Function(...Object.keys(bindings), compiled + ";return callback;")(...Object.values(bindings)) as (event: unknown) => void;
+  };
+  const changed: unknown[] = [];
+  callback(native, { onChange: (value: unknown) => changed.push(value) })({ currentTarget: { value: "4" } });
+  assert.deepEqual(changed, ["4"], "Quantity keeps its actual controlled callback");
+  const limits = featuredElements(tree, "input").filter(node => featuredAttribute(node, "name", tree) === "item_limit");
+  assert.equal(limits.length, 1);
+  const limit = limits[0];
+  assert.ok(limit.parent && ts.isJsxElement(limit.parent) && limit.parent.openingElement.tagName.getText(tree) === "AdminFormField");
+  assert.equal(featuredAttribute(limit.parent, "label", tree), "العدد المسموح به");
+  assert.equal(featuredAttribute(limit.parent, "required", tree), "true");
+  for (const [name, value] of Object.entries({ type: "number", min: "1", max: "12", required: "true", value: "itemLimit" })) assert.equal(featuredAttribute(limit, name, tree), value);
+  const raw: unknown[] = [], counts: unknown[] = [];
+  const onLimit = callback(limit, { setItemLimit: (value: unknown) => raw.push(value), setItemsPerView: (update: (current: string) => string) => counts.push(update("7")), resolveFeaturedItemsPerView, presentationVariant: "three-cards" });
+  onLimit({ currentTarget: { value: "4", valueAsNumber: 4, validity: { valid: true } } });
+  assert.deepEqual(raw, ["4"]); assert.deepEqual(counts, [String(resolveFeaturedItemsPerView("three-cards", "7", 4))]);
+  onLimit({ currentTarget: { value: "-", valueAsNumber: NaN, validity: { valid: false } } });
+  assert.deepEqual(raw, ["4", "-"]); assert.equal(counts.length, 1, "Invalid native edits do not normalize the dependent quantity");
+}
+assertFeaturedQuantitySource(editor);
+check("CMS editor keeps concise canonical Field labels, native quantity policies and controlled callbacks", true);
+for (const [name, source] of [
+  ["missing numeric Field label", editor.replace('<AdminFormField label="العناصر الظاهرة" required>', "<AdminFormField required>")],
+  ["wrong quantity callback", editor.replace("onChange(event.currentTarget.value)", 'onChange("wrong")')],
+  ["wrong item-limit callback", editor.replace("setItemLimit(input.value)", 'setItemLimit("wrong")')],
+  ["normalizing invalid native edits", editor.replace("if (input.validity.valid)", "if (true)")],
+  ["lost native item-limit name", editor.replace('name="item_limit"', 'name="parallel_item_limit"')],
+] as const) { assert.notEqual(source, editor, "Effective negative " + name); assert.throws(() => assertFeaturedQuantitySource(source), name); check("Featured quantity source rejects " + name, true); }
 check(
   "Cards and list expose a real per-view count while list remains intentionally static",
   /"three-cards":\s*\{[\s\S]*?itemsPerView:\s*\{[\s\S]*?mode:\s*"configurable"[\s\S]*?min:\s*1,[\s\S]*?max:\s*4,/u.test(
