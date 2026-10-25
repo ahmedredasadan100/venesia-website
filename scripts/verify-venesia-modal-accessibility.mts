@@ -403,6 +403,92 @@ function loadModule<T>(path: string, source: string, ports: Props, globals: Prop
   return commonJsModule.exports as T;
 }
 
+const LIFECYCLE_TAB_ICON_BOUNDARY_ERROR =
+  "AdminModuleTabIcon is outside the Modal lifecycle fixture execution boundary";
+
+function lifecycleSourceTree(path: string, source: string) {
+  const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal(
+    (tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length,
+    0,
+    path + ": lifecycle source must independently parse",
+  );
+  return tree;
+}
+
+function canonicalLifecycleTabIconPort(
+  runtimeSource = formRuntime,
+  tabsSource = read("src/components/admin/ui/AdminModuleTabs.tsx"),
+) {
+  const runtimeTree = lifecycleSourceTree("AdminFormRuntime.tsx", runtimeSource);
+  const imports = runtimeTree.statements.filter(ts.isImportDeclaration).filter(node =>
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminModuleTabs");
+  assert.equal(imports.length, 1, "Runtime retains its one canonical Tabs import");
+  const clause = imports[0]!.importClause;
+  assert.ok(clause && !clause.isTypeOnly && !clause.name);
+  const bindings = clause.namedBindings;
+  assert.ok(bindings && ts.isNamedImports(bindings));
+  assert.deepEqual(
+    bindings.elements.filter(node => !node.isTypeOnly).map(node => ({
+      local: node.name.text,
+      exported: (node.propertyName ?? node.name).text,
+    })),
+    [{ local: "AdminModuleTabIcon", exported: "AdminModuleTabIcon" }],
+    "Only the existing canonical icon binding is outside this lifecycle fixture",
+  );
+  const tabsTree = lifecycleSourceTree("AdminModuleTabs.tsx", tabsSource);
+  const exports = tabsTree.statements.filter(ts.isFunctionDeclaration).filter(node =>
+    node.name?.text === "AdminModuleTabIcon" &&
+    node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) &&
+    !node.modifiers.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword));
+  assert.equal(exports.length, 1, "The actual canonical Tabs module exports its named icon");
+  assert.ok(exports[0]!.body);
+  // This fixture executes the Runtime close/dirty hook, not AdminFormActions.
+  // An unexpected presentation call must fail rather than render a parallel icon.
+  const outsideLifecycleIcon = (): never => {
+    throw new Error(LIFECYCLE_TAB_ICON_BOUNDARY_ERROR);
+  };
+  return {
+    importSource: imports[0]!.getText(runtimeTree),
+    port: { AdminModuleTabIcon: outsideLifecycleIcon },
+  };
+}
+
+function canonicalLifecycleListboxStyles(
+  source = read("src/components/admin/ui/AdminListboxSelect.tsx"),
+) {
+  const tree = lifecycleSourceTree("AdminListboxSelect.tsx", source);
+  const imports = tree.statements.filter(ts.isImportDeclaration).filter(node =>
+    ts.isStringLiteral(node.moduleSpecifier) &&
+    node.moduleSpecifier.text === "../../../lib/admin/admin-ui-styles");
+  assert.equal(imports.length, 1, "Listbox retains its exact canonical styles module");
+  const clause = imports[0]!.importClause;
+  assert.equal(Boolean(clause && !clause.isTypeOnly && !clause.name), true);
+  const bindings = clause!.namedBindings;
+  assert.equal(Boolean(bindings && ts.isNamedImports(bindings)), true);
+  assert.ok(bindings && ts.isNamedImports(bindings));
+  assert.deepEqual(
+    bindings.elements.filter(node => !node.isTypeOnly).map(node => ({
+      local: node.name.text,
+      exported: (node.propertyName ?? node.name).text,
+    })),
+    [{ local: "ADMIN_CINEMATIC_GOLD_V1", exported: "ADMIN_CINEMATIC_GOLD_V1" }],
+  );
+  const scrollbar = loadModule<Props>(
+    "src/components/venesia-scrollbar-styles.ts",
+    read("src/components/venesia-scrollbar-styles.ts"),
+    {},
+  );
+  const port = loadModule<Props>(
+    "src/lib/admin/admin-ui-styles.ts",
+    read("src/lib/admin/admin-ui-styles.ts"),
+    { "../../components/venesia-scrollbar-styles": scrollbar },
+  );
+  assert.equal(typeof port.ADMIN_CINEMATIC_GOLD_V1, "object");
+  assert.notEqual(port.ADMIN_CINEMATIC_GOLD_V1, null);
+  return { source, importSource: imports[0]!.getText(tree), port };
+}
+
 function trees(value: unknown): Tree[] {
   if (Array.isArray(value)) return value.flatMap(trees);
   if (!value || typeof value !== "object" || !("props" in value)) return [];
@@ -559,6 +645,7 @@ function lifecycleFixture(modalSource = modal, runtimeSource = formRuntime) {
   const safe = pure<Props>("src/lib/security/safe-internal-path.ts");
   const formDecision = pure<Props>("src/lib/admin/form-runtime.ts", { "../security/safe-internal-path.ts": safe });
   const formDom = pure<Props>("src/lib/admin/form-dom-preservation.ts");
+  const tabIconBoundary = canonicalLifecycleTabIconPort(runtimeSource);
   type Guard = { isDirty: boolean; dialog: unknown; requestCallback: (callback: () => void) => void };
   const Runtime = loadModule<{ useAdminUnsavedChangesGuard: (props: Props) => Guard }>("AdminFormRuntime.tsx", runtimeSource, {
     react: controlled.hooks, "react-dom": {}, "next/navigation": { useRouter: () => ({ push() { throw new Error("Unexpected fixture navigation"); } }) },
@@ -567,10 +654,13 @@ function lifecycleFixture(modalSource = modal, runtimeSource = formRuntime) {
     "../../../lib/admin/entity-list/data-engine/instant-mutation-cache": {},
     "../../../lib/security/safe-internal-path": safe,
     "../AdminFeedbackProvider": {}, "./AdminConfirmDialog": { default: Confirm }, "./AdminForm": {},
+    "./AdminModuleTabs": tabIconBoundary.port,
   }, dom.globals);
-  const Listbox = loadModule<{ default: Component }>("AdminListboxSelect.tsx", read("src/components/admin/ui/AdminListboxSelect.tsx"), {
+  const listboxStyles = canonicalLifecycleListboxStyles();
+  const Listbox = loadModule<{ default: Component }>("AdminListboxSelect.tsx", listboxStyles.source, {
     react: controlled.hooks, "react-dom": { createPortal: (tree: unknown) => tree },
     "../../../hooks/use-client-mounted": { useClientMounted: () => true },
+    "../../../lib/admin/admin-ui-styles": listboxStyles.port,
     "./admin-filter-styles": { ADMIN_FILTER_MENU_ATTR: "data-filter-menu", isInsideAdminFilterMenu: () => false },
     "./useAdminFloatingMenuPosition": { useAdminFloatingMenuPosition: () => ({ style: {}, placement: "bottom" }) },
   }, dom.globals).default;
@@ -798,6 +888,108 @@ for (const [name, source] of [
   assert.notEqual(source, formRuntime, `Mutation applied: ${name}`);
   execute(`negative rejects ${name}`, () => assert.throws(() => runtimeDismissal(source), { name: "AssertionError" }));
 }
+
+execute("canonical Runtime icon import stays explicit without claiming presentation execution", () => {
+  const tabsSource = read("src/components/admin/ui/AdminModuleTabs.tsx");
+  const actual = canonicalLifecycleTabIconPort(formRuntime, tabsSource);
+  const imported = loadModule<{ icon: unknown }>(
+    "ActualRuntimeTabIconImport.tsx",
+    actual.importSource + "\nexports.icon = AdminModuleTabIcon;",
+    { "./AdminModuleTabs": actual.port },
+  );
+  assert.equal(imported.icon === actual.port.AdminModuleTabIcon, true);
+  for (const [name, runtimeSource, ownerSource] of [
+    ["foreign module", formRuntime.replace('from "./AdminModuleTabs"', 'from "./ParallelModuleTabs"'), tabsSource],
+    ["wrong named export", formRuntime.replace('import { AdminModuleTabIcon } from "./AdminModuleTabs"', 'import { ParallelLifecycleIcon as AdminModuleTabIcon } from "./AdminModuleTabs"'), tabsSource],
+    ["missing named export", formRuntime, tabsSource.replace("export function AdminModuleTabIcon(", "function AdminModuleTabIcon(")],
+    ["renamed canonical export", formRuntime, tabsSource.replace("export function AdminModuleTabIcon(", "export function ParallelLifecycleIcon(")],
+  ] as const) {
+    assert.equal(runtimeSource !== formRuntime || ownerSource !== tabsSource, true, name + ": actual source changes");
+    lifecycleSourceTree("RuntimeMutation.tsx", runtimeSource);
+    lifecycleSourceTree("TabsMutation.tsx", ownerSource);
+    assert.throws(() => canonicalLifecycleTabIconPort(runtimeSource, ownerSource), { name: "AssertionError" });
+  }
+});
+
+execute("actual Runtime import rejects unknown, omitted module and missing named ports", () => {
+  const actual = canonicalLifecycleTabIconPort();
+  const evaluate = (importSource: string, ports: Props) => {
+    const imported = loadModule<{ icon: unknown }>(
+      "ActualRuntimeTabIconImport.tsx",
+      importSource + "\nexports.icon = AdminModuleTabIcon;",
+      ports,
+    );
+    assert.equal(typeof imported.icon, "function", "Actual named import must not resolve an empty UI module");
+    return imported.icon;
+  };
+  assert.equal(evaluate(actual.importSource, { "./AdminModuleTabs": actual.port }) === actual.port.AdminModuleTabIcon, true);
+  assert.throws(() => evaluate(actual.importSource, {}), {
+    name: "AssertionError",
+    message: /Unexpected lifecycle fixture import \.\/AdminModuleTabs in ActualRuntimeTabIconImport/u,
+  });
+  const unknown = actual.importSource.replace("./AdminModuleTabs", "./ParallelModuleTabs");
+  assert.equal(unknown !== actual.importSource, true);
+  lifecycleSourceTree("UnknownRuntimeTabIconImport.tsx", unknown + "\nexport { AdminModuleTabIcon };");
+  assert.throws(() => evaluate(unknown, { "./AdminModuleTabs": actual.port }), {
+    name: "AssertionError",
+    message: /Unexpected lifecycle fixture import \.\/ParallelModuleTabs in ActualRuntimeTabIconImport/u,
+  });
+  assert.throws(() => evaluate(actual.importSource, { "./AdminModuleTabs": {} }), { name: "AssertionError" });
+});
+
+execute("unexpected icon execution in the actual Runtime dirty hook fails the lifecycle boundary", () => {
+  const runtimeTree = lifecycleSourceTree("AdminFormRuntime.tsx", formRuntime);
+  const hooks = runtimeTree.statements.filter(ts.isFunctionDeclaration).filter(node =>
+    node.name?.text === "useAdminUnsavedChangesGuard");
+  assert.equal(hooks.length, 1);
+  assert.ok(hooks[0]!.body);
+  const start = hooks[0]!.body.getStart(runtimeTree) + 1;
+  const invoked = formRuntime.slice(0, start) +
+    '\n  AdminModuleTabIcon({ name: "content" });\n' + formRuntime.slice(start);
+  assert.equal(invoked !== formRuntime, true);
+  lifecycleSourceTree("RuntimeUnexpectedIconCall.tsx", invoked);
+  assert.throws(() => runtimeDismissal(invoked), {
+    name: "Error",
+    message: LIFECYCLE_TAB_ICON_BOUNDARY_ERROR,
+  });
+});
+
+execute("actual Listbox styles import uses the canonical pure modules and rejects missing bindings", () => {
+  const actual = canonicalLifecycleListboxStyles();
+  const evaluate = (importSource: string, ports: Props) => {
+    const imported = loadModule<{ token: unknown }>(
+      "ActualListboxStylesImport.tsx",
+      importSource + "\nexports.token = ADMIN_CINEMATIC_GOLD_V1;",
+      ports,
+    );
+    assert.equal(typeof imported.token, "object");
+    assert.notEqual(imported.token, null);
+    return imported.token;
+  };
+  assert.equal(evaluate(actual.importSource, {
+    "../../../lib/admin/admin-ui-styles": actual.port,
+  }) === actual.port.ADMIN_CINEMATIC_GOLD_V1, true);
+  assert.throws(() => evaluate(actual.importSource, {}), {
+    name: "AssertionError",
+    message: /Unexpected lifecycle fixture import .*admin-ui-styles in ActualListboxStylesImport/u,
+  });
+  assert.throws(() => evaluate(actual.importSource, {
+    "../../../lib/admin/admin-ui-styles": {},
+  }), { name: "AssertionError" });
+  for (const [name, source] of [
+    ["foreign Listbox styles module", actual.source.replace('from "../../../lib/admin/admin-ui-styles"', 'from "../../../lib/admin/parallel-ui-styles"')],
+    ["wrong Listbox styles binding", actual.source.replace("  ADMIN_CINEMATIC_GOLD_V1,", "  PARALLEL_CINEMATIC_GOLD as ADMIN_CINEMATIC_GOLD_V1,")],
+  ] as const) {
+    assert.equal(source !== actual.source, true, name + ": actual source changes");
+    lifecycleSourceTree("ListboxMutation.tsx", source);
+    assert.throws(() => canonicalLifecycleListboxStyles(source), { name: "AssertionError" });
+  }
+  const stylesSource = read("src/lib/admin/admin-ui-styles.ts");
+  assert.throws(() => loadModule("admin-ui-styles.ts", stylesSource, {}), {
+    name: "AssertionError",
+    message: /Unexpected lifecycle fixture import .*venesia-scrollbar-styles in admin-ui-styles/u,
+  });
+});
 
 console.log(
   `VenesiaModal accessibility verifier passed (${passed} assertions, ${actualConsumers.length} consumers).`,
