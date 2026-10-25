@@ -22,6 +22,11 @@ function check(label: string, condition: unknown) {
   passed += 1;
   console.log(`PASS ${label}`);
 }
+if (process.argv.includes("--premium-output-contract")) {
+  check("Premium acceptance fresh output retains default behavior and rejects malformed, linked or existing boundaries without historical writes", verifyPremiumAcceptanceOutputContract());
+  console.log(`Premium output contract passed (${passed} affected check; controlled filesystem only).`);
+  process.exit(0);
+}
 if (process.argv.includes("--page-visual-map")) {
   await verifyPageVisualMap();
   console.log(`Page Visual Map verification passed (${passed} affected checks; actual component SSR and callback ports only).`);
@@ -74,6 +79,7 @@ if (process.argv.includes("--featured-switch-composition")) {
   console.log(`Featured Switch composition passed (${passed} affected source/SSR checks; computed geometry and Owner review remain separate).`);
   process.exit(0);
 }
+check("Premium acceptance fresh output retains default behavior and rejects malformed, linked or existing boundaries without historical writes", verifyPremiumAcceptanceOutputContract());
 await verifyFeaturedSwitchComposition();
 await verifyBlockPanelComposition();
 const {
@@ -228,6 +234,89 @@ function premiumAcceptanceOutput(args: readonly string[]) {
   mkdirSync(dirname(output), { recursive: true });
   mkdirSync(output); // Exclusive creation preserves every earlier receipt and rejects a linked target.
   return requested;
+}
+
+function verifyPremiumAcceptanceOutputContract() {
+  const tree = ts.createSourceFile("verify-page-block-editor-presentation.mts", read("scripts/verify-page-block-editor-presentation.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "premiumAcceptanceOutput");
+  assert.equal(declarations.length, 1);
+  const source = declarations[0]!.getText(tree), canonicalRoot = realpathSync(ROOT), nativeRoot = lstatSync(canonicalRoot);
+  assert.ok(nativeRoot.isDirectory() && !nativeRoot.isSymbolicLink(), "The positive uses an actual native canonical repository root");
+  const selected = ".tmp-qa/page-block-output-contract/fresh", target = resolve(canonicalRoot, selected);
+  type Entry = "directory" | "file" | "link";
+  const verify = (candidate: string) => {
+    const compiled = ts.transpileModule(candidate, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } });
+    assert.equal(compiled.diagnostics?.length ?? 0, 0, "Output contract mutations remain syntax-valid");
+    const harness = (root = canonicalRoot, rootKind: Entry = "directory", actualRoot = root) => {
+      const entries = new Map<string, Entry>([[root, rootKind], [join(root, ".tmp-qa"), "directory"]]);
+      const calls: { kind: string; path: string; recursive?: boolean }[] = [];
+      const stat = (file: string) => {
+        calls.push({ kind: "stat", path: file });
+        if (file === canonicalRoot && rootKind === "directory") return nativeRoot;
+        const entry = entries.get(file);
+        if (!entry) throw Object.assign(new Error("Controlled path is absent"), { code: "ENOENT" });
+        return { isDirectory: () => entry !== "file", isSymbolicLink: () => entry === "link" };
+      };
+      const mkdir = (file: string, options?: { recursive?: boolean }) => {
+        calls.push({ kind: "mkdir", path: file, recursive: options?.recursive ?? false });
+        if (!options?.recursive && entries.has(file)) throw Object.assign(new Error("Controlled target already exists"), { code: "EEXIST" });
+        entries.set(file, "directory");
+      };
+      const realpath = (file: string) => { calls.push({ kind: "realpath", path: file }); assert.equal(file, root); return actualRoot; };
+      const output = new Function("assert", "ROOT", "lstatSync", "mkdirSync", "join", "resolve", "dirname", "realpathSync", `${compiled.outputText};return premiumAcceptanceOutput;`)(assert, root, stat, mkdir, join, resolve, dirname, realpath) as typeof premiumAcceptanceOutput;
+      return { output, entries, calls };
+    };
+    const plain = harness();
+    assert.equal(plain.output([]), ".tmp-qa/page-block-editor-presentation/current");
+    assert.equal(plain.output(["--section-header-defaults"]), ".tmp-qa/page-block-editor-presentation/current");
+    assert.equal(plain.calls.length, 0, "No-argument and unrelated selectors retain the default without filesystem work");
+    const positive = harness();
+    assert.equal(positive.output([`--content-premium-output-dir=${selected}`]), selected);
+    assert.equal(positive.entries.get(target), "directory");
+    assert.deepEqual(positive.calls.filter(call => call.kind === "mkdir"), [
+      { kind: "mkdir", path: dirname(target), recursive: true },
+      { kind: "mkdir", path: target, recursive: false },
+    ], "Only the explicit fresh parent is recursive; the final allocation is exclusive");
+    let rejected = 0;
+    for (const args of [
+      ["--content-premium-output-dir"], ["--content-premium-output-dir="],
+      ["--content-premium-output-dir:wrong"], ["--content-premium-output-dir/wrong"], ["--content-premium-output-dirX"],
+      ["--content-premium-output-dir=.tmp-qa"], ["--content-premium-output-dir=../outside"],
+      ["--content-premium-output-dir=.tmp-qa/../outside"], ["--content-premium-output-dir=.tmp-qa/./ambiguous"],
+      ["--content-premium-output-dir=.tmp-qa//ambiguous"], ["--content-premium-output-dir=.tmp-qa\\ambiguous"],
+      ["--content-premium-output-dir=.tmp-qa/trailing/"], ["--content-premium-output-dir=C:/outside"],
+      [`--content-premium-output-dir=${selected}`],
+      [`--content-premium-output-dir=${selected}2`, `--content-premium-output-dir=${selected}3`],
+    ]) { assert.throws(() => positive.output(args)); rejected++; }
+    for (const [entry, path] of [["file", dirname(target)], ["link", dirname(target)], ["link", target]] as const) {
+      const boundary = harness(); boundary.entries.set(path, entry);
+      assert.throws(() => boundary.output([`--content-premium-output-dir=${selected}`])); rejected++;
+    }
+    const linkedRoot = harness(canonicalRoot, "link"), alias = `${canonicalRoot}-linked-ancestor`, linkedAncestor = harness(alias, "directory", canonicalRoot);
+    for (const boundary of [linkedRoot, linkedAncestor]) {
+      assert.equal(boundary.output([]), ".tmp-qa/page-block-editor-presentation/current", "Linked-root default behavior remains unchanged before the opt-in boundary");
+      assert.equal(boundary.calls.length, 0);
+      assert.throws(() => boundary.output([`--content-premium-output-dir=${selected}`])); rejected++;
+    }
+    assert.equal(rejected, 20, "All previously demonstrated boundary rejection controls are persisted in this guard");
+    return rejected;
+  };
+  const rejected = verify(source);
+  for (const [original, replacement] of [
+    ['arg.startsWith(option)', 'arg === option || arg.startsWith(`${option}=`)'],
+    ['realpathSync(ROOT) === resolve(ROOT)', 'true'],
+    ['!rootState.isSymbolicLink()', 'true'],
+    ['!state.isSymbolicLink()', 'true'],
+    ['part && part !== "." && part !== ".."', 'Boolean(part)'],
+    ['mkdirSync(output);', 'mkdirSync(output, { recursive: true });'],
+  ]) {
+    const mutant = source.replace(original, replacement);
+    assert.notEqual(mutant, source);
+    assert.equal(ts.transpileModule(mutant, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).diagnostics?.length ?? 0, 0, "Each rejection probe is independently syntax-valid before testing its contract failure");
+    assert.throws(() => verify(mutant), "Persisted controls reject malformed-option fallback, noncanonical roots/ancestors, traversal and nonexclusive allocation");
+  }
+  console.log(`Premium fresh output: native canonical root, default and unrelated-option preservation, exclusive controlled allocation, ${rejected} boundary rejections and 6 effective source mutations; no output files allocated.`);
+  return true;
 }
 
 function hasHeroCtaDescendants(source: string) {

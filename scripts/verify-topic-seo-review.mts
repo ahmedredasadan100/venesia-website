@@ -70,6 +70,151 @@ const displaySettings = read("src/components/admin/content/editors/ContentDispla
 const review = read("src/components/admin/content-workflow/ContentReviewPanel.tsx");
 const createEditor = read("src/components/admin/content/editors/ArticleCreateEditor.tsx");
 const editEditor = read("src/components/admin/content/editors/ArticleEditor.tsx");
+const { applyTopicFormDraftFields } = require("../src/components/admin/content/editors/content-form-definition.ts") as typeof import("../src/components/admin/content/editors/content-form-definition");
+const { ENTITY_SEO_FIELD_NAMES: hydrationFieldNames } = require("../src/lib/seo/entity-seo-types.ts") as typeof import("../src/lib/seo/entity-seo-types");
+type HydratedSeo = Pick<import("../src/lib/seo/entity-seo-types").EntitySeoValues, keyof typeof hydrationFieldNames>;
+function topicSeoHydration(source: string, mode: "create" | "edit") {
+  const tree = ts.createSourceFile("ArticleEditor.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "hydration source parses");
+  const find = <T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T[] => {
+    const result: T[] = [];
+    const visit = (node: ts.Node) => { if (predicate(node)) result.push(node); ts.forEachChild(node, visit); };
+    visit(root); return result;
+  };
+  const compact = (node: ts.Node) => node.getText(tree).replace(/\s+/gu, "");
+  const imported = (module: string, name: string, isDefault = false) => tree.statements.filter(node => {
+    if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier) || node.moduleSpecifier.text !== module || node.importClause?.isTypeOnly) return false;
+    if (isDefault) return node.importClause?.name?.text === name;
+    const bindings = node.importClause?.namedBindings;
+    return bindings && ts.isNamedImports(bindings) && bindings.elements.some(binding => !binding.isTypeOnly && binding.name.text === name && (binding.propertyName ?? binding.name).text === name);
+  }).length === 1;
+  assert.ok(imported("./content-form-definition", "applyTopicFormDraftFields") && imported("../../SeoPanel", "SeoPanel", true) && imported("./ContentEditorShell", "ContentEditorShell", true) && imported("../../ui", "AdminPageExperience"), "canonical hydration and native adapter imports");
+  const ownReturns = (body: ts.Block) => {
+    const nodes: ts.ReturnStatement[] = [];
+    const visit = (node: ts.Node) => {
+      if (node !== body && ts.isFunctionLike(node)) return;
+      if (ts.isReturnStatement(node)) nodes.push(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(body); return nodes;
+  };
+  const editor = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === (mode === "edit" ? "ArticleEditor" : "ArticleCreateEditor"));
+  assert.ok(editor?.body && editor.modifiers?.some(node => node.kind === ts.SyntaxKind.DefaultKeyword), "actual exported editor function");
+  const publicProps = editor.parameters[0]?.name;
+  assert.ok(publicProps && ts.isObjectBindingPattern(publicProps), "actual public editor props");
+  const publicTopic = publicProps.elements.filter(node => node.name.getText(tree) === "topic" || node.propertyName?.getText(tree) === "topic");
+  if (mode === "edit") assert.ok(publicTopic.length === 1 && publicTopic[0]!.name.getText(tree) === "topic" && !publicTopic[0]!.propertyName && !publicTopic[0]!.initializer, "saved topic is the actual public prop");
+  const editorReturns = ownReturns(editor.body);
+  assert.equal(editorReturns.length, 1, "one active editor return");
+  assert.equal(editorReturns[0]!.parent === editor.body, true, "editor return is unconditional");
+  let editorRoot = editorReturns[0]!.expression;
+  while (editorRoot && ts.isParenthesizedExpression(editorRoot)) editorRoot = editorRoot.expression;
+  assert.ok(editorRoot && ts.isJsxElement(editorRoot) && editorRoot.openingElement.tagName.getText(tree) === "AdminPageExperience", "actual canonical returned editor surface");
+  const shells = editorRoot.children.filter((node): node is ts.JsxSelfClosingElement => ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "ContentEditorShell");
+  assert.equal(shells.length, 1, "active direct canonical editor shell");
+  const shellAttribute = (name: string) => shells[0]!.attributes.properties.filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === name);
+  assert.equal(shells[0]!.attributes.properties.every(ts.isJsxAttribute), true, "shell native bindings cannot be overridden by spreads");
+  for (const [name, expected] of [["tabs", "{renderTabs}"], ["initialModelValue", "{initialModelValue}"], ["draftSession", "{draftSession}"]] as const) {
+    const attributes = shellAttribute(name);
+    assert.equal(attributes.length, 1, `one ${name} shell binding`);
+    assert.equal(attributes[0]!.initializer && compact(attributes[0]!.initializer), expected, `active ${name} shell transport`);
+  }
+  const renderers = editor.body.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "renderTabs");
+  assert.equal(renderers.length, 1, "one active tab producer");
+  const renderer = renderers[0]!;
+  assert.ok(renderer.body && renderer.parameters.length === 1 && renderer.parameters[0]!.name.getText(tree) === "model", "recovery model binding");
+  const variable = (name: string) => {
+    const declarations = find(renderer.body!, ts.isVariableDeclaration).filter(node => node.name.getText(tree) === name);
+    assert.equal(declarations.length, 1, `one ${name} projection`);
+    const declaration = declarations[0]!;
+    assert.equal(declaration.parent.parent.parent === renderer.body, true, `${name} is an unconditional direct projection`);
+    return declaration;
+  };
+  const projectedName = mode === "edit" ? "effectiveTopic" : "values";
+  const projection = variable(projectedName), keywords = variable("seoKeywords");
+  assert.equal(projection.initializer && compact(projection.initializer), `applyTopicFormDraftFields(${mode === "edit" ? "topic" : "defaultValues"},model.recoveryFields,"article")`, "saved base and actual recovery fields reach the canonical owner");
+  assert.equal(keywords.initializer && compact(keywords.initializer), mode === "edit" ? "getSeoKeywords(effectiveTopic.seo_keywords)" : "Array.isArray(values.seo_keywords)?values.seo_keywords.map(String):[]", "saved and restored keywords follow the projected source");
+  const initialModels = editor.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).filter(node => node.name.getText(tree) === "initialModelValue");
+  assert.equal(initialModels.length, 1, "one initial controlled model");
+  const initialModel = initialModels[0]!.initializer;
+  assert.ok(initialModel && ts.isObjectLiteralExpression(initialModel) && initialModel.properties.every(ts.isPropertyAssignment), "explicit canonical model initialization");
+  for (const [prop, field] of [["seoTitle", "seo_title"], ["seoDescription", "seo_description"], ["focusKeyword", "focus_keyword"]] as const) {
+    const values: ts.PropertyAssignment[] = initialModel.properties.filter((node): node is ts.PropertyAssignment => ts.isPropertyAssignment(node) && node.name.getText(tree) === prop);
+    assert.equal(values.length, 1, `one initial ${prop}`);
+    assert.equal(compact(values[0]!.initializer), mode === "edit" ? `topic.${field}??""` : '""', `${prop} starts from saved Edit or blank Create state`);
+  }
+  const tracked = new Set(["applyTopicFormDraftFields", "SeoPanel", "AdminPageExperience", "ContentEditorShell", "model", "initialModelValue", "renderTabs", projectedName, "seoKeywords", ...(mode === "edit" ? ["getSeoKeywords", "topic"] : ["defaultValues"])]);
+  const boundNames = (node: ts.BindingName): string[] => ts.isIdentifier(node) ? [node.text] : node.elements.flatMap(element => ts.isBindingElement(element) ? boundNames(element.name) : []);
+  for (const node of find(editor, ts.isFunctionDeclaration)) {
+    if (node === editor || node === renderer) continue;
+    assert.equal(Boolean(node.name && tracked.has(node.name.text)), false, "local functions cannot replace hydration owners");
+  }
+  assert.equal(boundNames(publicProps).some(name => tracked.has(name) && !(mode === "edit" && name === "topic")), false, "public props cannot replace hydration owners");
+  for (const node of find(editor, ts.isVariableDeclaration)) {
+    if (node === projection || node === keywords || node === initialModels[0] || (mode === "create" && node.name.getText(tree) === "defaultValues" && node.parent.parent.parent === editor.body)) continue;
+    assert.equal(boundNames(node.name).some(name => tracked.has(name)), false, "hydration bindings cannot be shadowed");
+  }
+  for (const node of find(editor, ts.isParameter)) {
+    if (node === renderer.parameters[0] || node === editor.parameters[0]) continue;
+    assert.equal(boundNames(node.name).some(name => tracked.has(name)), false, "hydration parameters cannot shadow owners");
+  }
+  for (const node of find(editor, ts.isBinaryExpression)) {
+    if (node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
+      let target = node.left;
+      while (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) target = target.expression;
+      assert.equal(ts.isIdentifier(target) && tracked.has(target.text), false, "hydration identities and their input fields cannot be reassigned");
+    }
+  }
+  const returned = ownReturns(renderer.body);
+  assert.equal(returned.length, 1, "one active returned tab array");
+  assert.equal(returned[0]!.parent === renderer.body, true, "tab array return is unconditional");
+  assert.ok(returned[0]!.expression && ts.isArrayLiteralExpression(returned[0]!.expression), "actual returned tabs");
+  const seoTabs = returned[0]!.expression.elements.filter((node): node is ts.ObjectLiteralExpression => ts.isObjectLiteralExpression(node) && node.properties.some(property => ts.isPropertyAssignment(property) && property.name.getText(tree) === "id" && ts.isStringLiteral(property.initializer) && property.initializer.text === "seo"));
+  assert.equal(seoTabs.length, 1, "one returned SEO tab");
+  const contents = seoTabs[0]!.properties.filter((node): node is ts.PropertyAssignment => ts.isPropertyAssignment(node) && node.name.getText(tree) === "content");
+  assert.equal(contents.length, 1, "one active SEO tab content");
+  let content = contents[0]!.initializer;
+  while (ts.isParenthesizedExpression(content)) content = content.expression;
+  assert.ok(ts.isJsxSelfClosingElement(content) && content.tagName.getText(tree) === "SeoPanel", "active canonical native SEO adapter");
+  assert.equal(content.attributes.properties.every(ts.isJsxAttribute), true, "native SEO bindings cannot be replaced by spreads");
+  for (const [name, expected] of [["controlledValues", "{title:model.value.title,excerpt:model.value.excerpt,content:model.value.content,seoTitle:model.value.seoTitle,seoDescription:model.value.seoDescription,focusKeyword:model.value.focusKeyword,}"], ["onControlledValueChange", "model.setField"]] as const) {
+    const attributes: ts.JsxAttribute[] = content.attributes.properties.filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === name);
+    assert.equal(attributes.length, 1, `one ${name} native model binding`);
+    const initial = attributes[0]!.initializer;
+    assert.ok(initial && ts.isJsxExpression(initial) && initial.expression, `actual ${name} binding`);
+    assert.equal(compact(initial.expression), expected, `${name} preserves canonical model state`);
+  }
+  const expressions: string[] = [];
+  for (const [prop, field] of Object.entries(hydrationFieldNames)) {
+    const attributes: ts.JsxAttribute[] = content.attributes.properties.filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === prop);
+    assert.equal(attributes.length, 1, `${prop} has exactly one native binding`);
+    const initial = attributes[0]!.initializer;
+    assert.ok(initial && ts.isJsxExpression(initial) && initial.expression, `${prop} has an actual value`);
+    const expected = prop === "seoKeywords" ? "seoKeywords" : `${projectedName}.${field}??${prop.startsWith("robots") ? "null" : '""'}`;
+    assert.equal(compact(initial.expression), expected, `${prop} preserves explicit false, clear and inherited values`);
+    expressions.push(`${prop}: ${initial.expression.getText(tree)}`);
+  }
+  const keywordHelper = mode === "edit" ? tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "getSeoKeywords") : undefined;
+  if (mode === "edit") assert.ok(keywordHelper, "actual edit keyword normalizer");
+  if (mode === "create") {
+    const contentDefaults = editor.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).filter(node => node.name.getText(tree) === "defaultContent");
+    assert.ok(contentDefaults.length === 1 && contentDefaults[0]!.initializer && ts.isStringLiteral(contentDefaults[0]!.initializer), "actual literal Create content base");
+    const defaults = find(editor, ts.isVariableDeclaration).filter(node => node.name.getText(tree) === "defaultValues");
+    assert.equal(defaults.length, 1, "one blank create base");
+    assert.equal(defaults[0]!.initializer && compact(defaults[0]!.initializer), "{content:defaultContent}", "Create does not invent persisted SEO overrides");
+  }
+  const output = ts.transpileModule(`return function(topic, recoveryFields) { const defaultValues = topic; const model = { recoveryFields }; ${keywordHelper?.getText(tree) ?? ""} const ${projection.getText(tree)}; const ${keywords.getText(tree)}; return { ${expressions.join(",")} }; }`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  return new Function("applyTopicFormDraftFields", output)(applyTopicFormDraftFields) as (base: Record<string, unknown>, fields: import("../src/lib/admin/content/topic-revision").TopicFormDraftFields | null) => HydratedSeo;
+}
+function rejectsTopicSeoHydration(source: string, mode: "create" | "edit", before: string, after: string) {
+  source = source.replaceAll("\r\n", "\n");
+  const mutated = source.replaceAll(before, after);
+  assert.notEqual(mutated, source, "hydration mutation changes actual source");
+  const tree = ts.createSourceFile("hydration-negative.tsx", mutated, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "hydration mutation remains syntax-valid");
+  assert.throws(() => topicSeoHydration(mutated, mode), `changed ${mode} hydration contract must reject: ${before}`);
+  return true;
+}
 function hasOneUnselectedTopicSeoAdapter(source: string) {
   const tree = ts.createSourceFile("ArticleEditor.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const names = new Set(tree.statements.flatMap((node) => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../SeoPanel" && node.importClause?.name ? [node.importClause.name.text] : []));
@@ -418,8 +563,45 @@ check("Topic Panel preserves every submitted SEO field, Index-Follow-Canonical o
 check("shared listbox defaults to a comfortable bounded width while preserving explicit sizing and one native form source", formListbox.includes('sizing?: AdminListboxSelectProps["sizing"]') && formListbox.includes('sizing = "content-relaxed"') && listbox.includes('sizing = "content-relaxed"') && listbox.includes('data-admin-listbox-sizing={sizing}') && listbox.includes('? "w-56 max-w-full ps-4 pe-4"') && listbox.includes('? "w-60 max-w-full ps-4 pe-4"') && listbox.includes('? "w-64 max-w-full ps-4 pe-4"') && formListbox.includes("<select") && formListbox.includes("name={name}") && formListbox.includes("<AdminListboxSelect") && formListbox.includes("sizing={sizing}") && formListbox.includes('sizing === "full" ? "w-full" : "max-w-full"'));
 check("shared checkbox defaults to the premium control while dense Data Grids retain the compact native presentation", sharedCheckbox.includes('presentation = "premium"') && sharedCheckbox.includes('data-admin-checkbox-presentation={presentation}') && sharedDataGrid.includes('presentation="native"'));
 check("shared compact listbox preserves RTL keyboard and measured below-first placement with no search by default", listbox.includes('searchable = false') && listbox.includes('dir = "rtl"') && listbox.includes('role="combobox"') && listbox.includes('role="listbox"') && listbox.includes('event.key === "ArrowDown"') && listbox.includes('event.key === "ArrowUp"') && listbox.includes('event.key === "Home"') && listbox.includes('event.key === "End"') && listbox.includes('event.key === "Enter"') && listbox.includes('event.key === "Escape"') && listbox.includes("useAdminFloatingMenuPosition"));
-check("edit retrieval hydrates canonical and robots controls", editEditor.includes("canonicalUrl={topic.canonical_url") && editEditor.includes("robotsIndex={topic.robots_index") && editEditor.includes("robotsFollow={topic.robots_follow"));
-check("Create keeps blank or inherited SEO defaults while Edit hydrates the complete saved contract", createEditor.includes('seoTitle=""') && createEditor.includes('seoDescription=""') && createEditor.includes('seoKeywords={[]}') && createEditor.includes('focusKeyword=""') && createEditor.includes('canonicalUrl=""') && createEditor.includes('robotsIndex={null}') && createEditor.includes('robotsFollow={null}') && createEditor.includes('ogImage=""') && createEditor.includes('ogImageAlt=""') && editEditor.includes("seoTitle={topic.seo_title") && editEditor.includes("seoDescription={topic.seo_description") && editEditor.includes("seoKeywords={seoKeywords}") && editEditor.includes("focusKeyword={topic.focus_keyword") && editEditor.includes("canonicalUrl={topic.canonical_url") && editEditor.includes("ogImage={topic.og_image"));
+const editSeoHydration = topicSeoHydration(editEditor, "edit");
+const createSeoHydration = topicSeoHydration(createEditor, "create");
+const savedSeoRow = {
+  seo_title: "Saved SEO title", seo_description: "Saved SEO description", focus_keyword: "Saved keyword", seo_keywords: ["saved", "keyword"],
+  canonical_url: "https://example.com/saved-topic", robots_index: false, robots_follow: true, og_image: "/saved-seo.jpg", og_image_alt: "Saved image alt",
+};
+check("edit retrieval hydrates canonical and robots controls through the canonical recovered-field projection", editSeoHydration(savedSeoRow, null).canonicalUrl === savedSeoRow.canonical_url && editSeoHydration(savedSeoRow, null).robotsIndex === false && editSeoHydration(savedSeoRow, null).robotsFollow === true);
+check("Create keeps blank or inherited SEO defaults while Edit hydrates the complete saved contract", Object.entries(hydrationFieldNames).every(([prop, field]) => {
+  const blank = createSeoHydration({}, null)[prop as keyof HydratedSeo];
+  const saved = editSeoHydration(savedSeoRow, null)[prop as keyof HydratedSeo];
+  return prop === "seoKeywords" ? Array.isArray(blank) && blank.length === 0 && JSON.stringify(saved) === JSON.stringify(savedSeoRow[field as keyof typeof savedSeoRow]) : blank === (prop.startsWith("robots") ? null : "") && saved === savedSeoRow[field as keyof typeof savedSeoRow];
+}));
+for (const [mode, source] of [["create", createEditor], ["edit", editEditor]] as const) {
+  const projected = mode === "edit" ? "effectiveTopic" : "values";
+  const base = mode === "edit" ? "topic" : "defaultValues";
+  const mutations = [
+    ['from "./content-form-definition"', 'from "./parallel-form-definition"'],
+    [`applyTopicFormDraftFields(${base}, model.recoveryFields, "article")`, `applyTopicFormDraftFields(${base}, null, "article")`],
+    [`applyTopicFormDraftFields(${base}, model.recoveryFields, "article")`, `applyTopicFormDraftFields({}, model.recoveryFields, "article")`],
+    [`applyTopicFormDraftFields(${base}, model.recoveryFields, "article")`, `applyTopicFormDraftFields(${base}, model.recoveryFields, "video")`],
+    [`canonicalUrl={${projected}.canonical_url ?? ""}`, 'canonicalUrl=""'],
+    [`robotsIndex={${projected}.robots_index ?? null}`, `robotsIndex={${projected}.robots_index || null}`],
+    [`robotsFollow={${projected}.robots_follow ?? null}`, 'robotsFollow={null}'],
+    ['tabs={renderTabs}', 'tabs={() => []}'],
+    ['content: (\n          <SeoPanel', 'content: (\n          false && <SeoPanel'],
+    ['const seoKeywords =', 'const { applyTopicFormDraftFields } = parallelOwner; const seoKeywords ='],
+    ['function renderTabs(model: ContentEditorModel) {', 'function renderTabs(model: ContentEditorModel) { function applyTopicFormDraftFields() { return {}; }'],
+    ['function renderTabs(model: ContentEditorModel) {', 'function renderTabs(model: ContentEditorModel) { function SeoPanel() { return null; }'],
+    ['function renderTabs(model: ContentEditorModel) {', 'function renderTabs(model: ContentEditorModel) { model.recoveryFields = null;'],
+    ['function renderTabs(model: ContentEditorModel) {', 'function renderTabs(model: ContentEditorModel) { if (true) return [];'],
+    ['  const safeCategories = categories;', '  if (true) return null; const safeCategories = categories;'],
+    ['  const templateContext =', '  initialModelValue.seoTitle = ""; const templateContext ='],
+    ['onControlledValueChange={model.setField}', 'onControlledValueChange={undefined}'],
+    ['seoTitle: model.value.seoTitle,', 'seoTitle: "",'],
+  ] as const;
+  check(`${mode} hydration rejects effective parsed owner, recovery, base, native, state, inactive and shadow mutations`, mutations.every(([before, after]) => rejectsTopicSeoHydration(source, mode, before, after)));
+}
+check("Edit hydration rejects detaching the public persisted topic binding", rejectsTopicSeoHydration(editEditor, "edit", "  topic,", "  topic: replacedTopic,"));
+check("Create hydration rejects introducing a persisted Canonical default", rejectsTopicSeoHydration(createEditor, "create", "{ content: defaultContent }", '{ content: defaultContent, canonical_url: "https://example.com/unrequested" }'));
 check("public topic metadata consumes canonical and robots overrides", publicPage.includes("canonical: topic.canonicalUrl") && publicPage.includes("robotsIndex: topic.robotsIndex") && publicPage.includes("robotsFollow: topic.robotsFollow"));
 check("Open Graph uses the explicit Topic override before content-image and global fallbacks", publicPage.includes("ogImage: topic.ogImage || undefined") && publicPage.includes("ogImageAlt: topic.ogImage") && publicPage.includes("image: topic.metadataImage || undefined") && finalMigration.includes("add column if not exists og_image"));
 
@@ -465,7 +647,7 @@ check(
       "aria-describedby={describedBy}",
     ].every((marker) => sharedFormSwitch.includes(marker)),
 );
-check("the shared switch default owns one compact framed presentation without changing card switches", sharedFormSwitch.includes('data-admin-form-switch-surface={surface ? "card" : "compact"}') && sharedFormSwitch.includes(': ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME'));
+check("the shared switch default owns the canonical card surface while explicit compact switches retain their branch", sharedFormSwitch.includes("surface = true") && sharedFormSwitch.includes('data-admin-form-switch-surface={surface ? "card" : "compact"}') && sharedFormSwitch.includes(': ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME'));
 check("embedded switch presentation is explicit and leaves both legacy surface branches intact", sharedFormSwitch.includes("embedded?: boolean") && sharedFormSwitch.includes("embedded = false") && sharedFormSwitch.includes("if (embedded)") && sharedFormSwitch.includes('data-admin-form-switch-surface="embedded"') && sharedFormSwitch.includes('data-admin-form-switch-surface={surface ? "card" : "compact"}') && sharedFormSwitch.includes("{labelContent}") && sharedFormSwitch.includes("{switchControl}"));
 const { createElement, cloneElement } = require("react") as typeof import("react");
 const { renderToStaticMarkup } = require("react-dom/server") as typeof import("react-dom/server");
@@ -508,6 +690,63 @@ const topicSeoEditFixture: Parameters<typeof TopicSeoPanelRuntime>[0] = {
     seoTitle: "عنوان محركات البحث الحالي", seoDescription: "الوصف التعريفي الحالي", focusKeyword: "عبارة حالية",
   },
 };
+// Execute the actual editor projection expressions, then the actual native SEO
+// owner; recover form values from its DOM before invoking the existing save parser.
+function seoNativeForm(html: string) {
+  const values = new FormData();
+  const attributes = (tag: string) => new Map(Array.from(tag.matchAll(/\s([\w:-]+)="([^"]*)"/gu), match => [match[1]!, match[2]!]));
+  const known = new Set<string>(Object.values(hydrationFieldNames));
+  for (const match of html.matchAll(/<input\b[^>]*>|<textarea\b[^>]*>[\s\S]*?<\/textarea>|<select\b[^>]*>[\s\S]*?<\/select>/gu)) {
+    const tag = match[0], attrs = attributes(tag.slice(0, tag.indexOf(">") + 1)), name = attrs.get("name");
+    if (!name || !known.has(name)) continue;
+    assert.equal(values.has(name), false, `${name} retains one native form source`);
+    const value = tag.startsWith("<select") ? Array.from(tag.matchAll(/<option\b[^>]*>/gu)).find(option => /\sselected(?:=|\s|>)/u.test(option[0]))?.[0] : undefined;
+    values.set(name, tag.startsWith("<textarea") ? tag.slice(tag.indexOf(">") + 1, tag.lastIndexOf("</textarea>")) : value ? attributes(value).get("value") ?? "" : attrs.get("value") ?? "");
+  }
+  assert.equal([...values.keys()].length, known.size, "all SEO fields retain their native form controls");
+  return values;
+}
+const recoveredSeoFields = {
+  seo_title: ["Recovered SEO title"], seo_description: ["Recovered SEO description"], focus_keyword: ["Recovered keyword"], seo_keywords: ["recovered, keyword"],
+  canonical_url: ["https://example.com/recovered-topic"], robots_index: ["true"], robots_follow: ["false"], og_image: ["/recovered-seo.jpg"], og_image_alt: ["Recovered image alt"],
+};
+const recoveredSeoExpected: HydratedSeo = {
+  seoTitle: "Recovered SEO title", seoDescription: "Recovered SEO description", focusKeyword: "Recovered keyword", seoKeywords: ["recovered", "keyword"],
+  canonicalUrl: "https://example.com/recovered-topic", robotsIndex: true, robotsFollow: false, ogImage: "/recovered-seo.jpg", ogImageAlt: "Recovered image alt",
+};
+const hydratedSeoCases = [
+  { name: "Create blank", project: createSeoHydration, base: {}, fields: null, expected: topicSeoCreateFixture },
+  { name: "Edit saved", project: editSeoHydration, base: savedSeoRow, fields: null, expected: topicSeoEditFixture },
+  ...[createSeoHydration, editSeoHydration].flatMap((project, index) => [
+    { name: `${index ? "Edit" : "Create"} restored`, project, base: index ? savedSeoRow : {}, fields: recoveredSeoFields, expected: recoveredSeoExpected },
+    { name: `${index ? "Edit" : "Create"} cleared and inherited`, project, base: index ? savedSeoRow : {}, fields: { ...recoveredSeoFields, canonical_url: [""], robots_index: [""], robots_follow: [""] }, expected: { ...recoveredSeoExpected, canonicalUrl: "", robotsIndex: null, robotsFollow: null } },
+  ]),
+];
+for (const test of hydratedSeoCases) {
+  const projected = test.project(test.base, test.fields);
+  // Saved fixture text is intentionally independent of the projection fixture.
+  const expected = test.name === "Edit saved" ? Object.fromEntries(Object.entries(hydrationFieldNames).map(([prop, field]) => [prop, savedSeoRow[field as keyof typeof savedSeoRow]])) : test.expected;
+  const html = renderToStaticMarkup(createElement(TopicSeoPanelRuntime, { ...topicSeoCreateFixture, ...projected }));
+  const form = seoNativeForm(html), payload = getPayload(form);
+  const persisted = buildTopicWritePayload(payload, { id: 1, name: "QA category", slug: "qa-category" }, null, "unpublished", "2026-07-22T12:00:00.000Z", null);
+  check(`${test.name} projection reaches actual native controls, FormData and canonical saved SEO payload`, Object.entries(hydrationFieldNames).every(([prop, field]) => {
+    const expectedValue = expected[prop as keyof typeof expected];
+    const value = projected[prop as keyof HydratedSeo], parsed = payload[prop as keyof typeof payload], saved = persisted[field as keyof typeof persisted];
+    return JSON.stringify(value) === JSON.stringify(expectedValue) && JSON.stringify(parsed) === JSON.stringify(value) && JSON.stringify(saved) === JSON.stringify(value === "" && ["canonicalUrl", "ogImage"].includes(prop) ? null : value);
+  }));
+}
+check("unrecognized and unrelated media draft fields cannot replace Article SEO values", [createSeoHydration, editSeoHydration].every(project => {
+  const base = project === editSeoHydration ? savedSeoRow : {};
+  return JSON.stringify(project(base, { unrecognized_seo_field: ["ignored"], video_url: ["ignored"], gallery_image_url: ["ignored"] })) === JSON.stringify(project(base, null));
+}));
+check("native hydration controls reject missing Canonical and changed Robots form bindings", hydratedSeoCases.every(test => {
+  const html = renderToStaticMarkup(createElement(TopicSeoPanelRuntime, { ...topicSeoCreateFixture, ...test.project(test.base, test.fields) }));
+  return ["canonical_url", "robots_index", "robots_follow"].every(name => {
+    const mutated = html.replace(`name="${name}"`, 'name="unrelated_field"');
+    assert.notEqual(mutated, html, "native mutation changes actual rendered source");
+    assert.throws(() => seoNativeForm(mutated)); return true;
+  });
+}));
 const topicSeoRenderedCases = [topicSeoCreateFixture, topicSeoEditFixture].map((props) => renderToStaticMarkup(createElement(TopicSeoPanelRuntime, props)));
 check("actual Topic Panel Create and hydrated controlled Edit render unique DOM ids, original navigation targets and linked Accordion ARIA", topicSeoRenderedCases.every(seoRenderedIdentityContract));
 check("negative actual Panel DOM fixtures reject duplicated Robots or Social identities and broken Accordion associations", topicSeoRenderedCases.every((html) =>
@@ -538,10 +777,36 @@ check("the actual shared default and Premium owners retain all original preview 
 const sharedSwitchRuntime = require("../src/components/admin/ui/AdminFormSwitch.tsx") as typeof import("../src/components/admin/ui/AdminFormSwitch");
 const SharedSwitch = sharedSwitchRuntime.default;
 assert.equal(sharedSwitchRuntime.ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME, "h-8 min-w-20 justify-between border border-white/10 bg-white/[0.035] px-2.5 py-1.5");
-assert.equal(sharedSwitchRuntime.ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME, "rounded-xl border border-white/10 bg-black/16 px-4 py-3");
+assert.equal(sharedSwitchRuntime.ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME, "min-h-11 rounded-xl border border-white/10 bg-black/16 px-4 py-2.5");
+function canonicalSwitchSurface(source: string) {
+  const tree = ts.createSourceFile("AdminFormSwitch.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+  const declarations = tree.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).filter(node => node.name.getText(tree) === "ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME");
+  assert.equal(declarations.length, 1);
+  const value = declarations[0]!.initializer;
+  assert.ok(value && ts.isStringLiteral(value));
+  assert.equal(value.text, "min-h-11 rounded-xl border border-white/10 bg-black/16 px-4 py-2.5");
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormSwitch");
+  const bindings = owner?.parameters[0]?.name;
+  assert.ok(bindings && ts.isObjectBindingPattern(bindings));
+  const surface = bindings.elements.filter(node => node.name.getText(tree) === "surface");
+  assert.equal(surface.length, 1);
+  assert.equal(surface[0]!.initializer?.kind, ts.SyntaxKind.TrueKeyword);
+}
+canonicalSwitchSurface(sharedFormSwitch);
+check("canonical Switch surface rejects reverting the approved 44px frame or default card ownership", [
+  ["min-h-11 rounded-xl border border-white/10 bg-black/16 px-4 py-2.5", "rounded-xl border border-white/10 bg-black/16 px-4 py-3"],
+  ["surface = true", "surface = false"],
+].every(([before, after]) => {
+  const mutated = sharedFormSwitch.replace(before!, after!);
+  assert.notEqual(mutated, sharedFormSwitch);
+  const tree = ts.createSourceFile("switch-negative.tsx", mutated, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+  assert.throws(() => canonicalSwitchSurface(mutated)); return true;
+}));
 const switchPresentationCases = [
-  { name: "compact", props: {} },
-  { name: "card", props: { surface: true } },
+  { name: "compact", props: { surface: false } },
+  { name: "card", props: {} },
   { name: "embedded", props: { embedded: true } },
 ] as const;
 let switchRuntimeCases = 0;
@@ -578,6 +843,7 @@ for (const presentation of switchPresentationCases) {
           const expectedSurface = presentation.name === "card" ? sharedSwitchRuntime.ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME : sharedSwitchRuntime.ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME;
           assert.ok(labelTag.includes(expectedSurface), context + " preserves the exact legacy frame");
           assert.equal(renderToStaticMarkup(createElement(SharedSwitch, { ...props, embedded: false })), html, context + " omitted opt-in equals explicit false");
+          if (presentation.name === "card") assert.equal(renderToStaticMarkup(createElement(SharedSwitch, { ...props, surface: true })), html, context + " omitted surface equals the canonical card default");
         }
         switchRuntimeCases += 1;
       }
