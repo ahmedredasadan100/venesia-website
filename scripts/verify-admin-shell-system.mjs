@@ -1007,12 +1007,35 @@ function verifyNativeHeaderActionAdoption(sourceOverrides = {}) {
 }
 check("Placeholder, Integration, error/not-found and both internal Preview headers adopt canonical actions without local button chrome", verifyNativeHeaderActionAdoption() === 7);
 check("Native Header action negatives reject restored local links/buttons and a lost existing retry callback", [
-  ["src/components/admin/AdminPlaceholderPage.tsx", "<AdminActionButton", "<Link"],
+  ["src/components/admin/AdminPlaceholderPage.tsx", '<AdminActionButton href="/admin"', '<Link href="/admin"'],
   ["src/app/admin/error.tsx", "onClick={retry}", "onClick={undefined}"],
-  ["src/components/admin/integrations/IntegrationsServerConfiguration.tsx", "<AdminActionButton href=", "<Link href="],
+  ["src/components/admin/integrations/IntegrationsServerConfiguration.tsx", '<AdminActionButton href="/admin/settings/integrations"', '<Link href="/admin/settings/integrations"'],
 ].every(([file, before, after]) => {
-  const source = read(file); assert.ok(source.includes(before));
-  try { verifyNativeHeaderActionAdoption({ [file]: source.replace(before, after) }); return false; } catch { return true; }
+  const source = read(file), ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal(ast.parseDiagnostics.length, 0, "The actual Header consumer independently parses");
+  const targets = [];
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === "AdminActionButton" && node.getText(ast).includes(before)) {
+      for (let parent = node.parent; parent; parent = parent.parent) {
+        if (ts.isJsxAttribute(parent) && parent.name.getText(ast) === "actions" &&
+          (ts.isJsxOpeningElement(parent.parent.parent) || ts.isJsxSelfClosingElement(parent.parent.parent)) &&
+          ["AdminPageHeader", "AdminPageContextHeader"].includes(parent.parent.parent.tagName.getText(ast))) {
+          targets.push(node); break;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.equal(targets.length, 1, "Each negative binds one actual Header action, not an unrelated card action");
+  const target = targets[0], original = target.getText(ast);
+  let changed = original.replace(before, after);
+  if (after.startsWith("<Link")) changed = changed.replace(/<\/AdminActionButton>$/u, "</Link>");
+  assert.notEqual(changed, original, "The intended Header action mutation takes effect");
+  const mutant = source.slice(0, target.getStart(ast)) + changed + source.slice(target.end);
+  const parsed = ts.createSourceFile(file, mutant, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal(parsed.parseDiagnostics.length, 0, "Header action rejection must not rely on invalid JSX");
+  try { verifyNativeHeaderActionAdoption({ [file]: mutant }); return false; } catch { return true; }
 }));
 
 function verifyReportHeaderActionContracts(source) {
