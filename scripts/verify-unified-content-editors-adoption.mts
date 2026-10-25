@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import * as videoPayload from "../src/lib/admin/media-topic-payload.ts";
+import { mediaContentSlot } from "../src/lib/media-center/detail-page-config.ts";
 
 import * as ts from "typescript";
 
@@ -1687,6 +1692,10 @@ function omittedNativeVideoBindingSource(input: string) {
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken && node.left.getText(tree).startsWith("nativeBinding?.")) return render(node.right);
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken && node.left.getText(tree) === "nativeBinding") return "null";
     if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression) && aliases.has(node.expression.text)) return `{${aliases.get(node.expression.text)}}`;
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "hasError" && node.arguments.length === 1 && ts.isIdentifier(node.arguments[0]!) && aliases.has(node.arguments[0]!.text)) return `hasError(${aliases.get(node.arguments[0]!.text)})`;
+    if (ts.isTemplateExpression(node) && node.templateSpans.every(span => ts.isIdentifier(span.expression) && aliases.has(span.expression.text))) {
+      return JSON.stringify(node.head.text + node.templateSpans.map(span => JSON.parse(aliases.get((span.expression as ts.Identifier).text)!) + span.literal.text).join(""));
+    }
     const replacements: Array<{ start: number; end: number; text: string }> = [];
     ts.forEachChild(node, (child) => {
       const text = render(child);
@@ -1702,7 +1711,7 @@ function omittedNativeVideoBindingSource(input: string) {
     const value = render(declaration.initializer);
     const parsed = parseTypeScriptSource("omitted-native-binding.ts", `const value = ${value};`);
     const literal = collectNodes(parsed, ts.isVariableDeclaration)[0]?.initializer;
-    if (literal && ts.isStringLiteral(literal)) aliases.set(declaration.name.text, literal.getText(parsed));
+    if (literal && ts.isStringLiteral(literal)) aliases.set(declaration.name.text, JSON.stringify(literal.text));
   }
   return render(tree);
 }
@@ -1766,7 +1775,6 @@ function hasCanonicalVideoPanelFields(actualInput: string) {
     !collectNodes(branch, ts.isCallExpression).some((node) => callName(node) === "useState") && !input.includes("setCustomValidity"));
 }
 assert.ok(hasCanonicalVideoPanelFields(mediaVideoFields.text), "Video panel must reuse canonical Cards, Charcoal Headers, provider metadata/selection, live model/start validation, playback and Media owners; preserve hidden duration and omitted default rendering.");
-const videoBranch = videoPanelBranch(mediaVideoFields)!;
 function hasCanonicalVideoConsumerBinding(input: string) {
   const tree = parseTypeScriptSource("MediaContentForm.tsx", input), controls = jsxElements(tree, "MediaVideoFields");
   const control = controls[0];
@@ -2156,8 +2164,14 @@ assert.ok(
   "Admin Form dirty tracking must run after React input ownership while remaining scoped to its form.",
 );
 
-const defaultVideoSource = parseTypeScriptSource("MediaVideoFields.default.tsx", mediaVideoFields.text.slice(0, videoBranch.getStart(mediaVideoFields)) + mediaVideoFields.text.slice(videoBranch.end));
-for (const [presentation, scope] of [["panel", videoBranch], ["default", defaultVideoSource]] as const) {
+function assertCanonicalVideoRuntimeErrors(input: string) {
+  const raw = parseTypeScriptSource("MediaVideoFields.tsx", input), rawPanel = videoPanelBranch(raw);
+  assert.ok(rawPanel, "The actual Video panel branch remains present");
+  const omitted = parseTypeScriptSource("MediaVideoFields.omitted.tsx", omittedNativeVideoBindingSource(input));
+  const omittedPanel = videoPanelBranch(omitted);
+  assert.ok(omittedPanel, "The omitted-binding projection retains the actual panel branch");
+  const defaultVideoSource = parseTypeScriptSource("MediaVideoFields.default.tsx", input.slice(0, rawPanel.getStart(raw)) + input.slice(rawPanel.end));
+  for (const [presentation, scope] of [["panel", omittedPanel], ["default", defaultVideoSource]] as const) {
   const specializedFields = presentation === "panel"
     ? ["video_url", "video_start_seconds", "video_duration", "video_thumbnail"]
     : ["video_url", "video_duration", "video_thumbnail"];
@@ -2168,7 +2182,110 @@ for (const [presentation, scope] of [["panel", videoBranch], ["default", default
   }
   const control = (name: string) => jsxElements(scope, "input").find((element) => jsxAttributeStaticString(element, "name") === name), url = control("video_url"), duration = control("video_duration"), thumbnail = jsxElements(scope, "AdminMediaImageField").find((element) => jsxAttributeStaticString(element, "name") === "video_thumbnail");
   assert.ok(url && jsxHasAttributes(url, ["aria-invalid", "aria-describedby"]) && duration && (presentation === "panel" ? jsxAttributeStaticString(duration, "type") === "hidden" : jsxHasAttributes(duration, ["aria-invalid", "aria-describedby"])) && thumbnail && jsxAttributeStaticString(thumbnail, "focusTargetId") === "video_thumbnail_control" && jsxHasAttributes(thumbnail, ["ariaInvalid", "ariaDescribedBy"]), presentation + " Video errors remain bound to eligible visible controls while panel retains duration as hidden metadata.");
+  }
 }
+assertCanonicalVideoRuntimeErrors(mediaVideoFields.text);
+function verifyVideoRuntimeErrorRendering(input: string) {
+  assertCanonicalVideoRuntimeErrors(input);
+  const tree = parseTypeScriptSource("MediaVideoFields.tsx", input);
+  for (const [module, names] of [["../../../ui/AdminFormRuntime", ["AdminFormError", "AdminFormGrid", "useOptionalAdminFormRuntime"]], ["../../../media/AdminMediaImageField", ["default"]]] as const) {
+    const declaration = tree.statements.find((node): node is ts.ImportDeclaration => ts.isImportDeclaration(node) && staticString(node.moduleSpecifier) === module && !node.importClause?.isTypeOnly);
+    assert.ok(declaration?.importClause, "Native error and media ports retain their actual canonical imports");
+    for (const name of names) {
+      if (name === "default") assert.equal(declaration.importClause.name?.text, "AdminMediaImageField");
+      else assert.ok(declaration.importClause.namedBindings && ts.isNamedImports(declaration.importClause.namedBindings) && declaration.importClause.namedBindings.elements.some(binding => !binding.isTypeOnly && !binding.propertyName && binding.name.text === name));
+    }
+  }
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "MediaVideoFields");
+  assert.ok(owner?.body);
+  const errorTree = readParsedSource(CONTENT_EDITOR_ARCHITECTURE.formRuntimeOwner), errorOwner = errorTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormError");
+  assert.ok(errorOwner, "Execute the actual canonical runtime error renderer");
+  const compile = (source: string) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const nativeRequire = createRequire(import.meta.url);
+  const requireJsx = (name: string) => { assert.equal(name, "react/jsx-runtime", "Only the native JSX runtime is loaded by the extracted component"); return nativeRequire(name); };
+  let fieldErrors: Record<string, string[]> = {};
+  const useRuntime = () => ({ state: { status: Object.keys(fieldErrors).length ? "error" : "idle" }, fieldErrors });
+  const ErrorOwner = new Function("exports", "require", "useOptionalAdminFormRuntime", compile(errorOwner.getText(errorTree)) + ";return exports.AdminFormError;")({}, requireJsx, useRuntime) as (props: { name?: string }) => ReactNode;
+  const passthrough = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
+  // Geometry, picker transport and playback are explicit controlled ports here;
+  // the actual Video component and actual Form Error emit the tested native DOM.
+  const ports = {
+    ...videoPayload, mediaContentSlot, useOptionalAdminFormRuntime: useRuntime,
+    AdminFormError: ErrorOwner, AdminFormGrid: passthrough, AdminCard: passthrough, AdminFormField: passthrough,
+    AdminModuleSectionHeader: () => null, AdminModuleTabIcon: () => null, AdminNotice: () => null, MediaVideoPlayback: () => null,
+    ADMIN_FORM: { helperTextInset: "" }, ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME: "",
+    adminChoiceButtonClassName: () => "", adminFormFieldClassName: () => "", adminFormHintClassName: () => "", adminFormLabelClassName: () => "",
+    AdminFormListboxSelect: ({ name, value }: { name?: string; value?: string }) => createElement("input", { type: "hidden", name, value, readOnly: true }),
+    AdminMediaImageField: ({ name, defaultValue, focusTargetId, ariaInvalid, ariaDescribedBy }: { name?: string; defaultValue?: string; focusTargetId?: string; ariaInvalid?: boolean; ariaDescribedBy?: string }) => createElement("div", null, createElement("input", { type: "hidden", name, defaultValue }), createElement("button", { type: "button", id: focusTargetId, "aria-invalid": ariaInvalid || undefined, "aria-describedby": ariaDescribedBy })),
+  };
+  const bindings = Object.keys(ports);
+  const Video = new Function("exports", "require", ...bindings, compile(owner.getText(tree)) + ";return exports.default;")({}, requireJsx, ...Object.values(ports)) as (props: Record<string, unknown>) => ReactNode;
+  const bound = { urlId: "bound-video-url", urlErrorName: "bound_video_url", thumbnailName: "video_poster_image", thumbnailAltName: "video_poster_alt", thumbnailAltId: "bound-video-alt", thumbnailAltErrorName: "bound_video_alt", thumbnailAlt: "Saved poster Alt", onThumbnailAltChange() {}, browseFolder: "images/projects/videos", mediaSlot: mediaContentSlot("videoPoster") };
+  const modes = [
+    { name: "omitted default", props: {}, panel: false, bound: false },
+    { name: "explicit default", props: { presentation: "default" }, panel: false, bound: false },
+    { name: "default ignores panel-only binding", props: { presentation: "default", nativeBinding: bound }, panel: false, bound: false },
+    { name: "Topic panel", props: { presentation: "panel" }, panel: true, bound: false },
+    { name: "bound panel", props: { presentation: "panel", nativeBinding: bound }, panel: true, bound: true },
+  ];
+  const attributes = (tag: string) => new Map(Array.from(tag.matchAll(/\s([\w:-]+)="([^"]*)"/gu), match => [match[1]!, match[2]!]));
+  let cases = 0;
+  for (const mode of modes) for (const errors of [false, true]) {
+    const names = mode.bound ? [bound.thumbnailName] : mode.panel ? ["video_url", "video_start_seconds", "video_duration", "video_thumbnail"] : ["video_url", "video_duration", "video_thumbnail"];
+    fieldErrors = errors ? Object.fromEntries([...names, bound.urlErrorName, bound.thumbnailAltErrorName].map(name => [name, [`Error ${name}`]])) : {};
+    const html = renderToStaticMarkup(createElement(Video, { defaultVideoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", videoProvider: "youtube", videoStartSeconds: "15", defaultDuration: "12:34", defaultThumbnail: "/saved-poster.jpg", onVideoUrlChange() {}, onVideoThumbnailChange() {}, ...mode.props }));
+    const tags = Array.from(html.matchAll(/<(?:input|button|p)\b[^>]*>/gu), match => attributes(match[0]));
+    const alerts = tags.filter(tag => tag.get("role") === "alert");
+    assert.equal(alerts.length, errors ? names.length : 0, `${mode.name} error count`);
+    for (const name of names) assert.equal(alerts.filter(tag => tag.get("id") === `${name}-error`).length, errors ? 1 : 0, `${mode.name} canonical error name/id exactly once`);
+    const control = (name: string) => { const found = tags.filter(tag => tag.get("name") === name); assert.equal(found.length, 1, `${mode.name} retains one ${name} native projection`); return found[0]!; };
+    const url = control("video_url"), thumbnail = control(mode.bound ? bound.thumbnailName : "video_thumbnail");
+    assert.equal(url.get("value"), "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    assert.equal(thumbnail.get("value"), "/saved-poster.jpg");
+    assert.equal(url.get("aria-invalid"), errors ? "true" : undefined);
+    assert.equal(url.get("aria-describedby"), errors ? `${mode.bound ? bound.urlErrorName : "video_url"}-error` : undefined);
+    const picker = tags.filter(tag => tag.get("id") === (mode.bound ? `${bound.urlId}-thumbnail-control` : "video_thumbnail_control"));
+    assert.equal(picker.length, 1); assert.equal(picker[0]!.get("aria-invalid"), errors ? "true" : undefined);
+    assert.equal(picker[0]!.get("aria-describedby"), errors ? `${mode.bound ? bound.thumbnailName : "video_thumbnail"}-error` : undefined);
+    if (mode.bound) {
+      assert.equal(tags.filter(tag => tag.get("name") === "video_provider" || tag.get("name") === "video_start_seconds" || tag.get("name") === "video_duration").length, 0, "URL-only native binding cannot add Topic payload fields");
+      assert.equal(control(bound.thumbnailAltName).get("value"), bound.thumbnailAlt);
+      assert.equal(control(bound.thumbnailAltName).get("aria-describedby"), errors ? `${bound.thumbnailAltErrorName}-error` : undefined);
+      assert.equal(alerts.some(tag => tag.get("id") === `${bound.urlErrorName}-error` || tag.get("id") === `${bound.thumbnailAltErrorName}-error`), false, "Bound URL/Alt errors remain with their existing outer aggregate owner");
+    } else {
+      assert.equal(control("video_duration").get("value"), "12:34");
+      assert.equal(control("video_duration").get("type"), mode.panel ? "hidden" : undefined);
+      assert.equal(control("video_provider").get("value"), "youtube");
+      if (mode.panel) assert.equal(control("video_start_seconds").get("aria-describedby"), errors ? "video_start_seconds-error" : undefined);
+    }
+    cases++;
+  }
+  console.log(`PASS Video runtime error contract: ${cases} actual component/Error SSR states with controlled visual/media ports; canonical native values, names, IDs, ARIA, hidden duration and bound payload scope retained.`);
+}
+verifyVideoRuntimeErrorRendering(mediaVideoFields.text);
+assertCanonicalVideoRuntimeErrors(mediaVideoFields.text.replace('nativeBinding?.urlErrorName ?? "video_url"', "nativeBinding?.urlErrorName ?? 'video_url'").replace('nativeBinding?.thumbnailName ?? "video_thumbnail"', "nativeBinding?.thumbnailName ?? 'video_thumbnail'"));
+for (const [name, before, after] of [
+  ["URL fallback", 'nativeBinding?.urlErrorName ?? "video_url"', 'nativeBinding?.urlErrorName ?? "wrong_url"'],
+  ["thumbnail fallback", 'nativeBinding?.thumbnailName ?? "video_thumbnail"', 'nativeBinding?.thumbnailName ?? "wrong_thumbnail"'],
+  ["lost bound URL error", 'nativeBinding?.urlErrorName ?? "video_url"', '"video_url"'],
+  ["lost bound thumbnail name", 'nativeBinding?.thumbnailName ?? "video_thumbnail"', '"video_thumbnail"'],
+  ["lost URL error", '<AdminFormError name={urlErrorName} />', '<span />'],
+  ["lost thumbnail error", '<AdminFormError name={thumbnailName} />', '<span />'],
+  ["detached URL hasError", 'hasError(urlErrorName)', 'hasError("unrelated_url")'],
+  ["detached URL error ID", '`${urlErrorName}-error`', '`${urlErrorName}-detached`'],
+  ["detached thumbnail hasError", 'hasError(thumbnailName)', 'hasError("unrelated_thumbnail")'],
+  ["detached thumbnail error ID", '`${thumbnailName}-error`', '`${thumbnailName}-detached`'],
+  ["thumbnail focus", '"video_thumbnail_control"', '"wrong_thumbnail_control"'],
+  ["bound local duplicate error", '!nativeBinding ? <AdminFormError name={urlErrorName}', 'nativeBinding ? <AdminFormError name={urlErrorName}'],
+  ["bound payload leak", '!nativeBinding ? <input type="hidden" name="video_duration"', 'nativeBinding ? <input type="hidden" name="video_duration"'],
+  ["parallel runtime", 'from "../../../ui/AdminFormRuntime"', 'from "../../../ui/ParallelFormRuntime"'],
+] as const) {
+  const mutated = mediaVideoFields.text.replaceAll(before, after);
+  assert.notEqual(mutated, mediaVideoFields.text, `${name} mutation changes actual source`);
+  assert.equal((parseTypeScriptSource("video-negative.tsx", mutated) as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, `${name} mutation remains syntax-valid`);
+  assert.throws(() => verifyVideoRuntimeErrorRendering(mutated), `${name} mutation cannot bypass canonical native runtime errors`);
+}
+console.log("PASS Video runtime errors reject fourteen effective syntax-valid source regressions; original late native/default error assertions remain intact.");
 assert.ok(["video_provider", "video_start_seconds"].every((name) =>
   collectNodes(contentFormNavigation, ts.isPropertyAssignment).some((node) =>
     staticPropertyName(node.name) === name &&

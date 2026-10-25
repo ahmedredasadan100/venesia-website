@@ -72,6 +72,12 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+if (process.argv.includes("--media-preview-contract")) {
+  check("Current shared SEO media preserves canonical preview eligibility and independent native image/Alt callbacks", verifySeoMediaPreviewRegressions());
+  console.log(`Shared SEO media preview verification passed (${passed} affected check; no Browser or hosted writes).`);
+  process.exit(0);
+}
+
 if (process.argv.includes("--project-adapter")) {
   check("Project selects the canonical shared Panel adapter and every registered SEO adapter retains its declared owner", hasAllEligiblePremiumSeoPresentation());
   for (const presentation of ["premium", "default"]) {
@@ -599,6 +605,131 @@ function hasCanonicalPanelSeoSections(input: string) {
   });
 }
 
+function canonicalSeoMediaPreview(imageOwner: string) {
+  const tree = ts.createSourceFile(paths.mediaImage, imageOwner, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminMediaImageField");
+  assert.ok(owner?.body);
+  assert.ok(tree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../VenesiaModal" && node.importClause?.name?.text === "VenesiaModal" && !node.importClause.isTypeOnly), "The existing preview Modal owner remains canonical");
+  const variables = new Map<string, ts.VariableDeclaration>(), nodes: ts.Node[] = [];
+  const visit = (node: ts.Node) => {
+    nodes.push(node);
+    if ((ts.isVariableDeclaration(node) || ts.isBindingElement(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name?.getText(tree) === "VenesiaModal") assert.fail("The canonical preview Modal cannot be shadowed");
+    ts.forEachChild(node, visit);
+  };
+  visit(owner);
+  for (const statement of owner.body.statements.filter(ts.isVariableStatement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name)) { assert.equal(variables.has(declaration.name.text), false); variables.set(declaration.name.text, declaration); }
+  const attribute = (node: ts.JsxOpeningLikeElement, name: string) => node.attributes.properties.find((value): value is ts.JsxAttribute => ts.isJsxAttribute(value) && value.name.getText(tree) === name)?.initializer;
+  const expression = (node: ts.JsxOpeningLikeElement, name: string) => { const value = attribute(node, name); return value && ts.isJsxExpression(value) ? value.expression : undefined; };
+  const modals = nodes.filter((node): node is ts.JsxOpeningElement => ts.isJsxOpeningElement(node) && node.tagName.getText(tree) === "VenesiaModal");
+  assert.equal(modals.length, 1);
+  const modal = modals[0]!, returned = owner.body.statements.filter(ts.isReturnStatement).at(-1)?.expression;
+  assert.ok(returned && ts.isParenthesizedExpression(returned) && ts.isJsxElement(returned.expression));
+  for (const statement of owner.body.statements.filter(node => node.getStart(tree) < returned.parent.getStart(tree))) {
+    const returns: ts.ReturnStatement[] = [];
+    const inspect = (node: ts.Node) => { if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)) return; if (ts.isReturnStatement(node)) returns.push(node); ts.forEachChild(node, inspect); };
+    inspect(statement);
+    if (returns.length) assert.ok(ts.isIfStatement(statement) && !statement.elseStatement && ['variant === "gallery"', 'variant === "compact"'].includes(statement.expression.getText(tree)), "Only the existing unrelated Gallery/Compact branches may return before the actual default/Card preview");
+  }
+  assert.equal(modal.parent.parent === returned.expression, true, "The actual default rendering mounts its canonical Modal directly");
+  const open = expression(modal, "open"), close = expression(modal, "onClose");
+  assert.equal(open?.getText(tree), 'previewOpen && presentation === "active" && canPreviewValue');
+  assert.equal(close?.getText(tree), "() => setPreviewOpen(false)");
+  const triggers = nodes.filter((node): node is ts.JsxOpeningElement => ts.isJsxOpeningElement(node) && !!node.attributes.properties.find(value => ts.isJsxAttribute(value) && value.name.getText(tree) === "data-admin-media-image-preview-trigger"));
+  assert.equal(triggers.length, 1);
+  const trigger = triggers[0]!, enabled = trigger.parent.parent;
+  assert.ok(ts.isConditionalExpression(enabled) && enabled.whenTrue === trigger.parent && enabled.condition.getText(tree) === "enablePreview !== false");
+  assert.ok(ts.isConditionalExpression(enabled.parent) && enabled.parent.whenFalse === enabled && enabled.parent.condition.getText(tree) === "!canPreviewValue", "URL eligibility governs the actual trigger as well as expanded preview");
+  const conditions: ts.ConditionalExpression[] = []; let mediaPreview: ts.JsxElement | undefined;
+  for (let current: ts.Node = trigger.parent; current !== returned.expression;) {
+    const parent = current.parent; assert.ok(parent);
+    if (ts.isConditionalExpression(parent)) {
+      assert.ok(parent === enabled && parent.whenTrue === current || parent === enabled.parent && parent.whenFalse === current || parent.condition.getText(tree) === "value" && parent.whenTrue === current, "The trigger follows only its actual mounted value/eligibility/enabled branches");
+      conditions.push(parent);
+    } else assert.ok(ts.isJsxElement(parent) || ts.isJsxExpression(parent) || ts.isParenthesizedExpression(parent), "An inactive wrapper cannot retain a disconnected preview trigger");
+    if (ts.isJsxElement(parent) && parent.openingElement.tagName.getText(tree) === "AdminMediaPreview") { assert.equal(mediaPreview === undefined, true); mediaPreview = parent; }
+    current = parent;
+  }
+  assert.equal(conditions.length, 3); assert.ok(mediaPreview, "The trigger is mounted through the actual media preview inside the final returned root");
+  assert.equal(attribute(trigger, "type")?.getText(tree), '"button"');
+  assert.equal(expression(trigger, "onClick")?.getText(tree), "() => setPreviewOpen(true)");
+  return { tree, owner, variables, open: open!, close: close!, click: expression(trigger, "onClick")!, mediaPreview };
+}
+
+function verifySeoMediaPreviewContract(shared = source.shared, imageOwner = source.mediaImage) {
+  const preview = canonicalSeoMediaPreview(imageOwner), { tree, owner, variables } = preview;
+  const declarations = ["cardPresentation", "urlInputOptions", "canPreviewValue"].map(name => { const declaration = variables.get(name); assert.ok(declaration?.initializer); return `const ${declaration.getText(tree)};`; }).join("\n");
+  const compile = (text: string) => ts.transpileModule(text, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+  const eligibility = new Function(compile(`function inspect(variant, urlInput, value, previewOpen, presentation) { ${declarations} return { eligible: canPreviewValue, open: ${preview.open.getText(tree)} }; }`) + ";return inspect;") as () => (variant: string, urlInput: unknown, value: string, previewOpen: boolean, presentation: string) => { eligible: boolean; open: boolean };
+  const inspect = eligibility(); let cases = 0;
+  for (const [value, valid] of [["/image.webp", true], ["https://example.com/image.webp", true], ["http://example.com/image.webp", true], ["", false], ["partial", false], ["//example.com/image.webp", false], ["data:image/png;base64,AA", false]] as const) {
+    for (const variant of ["default", "card"]) for (const optIn of [false, true]) for (const previewOpen of [false, true]) for (const presentation of ["active", "deleted", "missing", "unavailable"]) {
+      const actual = inspect(variant, optIn ? { id: "original-url" } : undefined, value, previewOpen, presentation), expected = variant !== "card" || !optIn || valid;
+      assert.equal(actual.eligible, expected, "Ordinary SEO/Blocks retain eligibility while the existing URL opt-in rejects partial/unsupported sources");
+      assert.equal(actual.open, previewOpen && presentation === "active" && expected); cases++;
+    }
+  }
+  let opened = false;
+  const callback = (node: ts.Expression) => new Function("setPreviewOpen", `${compile(`const callback = ${node.getText(tree)};`)} return callback;`)((value: boolean) => { opened = value; }) as () => void;
+  callback(preview.click)(); assert.equal(opened, true); callback(preview.close)(); assert.equal(opened, false);
+  const sharedTree = ts.createSourceFile(paths.shared, shared, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), sharedNodes: ts.Node[] = [];
+  const collect = (node: ts.Node) => { sharedNodes.push(node); ts.forEachChild(node, collect); }; collect(sharedTree);
+  const social = sharedNodes.find((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText(sharedTree) === "socialImageField");
+  assert.ok(social?.initializer && ts.isParenthesizedExpression(social.initializer) && ts.isJsxSelfClosingElement(social.initializer.expression));
+  const properties = social.initializer.expression.attributes.properties;
+  assert.equal(properties.some(node => ts.isJsxAttribute(node) && ["altName", "onRemove", "onReplace"].includes(node.name.getText(sharedTree))), false, "SEO retains the existing standalone Alt and default media lifecycle");
+  const changed = properties.find((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(sharedTree) === "onValueChange")?.initializer;
+  assert.ok(changed && ts.isJsxExpression(changed) && changed.expression);
+  let observed = { ogImage: "/original.webp", ogImageAlt: "Independent saved Alt", seoTitle: "Retained title" };
+  const onValueChange = new Function("setObservedLive", `${compile(`const callback = ${changed.expression.getText(sharedTree)};`)} return callback;`)((update: (current: typeof observed) => typeof observed) => { observed = update(observed); });
+  let events = 0;
+  const native = { value: observed.ogImage, dispatchEvent: (event: Event) => { assert.equal(event.type, "input"); assert.equal(event.bubbles, true); events++; } };
+  const functions = ["updateValue", "openPicker", "removeValue"].map(name => { const nodes = owner.body!.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name); assert.equal(nodes.length, 1); return nodes[0]!.getText(tree); }).join("\n");
+  const retainedAlt = () => { throw Error("Standalone SEO Alt must not be mutated by image lifecycle"); };
+  const actions = new Function("setValue", "valueInputRef", "clearAltOnRemove", "altName", "setAltValue", "altInputRef", "onAltValueChange", "onValueChange", "onRemove", "onReplace", "setPickerOpen", `${compile(functions)} return { updateValue, openPicker, removeValue };`)((value: string) => { native.value = value; }, { current: native }, true, undefined, retainedAlt, { current: null }, retainedAlt, onValueChange, undefined, undefined, (value: boolean) => { opened = value; }) as { updateValue: (value: string) => void; openPicker: () => void; removeValue: () => void };
+  actions.openPicker(); assert.equal(opened, true);
+  for (const next of ["/replacement.webp", ""]) {
+    const previousEvents = events;
+    if (next) actions.updateValue(next); else actions.removeValue();
+    assert.equal(events, previousEvents + 1, "The actual native image projection still emits its bubbling input event");
+    assert.equal(native.value, next); assert.equal(observed.ogImage, next); assert.equal(observed.ogImageAlt, "Independent saved Alt"); assert.equal(observed.seoTitle, "Retained title");
+    const form = new FormData(); form.set(ENTITY_SEO_FIELD_NAMES.ogImage, native.value); form.set(ENTITY_SEO_FIELD_NAMES.ogImageAlt, observed.ogImageAlt);
+    const saved = toEntitySeoPersistence(readEntitySeoFormData(form));
+    assert.equal(saved.og_image, next || null); assert.equal(saved.og_image_alt, observed.ogImageAlt);
+  }
+  console.log(`Shared SEO media: ${cases} actual owner preview eligibility/open states; real trigger/close, picker/replace/remove, native input event and standalone Alt persistence projection preserved.`);
+  return true;
+}
+
+function verifySeoMediaPreviewRegressions() {
+  verifySeoMediaPreviewContract();
+  const mounted = canonicalSeoMediaPreview(source.mediaImage), previewElement = mounted.mediaPreview.getText(mounted.tree);
+  const currentOpen = 'open={previewOpen && presentation === "active" && canPreviewValue}';
+  const mutants: [string, string, string][] = [
+    ["lost open state", source.shared, source.mediaImage.replace(currentOpen, 'open={presentation === "active" && canPreviewValue}')],
+    ["lost active state", source.shared, source.mediaImage.replace(currentOpen, 'open={previewOpen && canPreviewValue}')],
+    ["lost eligibility", source.shared, source.mediaImage.replace(currentOpen, 'open={previewOpen && presentation === "active"}')],
+    ["inverted eligibility", source.shared, source.mediaImage.replace(currentOpen, 'open={previewOpen && presentation === "active" && !canPreviewValue}')],
+    ["parallel Modal owner", source.shared, source.mediaImage.replace('from "../VenesiaModal"', 'from "../ParallelModal"')],
+    ["parameter-shadowed Modal owner", source.shared, source.mediaImage.replace('export default function AdminMediaImageField({', 'export default function AdminMediaImageField({ VenesiaModal,')],
+    ["inactive Modal", source.shared, source.mediaImage.replace(/<VenesiaModal\b/u, '{false && <VenesiaModal').replace('</VenesiaModal>', '</VenesiaModal>}')],
+    ["early Card return", source.shared, source.mediaImage.replace('const cardPresentation = variant === "card";', 'if (variant === "card") return null; const cardPresentation = variant === "card";')],
+    ["inactive media preview", source.shared, source.mediaImage.replace(previewElement, `{false && (${previewElement})}`)],
+    ["lost preview trigger", source.shared, source.mediaImage.replace('onClick={() => setPreviewOpen(true)}', 'onClick={() => setPreviewOpen(false)}')],
+    ["lost close callback", source.shared, source.mediaImage.replace('onClose={() => setPreviewOpen(false)}', 'onClose={() => setPreviewOpen(true)}')],
+    ["bypassed URL eligibility", source.shared, source.mediaImage.replace('const canPreviewValue = !urlInputOptions ||', 'const canPreviewValue = true ||')],
+    ["non-http preview source", source.shared, source.mediaImage.replace('parsed.protocol === "http:" || parsed.protocol === "https:"', 'true')],
+    ["lost native image event", source.shared, source.mediaImage.replace('valueInputRef.current.dispatchEvent(', 'Boolean(')],
+    ["coupled standalone Alt clearing", source.shared.replace('setObservedLive((current) => ({ ...current, ogImage }))', 'setObservedLive((current) => ({ ...current, ogImage, ogImageAlt: "" }))'), source.mediaImage],
+  ];
+  for (const [name, shared, image] of mutants) {
+    assert.ok(shared !== source.shared || image !== source.mediaImage, `${name} changes its intended current source binding`);
+    for (const candidate of [shared, image]) assert.equal(ts.transpileModule(candidate, { reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS } }).diagnostics?.length ?? 0, 0, `${name} is independently syntax-valid`);
+    assert.throws(() => verifySeoMediaPreviewContract(shared, image), `${name} cannot pass the actual preview/native contract`);
+  }
+  console.log(`Shared SEO media rejects ${mutants.length} effective syntax-valid owner/native mutations; original seven media negatives remain intact.`);
+  return true;
+}
+
 function hasCanonicalPremiumSeoMedia(input: string, imageOwner = source.mediaImage, reference = source.mediaReference) {
   const tree = ts.createSourceFile(paths.shared, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const declarations = new Map<string, ts.Expression>();
@@ -650,7 +781,7 @@ function hasCanonicalPremiumSeoMedia(input: string, imageOwner = source.mediaIma
     imageOwner.includes('<AdminActionButton {...remove} size="icon" variant="danger">') &&
     imageOwner.includes('<AdminDataGridActionIcon action="restore" size="md" />') &&
     imageOwner.includes('<AdminDataGridActionIcon action="delete" size="md" />') &&
-    imageOwner.includes("data-admin-media-image-preview-trigger") && imageOwner.includes('open={previewOpen && presentation === "active"}') && referenceUsesCard);
+    (() => { try { canonicalSeoMediaPreview(imageOwner); return true; } catch { return false; } })() && referenceUsesCard);
 }
 
 function hasNativePageSeoFooter(input: string) {
@@ -858,6 +989,10 @@ check(
     !hasCanonicalPremiumSeoMedia(source.shared, source.mediaImage.replace('size="icon" variant="gold"', 'size="sm" variant="gold"')) &&
     !hasCanonicalPremiumSeoMedia(source.shared, source.mediaImage.replace('action="delete" size="md"', 'action="restore" size="md"')) &&
     !hasCanonicalPremiumSeoMedia(source.shared, source.mediaImage, source.mediaReference.replace('variant="card"', 'variant="compact"')),
+);
+check(
+  "Current shared SEO media preserves canonical preview eligibility and independent native image/Alt callbacks",
+  verifySeoMediaPreviewRegressions(),
 );
 check(
   "Page SEO uses the canonical presentation-only footer around its unchanged native submit action within the shared pending field scope",
