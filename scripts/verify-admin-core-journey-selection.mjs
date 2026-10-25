@@ -1,4 +1,5 @@
 import {isCoreMediaSelection,coreSelectedMediaIds,assertCoreMediaSelectionReceipt} from './fixtures/admin-core-media-journeys.mjs';
+import {CORE_PREVIEW_PUBLIC_IMPACT_SELECTION,validateCorePreviewPublicImpactSelection} from './fixtures/admin-core-preview-journeys.mjs';
 import {CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,CORE_MEDIA_RECOVERY_GROUPS,coreSelectedMediaRecoveryGroups,coreSelectedMediaRecoveryIds,assertCoreMediaRecoverySelectionReceipt} from './fixtures/admin-core-media-recovery-journeys.mjs';
 import {CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION} from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import {CORE_TOPIC_VIDEO_SELECTION,isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,TOPIC_CONTROL_KINDS,TOPIC_CONTROL_PHASES,TOPIC_CONTROL_ASSET_KEYS,buildCoreTopicControlsPlan,coreTopicControlFixtureSlug,coreSelectedTopicControlKinds,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
@@ -66,7 +67,90 @@ async function dispatch(selected){const calls=[];const ctx={close(){calls.push("
 await test("Actual selected driver dispatch skips Project create, operational and settings helpers",async()=>assert.deepEqual(await dispatch(selection),["runCoreDomainFormJourneys","close"]));
 await test("Actual default driver dispatch is unchanged",async()=>assert.deepEqual(await dispatch(null),["runCoreProjectCreateJourneys","runCoreDomainFormJourneys","runCoreOperationalFormJourneys","runCoreSettingsAndMenuJourneys","close"]));
 const owner=readFileSync(resolve(root,"scripts/lib/isolated-public-verification.mts"),"utf8"),collector=readFileSync(resolve(root,"scripts/verify-admin-adoption-readback-isolated.mts"),"utf8");
-await test("Existing owner validates before gate construction and forwards the exact selector",()=>{const ast=ts.createSourceFile('public-owner.mts',owner,ts.ScriptTarget.Latest,true),functions=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='runOwnedPublicVerification');assert.equal(functions.length,1);const scope=functions[0].getText(ast),validation=scope.indexOf('validateCoreJourneySelection({ scope: request.adoptionScope'),construction=scope.indexOf('const gates =');assert.ok(validation>=0&&construction>=0&&validation<construction);assert.match(owner,/if \(request\.adoptionJourneySelection !== undefined\) assert\.equal\(request\.selection, "admin-adoption"\)/u);assert.ok(owner.includes('["--core-journey-selection=" + request.adoptionJourneySelection]'));});
+// The canonical descriptor now owns validation and CLI construction together.
+// Follow actual calls at both runtime boundaries; a detached helper is no proof.
+function assertAdoptionGateTransportSource(text) {
+ const ast=ts.createSourceFile('public-owner.mts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+ const declaration=name=>{const rows=ast.statements.filter(ts.isFunctionDeclaration).filter(node=>node.name?.text===name);assert.equal(rows.length,1);assert.ok(rows[0].body);return rows[0];};
+ const nodes=(root,predicate)=>{const found=[];function visit(node){if(predicate(node))found.push(node);ts.forEachChild(node,visit);}visit(root);return found;};
+ const call=(node,name)=>ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text===name;
+ const requestProperty=(node,name)=>ts.isPropertyAccessExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='request'&&node.name.text===name;
+ const exactRequestCall=(node,name)=>{assert.ok(call(node,name));assert.equal(node.arguments.length,1);assert.ok(ts.isIdentifier(node.arguments[0])&&node.arguments[0].text==='request');};
+ const runtime=declaration('runOwnedPublicVerification'),helper=declaration('adminAdoptionGate');
+ for(const [name,path]of [['validateCoreJourneySelection','../fixtures/admin-core-domain-form-journeys.mjs'],['CORE_PREVIEW_PUBLIC_IMPACT_SELECTION','../fixtures/admin-core-preview-journeys.mjs'],['validateCorePreviewPublicImpactSelection','../fixtures/admin-core-preview-journeys.mjs']])assert.ok(ast.statements.filter(ts.isImportDeclaration).some(node=>ts.isStringLiteral(node.moduleSpecifier)&&node.moduleSpecifier.text===path&&node.importClause?.namedBindings&&ts.isNamedImports(node.importClause.namedBindings)&&node.importClause.namedBindings.elements.some(binding=>!binding.isTypeOnly&&!binding.propertyName&&binding.name.text===name)),`Canonical selection owner ${name}`);
+ for(const scope of [runtime,helper])assert.equal(nodes(scope,node=>(ts.isVariableDeclaration(node)||ts.isParameter(node)||ts.isBindingElement(node)||ts.isFunctionDeclaration(node))&&node!==helper&&node.name&&['adminAdoptionGate','validateCoreJourneySelection','validateCorePreviewPublicImpactSelection','CORE_PREVIEW_PUBLIC_IMPACT_SELECTION'].includes(node.name.getText(ast))).length,0,'No runtime or helper shadow can disconnect canonical validation');
+ assert.equal(nodes(runtime,node=>ts.isBinaryExpression(node)&&['adminAdoptionGate','validateCoreJourneySelection','validateCorePreviewPublicImpactSelection'].includes(node.left.getText(ast))&&node.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&node.operatorToken.kind<=ts.SyntaxKind.LastAssignment).length,0);
+ const gatesStatements=runtime.body.statements.filter(node=>ts.isVariableStatement(node)&&node.declarationList.declarations.some(value=>value.name.getText(ast)==='gates'));
+ assert.equal(gatesStatements.length,1);const gates=gatesStatements[0];
+ const validationStatements=runtime.body.statements.filter(node=>ts.isExpressionStatement(node)&&call(node.expression,'adminAdoptionGate'));
+ assert.equal(validationStatements.length,1,'Actual runtime calls its canonical validator unconditionally');const validation=validationStatements[0];
+ exactRequestCall(validation.expression,'adminAdoptionGate');assert.ok(validation.end<gates.getStart(ast),'Validation precedes actual gate construction');
+ const adoptionDeclarations=runtime.body.statements.filter(ts.isVariableStatement).flatMap(node=>node.declarationList.declarations).filter(node=>node.name.getText(ast)==='adoption');
+ assert.equal(adoptionDeclarations.length,1);const adoption=adoptionDeclarations[0].initializer;
+ assert.ok(adoption&&ts.isBinaryExpression(adoption)&&requestProperty(adoption.left,'selection')&&adoption.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken&&ts.isStringLiteral(adoption.right)&&adoption.right.text==='admin-adoption');
+ const adoptionBranches=nodes(gates,node=>ts.isConditionalExpression(node)&&ts.isIdentifier(node.condition)&&node.condition.text==='adoption');
+ assert.equal(adoptionBranches.length,1);assert.ok(ts.isArrayLiteralExpression(adoptionBranches[0].whenTrue));
+ const descriptorCalls=nodes(gates,node=>call(node,'adminAdoptionGate'));assert.equal(descriptorCalls.length,1);exactRequestCall(descriptorCalls[0],'adminAdoptionGate');
+ const tail=adoptionBranches[0].whenTrue.elements.at(-1);assert.ok(tail&&ts.isNonNullExpression(tail)&&tail.expression===descriptorCalls[0],'Actual adoption tail executes the same canonical descriptor helper');
+ const validatorBranches=helper.body.statements.filter(node=>ts.isIfStatement(node)&&ts.isBinaryExpression(node.expression)&&requestProperty(node.expression.left,'adoptionJourneySelection')&&node.expression.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken&&ts.isIdentifier(node.expression.right)&&node.expression.right.text==='CORE_PREVIEW_PUBLIC_IMPACT_SELECTION');
+ assert.equal(validatorBranches.length,1);const validatorBranch=validatorBranches[0];
+ for(const [statement,name]of [[validatorBranch.thenStatement,'validateCorePreviewPublicImpactSelection'],[validatorBranch.elseStatement,'validateCoreJourneySelection']]){
+  assert.ok(statement&&ts.isExpressionStatement(statement)&&call(statement.expression,name));const invocation=statement.expression;
+  assert.equal(invocation.arguments.length,1);const argument=invocation.arguments[0];assert.ok(ts.isObjectLiteralExpression(argument));assert.equal(argument.properties.length,3);
+  for(const [index,[key,value]]of ['scope','cohort','selection'].map((key,index)=>[key,['adoptionScope','adoptionCohort','adoptionJourneySelection'][index]]).entries()){
+   const property=argument.properties[index];assert.ok(ts.isPropertyAssignment(property));assert.equal(property.name.getText(ast),key);assert.ok(requestProperty(property.initializer,value));
+  }
+ }
+ const selectionBoundary=helper.body.statements.filter(node=>ts.isIfStatement(node)&&ts.isBinaryExpression(node.expression)&&requestProperty(node.expression.left,'adoptionJourneySelection')&&node.expression.operatorToken.kind===ts.SyntaxKind.ExclamationEqualsEqualsToken&&ts.isIdentifier(node.expression.right)&&node.expression.right.text==='undefined');
+ assert.equal(selectionBoundary.length,1);const assertion=selectionBoundary[0].thenStatement;
+ assert.ok(ts.isExpressionStatement(assertion)&&ts.isCallExpression(assertion.expression)&&assertion.expression.expression.getText(ast)==='assert.equal');
+ assert.equal(assertion.expression.arguments.length,2);assert.ok(requestProperty(assertion.expression.arguments[0],'selection'));assert.ok(ts.isStringLiteral(assertion.expression.arguments[1])&&assertion.expression.arguments[1].text==='admin-adoption');
+ const descriptorReturns=helper.body.statements.filter(node=>ts.isReturnStatement(node)&&node.expression&&ts.isObjectLiteralExpression(node.expression));assert.equal(descriptorReturns.length,1);
+ assert.ok(validatorBranch.end<descriptorReturns[0].getStart(ast)&&selectionBoundary[0].end<descriptorReturns[0].getStart(ast),'Both canonical selection validators and entry boundary precede descriptor construction');
+ const code=ts.transpileModule(helper.getText(ast).replace(/^export\s+/u,'')+'\nreturn function(request){const heroCompatibility=false,mediaUpload=false,measurement=undefined,heroGate={};\n'+adoptionDeclarations[0].parent.parent.getText(ast)+'\n'+validation.getText(ast)+'\n'+gates.getText(ast)+'\nreturn gates;};',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+ const requests=[
+  {selection:'admin-adoption',adoptionScope:'core-closure',adoptionCohort:'domain-forms',adoptionJourneySelection:'text-topic-forms'},
+  {selection:'admin-adoption',adoptionScope:'core-closure',adoptionCohort:'preview-recovery-templates',adoptionJourneySelection:CORE_PREVIEW_PUBLIC_IMPACT_SELECTION},
+  {selection:'admin-adoption',finalQualityGate:true},
+ ];
+ for(const request of requests){
+  const events=[],gatesInput=new Proxy([{name:'public-boundary'}],{get(target,key,receiver){if(key==='filter'||key===Symbol.iterator)events.push('construction');return Reflect.get(target,key,receiver);}});
+  const domain=input=>{events.push('domain');return validateCoreJourneySelection(input);},preview=input=>{events.push('preview');return validateCorePreviewPublicImpactSelection(input);};
+  const run=new Function('assert','validateCoreJourneySelection','CORE_PREVIEW_PUBLIC_IMPACT_SELECTION','validateCorePreviewPublicImpactSelection','GATES',code)(assert,domain,CORE_PREVIEW_PUBLIC_IMPACT_SELECTION,preview,gatesInput);
+  const result=run(request),validator=request.adoptionJourneySelection===CORE_PREVIEW_PUBLIC_IMPACT_SELECTION?'preview':'domain';
+  assert.deepEqual(events,[validator,'construction',validator],'The real helper validates before construction and supplies the executed descriptor');
+  assert.deepEqual(result.at(-1),{name:'admin-adoption',script:'scripts/qa-admin-adoption-journeys.mjs',args:request.adoptionScope?['--core-closure','--core-cohort='+request.adoptionCohort,'--core-journey-selection='+request.adoptionJourneySelection]:[],limitMs:900000});
+ }
+ const run=new Function('assert','validateCoreJourneySelection','CORE_PREVIEW_PUBLIC_IMPACT_SELECTION','validateCorePreviewPublicImpactSelection','GATES',code)(assert,validateCoreJourneySelection,CORE_PREVIEW_PUBLIC_IMPACT_SELECTION,validateCorePreviewPublicImpactSelection,[]);
+ for(const request of [
+  {...requests[0],adoptionScope:'other'}, {...requests[0],adoptionCohort:'readonly-hubs'}, {...requests[0],adoptionJourneySelection:'foreign'}, {...requests[0],selection:'build-contracts'},
+  {...requests[1],adoptionCohort:'domain-forms'}, {...requests[1],adoptionScope:'other'},
+ ])assert.throws(()=>run(request),'Actual canonical validators reject invalid transport before construction');
+ return {ast,runtime,helper,validation,gates,validatorBranch,selectionBoundary:selectionBoundary[0],descriptorCall:descriptorCalls[0]};
+}
+await test("Existing owner validates before gate construction and forwards the exact selector",()=>assertAdoptionGateTransportSource(owner));
+await test('Canonical helper coupling is independent of quote and whitespace spelling',()=>assertAdoptionGateTransportSource(ts.createPrinter().printFile(ts.createSourceFile('owner.mts',owner,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS))));
+const transport=assertAdoptionGateTransportSource(owner),replaceTransport=(node,replacement)=>owner.slice(0,node.getStart(transport.ast))+replacement+owner.slice(node.end);
+for(const [name,mutant]of [
+ ['missing early validation',replaceTransport(transport.validation,'')],
+ ['conditional early validation',replaceTransport(transport.validation,'if (false) adminAdoptionGate(request);')],
+ ['late validation',owner.slice(0,transport.validation.getStart(transport.ast))+owner.slice(transport.validation.end,transport.gates.end)+'\nadminAdoptionGate(request);'+owner.slice(transport.gates.end)],
+ ['wrong validation request',replaceTransport(transport.validation.expression.arguments[0],'{}')],
+ ['parallel runtime helper',replaceTransport(transport.descriptorCall,'otherAdoptionGate(request)')],
+ ['wrong descriptor request',replaceTransport(transport.descriptorCall.arguments[0],'{}')],
+ ['shadowed runtime helper',replaceTransport(transport.validation,'const adminAdoptionGate = otherAdoptionGate; adminAdoptionGate(request);')],
+ ['destructured runtime helper',replaceTransport(transport.validation,'const {adminAdoptionGate} = substituteOwner; adminAdoptionGate(request);')],
+ ['disconnected domain validator',replaceTransport(transport.validatorBranch.elseStatement,'otherValidator(request);')],
+ ['disconnected preview validator',replaceTransport(transport.validatorBranch.thenStatement,'otherValidator(request);')],
+ ['wrong canonical validator import',owner.replace('from "../fixtures/admin-core-domain-form-journeys.mjs"','from "../fixtures/other-selection.mjs"')],
+ ['wrong validation scope',owner.replace('scope: request.adoptionScope','scope: request.adoptionCohort')],
+ ['wrong validation cohort',owner.replace('cohort: request.adoptionCohort','cohort: request.adoptionScope')],
+ ['wrong validation selector',owner.replace('selection: request.adoptionJourneySelection','selection: request.adoptionCohort')],
+ ['missing selection entry boundary',replaceTransport(transport.selectionBoundary,'')],
+ ['wrong selection entry',replaceTransport(transport.selectionBoundary,'if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "build-contracts");')],
+ ['wrong selector CLI name',owner.replace('"--core-journey-selection=" + request.adoptionJourneySelection','"--other-selection=" + request.adoptionJourneySelection')],
+ ['wrong forwarded selector',owner.replace('"--core-journey-selection=" + request.adoptionJourneySelection','"--core-journey-selection=" + request.adoptionCohort')],
+])await test('Canonical adoption transport rejects '+name,()=>{assert.notEqual(mutant,owner);assert.throws(()=>assertAdoptionGateTransportSource(mutant));});
 await test("Collector joins selection before native reads and preserves native/draft owners",()=>{assert.ok(collector.indexOf('const selectedJourneys =')<collector.indexOf('const writes = await verifyCoreDomainWrites'));assert.ok(collector.includes('assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration)'));assert.ok(collector.includes('assertCoreFormDraftRestorationJoin({artifact:draftArtifact'));});
 await test("Driver rejects duplicate selector and validates only actual executed IDs before final success",()=>{assert.ok(source.includes('assert.ok(selectionArgs.length <= 1'));assert.ok(source.includes('executedJourneyIds.push(id)'));assert.ok(source.includes('assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases)'));assert.ok(source.includes('globalClosed: journeySelection === null && driverCompleted'));});
 // Inspect the actual collector call; quote and whitespace spelling are not execution criteria.
