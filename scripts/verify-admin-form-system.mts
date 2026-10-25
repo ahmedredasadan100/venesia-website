@@ -6,7 +6,7 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 import * as ts from "typescript";
-import { Children, Fragment, createElement, isValidElement, type ReactNode } from "react";
+import { Children, Fragment, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
@@ -142,6 +142,7 @@ if (process.argv.includes("--unified-presentation")) {
   check("Unified Card/Header defaults retain native identity, children and embedded/standalone composition", await verifyUnifiedCardAndHeader());
   check("Unified Layout retains natural flow, aside/secondary ordering and the existing Grid port", await verifyUnifiedFormLayout());
   check("Unified Field defaults retain native bindings, hints/errors and mixed-row slots", await verifyUnifiedFormFields());
+  await verifyUnifiedFormListbox();
   check("Unified Actions retain Pending, native Save/Close, save-only and runtime callback ownership", await verifyUnifiedFormActions());
   console.log(`Unified presentation verification passed (${passed} affected owner checks; source/SSR only).`);
   process.exit(0);
@@ -2238,6 +2239,10 @@ function hasInlineListboxPresentationContract(source: string, formSource: string
   const ports = ["inlineClassName", "inlineOptionsClassName", "inlineOptionClassName"];
   const tree = ts.createSourceFile("AdminListboxSelect.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const formTree = ts.createSourceFile("AdminFormListboxSelect.tsx", formSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const form = formTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormListboxSelect");
+  const formBindings = form?.parameters[0]?.name;
+  const canonicalFormOwners = formTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminListboxSelect" && node.importClause?.name?.text === "AdminListboxSelect") &&
+    ["adminFormHintClassName", "adminFormLabelClassName"].every(name => formTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../lib/admin/admin-ui-styles" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => binding.name.text === name && !binding.propertyName)));
   const optionalProps = (root: ts.SourceFile, name: string, keys: readonly string[]) => {
     const declaration = root.statements.find((node): node is ts.TypeAliasDeclaration =>
       ts.isTypeAliasDeclaration(node) && node.name.text === name);
@@ -2296,17 +2301,19 @@ function hasInlineListboxPresentationContract(source: string, formSource: string
     disabledDefault?.kind === ts.SyntaxKind.FalseKeyword &&
     presentationDefault === '"default"' && source.includes('const cinematic = presentation === "cinematic";') &&
     forwarded.length === 1 && ports.every(forwards) &&
-    formSource.includes('from "./AdminListboxSelect"') &&
+    canonicalFormOwners && formBindings && ts.isObjectBindingPattern(formBindings) && !formBindings.elements.some(binding => binding.name.getText(formTree) === "presentation") &&
     preservesInlinePresentation &&
     source.includes('className={inlineOptionsClassName ?? `${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto p-0.5`}') &&
     source.includes('className={inlineOptionClassName?.(selectedOption) ?? `block w-full rounded-[8px] px-2.5 py-2 text-right text-sm transition') &&
     source.includes('{option.icon ? <span aria-hidden="true"') &&
-    formSource.includes('presentation = "default"') &&
-    formSource.includes('const titleClassName = presentation === "panel" ? adminFormLabelClassName({ textInset: true }) : labelClassName;') &&
-    formSource.includes('className={titleClassName ?? "block text-sm font-medium text-white/70"}') &&
-    formSource.includes('{titleClassName ? <span data-admin-form-label-text>') &&
-    formSource.includes('className={presentation === "panel" ? adminFormHintClassName({ textInset: true }) : "text-xs leading-5 text-white/40"}'));
+    !/presentation\s*===/u.test(form?.getText(formTree) ?? "") &&
+    formSource.includes('const titleClassName = labelClassName ?? adminFormLabelClassName({ textInset: true });') &&
+    formSource.includes('<span id={labelId} className={titleClassName}>') &&
+    formSource.includes('<span data-admin-form-label-text>{label}{required ?') &&
+    formSource.includes('<p id={statusId} className={adminFormHintClassName({ textInset: true })}>'));
 }
+async function verifyUnifiedFormListbox() {
+const adminListboxSelect = read("src/components/admin/ui/AdminListboxSelect.tsx"), adminFormListboxSelect = read("src/components/admin/ui/AdminFormListboxSelect.tsx");
 check(
   "Shared inline choice composition and inset label ports are optional and preserve existing listbox defaults",
   hasInlineListboxPresentationContract(adminListboxSelect, adminFormListboxSelect),
@@ -2324,13 +2331,64 @@ check(
     [adminListboxSelect.replace('{option.icon ? <span aria-hidden="true"', '{option.icon ? <span aria-hidden="false"'), adminFormListboxSelect],
     [adminListboxSelect, adminFormListboxSelect.replace('inlineOptionsClassName={inlineOptionsClassName}', '')],
     [adminListboxSelect, adminFormListboxSelect.replace('from "./AdminListboxSelect"', 'from "./ParallelListboxSelect"')],
-    [adminListboxSelect, adminFormListboxSelect.replace('{titleClassName ? <span data-admin-form-label-text>', '{titleClassName ? <span>')],
+    [adminListboxSelect, adminFormListboxSelect.replace('<span data-admin-form-label-text>', '<span>')],
     [adminListboxSelect, adminFormListboxSelect.replace('presentation?: "default" | "panel"', 'presentation: "default" | "panel"')],
-    [adminListboxSelect, adminFormListboxSelect.replace('presentation = "default"', 'presentation = "panel"')],
-    [adminListboxSelect, adminFormListboxSelect.replace(': labelClassName;', ': undefined;')],
-    [adminListboxSelect, adminFormListboxSelect.replace(': "text-xs leading-5 text-white/40"', ': "text-xs leading-5 text-white/48"')],
-  ].every(([source, formSource]) => !hasInlineListboxPresentationContract(source, formSource)),
+    [adminListboxSelect, adminFormListboxSelect.replace('  labelClassName,', '  labelClassName, presentation = "default",')],
+    [adminListboxSelect, adminFormListboxSelect.replace('labelClassName ?? adminFormLabelClassName', 'undefined ?? adminFormLabelClassName')],
+    [adminListboxSelect, adminFormListboxSelect.replace('className={adminFormHintClassName({ textInset: true })}', 'className={adminFormHintClassName({ textInset: false })}')],
+    [adminListboxSelect, adminFormListboxSelect.replace('../../../lib/admin/admin-ui-styles', '../../../lib/admin/parallel-ui-styles')],
+  ].every(([source, formSource]) => {
+    assert.ok(source !== adminListboxSelect || formSource !== adminFormListboxSelect, "Each inline presentation negative must mutate actual current source");
+    return !hasInlineListboxPresentationContract(source, formSource);
+  }),
 );
+await verifyUnifiedFormListboxStates(adminFormListboxSelect);
+}
+await verifyUnifiedFormListbox();
+
+async function verifyUnifiedFormListboxStates(source: string) {
+  const { styles } = await unifiedPresentationDependencies();
+  const inspect = (candidate: string) => {
+    assert.ok(hasInlineListboxPresentationContract(read("src/components/admin/ui/AdminListboxSelect.tsx"), candidate));
+    const tree = ts.createSourceFile("AdminFormListboxSelect.tsx", candidate, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormListboxSelect"); assert.ok(owner);
+    const Stub = () => null, exports: { default?: (props: Record<string, unknown>) => ReactElement<Record<string, unknown>> } = {};
+    new Function("React", "exports", "useEffect", "useId", "useRef", "useState", "AdminListboxSelect", "adminFormHintClassName", "adminFormLabelClassName", ts.transpileModule(owner.getText(tree), {
+      compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText)({ createElement, Fragment }, exports, () => undefined, () => "-controlled-", () => ({ current: null }), (value: unknown) => [value, () => undefined], Stub, styles.adminFormHintClassName, styles.adminFormLabelClassName);
+    assert.ok(exports.default); const Wrapper = exports.default;
+    for (const loading of [false, true]) for (const error of [undefined, "Original error"]) for (const empty of [false, true]) for (const hint of [undefined, "Original hint"]) for (const external of [undefined, "source-note"]) for (const labelClassName of [undefined, "custom-label"]) {
+      const calls: string[] = [], props = { name: "original-choice", id: "original-choice", focusTargetId: "original-focus", label: "Original label", value: "one", options: empty ? [] : [{ value: "one", label: "One" }], required: true, disabled: true, loading, error, hint, ariaDescribedBy: external, labelClassName, onChange: (value: string) => calls.push(value) };
+      const normal = Wrapper(props), markup = renderToStaticMarkup(normal), children = Children.toArray(normal.props.children as ReactNode);
+      const elements = children.filter((node): node is ReactElement<Record<string, unknown>> => isValidElement(node));
+      const native = elements.find(node => node.type === "select"), label = elements.find(node => node.type === "span"), control = elements.find(node => node.props["data-admin-form-field-control"] !== undefined);
+      assert.ok(native && label && control && isValidElement(control.props.children));
+      const choice = control.props.children as ReactElement<Record<string, unknown>>, status = elements.find(node => node.type === "p");
+      assert.equal(choice.type, Stub); assert.equal(native.props.name, props.name); assert.equal(native.props.id, "original-choice-source");
+      assert.equal(native.props.value, "one"); assert.equal(native.props.required, true); assert.equal(native.props.disabled, true); assert.equal(native.props.tabIndex, -1); assert.equal(native.props["aria-hidden"], "true");
+      assert.equal(label.props.id, "original-choice-label"); assert.equal(label.props.className, labelClassName ?? styles.adminFormLabelClassName({ textInset: true }));
+      assert.ok(markup.includes("data-admin-form-label-text") && markup.includes('class="text-red-400">*</span>'));
+      const describedBy = [external, loading || error || empty || hint ? "original-choice-status" : undefined].filter(Boolean).join(" ") || undefined;
+      assert.equal(choice.props.ariaDescribedBy, describedBy); assert.equal(choice.props.ariaLabelledBy, "original-choice-label"); assert.equal(choice.props.ariaInvalid, Boolean(error));
+      assert.equal(choice.props.id, "original-choice"); assert.equal(choice.props.triggerId, "original-focus"); assert.equal(choice.props.disabled, true); assert.equal(choice.props.value, "one");
+      const expected = loading ? "جارٍ تحميل الخيارات…" : error ?? (empty ? "لا توجد خيارات متاحة." : hint);
+      assert.equal(status?.props.children, expected); if (expected) assert.equal(status?.props.id, "original-choice-status");
+      assert.equal(status?.props.role, loading || empty && !error ? "status" : error ? "alert" : undefined);
+      if (!loading && !error && !empty && hint) assert.equal(status?.props.className, styles.adminFormHintClassName({ textInset: true }));
+      (native.props.onChange as (event: { currentTarget: { value: string } }) => void)({ currentTarget: { value: "one" } }); assert.deepEqual(calls, []);
+      (native.props.onChange as (event: { currentTarget: { value: string } }) => void)({ currentTarget: { value: "other" } }); assert.deepEqual(calls, ["other"]);
+      for (const presentation of ["default", "panel"]) assert.equal(renderToStaticMarkup(Wrapper({ ...props, presentation })), markup);
+    }
+  };
+  inspect(source);
+  for (const [from, to] of [
+    ["name={name}", "name={undefined}"], ["required={required}", "required={false}"], ["disabled={disabled}", "disabled={false}"], ["value={selectedValue}", "value={undefined}"],
+    ['className="text-red-400"', 'className="text-white"'], ['role="alert"', 'role="status"'], ["ariaDescribedBy,", "ariaDescribedBy: lostDescription,"],
+    ["loading || error || unavailable || hint ? statusId : undefined", "undefined"], ["ariaDescribedBy={describedBy}", "ariaDescribedBy={undefined}"],
+    ["ariaLabelledBy={label ? labelId : undefined}", "ariaLabelledBy={undefined}"], ["triggerId={focusTargetId}", "triggerId={undefined}"], ["onChange?.(next)", "onChange?.('wrong')"],
+  ]) { const mutant = source.replaceAll(from, to); assert.notEqual(mutant, source); assert.throws(() => inspect(mutant)); }
+  check("Unified Listbox aliases preserve 64 native label, status, description, hint and error states with actual change bindings and 12 mutation negatives", true);
+}
 function hasInlineListboxDisabledContract(source: string) {
   const handlerStart = source.indexOf("function handleInlineKeyDown");
   const handlerEnd = source.indexOf("\n  const menu =", handlerStart);
@@ -2411,14 +2469,13 @@ function hasCanonicalVisibleFormStack(source: string, tokenModule: string, conte
     ts.isIdentifier(attribute.initializer.expression) && attribute.initializer.expression.text === tokenBindings[0]);
 }
 
+const unifiedLayoutProof = await verifyUnifiedFormLayout(), unifiedFieldsProof = await verifyUnifiedFormFields();
 check(
   "full-page reference forms adopt one shared presentation cadence and page surface",
   adminFormPresentation.includes(
     'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-5"',
   ) &&
-    adminFormPresentation.includes("grid gap-6 xl:grid-cols") &&
-    adminFormPresentation.includes("`${ADMIN_FORM_SECTION_SURFACE_CLASSES} p-5`") &&
-    adminFormPresentation.includes('compactHeader ? "mb-4" : "mb-5"') &&
+    unifiedLayoutProof && unifiedFieldsProof &&
     adminPageExperience.includes(
       'data-admin-page-surface-owner="AdminPageExperience"',
     ) &&
@@ -2746,8 +2803,8 @@ check(
     return true;
   })(),
 );
-check("Unified Layout defaults preserve natural flow, source order and explicit Grid delegation", await verifyUnifiedFormLayout());
-check("Unified Section and Field defaults preserve metadata, labels and all native child contracts", await verifyUnifiedFormFields());
+check("Unified Layout defaults preserve natural flow, source order and explicit Grid delegation", unifiedLayoutProof);
+check("Unified Section and Field defaults preserve metadata, labels and all native child contracts", unifiedFieldsProof);
 check("Unified Save and Close keep native pending, save-only and callback contracts", await verifyUnifiedFormActions());
 const formRuntimeContract = read("src/lib/admin/form-runtime.ts");
 const actionsSource = runtime.slice(
