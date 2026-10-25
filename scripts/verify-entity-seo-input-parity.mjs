@@ -16,6 +16,7 @@ const article = "src/components/admin/SeoPanel.tsx";
 const media = "src/components/admin/content/editors/media/MediaEntitySeoPanel.tsx";
 const mediaForm = "src/components/admin/content/editors/media/MediaContentForm.tsx";
 const projectPanel = "src/components/admin/projects/entry/ProjectSeoPanel.tsx";
+const contentFormDefinition = "src/components/admin/content/editors/content-form-definition.ts";
 const scorePath = "src/lib/admin/seo-score.ts";
 const cache = new Map();
 const completed = Symbol("captured actual panel input");
@@ -44,7 +45,7 @@ function load(file) {
       };
     }
     if (target.startsWith(resolve(root, "src/app/"))) return {};
-    if (target.startsWith(resolve(root, "src/components/admin")) && ![shared, article, media, mediaForm, projectPanel].some((entry) => resolve(root, entry) === target)
+    if (target.startsWith(resolve(root, "src/components/admin")) && ![shared, article, media, mediaForm, projectPanel, contentFormDefinition].some((entry) => resolve(root, entry) === target)
       && !target.endsWith("content-editor-navigation.ts") && !target.endsWith("project-entry-navigation.ts")) return { __esModule: true, default: () => null };
     return load(target);
   }, loaded, loaded.exports);
@@ -54,7 +55,7 @@ const value = (item) => item ?? "";
 function topicElement(row) {
   if (row.content_type !== "article") {
     const shell = load(mediaForm).default({ mode: "edit", contentType: row.content_type, values: row, categories: [], series: [] });
-    const seoTab = shell.props.tabs({ value: shell.props.initialModelValue, setField: () => {} }).find((tab) => tab.id === "seo");
+    const seoTab = shell.props.tabs({ value: shell.props.initialModelValue, setField: () => {}, recoveryFields: null }).find((tab) => tab.id === "seo");
     assert.ok(seoTab);
     return seoTab.content.type(seoTab.content.props);
   }
@@ -167,4 +168,26 @@ const extension = capture({ ...element, props: { ...element.props, initial: { ..
   analysisExtension: { initialState: { faq: extendedFaq }, resolveFaq: (state) => state.faq } } });
 assert.deepEqual(extension.input.faq, extendedFaq);
 checks += 4;
+// This is an executable dependency of the actual Media editor, not an unrendered
+// UI child. Keep its real initial identity and native SEO draft projection.
+const draftOwner = load(contentFormDefinition);
+assert.equal(typeof draftOwner.applyTopicFormDraftFields, "function");
+assert.equal(typeof draftOwner.getTopicDraftDisplayDate, "function");
+assert.equal(draftOwner.applyTopicFormDraftFields(base, null, "news") === base, true);
+assert.equal(draftOwner.getTopicDraftDisplayDate(null), undefined);
+checks++;
+const seoContract = load("src/lib/seo/entity-seo-types.ts");
+for (const [canonicalUrl, robotsIndex, robotsFollow] of [["https://example.com/restored", "false", "true"], ["https://example.com/reversed", "true", "false"], ["", "", ""]]) {
+  const form = new FormData();
+  const values = canonicalUrl ? { seoTitle: "Restored title", seoDescription: "Restored description", focusKeyword: "restored", seoKeywords: "one, two", canonicalUrl, robotsIndex, robotsFollow, ogImage: "/restored.jpg", ogImageAlt: "Restored Alt" } : Object.fromEntries(Object.keys(seoContract.ENTITY_SEO_FIELD_NAMES).map((name) => [name, ""]));
+  for (const [name, field] of Object.entries(seoContract.ENTITY_SEO_FIELD_NAMES)) form.set(field, values[name]);
+  const restored = draftOwner.applyTopicFormDraftFields(base, Object.fromEntries([...form].map(([name, item]) => [name, [item]])), "news");
+  const expected = seoContract.readEntitySeoFormData(form), projected = new FormData();
+  for (const [name, field] of Object.entries(seoContract.ENTITY_SEO_FIELD_NAMES)) {
+    assert.deepEqual(restored[field], expected[name], `Actual draft helper preserves native ${field}, including explicit clear/false/inherit`);
+    projected.set(field, Array.isArray(restored[field]) ? restored[field].join(", ") : restored[field] === null ? "" : String(restored[field]));
+  }
+  assert.deepEqual(seoContract.toEntitySeoPersistence(seoContract.readEntitySeoFormData(projected)), seoContract.toEntitySeoPersistence(expected));
+  checks++;
+}
 console.log(`${checks}/${checks} executable Entity SEO editor/persistence input parity checks passed.`);
