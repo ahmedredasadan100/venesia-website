@@ -1,5 +1,7 @@
 import { normalizeVerificationText } from "./lib/verification-text.mjs";
 import assert from "node:assert/strict";
+import * as ts from "typescript";
+import { parseTypeScriptSource } from "./lib/typescript-executable-graph.mts";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -95,6 +97,196 @@ const legacyPagesReadModelMigration = read(
 );
 const pagination = read("src/components/admin/ui/AdminTablePagination.tsx");
 const uiRules = read("src/components/admin/ui/ADMIN_UI_RULES.md");
+
+function pagesShellNodes<Node extends ts.Node>(root: ts.Node, match: (node: ts.Node) => node is Node) {
+  const found: Node[] = [];
+  const visit = (node: ts.Node) => { if (match(node)) found.push(node); ts.forEachChild(node, visit); };
+  visit(root); return found;
+}
+function pagesShellUnwrap(node: ts.Expression): ts.Expression {
+  return ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node)
+    ? pagesShellUnwrap(node.expression) : node;
+}
+function pagesShellPath(node: ts.Expression, expected: string) {
+  const value = pagesShellUnwrap(node);
+  const path = (current: ts.Expression): string | null => ts.isIdentifier(current) ? current.text
+    : ts.isPropertyAccessExpression(current) ? `${path(current.expression)}.${current.name.text}` : null;
+  return path(value) === expected;
+}
+function pagesShellLiteral(node: ts.Expression, expected: string) {
+  const value = pagesShellUnwrap(node); return ts.isStringLiteral(value) && value.text === expected;
+}
+function pagesShellLogical(node: ts.Expression, operator: ts.SyntaxKind): ts.Expression[] {
+  const value = pagesShellUnwrap(node);
+  return ts.isBinaryExpression(value) && value.operatorToken.kind === operator
+    ? [...pagesShellLogical(value.left, operator), ...pagesShellLogical(value.right, operator)] : [value];
+}
+function pagesShellEquals(node: ts.Expression, name: string, value: string | null) {
+  const expression = pagesShellUnwrap(node);
+  return ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+    && pagesShellPath(expression.left, name) && (value === null
+      ? expression.right.kind === ts.SyntaxKind.NullKeyword : pagesShellLiteral(expression.right, value));
+}
+function pagesShellFunction(tree: ts.SourceFile, name: string) {
+  const found = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.equal(found.length, 1, `One actual top-level ${name} owner`); assert.ok(found[0]!.body); return found[0]!;
+}
+function pagesShellVariable(owner: ts.FunctionDeclaration, name: string) {
+  const found = owner.body!.statements.flatMap(statement => ts.isVariableStatement(statement)
+    ? statement.declarationList.declarations.filter(node => ts.isIdentifier(node.name) && node.name.text === name) : []);
+  assert.equal(found.length, 1, `One direct ${name} binding`); assert.ok(found[0]!.initializer); return found[0]!;
+}
+function pagesShellMutant(source: string, tree: ts.SourceFile, node: ts.Node, replacement: string) {
+  const result = source.slice(0, node.getStart(tree)) + replacement + source.slice(node.end);
+  assert.notEqual(result, source, "The actual source-span mutation changes bytes");
+  parseTypeScriptSource("pages-shell-mutant.tsx", result); return result;
+}
+function pageCompositionReorderProjection(source: string) {
+  const tree = parseTypeScriptSource("PageBlocksClient.tsx", source), owner = pagesShellFunction(tree, "PageBlocksClient");
+  const handlers = owner.body!.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "handleReorderAssignment");
+  assert.equal(handlers.length, 1, "The actual PageBlocksClient owns one direct reorder callback");
+  const handler = handlers[0]!; assert.ok(handler.body);
+  assert.equal(handler.parameters.length, 2);
+  assert.equal(ts.isIdentifier(handler.parameters[0]!.name) && handler.parameters[0]!.name.text === "row", true);
+  assert.equal(ts.isIdentifier(handler.parameters[1]!.name) && handler.parameters[1]!.name.text === "targetPosition", true);
+  const gate = handler.body.statements[0];
+  assert.equal(Boolean(gate && ts.isIfStatement(gate)), true, "The guard is the first active handler statement before any effects");
+  assert.ok(gate && ts.isIfStatement(gate));
+  assert.equal(gate.elseStatement === undefined, true);
+  assert.equal(ts.isReturnStatement(gate.thenStatement) && gate.thenStatement.expression === undefined, true, "All refusal gates return without mutation");
+  const terms = pagesShellLogical(gate.expression, ts.SyntaxKind.BarBarToken);
+  const negated = (node: ts.Expression, name: string) => ts.isPrefixUnaryExpression(pagesShellUnwrap(node))
+    && (pagesShellUnwrap(node) as ts.PrefixUnaryExpression).operator === ts.SyntaxKind.ExclamationToken
+    && pagesShellPath((pagesShellUnwrap(node) as ts.PrefixUnaryExpression).operand, name);
+  assert.equal(terms.length, 3);
+  assert.equal(terms.filter(term => negated(term, "manualReorderEnabled")).length, 1);
+  assert.equal(terms.filter(term => pagesShellPath(term, "instant.bulkInteraction.isBlocked")).length, 1);
+  assert.equal(terms.filter(term => {
+    const value = pagesShellUnwrap(term); if (!ts.isPrefixUnaryExpression(value) || value.operator !== ts.SyntaxKind.ExclamationToken) return false;
+    const call = pagesShellUnwrap(value.operand); return ts.isCallExpression(call) && pagesShellPath(call.expression, "isManageableAssignment")
+      && call.arguments.length === 1 && pagesShellPath(call.arguments[0]!, "row");
+  }).length, 1);
+  const eligibility = pagesShellVariable(owner, "manualReorderEnabled"), conditions = pagesShellLogical(eligibility.initializer!, ts.SyntaxKind.AmpersandAmpersandToken);
+  assert.equal(conditions.length, 5);
+  for (const [name, value] of [["table.sort.key", null], ["moduleType", "all"], ["slot", "all"], ["visibility", "all"]] as const) {
+    assert.equal(conditions.filter(condition => pagesShellEquals(condition, name, value)).length, 1);
+  }
+  assert.equal(conditions.filter(condition => negated(condition, "search")).length, 1);
+  const tracked = new Set(["manualReorderEnabled", "instant", "isManageableAssignment", "row", "targetPosition"]);
+  const bindsTracked = (name: ts.BindingName): boolean => ts.isIdentifier(name) ? tracked.has(name.text)
+    : name.elements.some(element => ts.isBindingElement(element) && bindsTracked(element.name));
+  assert.equal(pagesShellNodes(handler.body, ts.isVariableDeclaration).some(node => bindsTracked(node.name)), false, "The handler cannot shadow its refusal gates");
+  assert.equal(pagesShellNodes(handler.body, ts.isFunctionDeclaration).some(node => node.name && tracked.has(node.name.text)), false);
+  return { tree, owner, handler, gate, eligibility, conditions, terms };
+}
+function verifyPageCompositionReorderGuard(source: string) {
+  const proof = pageCompositionReorderProjection(source);
+  const guard = new Function("manualReorderEnabled", "instant", "isManageableAssignment", "row", `${proof.gate.getText(proof.tree)}; return "proceed";`) as (enabled: boolean, instant: { bulkInteraction: { isBlocked: boolean } }, manageable: (row: unknown) => boolean, row: unknown) => string | undefined;
+  const eligibility = new Function("table", "search", "moduleType", "slot", "visibility", `return (${proof.eligibility.initializer!.getText(proof.tree)});`) as (table: { sort: { key: string | null } }, search: string, moduleType: string, slot: string, visibility: string) => boolean;
+  for (const enabled of [false, true]) for (const blocked of [false, true]) for (const manageable of [false, true]) {
+    assert.equal(guard(enabled, { bulkInteraction: { isBlocked: blocked } }, () => manageable, {}), enabled && !blocked && manageable ? "proceed" : undefined);
+  }
+  for (let mask = 0; mask < 32; mask++) {
+    const enabled = eligibility({ sort: { key: mask & 1 ? "template_name" : null } }, mask & 2 ? "search" : "", mask & 4 ? "hero" : "all", mask & 8 ? "main" : "all", mask & 16 ? "visible" : "all");
+    assert.equal(enabled, mask === 0, "Actual sort/search/three-filter eligibility retains every refusal condition");
+    assert.equal(guard(enabled, { bulkInteraction: { isBlocked: false } }, () => true, {}), mask === 0 ? "proceed" : undefined);
+  }
+  const gate = proof.gate.getText(proof.tree), condition = proof.gate.expression.getText(proof.tree);
+  const mutations: Array<[string, ts.Node, string]> = [
+    ["lost manual gate", proof.gate.expression, "instant.bulkInteraction.isBlocked || !isManageableAssignment(row)"],
+    ["inverted manual gate", proof.gate.expression, "manualReorderEnabled || instant.bulkInteraction.isBlocked || !isManageableAssignment(row)"],
+    ["AND refusal", proof.gate.expression, "!manualReorderEnabled && instant.bulkInteraction.isBlocked && !isManageableAssignment(row)"],
+    ["inactive refusal", proof.gate.expression, `false && (${condition})`],
+    ["lost return", proof.gate.thenStatement, "{}"],
+    ["effect before guard", proof.gate, `instant.rows = []; ${gate}`],
+    ["lost blocked gate", proof.gate.expression, "!manualReorderEnabled || !isManageableAssignment(row)"],
+    ["lost manageability gate", proof.gate.expression, "!manualReorderEnabled || instant.bulkInteraction.isBlocked"],
+    ["disabled eligibility gate", proof.eligibility.initializer!, "true"],
+    ...proof.conditions.map((condition): [string, ts.Node, string] => ["lost eligibility: " + condition.getText(proof.tree), condition, "true"]),
+  ];
+  for (const [label, node, replacement] of mutations) {
+    const mutant = pagesShellMutant(source, proof.tree, node, replacement);
+    assert.throws(() => pageCompositionReorderProjection(mutant), label);
+  }
+  console.log("Pages reorder guard: 8 native gate states, 32 actual sort/search/filter states and 14 effective parsed negatives passed.");
+}
+function dataGridScrollSurfaceProjection(source: string, styleSource: string) {
+  const tree = parseTypeScriptSource("AdminDataGrid.tsx", source), owner = pagesShellFunction(tree, "AdminDataGrid");
+  const imported = tree.statements.filter((node): node is ts.ImportDeclaration => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+    && node.moduleSpecifier.text === "../../../lib/admin/admin-ui-styles");
+  assert.equal(imported.length, 1); const clause = imported[0]!.importClause;
+  assert.ok(clause && !clause.isTypeOnly && clause.namedBindings && ts.isNamedImports(clause.namedBindings));
+  for (const name of ["ADMIN_CINEMATIC_GOLD_V1", "resolveAdminCollectionPresentation"]) assert.equal(clause.namedBindings.elements.filter(element => !element.isTypeOnly && !element.propertyName && element.name.text === name).length, 1);
+  assert.equal(owner.parameters.length, 1); assert.ok(ts.isObjectBindingPattern(owner.parameters[0]!.name));
+  const ports = owner.parameters[0]!.name.elements;
+  for (const [property, name, fallback] of [["surface", "surface", "standalone"], ["presentation", "requestedPresentation", "default"]] as const) {
+    const found = ports.filter(port => ts.isIdentifier(port.name) && port.name.text === name && (port.propertyName?.getText(tree) ?? name) === property);
+    assert.equal(found.length, 1); assert.equal(Boolean(found[0]!.initializer && pagesShellLiteral(found[0]!.initializer, fallback)), true);
+  }
+  const importedNames = new Set(["ADMIN_CINEMATIC_GOLD_V1", "resolveAdminCollectionPresentation"]);
+  assert.equal(pagesShellNodes(owner, ts.isIdentifier).some(node => importedNames.has(node.text) && (
+    ts.isBindingElement(node.parent) && node.parent.name === node || ts.isVariableDeclaration(node.parent) && node.parent.name === node
+    || ts.isFunctionDeclaration(node.parent) && node.parent.name === node || ts.isParameter(node.parent) && node.parent.name === node)), false, "Canonical token/resolver imports have no local shadow");
+  const embedded = pagesShellVariable(owner, "embedded"), presentation = pagesShellVariable(owner, "presentation");
+  assert.equal(pagesShellEquals(embedded.initializer!, "surface", "embedded"), true);
+  assert.ok(presentation.initializer && ts.isCallExpression(presentation.initializer));
+  assert.equal(pagesShellPath(presentation.initializer.expression, "resolveAdminCollectionPresentation"), true);
+  assert.equal(presentation.initializer.arguments.length, 1); assert.equal(pagesShellPath(presentation.initializer.arguments[0]!, "requestedPresentation"), true);
+  const returns = owner.body!.statements.filter(ts.isReturnStatement); assert.equal(returns.length, 1); assert.equal(pagesShellNodes(owner.body!, ts.isReturnStatement).length, 1); assert.ok(returns[0]!.expression);
+  const returned = pagesShellUnwrap(returns[0]!.expression); assert.ok(ts.isJsxElement(returned));
+  assert.equal(returned.openingElement.tagName.getText(tree), "section");
+  const regions = returned.children.filter((node): node is ts.JsxElement => ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "div"
+    && node.openingElement.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(tree) === "data-admin-data-grid-scroll"));
+  assert.equal(regions.length, 1, "The scroll condition belongs to the actual directly returned native scroll region");
+  const attributes = regions[0]!.openingElement.attributes.properties;
+  assert.equal(attributes.some(ts.isJsxSpreadAttribute), false, "The actual native scroll attributes cannot be overridden by a spread");
+  const attributeNames = attributes.filter(ts.isJsxAttribute).map(attribute => attribute.name.getText(tree));
+  assert.equal(new Set(attributeNames).size, attributeNames.length, "Actual scroll attribute identities are unique");
+  assert.equal(attributes.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(tree) === "role" && attribute.initializer && ts.isStringLiteral(attribute.initializer) && attribute.initializer.text === "region"), true);
+  const classNames = attributes.filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === "className"); assert.equal(classNames.length, 1);
+  const value = classNames[0]!.initializer; assert.ok(value && ts.isJsxExpression(value) && value.expression && ts.isCallExpression(value.expression));
+  assert.equal(value.expression.arguments.length, 0); const trim = value.expression.expression;
+  assert.ok(ts.isPropertyAccessExpression(trim) && trim.name.text === "trim" && ts.isTemplateExpression(trim.expression));
+  const conditionalSpans = trim.expression.templateSpans.filter(span => ts.isConditionalExpression(span.expression) && pagesShellPath(span.expression.condition, "embedded"));
+  assert.equal(conditionalSpans.length, 1); const conditional = conditionalSpans[0]!.expression; assert.ok(ts.isConditionalExpression(conditional));
+  assert.equal(pagesShellLiteral(conditional.whenTrue, ""), true);
+  assert.ok(ts.isConditionalExpression(conditional.whenFalse)); const cinematic = conditional.whenFalse;
+  assert.equal(pagesShellEquals(cinematic.condition, "presentation", "cinematic"), true);
+  assert.equal(pagesShellPath(cinematic.whenTrue, "ADMIN_CINEMATIC_GOLD_V1.dataGrid.scroll"), true);
+  assert.equal(pagesShellLiteral(cinematic.whenFalse, "rounded-[14px] border border-white/8"), true);
+  const styles = parseTypeScriptSource("admin-ui-styles.ts", styleSource), resolver = pagesShellFunction(styles, "resolveAdminCollectionPresentation");
+  const aliases = styles.statements.filter((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === "AdminCollectionPresentation");
+  assert.equal(aliases.length, 1); assert.ok(ts.isUnionTypeNode(aliases[0]!.type));
+  assert.deepEqual(aliases[0]!.type.types.map(type => ts.isLiteralTypeNode(type) && ts.isStringLiteral(type.literal) ? type.literal.text : null).sort(), ["cinematic", "default"]);
+  assert.equal(resolver.parameters.length, 1); assert.ok(ts.isIdentifier(resolver.parameters[0]!.name));
+  assert.equal(resolver.parameters[0]!.name.text, "presentation"); assert.equal(pagesShellLiteral(resolver.parameters[0]!.initializer!, "default"), true);
+  assert.equal(resolver.body!.statements.length, 1); const resolved = resolver.body!.statements[0]; assert.ok(resolved && ts.isReturnStatement(resolved) && resolved.expression && ts.isConditionalExpression(resolved.expression));
+  assert.equal(pagesShellEquals(resolved.expression.condition, "presentation", "default"), true); assert.equal(pagesShellLiteral(resolved.expression.whenTrue, "cinematic"), true); assert.equal(pagesShellPath(resolved.expression.whenFalse, "presentation"), true);
+  return { tree, conditional, cinematic, scrollAttributes: regions[0]!.openingElement.attributes, resolverExpression: resolved.expression, resolverTree: styles };
+}
+function verifyDataGridScrollSurface(source: string, styleSource: string) {
+  const proof = dataGridScrollSurfaceProjection(source, styleSource);
+  const project = new Function("embedded", "presentation", "ADMIN_CINEMATIC_GOLD_V1", `return (${proof.conditional.getText(proof.tree)});`) as (embedded: boolean, presentation: string, token: { dataGrid: { scroll: string } }) => string;
+  const resolvePresentation = new Function("presentation", `return (${proof.resolverExpression.getText(proof.resolverTree)});`) as (presentation: string) => string;
+  const marker = { dataGrid: { scroll: "[canonical-data-grid-scroll-token]" } };
+  for (const requested of [undefined, "default", "cinematic"]) for (const embedded of [false, true]) {
+    const presentation = resolvePresentation(requested ?? "default"); assert.equal(presentation, "cinematic");
+    assert.equal(project(embedded, presentation, marker), embedded ? "" : marker.dataGrid.scroll);
+  }
+  assert.equal(project(false, "out-of-contract-legacy-probe", marker), "rounded-[14px] border border-white/8");
+  assert.equal(project(true, "out-of-contract-legacy-probe", marker), "");
+  for (const [label, node, replacement] of [
+    ["lost embedded neutral branch", proof.conditional.whenTrue, '"rounded-[14px] border border-white/8"'],
+    ["lost canonical cinematic token", proof.cinematic.whenTrue, '"rounded-[14px] border border-white/8"'],
+    ["lost retained legacy fallback", proof.cinematic.whenFalse, '""'],
+    ["restored obsolete binary branch", proof.conditional, 'embedded ? "" : "rounded-[14px] border border-white/8"'],
+    ["late native class override", proof.scrollAttributes, proof.scrollAttributes.getText(proof.tree) + ' {...{ className: "lost-scroll-owner" }}'],
+  ] as const) {
+    const mutant = pagesShellMutant(source, proof.tree, node, replacement);
+    assert.throws(() => dataGridScrollSurfaceProjection(mutant, styleSource), label);
+  }
+  console.log("DataGrid scroll guard: canonical token/resolver imports, 6 native public-alias/surface states, 2 raw legacy probes and 5 effective parsed negatives passed (no SSR/default-plain claim).");
+}
 
 const replacementMatch = migration.match(
   /v_new constant text := \$new\$([\s\S]*?)\$new\$;/u,
@@ -699,7 +891,7 @@ assert.match(
   /confirmation\?: \{[\s\S]*resolvedOption\?\.confirmation[\s\S]*if \(resolvedConfirmation\)[\s\S]*<AdminBulkActionConfirm/u,
 );
 assert.match(compositionClient, /const manualReorderEnabled =/u);
-assert.match(compositionClient, /if \(!manualReorderEnabled\) return;/u);
+verifyPageCompositionReorderGuard(compositionClient);
 assert.match(compositionClient, /table\.toggleSort\(key\)/u);
 assert.match(compositionClient, /manualReorderEnabled=\{manualReorderEnabled\}/u);
 assert.match(assignmentRow, /AdminDataGridReorderHandle/u);
@@ -728,7 +920,7 @@ assert.match(entityListFilters, /surface = "standalone"/u);
 assert.match(entityListFilters, /surface === "embedded"[\s\S]*overflow-visible border-b/u);
 assert.match(dataGrid, /surface\?: "standalone" \| "embedded"/u);
 assert.match(dataGrid, /surface = "standalone"/u);
-assert.match(dataGrid, /embedded \? "" : "rounded-\[14px\] border border-white\/8"/u);
+verifyDataGridScrollSurface(dataGrid, read("src/lib/admin/admin-ui-styles.ts"));
 assert.match(uiRules, /عند تفعيل فرز عرض مختلف، يُعطّل reorder/u);
 assert.match(assignmentReorder, /mutatePageComposition\([\s\S]*"reorder"/u);
 
