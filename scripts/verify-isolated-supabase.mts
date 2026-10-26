@@ -255,6 +255,69 @@ function verifyDockerMountNormalization(owner: typeof import("./lib/isolated-sup
   }
 }
 
+/** Actual comparison plus the current lifecycle closure; no Docker or SQL executes. */
+function verifyExistingResourcePreservationComparison(owner: typeof import("./lib/isolated-supabase.mts")) {
+  const row = { id: "container-id", name: "/retained", state: "exited", aliases: ["first", "second"], mounts: [
+    { Type: "bind", Source: "/qa/input", Destination: "/input", RW: false, Mode: "ro", Options: { labels: ["a", "b"] } },
+    { Type: "bind", Source: "/qa/evidence", Destination: "/evidence", RW: true, Mode: "rw", Options: { labels: ["c", "d"] } },
+  ] };
+  const reversed = { ...structuredClone(row), mounts: [...structuredClone(row.mounts)].reverse() };
+  const untouched = JSON.stringify([row, reversed]);
+  type OfflineInventory = { containers: Record<string, unknown>[]; volumes: Record<string, unknown>[]; networks: Record<string, unknown>[]; imageIds: string[] };
+  const baseline: OfflineInventory = { containers: [row], volumes: [], networks: [], imageIds: ["retained-image"] };
+  const source = ts.createSourceFile("isolated-supabase.mts", readSource("scripts/lib/isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations: ts.VariableDeclaration[] = [];
+  const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && ["canonical", "assertOriginalsUnchanged"].includes(node.name.getText(source))) declarations.push(node); ts.forEachChild(node, visit); };
+  visit(source);
+  const initializer = (name: string) => { const found = declarations.filter(node => node.name.getText(source) === name); assert.equal(found.length, 1); assert.ok(found[0].initializer); return found[0].initializer.getText(source); };
+  const body = ts.transpileModule("const canonical = " + initializer("canonical") + "; return " + initializer("assertOriginalsUnchanged") + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const diagnostics: unknown[] = [];
+  const lifecycle = new Function("before", "preservationComparisonJson", "requireThat", "recordFile", "sha256", body)(baseline, owner.preservationComparisonJson,
+    (condition: unknown, code: string, stage: string) => { if (!condition) throw new owner.IsolatedSupabaseError(code, stage); },
+    (_name: string, value: unknown) => { diagnostics.push(value); }, sha256) as (after: OfflineInventory, baseline?: OfflineInventory) => void;
+  check("preservation accepts only a permutation of the complete top-level container mounts", () => {
+    assert.equal(owner.preservationComparisonJson("container", row), owner.preservationComparisonJson("container", reversed));
+    lifecycle({ ...baseline, containers: [reversed] }); assert.equal(diagnostics.length, 0);
+  });
+  const mutations: Array<[string, (value: typeof row) => void]> = [
+    ["source", value => { value.mounts[0].Source += ".changed"; }],
+    ["destination", value => { value.mounts[0].Destination += ".changed"; }],
+    ["RW", value => { value.mounts[0].RW = !value.mounts[0].RW; }],
+    ["type", value => { value.mounts[0].Type = "volume"; }],
+    ["mode", value => { value.mounts[0].Mode = "rw"; }],
+    ["options value", value => { value.mounts[0].Options.labels[0] = "changed"; }],
+    ["nested options array order", value => { value.mounts[0].Options.labels.reverse(); }],
+    ["missing mount field", value => { delete (value.mounts[0] as Partial<typeof value.mounts[0]>).Source; }],
+    ["extra mount field", value => { Object.assign(value.mounts[0], { unreviewed: true }); }],
+    ["missing mount", value => { value.mounts.pop(); }],
+    ["extra mount", value => { value.mounts.push({ ...structuredClone(value.mounts[0]), Source: "/another" }); }],
+    ["extra duplicate mount", value => { value.mounts.push(structuredClone(value.mounts[0])); }],
+    ["duplicate replacing a distinct mount", value => { value.mounts[1] = structuredClone(value.mounts[0]); }],
+    ["resource id", value => { value.id = "another-container"; }],
+    ["resource name", value => { value.name = "/another"; }],
+    ["resource state", value => { value.state = "running"; }],
+    ["other top-level array order", value => { value.aliases.reverse(); }],
+  ];
+  for (const [name, mutate] of mutations) check("preservation rejects changed " + name, () => {
+    const changed = structuredClone(row); mutate(changed);
+    assert.notEqual(owner.preservationComparisonJson("container", changed), owner.preservationComparisonJson("container", row));
+    assert.throws(() => lifecycle({ ...baseline, containers: [changed] }), (error: unknown) => error instanceof owner.IsolatedSupabaseError && error.code === "EXISTING_RESOURCE_CHANGED");
+  });
+  for (const kind of ["volume", "network"] as const) check("preservation keeps every " + kind + " array ordered", () => {
+    assert.notEqual(owner.preservationComparisonJson(kind, row), owner.preservationComparisonJson(kind, reversed));
+    const key = kind === "volume" ? "volumes" : "networks";
+    const before = { ...baseline, containers: [], [key]: [row] }, after = { ...before, [key]: [reversed] };
+    assert.throws(() => lifecycle(after, before), owner.IsolatedSupabaseError);
+  });
+  check("preservation retains duplicate counts when mounts are only reordered", () => {
+    const duplicated = { ...row, mounts: [...row.mounts, row.mounts[0]] };
+    const reordered = { ...duplicated, mounts: [...duplicated.mounts].reverse() };
+    assert.equal(owner.preservationComparisonJson("container", duplicated), owner.preservationComparisonJson("container", reordered));
+    assert.notEqual(owner.preservationComparisonJson("container", duplicated), owner.preservationComparisonJson("container", row));
+  });
+  check("preservation comparison never mutates either input", () => assert.equal(JSON.stringify([row, reversed]), untouched));
+}
+
 async function currentInfrastructureOnly() {
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts", "scripts/verify-isolated-supabase.mts", "scripts/fixtures/isolated-supabase/stack.lock.json", "scripts/fixtures/isolated-supabase/compose.test.yml"];
   const texts = Object.fromEntries(sources.map(file => [file, readSource(file)]));
@@ -265,6 +328,7 @@ async function currentInfrastructureOnly() {
   const lock = owner.readReleaseLock(path.join(root, "scripts/fixtures/isolated-supabase/stack.lock.json"));
   check("actual lifecycle lock binds the official CLI tool contract", () => cli.assertApplicationMigrationTool(lock.applicationMigrationTool));
   verifyDockerMountNormalization(owner);
+  verifyExistingResourcePreservationComparison(owner);
   const file = ts.createSourceFile("owner.mts", texts[sources[0]], ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   let cleanupBranch: ts.IfStatement | undefined, prepareCompose: ts.ArrowFunction | undefined;
   function visit(node: ts.Node) {
@@ -1946,6 +2010,7 @@ async function main() {
   // Importing the lifecycle owner must be passive. Only pure exported guards are
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
+  verifyExistingResourcePreservationComparison(owner);
   await verifyMigrationToolPlatforms(provenance.lock);
   await verifyAdminMeasurementControlLease(owner);
   verifyAdminMeasurementRestartPolicy();
