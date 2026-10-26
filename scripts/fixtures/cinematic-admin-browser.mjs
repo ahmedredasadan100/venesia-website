@@ -25,6 +25,7 @@ export async function verifyCinematicAdminPresentation(options = {}) {
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { topicsQueryContract } = await jiti.import(path.join(root, 'src/lib/admin/content/entity-list-contracts/topics.ts'));
   const { normalizeAdminEntityListQuery } = await jiti.import(path.join(root, 'src/lib/admin/entity-list/data-engine/contracts.ts'));
+  const { ADMIN_COMPANY_DEFAULT } = await jiti.import(path.join(root, 'src/config/admin/company.ts'));
   const output = path.join(root, '.tmp-qa/admin-development-batch-01', moduleTitleShimmerOnly ? 'module-title-shimmer-20261024/' + (moduleTitleShimmerBefore ? 'before-fixture' : 'fixture') : kpiAdoptionOnly ? 'kpi-default-adoption-20261024/fixture' : systemwideAdoptionOnly ? 'systemwide-adoption-20261024/fixture' : sidebarSelectionOnly ? 'sidebar-selection-20261024/after' : finalAlignmentOnly ? 'cinematic-final-alignment-20261024' : dataGridRefinementOnly ? 'cinematic-datagrid-v11-20261024' : dataGridOnly ? 'cinematic-datagrid-v1-20261024' : 'cinematic-gold-v11-20261024');
   await mkdir(output, { recursive: true });
   const project = root.replaceAll('\\', '/');
@@ -288,6 +289,11 @@ root.render(<SearchParamsContext.Provider value={new URLSearchParams(location.se
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
+  const logoutDestination = () => {
+    const destination = new URL(ADMIN_COMPANY_DEFAULT.publicWebsiteUrl, origin);
+    assert.equal(destination.origin, origin, 'Actual public logout destination stays inside the isolated fixture origin');
+    return destination.href;
+  };
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.on('pageerror', error => errors.push(error.message));
@@ -1092,7 +1098,7 @@ root.render(<SearchParamsContext.Provider value={new URLSearchParams(location.se
       cases.push({ surface: 'v11-draft-date', width, datetime: date.savedAt, displayed: date.expected, sharedTimeZone: 'Africa/Cairo', rawStorageUnchanged: true, fieldsUnchanged: true, closeAndReloadRetained: true });
     }
     await page.setViewportSize({ width: 390, height: 1000 }); await open('defaults'); await page.locator('[data-admin-shell-header]').getByRole('button', { name: 'فتح القائمة', exact: true }).click(); const menu = page.getByRole('dialog', { name: 'قائمة الإدارة', exact: true }); await expect(menu).toBeVisible(); await menu.getByRole('button', { name: 'إغلاق القائمة', exact: true }).click({ position: { x: 10, y: 10 } }); await expect(menu).toHaveCount(0); cases.push({ surface: 'v11-mobile-menu', openAndClose: true });
-    await page.setViewportSize({ width: 1440, height: 1000 }); await open('defaults'); await page.locator('[data-admin-shell-header]').getByRole('button', { name: /خروج/u }).click(); await expect.poll(() => requests.filter(row => row.path === '/api/admin/auth/logout').length).toBe(1); cases.push({ surface: 'v11-system-header-logout', localFakeEndpointOnly: true });
+    await page.setViewportSize({ width: 1440, height: 1000 }); await open('defaults'); await Promise.all([page.waitForURL(logoutDestination(), { waitUntil: 'load' }), page.locator('[data-admin-shell-header]').getByRole('button', { name: /خروج/u }).click()]); await expect.poll(() => requests.filter(row => row.path === '/api/admin/auth/logout').length).toBe(1); cases.push({ surface: 'v11-system-header-logout', localFakeEndpointOnly: true });
   }
   try {
   if (moduleTitleShimmerOnly) await verifyModuleTitleShimmer(); else if (kpiAdoptionOnly) await verifyKpiAdoption(); else if (systemwideAdoptionOnly) await verifySystemwideAdoption(); else if (sidebarSelectionOnly) await verifySidebarSelection(); else if (finalAlignmentOnly) await verifyFinalAlignment(); else if (dataGridRefinementOnly) await verifyDataGridRefinement(); else if (dataGridOnly) await verifyDataGrid(); else await verifyRefinements();
@@ -1144,7 +1150,7 @@ root.render(<SearchParamsContext.Provider value={new URLSearchParams(location.se
   await open('topics'); failReads = true; await page.locator('[data-admin-metric-cards-viewport]').getByRole('button', { name: 'مميزة', exact: true }).click(); const queryError = page.locator('[data-admin-entity-list-query-error]'); await expect(queryError).toContainText('تعذر تحديث النتائج'); await expect(queryError).toContainText('الصفوف والعدّادات المعروضة تخص النتائج السابقة. Unable to load the requested list.'); assert.ok((await page.locator('[data-admin-metric-cards-viewport]').textContent()).includes('901'), 'Request failure retains visible prior metrics'); await screenshot('topics-query-failure-retains-metrics-rtl'); cases.push({ surface: 'topics-query-failure', retainedRealMetrics: true });
   await page.setViewportSize({ width: 390, height: 1000 }); await open('defaults'); await page.locator('[data-admin-shell-header]').getByRole('button', { name: 'فتح القائمة', exact: true }).click(); const menu = page.getByRole('dialog', { name: 'قائمة الإدارة', exact: true }); await expect(menu).toBeVisible(); await screenshot('system-header-390-open-menu-rtl'); await menu.getByRole('button', { name: 'إغلاق القائمة', exact: true }).click({ position: { x: 10, y: 10 } }); await expect(menu).toHaveCount(0); cases.push({ surface: 'system-header-mobile-menu', width: 390, openAndClose: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await open('defaults'); const logout = page.locator('[data-admin-shell-header]').getByRole('button', { name: /خروج/u }), previousLogoutCount = requests.filter(row => row.path === '/api/admin/auth/logout').length; await logout.click(); await expect.poll(() => requests.filter(row => row.path === '/api/admin/auth/logout').length).toBe(previousLogoutCount + 1); cases.push({ surface: 'system-header', logoutPath: '/api/admin/auth/logout', logoutMethod: 'POST', isolatedOnly: true });
+  await open('defaults'); const logout = page.locator('[data-admin-shell-header]').getByRole('button', { name: /خروج/u }), previousLogoutCount = requests.filter(row => row.path === '/api/admin/auth/logout').length; await Promise.all([page.waitForURL(logoutDestination(), { waitUntil: 'load' }), logout.click()]); await expect.poll(() => requests.filter(row => row.path === '/api/admin/auth/logout').length).toBe(previousLogoutCount + 1); cases.push({ surface: 'system-header', logoutPath: '/api/admin/auth/logout', logoutMethod: 'POST', isolatedOnly: true });
   }
   } catch (error) {
     if (dataGridOnly) await screenshot('datagrid-failure').catch(() => {});
