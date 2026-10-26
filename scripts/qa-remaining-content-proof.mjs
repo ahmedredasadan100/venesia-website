@@ -34,7 +34,7 @@ import {resolveHeroContentControlsForVariant} from '@src/lib/hero/hero-content-c
 const root=createRoot(document.getElementById('root'));
 const assignmentContext={assignments:[],pages:[]};
 const block={id:51,name:'Proof block',slug:'',description:null,style_preset:'premium-dark',status:'unpublished',updated_at:'2026-09-13T00:00:00.000Z'};
-window.calls=0;window.payloads=[];window.mode='failure';window.holdMediaResult=false;
+window.calls=0;window.payloads=[];window.mode='failure';window.holdMediaResult=false;window.__remainingContentProofMetaReadCalls=0;
 window.__remainingContentProofNavigation={href:null,calls:[]};
 window.__remainingContentProofNativeNavigation=window.navigation;
 window.action=async(...args)=>{
@@ -72,11 +72,17 @@ export const useRouter=()=>router;export const usePathname=()=>'/proof';export c
 await writeFile(path.join(out, "link.tsx"), `import React from 'react';export default function Link({href,children,prefetch,...props}){return <a href={href} {...props}>{children}</a>}`);
 await writeFile(path.join(out, "image.tsx"), `import React from 'react';export default function Image({fill,priority,unoptimized,quality,loader,...props}){return <img {...props}/>}`);
 await writeFile(path.join(out, "actions.ts"), `export const updateHeroTemplateDetails=(...args)=>window.action(...args);export const saveContentForm=(...args)=>window.action(...args);`);
+await writeFile(path.join(out, "media-validation.ts"), `export async function readMediaVideoEmbed(payload){window.__remainingContentProofMetaReadCalls++;throw new Error("Unexpected Meta embed Server Function read outside remaining-content proof scope");}`);
 await writeFile(path.join(out, "link-actions.ts"), `export const browseAdminLinksAjax=async()=>[];export const browseMenusPickerAjax=async()=>[];export const browseMenuItemsPickerAjax=async()=>[];export const browseTopicCategoriesPickerAjax=async()=>[];export const resolveAdminLinkAjax=async()=>[];`);
 const { loadBindings } = require("next/dist/build/swc"); await loadBindings();
 const webpack = require("next/dist/compiled/webpack/webpack").webpack;
+function replaceRemainingMediaReadAction(resource) {
+  const full = path.resolve(resource.context, resource.request).replaceAll("\\", "/");
+  const canonical = path.join(root, "src/app/admin/content/topics/media-actions/validation").replaceAll("\\", "/");
+  if (full === canonical) resource.request = path.join(out, "media-validation.ts");
+}
 const compiler = webpack({ mode: "development", target: "web", context: root, entry: path.join(out, "entry.tsx"), output: { path: out, filename: "fixture.js" }, devtool: false,
-  plugins: [new webpack.NormalModuleReplacementPlugin(/(actions|save|\/ui)$/, resource => {
+  plugins: [new webpack.NormalModuleReplacementPlugin(/(?:^|\/)media-actions\/validation$/, replaceRemainingMediaReadAction), new webpack.NormalModuleReplacementPlugin(/(actions|save|\/ui)$/, resource => {
     const full = path.resolve(resource.context, resource.request).replaceAll("\\", "/");
     if (full.endsWith("/components/admin/ui")) resource.request = path.join(root, "src/components/admin/ui/index.ts");
     else if (full.endsWith("/lib/admin/links/actions")) resource.request = path.join(out, "link-actions.ts");
@@ -118,8 +124,11 @@ async function check(name, run) {
   });
   try {
     await page.goto(origin); await page.waitForFunction(() => typeof window.mount === "function");
-    const detail = await run(page); assert.deepEqual(errors, []);
-    results.push({ name, status: "PASS", ...detail, blockedRequests: blocked }); console.log(`PASS ${name}`);
+    const detail = await run(page);
+    const metaReadActionCalls = await page.evaluate(() => window.__remainingContentProofMetaReadCalls);
+    assert.equal(metaReadActionCalls, 0, "Current remaining-content cases do not invoke the isolated Meta read Server Function");
+    assert.deepEqual(errors, []);
+    results.push({ name, status: "PASS", ...detail, blockedRequests: blocked, metaReadActionCalls }); console.log(`PASS ${name}`);
   } catch (error) {
     attempts.push({ name, message: String(error), errors });
     await page.screenshot({ path: path.join(out, `${name}-failure.png`), fullPage: true });

@@ -15,6 +15,93 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+function actualArticleDisplaySlot(source: string, mode: "create" | "edit") {
+  const tree = ts.createSourceFile("ArticleDisplay.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const unwrap = (node: ts.Expression | undefined): ts.Expression | undefined => {
+    while (node && ts.isParenthesizedExpression(node)) node = node.expression;
+    return node;
+  };
+  const canonicalImport = (name: string, module: string, defaultImport = false) => tree.statements.filter(node =>
+    ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module &&
+    node.importClause && !node.importClause.isTypeOnly && (defaultImport ? node.importClause.name?.text === name :
+      node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+      node.importClause.namedBindings.elements.some(binding => binding.name.text === name && !binding.propertyName && !binding.isTypeOnly))).length === 1;
+  if (!canonicalImport("ContentDisplaySettings", "./ContentDisplaySettings", true) ||
+      !canonicalImport("ContentEditorShell", "./ContentEditorShell", true) ||
+      !canonicalImport("AdminPageExperience", "../../ui") ||
+      !canonicalImport("applyTopicFormDraftFields", "./content-form-definition")) return null;
+  const declarations = tree.statements.filter((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === (mode === "create" ? "ArticleCreateEditor" : "ArticleEditor"));
+  const editor = declarations[0];
+  if (declarations.length !== 1 || !editor?.body || !editor.modifiers?.some(node => node.kind === ts.SyntaxKind.ExportKeyword) ||
+      !editor.modifiers.some(node => node.kind === ts.SyntaxKind.DefaultKeyword)) return null;
+  const ownReturns = (body: ts.Block) => {
+    const returns: ts.ReturnStatement[] = [];
+    const visit = (node: ts.Node) => { if (node !== body && ts.isFunctionLike(node)) return; if (ts.isReturnStatement(node)) returns.push(node); ts.forEachChild(node, visit); };
+    visit(body); return returns;
+  };
+  const editorReturns = ownReturns(editor.body), root = unwrap(editorReturns[0]?.expression);
+  if (editorReturns.length !== 1 || editorReturns[0]?.parent !== editor.body || !root ||
+      !ts.isJsxElement(root) || root.openingElement.tagName.getText(tree) !== "AdminPageExperience") return null;
+  const shells = root.children.filter((node): node is ts.JsxSelfClosingElement =>
+    ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "ContentEditorShell");
+  const attribute = (node: ts.JsxOpeningLikeElement, name: string) => node.attributes.properties.find((property): property is ts.JsxAttribute =>
+    ts.isJsxAttribute(property) && property.name.getText(tree) === name)?.initializer;
+  if (shells.length !== 1 || shells[0]!.attributes.properties.filter(property => ts.isJsxAttribute(property) && property.name.getText(tree) === "tabs").length !== 1 ||
+      attribute(shells[0]!, "tabs")?.getText(tree) !== "{renderTabs}" ||
+      shells[0]!.attributes.properties.some(ts.isJsxSpreadAttribute)) return null;
+  const renderers = editor.body.statements.filter((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "renderTabs");
+  const renderer = renderers[0], model = renderer?.parameters[0];
+  if (renderers.length !== 1 || !renderer?.body || renderer.parameters.length !== 1 || !model || !ts.isIdentifier(model.name) || model.name.text !== "model") return null;
+  const returns = ownReturns(renderer.body), returned = unwrap(returns[0]?.expression);
+  if (returns.length !== 1 || returns[0]?.parent !== renderer.body || !returned || !ts.isArrayLiteralExpression(returned)) return null;
+  const property = (node: ts.ObjectLiteralExpression, name: string) => {
+    const values = node.properties.filter((row): row is ts.PropertyAssignment => ts.isPropertyAssignment(row) && row.name.getText(tree) === name);
+    return values.length === 1 && !node.properties.some(ts.isSpreadAssignment) ? values[0]!.initializer : undefined;
+  };
+  const tabs = returned.elements;
+  if (tabs.length !== 5 || !tabs.every(ts.isObjectLiteralExpression) ||
+      !["basic", "display", "faq", "seo", "publish"].every((id, index) => {
+        const value = property(tabs[index] as ts.ObjectLiteralExpression, "id"); return value && ts.isStringLiteral(value) && value.text === id;
+      })) return null;
+  const content = property(tabs[1] as ts.ObjectLiteralExpression, "content");
+  if (!content) return null;
+  const projectedName = mode === "create" ? "values" : "effectiveTopic", sourceName = mode === "create" ? "defaultValues" : "topic";
+  const directDeclarations = (body: ts.Block, name: string) => body.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
+    .filter(node => ts.isIdentifier(node.name) && node.name.text === name);
+  const projected = directDeclarations(renderer.body, projectedName), initial = mode === "create" ? directDeclarations(editor.body, sourceName)[0] : undefined;
+  const initializer = projected[0]?.initializer, projectedStatement = projected[0]?.parent.parent;
+  if (projected.length !== 1 || !initializer || !ts.isCallExpression(initializer) || initializer.expression.getText(tree) !== "applyTopicFormDraftFields" ||
+      initializer.arguments.map(node => node.getText(tree)).join("|") !== sourceName + '|model.recoveryFields|"article"' ||
+      !projectedStatement || !ts.isVariableStatement(projectedStatement) || projectedStatement.end >= returns[0]!.getStart(tree)) return null;
+  const topic = editor.parameters[0]?.name;
+  const topicBinding = topic && ts.isObjectBindingPattern(topic) ? topic.elements.find(node => ts.isIdentifier(node.name) && node.name.text === "topic" && !node.propertyName && !node.dotDotDotToken) : undefined;
+  if (mode === "create" ? !initial?.initializer || directDeclarations(editor.body, sourceName).length !== 1 ||
+      !ts.isVariableStatement(initial.parent.parent) || initial.parent.parent.end >= editorReturns[0]!.getStart(tree) : !topicBinding) return null;
+  const tracked = new Set(["ContentDisplaySettings", "ContentEditorShell", "AdminPageExperience", "applyTopicFormDraftFields", "renderTabs", "model", projectedName, sourceName]);
+  const permitted = new Set<ts.Node>([renderer, model, projected[0]!, ...(initial ? [initial] : []), ...(topicBinding ? [topicBinding] : [])]);
+  const baseIdentifier = (node: ts.Expression): string | null => {
+    while (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isParenthesizedExpression(node)) node = node.expression;
+    return ts.isIdentifier(node) ? node.text : null;
+  };
+  let safe = true;
+  const visit = (node: ts.Node) => {
+    if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) || ts.isFunctionDeclaration(node) ||
+        ts.isClassDeclaration(node) || ts.isClassExpression(node) || ts.isEnumDeclaration(node) || ts.isFunctionExpression(node)) &&
+        node.name && ts.isIdentifier(node.name) && tracked.has(node.name.text) && !permitted.has(node)) safe = false;
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+        tracked.has(baseIdentifier(node.left) ?? "")) safe = false;
+    if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+        [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator) && tracked.has(baseIdentifier(node.operand) ?? "")) safe = false;
+    if (ts.isDeleteExpression(node) && tracked.has(baseIdentifier(node.expression) ?? "")) safe = false;
+    ts.forEachChild(node, visit);
+  };
+  visit(editor);
+  const direct = unwrap(content);
+  return safe ? { tree, content, unconditional: Boolean(direct && ts.isJsxSelfClosingElement(direct) && direct.tagName.getText(tree) === "ContentDisplaySettings") } : null;
+}
+
 function hasVisibleSafeArticleDisplayDefaults(create: string, edit: string, shared: string) {
   const parse = (source: string) => ts.createSourceFile("display.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const bindings = [
@@ -60,7 +147,8 @@ function hasVisibleSafeArticleDisplayDefaults(create: string, edit: string, shar
     .flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
     .find(node => node.name.getText(createTree) === "defaultValues")?.initializer;
   const createDisplayDefaultsOmitted = defaultValues && ts.isObjectLiteralExpression(defaultValues) && !defaultValues.properties.some(node => ts.isSpreadAssignment(node) || (ts.isPropertyAssignment(node) && bindings.some(([, field]) => node.name.getText(createTree) === field)));
-  return canonical && createUses.length === 1 && editUses.length === 1 && controls.length === bindings.length && Boolean(params && ts.isObjectBindingPattern(params) && bindings.every(([prop, field]) => params.elements.some((node) => node.name.getText(sharedTree) === prop && node.initializer?.kind === ts.SyntaxKind.TrueKeyword) && controls.filter((node) => attribute(node, "name") === field && attribute(node, "defaultChecked") === `${prop} !== false`).length === 1)) &&
+  const activeCreate = actualArticleDisplaySlot(create, "create"), activeEdit = actualArticleDisplaySlot(edit, "edit");
+  return Boolean(activeCreate?.unconditional && activeEdit?.unconditional) && canonical && createUses.length === 1 && editUses.length === 1 && controls.length === bindings.length && Boolean(params && ts.isObjectBindingPattern(params) && bindings.every(([prop, field]) => params.elements.some((node) => node.name.getText(sharedTree) === prop && node.initializer?.kind === ts.SyntaxKind.TrueKeyword) && controls.filter((node) => attribute(node, "name") === field && attribute(node, "defaultChecked") === `${prop} !== false`).length === 1)) &&
     createDisplayDefaultsOmitted && recoveryProjection(createTree!, "values", "defaultValues") && recoveryProjection(editTree!, "effectiveTopic", "topic") &&
     createUses[0]!.attributes.properties.every((node) => ts.isJsxAttribute(node) && ["columns", "introCardSpan", "presentation", "sectionHeading", ...bindings.map(([prop]) => prop)].includes(node.name.getText(createTree))) &&
     bindings.every(([prop, field]) => attribute(createUses[0]!, prop) === `values.${field}`) &&
@@ -99,19 +187,17 @@ function executeArticleDisplayProjection(create: string, edit: string, shared: s
   const dependencies = ["AdminFormGrid", "AdminFormGridItem", "AdminCard", "AdminModuleSectionHeader", "AdminModuleTabIcon", "TopicFormSwitch"];
   new Function("require", "module", "exports", ...dependencies, "ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", compiled.outputText)(nativeRequire, displayModule, displayModule.exports, ...dependencies, "canonical-header-token");
   const display = displayModule.exports.default as (props: Record<string, unknown>) => unknown;
-  const propsFromActualConsumer = (source: string, values: Record<string, unknown>) => {
-    const sourceTree = ts.createSourceFile("consumer.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    let usage: ts.JsxOpeningLikeElement | undefined;
-    const visit = (node: ts.Node) => {
-      if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(sourceTree) === "ContentDisplaySettings") usage = node;
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceTree);
-    assert.ok(usage);
-    return Object.fromEntries(usage.attributes.properties.filter(ts.isJsxAttribute).filter(attribute => /^show[A-Z]/.test(attribute.name.getText(sourceTree))).map(attribute => {
-      assert.ok(attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression);
-      return [attribute.name.getText(sourceTree), new Function("values", "effectiveTopic", `return (${attribute.initializer.expression.getText(sourceTree)});`)(values, values)];
-    }));
+  const propsFromActualConsumer = (source: string, mode: "create" | "edit", values: Record<string, unknown>) => {
+    const selected = actualArticleDisplaySlot(source, mode);
+    assert.ok(selected, "Display projection must use the actual returned canonical tab and unshadowed hydration bindings");
+    const compiled = ts.transpileModule("export const element = (" + selected.content.getText(selected.tree) + ");", {
+      fileName: "actual-display-content.tsx", compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    });
+    const exports: { element?: { type?: unknown; props?: Record<string, unknown> } | null | false } = {};
+    new Function("require", "exports", "ContentDisplaySettings", "values", "effectiveTopic", compiled.outputText)(nativeRequire, exports, display, values, values);
+    const element = exports.element;
+    assert.ok(element && element.type === display && element.props, "The actual Display content must mount the canonical shared owner for this hydrated state");
+    return element.props;
   };
   const controls = (value: unknown): Record<string, boolean> => {
     const result: Record<string, boolean> = {};
@@ -127,10 +213,10 @@ function executeArticleDisplayProjection(create: string, edit: string, shared: s
   };
   const nativeFields = Object.keys(controls(display({})));
   return {
-    freshCreate: controls(display(propsFromActualConsumer(create, hydrate({}, null, "article")))),
-    recoveredCreate: controls(display(propsFromActualConsumer(create, hydrate({}, Object.fromEntries(nativeFields.map(field => [field, []])), "article")))),
-    savedEdit: controls(display(propsFromActualConsumer(edit, hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), null, "article")))),
-    recoveredEdit: controls(display(propsFromActualConsumer(edit, hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), Object.fromEntries(nativeFields.map(field => [field, ["on"]])), "article")))),
+    freshCreate: controls(display(propsFromActualConsumer(create, "create", hydrate({}, null, "article")))),
+    recoveredCreate: controls(display(propsFromActualConsumer(create, "create", hydrate({}, Object.fromEntries(nativeFields.map(field => [field, []])), "article")))),
+    savedEdit: controls(display(propsFromActualConsumer(edit, "edit", hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), null, "article")))),
+    recoveredEdit: controls(display(propsFromActualConsumer(edit, "edit", hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), Object.fromEntries(nativeFields.map(field => [field, ["on"]])), "article")))),
   };
 }
 
@@ -256,6 +342,57 @@ check(
     !hasVisibleSafeArticleDisplayDefaults(articleCreate.replace('from "./ContentDisplaySettings"', 'from "./ParallelDisplaySettings"'), articleEdit, displaySettings) &&
     !hasVisibleSafeArticleDisplayDefaults(`${articleCreate}\nconst duplicate = <ContentDisplaySettings />;`, articleEdit, displaySettings),
 );
+
+
+function moveArticleDisplayDeclarationAfterReturn(source: string, mode: "create" | "edit", initialDefaults = false) {
+  const tree = ts.createSourceFile("DisplayDeclarationOrder.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const editor = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) &&
+    node.name?.text === (mode === "create" ? "ArticleCreateEditor" : "ArticleEditor"));
+  assert.ok(editor?.body);
+  const renderer = editor.body.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "renderTabs");
+  const body = initialDefaults ? editor.body : renderer?.body;
+  assert.ok(body);
+  const name = initialDefaults ? "defaultValues" : mode === "create" ? "values" : "effectiveTopic";
+  const statement = body.statements.find((node): node is ts.VariableStatement => ts.isVariableStatement(node) &&
+    node.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === name));
+  const returned = body.statements.find(ts.isReturnStatement);
+  assert.ok(statement && returned && statement.end < returned.getStart(tree));
+  return source.slice(0, statement.getStart(tree)) + source.slice(statement.end, returned.end) + "\n" +
+    statement.getText(tree) + source.slice(returned.end);
+}
+
+const displayActivityMutations: { label: string; mode: "create" | "edit"; source: string; bindingRejected?: boolean }[] = [];
+for (const [mode, original] of [["create", articleCreate], ["edit", articleEdit]] as const) {
+  const selected = actualArticleDisplaySlot(original, mode);
+  assert.ok(selected);
+  const slot = selected.content.getText(selected.tree), replaceSlot = (replacement: string) =>
+    original.slice(0, selected.content.getStart(selected.tree)) + replacement + original.slice(selected.content.end);
+  displayActivityMutations.push(
+    { label: mode + " inactive actual content", mode, source: replaceSlot("(false && " + slot + ")") },
+    { label: mode + " conditional missing controls", mode, source: replaceSlot("((false as boolean) ? " + slot + " : null)") },
+    { label: mode + " detached actual tab producer", mode, source: original.replace("tabs={renderTabs}", "tabs={() => []}") },
+    { label: mode + " earlier actual renderer return", mode, source: original.replace("function renderTabs(model: ContentEditorModel) {", "function renderTabs(model: ContentEditorModel) { if (true) return [];") },
+    { label: mode + " local canonical owner shadow", mode, source: original.replace("function renderTabs(model: ContentEditorModel) {", "function renderTabs(model: ContentEditorModel) { const ContentDisplaySettings = () => null;") },
+    { label: mode + " parallel imported Display owner", mode, source: original.replace('from "./ContentDisplaySettings"', 'from "./ParallelDisplaySettings"') },
+    { label: mode + " projected values initialized after returned tabs", mode, bindingRejected: true, source: moveArticleDisplayDeclarationAfterReturn(original, mode) },
+    { label: mode + " late duplicate tabs override", mode, bindingRejected: true, source: original.replace("tabs={renderTabs}", "tabs={renderTabs} tabs={() => []}") },
+    { label: mode + " local class value shadow", mode, bindingRejected: true, source: original.replace("function renderTabs(model: ContentEditorModel) {", "function renderTabs(model: ContentEditorModel) { class ContentDisplaySettings {}") },
+    { label: mode + " local enum value shadow", mode, bindingRejected: true, source: original.replace("function renderTabs(model: ContentEditorModel) {", "function renderTabs(model: ContentEditorModel) { enum ContentDisplaySettings {}") },
+    { label: mode + " named expression shadow in actual content", mode, bindingRejected: true, source: replaceSlot("(function ContentDisplaySettings() { return " + slot + "; })()") },
+  );
+}
+displayActivityMutations.push({ label: "create initial defaults initialized after editor return", mode: "create", bindingRejected: true,
+  source: moveArticleDisplayDeclarationAfterReturn(articleCreate, "create", true) });
+for (const mutation of displayActivityMutations) {
+  const original = mutation.mode === "create" ? articleCreate : articleEdit;
+  assert.notEqual(mutation.source, original, "Display activity negative changes the actual owner: " + mutation.label);
+  const parsed = ts.createSourceFile("DisplayActivityNegative.tsx", mutation.source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal((parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "Syntactically valid Display activity negative: " + mutation.label);
+  if (mutation.bindingRejected) assert.equal(actualArticleDisplaySlot(mutation.source, mutation.mode), null, "Actual returned-slot resolver rejects lost binding: " + mutation.label);
+  const create = mutation.mode === "create" ? mutation.source : articleCreate, edit = mutation.mode === "edit" ? mutation.source : articleEdit;
+  check("Display activity rejects " + mutation.label, !hasVisibleSafeArticleDisplayDefaults(create, edit, displaySettings));
+  assert.throws(() => executeArticleDisplayProjection(create, edit, displaySettings), "Actual native projection rejects " + mutation.label);
+}
 
 const actualDisplayProjection = executeArticleDisplayProjection(articleCreate, articleEdit, displaySettings);
 check(

@@ -1025,5 +1025,74 @@ for (const [name, args] of [
 }
 assert.equal(adapterWriteCalls, 3, "Each adapter must issue exactly one explicit action call.");
 
+
+/** Actual fixture resource tail, native loopback socket, controlled Browser startup ports. */
+async function verifyControllerStartupCleanupContracts() {
+  const { spawnSync } = await import("node:child_process");
+  const controllerPath = new URL("./qa-admin-data-engine-controller.mjs", import.meta.url);
+  const source = readFileSync(controllerPath, "utf8").replace(/\r\n?/gu, "\n");
+  const parse = (input: string) => ts.createSourceFile("controller.mjs", input, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const functionFrom = (tree: ts.SourceFile) => {
+    const owners = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "isolatedFailureContracts");
+    assert.equal(owners.length, 1); assert.ok(owners[0]!.body); return owners[0]!;
+  };
+  const tailFrom = (input: string) => {
+    const tree = parse(input), owner = functionFrom(tree);
+    const statements = owner.body!.statements;
+    const server = statements.filter((node): node is ts.VariableStatement => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => ts.isIdentifier(row.name) && row.name.text === "server"));
+    assert.equal(server.length, 1);
+    const declaration = server[0]!.declarationList.declarations[0]!;
+    assert.ok(declaration.initializer && ts.isCallExpression(declaration.initializer) && declaration.initializer.expression.getText(tree) === "createServer");
+    const actualImport = (name: string, module: string) => tree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(row => row.name.text === name && !row.propertyName && !row.isTypeOnly));
+    assert.ok(actualImport("createServer", "node:http") && actualImport("chromium", "playwright"));
+    return { tree, owner, tail: input.slice(server[0]!.getStart(tree), owner.body!.end - 1) };
+  };
+  const run = (input: string, mode: "launch" | "context-and-close" | "launch-and-server-close" | "launch-and-evidence-write") => {
+    const selected = tailFrom(input);
+    const program = [
+      'import assert from "node:assert/strict"; import {createServer as nativeCreateServer} from "node:http"; import path from "node:path";',
+      'let server, port, listened=0, closed=0, launchCalls=0, closeCalls=0; const written=[];',
+      'const expected=new Error("controlled-controller-'+mode+'-failure"), cleanupError=new Error("controlled-browser-close-failure");',
+      'const createServer=handler=>{server=nativeCreateServer(handler);server.once("listening",()=>{listened++;port=server.address().port});server.once("close",()=>closed++);'+(mode === "launch-and-server-close" ? "const close=server.close.bind(server);server.close=callback=>close(error=>callback(error??cleanupError));" : "")+'return server;};',
+      'const chromium={launch:async()=>{launchCalls++;assert.equal(listened,1,"Browser starts only after native listen");'+(mode !== "context-and-close" ? 'throw expected;' : 'return {newContext:async()=>{throw expected},close:async()=>{closeCalls++;throw cleanupError}};')+'}};',
+      'const writeFile=async(file,text)=>{assert.equal(path.basename(file),"evidence.json");written.push(JSON.parse(text));'+(mode === "launch-and-evidence-write" ? "throw cleanupError;" : "")+'};',
+      'async function actualTail(){const navigation=null,eligibilityOnly=false,intentPrefetch=false,adjacentPrefetch=false,bundle=Buffer.alloc(0),output="/controlled-no-write",passed=0,failed=0; const requests=[],blocked=[],observations=[],errors=[],responsePlans=[],delayedResponses=[],requestWaiters=new Set(),failures=new Map(),held=new Map();let fixtureOptions={};'+selected.tail+'}',
+      'try { let error;try{await actualTail()}catch(value){error=value};assert.equal(error,expected,"Original startup/body error identity preserved");assert.equal(launchCalls,1);assert.equal(listened,1);assert.equal(server.listening,false,"Actual resource tail closes native listening server");assert.equal(closed,1);assert.equal(written.length,1);assert.deepEqual(written[0].requests,[]);assert.deepEqual(written[0].observations.filter(row=>row.label==="controller fixture cleanup failed").map(row=>row.stage),'+JSON.stringify(mode === "context-and-close" ? ["browser-close"] : mode === "launch-and-server-close" ? ["server-close"] : [])+');assert.equal(closeCalls,'+(mode !== "context-and-close" ? '0' : '1')+');const probe=nativeCreateServer();try{await new Promise((resolve,reject)=>{probe.once("error",reject);probe.listen(port,"127.0.0.1",resolve)});}finally{if(probe.listening)await new Promise(resolve=>probe.close(resolve));}console.log("PASS native controller resource tail '+mode+'"); } finally { if(server?.listening){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));} }',
+    ].join("\n");
+    return spawnSync(process.execPath, ["--input-type=module", "--eval", program], { encoding: "utf8", timeout: 5_000, windowsHide: true, maxBuffer: 1_000_000 });
+  };
+  for (const mode of ["launch", "context-and-close", "launch-and-server-close", "launch-and-evidence-write"] as const) {
+    const result = run(source, mode);
+    assert.equal(result.error === undefined, true, "Native controlled child completes within deadline: " + mode);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(result.stdout.includes("PASS native controller resource tail " + mode));
+    if (mode === "launch-and-evidence-write") assert.ok(result.stderr.includes("Controller fixture cleanup failed while writing evidence."), "Evidence-write cleanup failure is explicitly observable without exposing error details");
+  }
+  const selected = tailFrom(source), ownTry = selected.owner.body!.statements.filter(ts.isTryStatement);
+  assert.equal(ownTry.length, 1); const startupTry = ownTry[0]!;
+  const startup = startupTry.tryBlock.statements.slice(0, 3);
+  assert.equal(startup.length, 3); assert.ok(startup[0]!.getText(selected.tree).includes('server.listen(0, "127.0.0.1"'));
+  assert.ok(startup[2]!.getText(selected.tree).includes("browser = await chromium.launch"));
+  const moved = source.slice(0, startupTry.getStart(selected.tree)) + startup.map(node => node.getText(selected.tree)).join("\n") + "\n" +
+    source.slice(startupTry.getStart(selected.tree), startup[0]!.getStart(selected.tree)) + source.slice(startup[2]!.end);
+  const replaceOne = (before: string, after: string) => { assert.equal(source.split(before).length, 2); return source.replace(before, after); };
+  const mutants = [
+    { label: "startup moved outside owned try", source: moved, mode: "launch" as const },
+    { label: "server close removed", source: replaceOne('await new Promise((resolve, reject) => server.close(error => {\n        if (error && error.code !== "ERR_SERVER_NOT_RUNNING") reject(error); else resolve();\n      }));', ''), mode: "launch" as const },
+    { label: "primary failure flag removed", source: replaceOne('primaryFailed = true;', ''), mode: "context-and-close" as const },
+    { label: "Browser close prevents independent server teardown", source: replaceOne('try { await browser?.close(); } catch (error) { recordCleanupFailure("browser-close", error); }', 'await browser?.close();'), mode: "context-and-close" as const },
+  ];
+  for (const mutant of mutants) {
+    assert.notEqual(mutant.source, source, "Effective controller lifecycle mutation: " + mutant.label);
+    assert.equal((parse(mutant.source) as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "Parse-valid controller lifecycle mutation: " + mutant.label);
+    const result = run(mutant.source, mutant.mode);
+    assert.equal(result.error === undefined, true, "Negative child cleans its own controlled socket: " + mutant.label);
+    assert.notEqual(result.status, 0, "Actual native tail rejects " + mutant.label);
+  }
+  console.log("PASS Controller startup cleanup: 4 native resource cases and 4 effective parsed negatives");
+}
+
+await verifyControllerStartupCleanupContracts();
+
 console.log("verify-admin-data-engine-contracts passed (shared query/sort and instant rollback contracts).");
 console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);

@@ -1112,6 +1112,66 @@ function verifyMetricIconPresentation(source) {
   return cases;
 }
 const metricCard = read("src/components/admin/ui/AdminMetricCard.tsx");
+async function verifyCinematicStartupCleanup(source) {
+  const parse = input => {
+    const tree = ts.createSourceFile("cinematic-admin-browser.mjs", input, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    assert.equal(tree.parseDiagnostics.length, 0, "Lifecycle controls require syntax-valid source");
+    const owners = tree.statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === "verifyCinematicAdminPresentation");
+    assert.equal(owners.length, 1);
+    return { tree, owner: owners[0] };
+  };
+  const run = async input => {
+    const { tree, owner } = parse(input), tries = owner.body.statements.filter(ts.isTryStatement);
+    assert.equal(tries.length, 1, "One actual startup/lifecycle try owns the fixture resources");
+    const lifecycle = tries[0], statements = lifecycle.tryBlock.statements;
+    const routeIndex = statements.findIndex(statement => ts.isExpressionStatement(statement) && ts.isAwaitExpression(statement.expression) && ts.isCallExpression(statement.expression.expression) && ts.isPropertyAccessExpression(statement.expression.expression.expression) && statement.expression.expression.expression.expression.getText(tree) === "page" && statement.expression.expression.expression.name.text === "route");
+    assert.ok(routeIndex >= 0, "Actual Browser setup, including its route, must be inside the cleanup try");
+    const declarations = owner.body.statements.filter(statement => ts.isVariableStatement(statement) && statement.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === "browser"));
+    assert.equal(declarations.length, 1);
+    const screenshots = owner.body.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "screenshot");
+    assert.equal(screenshots.length, 1, "Failure capture remains callable from the catch boundary");
+    const actual = declarations[0].getText(tree) + "\n" + screenshots[0].getText(tree) + "\ntry {\n" + statements.slice(0, routeIndex + 1).map(statement => statement.getText(tree)).join("\n") + "\n}" + input.slice(lifecycle.tryBlock.end, lifecycle.end);
+    const scenarios = [];
+    for (const dataGridOnly of [false, true]) for (const phase of ["after-listen", "after-browser", "after-route"]) {
+      const failure = new Error("Controlled Cinematic startup: " + phase), state = { listening: false, connected: false, browserCreated: false, browserCloses: 0, serverCloses: 0 }, writes = [];
+      const page = { on() {}, async route() { if (phase === "after-route") throw failure; }, async screenshot() {}, async evaluate() { return {}; } };
+      const server = { once() {}, off() {}, listen(_port, _host, ready) { state.listening = true; ready(); }, address() { if (phase === "after-listen") throw failure; return { port: 43123 }; }, get listening() { return state.listening; }, closeAllConnections() {}, close(done) { state.serverCloses++; state.listening = false; done(); } };
+      const chromium = { async launch() { state.browserCreated = true; state.connected = true; return { async newPage() { if (phase === "after-browser") throw failure; return page; }, async close() { state.browserCloses++; state.connected = false; } }; } };
+      const execute = new Function("assert", "path", "chromium", "server", "writeFile", "dataGridOnly", `return async function() { const output="controlled-output", errors=[], cases=[], screenshots=[], forbidden=[], requests=[]; let holdReads=false; const held=[], gridTransport={holdActions:false,heldActions:[]}; const ADMIN_COMPANY_DEFAULT={publicWebsiteUrl:"/"}; ${actual} };`)(assert, { join: (...parts) => parts.join("/") }, chromium, server, async (_file, body) => writes.push(JSON.parse(body)), dataGridOnly);
+      await assert.rejects(execute, error => error === failure, "Original startup failure must survive catch/cleanup unchanged");
+      assert.equal(state.listening, false, "Every created listener closes");
+      assert.equal(state.connected, false, "Every created Browser closes");
+      assert.equal(state.serverCloses, 1);
+      assert.equal(state.browserCloses, state.browserCreated ? 1 : 0);
+      assert.ok(writes.some(row => row.status === "FAIL" && row.message === String(failure)), "Actual failure receipt keeps the original cause");
+      scenarios.push({ dataGridOnly, phase });
+    }
+    return scenarios;
+  };
+  const scenarios = await run(source), { tree, owner } = parse(source), targets = { browser: [], server: [], rethrow: [] };
+  const visit = node => {
+    if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression) && ts.isPropertyAccessExpression(node.expression.expression) && node.expression.expression.expression.getText(tree) === "browser" && node.expression.expression.name.text === "close") targets.browser.push(node);
+    if (ts.isIfStatement(node) && node.expression.getText(tree) === "server.listening") targets.server.push(node);
+    if (ts.isThrowStatement(node) && node.expression?.getText(tree) === "error" && node.parent === owner.body.statements.find(ts.isTryStatement).catchClause.block) targets.rethrow.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(owner);
+  const mutations = [];
+  for (const [name, nodes] of Object.entries(targets)) {
+    assert.equal(nodes.length, 1, "Unique actual lifecycle mutation target: " + name);
+    const node = nodes[0], replacement = name === "browser" ? "void browser" : name === "server" ? "void server;" : "void error;";
+    const mutant = source.slice(0, node.getStart(tree)) + replacement + source.slice(node.end);
+    assert.notEqual(mutant, source);
+    parse(mutant);
+    await assert.rejects(() => run(mutant), undefined, "Missing " + name + " must lose lifecycle proof");
+    mutations.push(name);
+  }
+  return { scenarios, mutations, boundary: "Actual startup prefix/catch/finally and failure capture; controlled in-memory resource ports only. No Browser rendering, network, file writes or Product behavior claim." };
+}
+const cinematicStartupCleanup = await verifyCinematicStartupCleanup(read("scripts/fixtures/cinematic-admin-browser.mjs"));
+check("Actual Cinematic startup failures preserve their cause and close every created server/Browser", cinematicStartupCleanup.scenarios.length === 6 && cinematicStartupCleanup.mutations.length === 3);
+
+
 const presentationScripts = JSON.parse(read("package.json")).scripts;
 check("Cinematic browser regression remains reachable from the existing Shell guard and awaited bounded runner", presentationScripts["qa:cinematic-admin"] === "node scripts/qa-home-story-presentation.mjs --cinematic-admin-only" && presentationScripts["verify:admin-shell-system"] === "node scripts/verify-admin-shell-system.mjs && npm run qa:cinematic-admin" && read("scripts/qa-home-story-presentation.mjs").includes("await verifyCinematicAdminPresentation();") && read("scripts/fixtures/cinematic-admin-browser.mjs").includes("await verifyRefinements();") && read("scripts/fixtures/cinematic-admin-browser.mjs").includes("--cinematic-v11-only"));
 check("Existing Admin Runtime CI path also awaits Sidebar selection, system-wide adoption, official KPI and Module title/visual Browser deltas", read("scripts/qa-home-story-presentation.mjs").includes("await verifyCinematicAdminPresentation({ sidebarSelectionOnly: true });") && read("scripts/qa-home-story-presentation.mjs").includes("await verifyCinematicAdminPresentation({ systemwideAdoptionOnly: true });") && read("scripts/qa-home-story-presentation.mjs").includes("await verifyCinematicAdminPresentation({ kpiAdoptionOnly: true });") && read("scripts/qa-home-story-presentation.mjs").includes("await verifyCinematicAdminPresentation({ moduleTitleShimmerOnly: true });") && read("scripts/fixtures/cinematic-admin-browser.mjs").includes("--cinematic-systemwide-adoption-only") && read("scripts/fixtures/cinematic-admin-browser.mjs").includes("--cinematic-kpi-adoption-only") && read("scripts/fixtures/cinematic-admin-browser.mjs").includes("--cinematic-module-title-shimmer-only") && read("scripts/fixtures/cinematic-admin-browser.mjs").includes("if (moduleTitleShimmerOnly) await verifyModuleTitleShimmer();"));
