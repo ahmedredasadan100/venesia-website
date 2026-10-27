@@ -47,23 +47,33 @@ test('Native collector binds source and owned run, rejects command checkpoints, 
 function selectedTransportNodes(value){
  const ast=ts.createSourceFile('isolated-public-verification.mts',value,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);assert.equal(ast.parseDiagnostics.length,0);
  const owners=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='runOwnedPublicVerification');assert.equal(owners.length,1);
- const statements=owners[0].body.statements,selected=statements.filter(node=>ts.isIfStatement(node)&&node.expression.getText(ast)==='request.adoptionJourneySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION');assert.equal(selected.length,1);
+ const helpers=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='adminAdoptionGate');assert.equal(helpers.length,1);
+ const statements=owners[0].body.statements,helperStatements=helpers[0].body.statements,selected=helperStatements.filter(node=>ts.isIfStatement(node)&&node.expression.getText(ast)==='request.adoptionJourneySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION');assert.equal(selected.length,1);
  const gates=statements.filter(node=>ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>row.name.getText(ast)==='gates'));assert.equal(gates.length,1);
- return {ast,owner:owners[0],statements,selected:selected[0],gates:gates[0]};
+ const descriptor=helperStatements.filter(node=>ts.isReturnStatement(node)&&node.expression&&ts.isObjectLiteralExpression(node.expression));assert.equal(descriptor.length,1);
+ return {ast,owner:owners[0],helper:helpers[0],statements,helperStatements,selected:selected[0],gates:gates[0],descriptor:descriptor[0]};
 }
 function assertSelectedTransportBinding(value){
- const {ast,owner,statements,selected,gates}=selectedTransportNodes(value);assert.ok(statements.indexOf(selected)<statements.indexOf(gates),'Preview scope validation must precede its own executable gate declaration.');
+ const {ast,owner,helper:gateHelper,statements,helperStatements,selected,gates,descriptor}=selectedTransportNodes(value);
+ assert.ok(helperStatements.indexOf(selected)<helperStatements.indexOf(descriptor),'Preview scope validation must precede its own returned executable descriptor.');
  assert.ok(ts.isExpressionStatement(selected.thenStatement));const call=selected.thenStatement.expression;assert.ok(ts.isCallExpression(call));assert.equal(call.expression.getText(ast),'validateCorePreviewPublicImpactSelection');assert.equal(call.arguments.length,1);assert.ok(ts.isObjectLiteralExpression(call.arguments[0]));
  assert.deepEqual(call.arguments[0].properties.map(row=>{assert.ok(ts.isPropertyAssignment(row));return [row.name.getText(ast),row.initializer.getText(ast)];}),[['scope','request.adoptionScope'],['cohort','request.adoptionCohort'],['selection','request.adoptionJourneySelection']]);
- assert.ok(gates.getText(ast).includes('["--core-journey-selection=" + request.adoptionJourneySelection]'));
- assert.ok(owner.body.getText(ast).includes('if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption")'));
+ assert.ok(ts.isExpressionStatement(selected.elseStatement));const fallback=selected.elseStatement.expression;assert.ok(ts.isCallExpression(fallback));assert.equal(fallback.expression.getText(ast),'validateCoreJourneySelection');assert.deepEqual(fallback.arguments.map(node=>node.getText(ast)),call.arguments.map(node=>node.getText(ast)));
+ assert.ok(descriptor.getText(ast).includes('["--core-journey-selection=" + request.adoptionJourneySelection]'));
+ assert.ok(gateHelper.body.getText(ast).includes('if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption")'));
+ const properties=new Map(descriptor.expression.properties.map(row=>{assert.ok(ts.isPropertyAssignment(row));let value=row.initializer;while(ts.isAsExpression(value))value=value.expression;return[row.name.getText(ast),value];}));
+ assert.equal(properties.get('name').text,'admin-adoption');assert.equal(properties.get('script').text,'scripts/qa-admin-adoption-journeys.mjs');
+ const validations=statements.filter(node=>ts.isExpressionStatement(node)&&ts.isCallExpression(node.expression)&&node.expression.expression.getText(ast)==='adminAdoptionGate');assert.equal(validations.length,1);assert.equal(validations[0].expression.getText(ast),'adminAdoptionGate(request)');assert.ok(statements.indexOf(validations[0])<statements.indexOf(gates));
+ const adoptionBranches=[];function findAdoption(node){if(ts.isConditionalExpression(node)&&node.condition.getText(ast)==='adoption')adoptionBranches.push(node);ts.forEachChild(node,findAdoption);}findAdoption(gates);assert.equal(adoptionBranches.length,1);assert.ok(ts.isArrayLiteralExpression(adoptionBranches[0].whenTrue));let executable=adoptionBranches[0].whenTrue.elements.at(-1);while(ts.isNonNullExpression(executable))executable=executable.expression;assert.ok(ts.isCallExpression(executable));assert.equal(executable.getText(ast),'adminAdoptionGate(request)');
+ const bindsHelper=name=>name&&(ts.isIdentifier(name)?name.text==='adminAdoptionGate':(ts.isObjectBindingPattern(name)||ts.isArrayBindingPattern(name))&&name.elements.some(row=>ts.isBindingElement(row)&&bindsHelper(row.name)));
+ const calls=[],shadows=[];function visit(node){if(ts.isCallExpression(node)&&node.expression.getText(ast)==='adminAdoptionGate')calls.push(node);if((ts.isVariableDeclaration(node)||ts.isParameter(node)||ts.isFunctionDeclaration(node))&&bindsHelper(node.name))shadows.push(node);ts.forEachChild(node,visit);}visit(gates);assert.equal(calls.length,1);assert.equal(calls[0].getText(ast),'adminAdoptionGate(request)');visit(owner);assert.equal(shadows.length,0);
 }
 test('Existing transport validates selected scope before its own gates and carries the same fixed argument',()=>assertSelectedTransportBinding(transport));
 test('Unrelated earlier gate receipt declaration cannot shadow the actual executable gate',()=>assertSelectedTransportBinding('function unrelatedReceipt(){const gates=[];return gates;}\n'+transport));
 const transportNodes=selectedTransportNodes(transport),selectedText=transportNodes.selected.getText(transportNodes.ast);
 for(const [name,change]of[
  ['missing selected validator',value=>value.replace(selectedText,'')],
- ['validation after its actual gate',value=>value.slice(0,transportNodes.selected.getStart(transportNodes.ast))+value.slice(transportNodes.selected.end,transportNodes.gates.end)+'\n'+selectedText+value.slice(transportNodes.gates.end)],
+ ['validation after its actual gate',value=>value.slice(0,transportNodes.selected.getStart(transportNodes.ast))+value.slice(transportNodes.selected.end,transportNodes.descriptor.end)+'\n'+selectedText+value.slice(transportNodes.descriptor.end)],
  ['disconnected validator in another function',value=>'function unrelatedValidator(){'+selectedText+'}\n'+value.replace(selectedText,'')],
  ['wrong bound scope',value=>value.replace(selectedText,selectedText.replace('scope: request.adoptionScope','scope: "foreign"'))],
  ['wrong bound cohort',value=>value.replace(selectedText,selectedText.replace('cohort: request.adoptionCohort','cohort: "foreign"'))],
@@ -71,5 +81,28 @@ for(const [name,change]of[
  ['wrong actual CLI argument',value=>value.replace('["--core-journey-selection=" + request.adoptionJourneySelection]','["--other=" + request.adoptionJourneySelection]')],
  ['missing Admin selection guard',value=>value.replace('if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption")','if (false) assert.equal(request.selection, "admin-adoption")')]
 ])test('Transport source control rejects '+name,()=>assert.throws(()=>assertSelectedTransportBinding(change(transport))));
+
+for(const[name,from,to]of[
+ ['unrelated runtime helper','adminAdoptionGate(request)!]','unrelatedGate(request)!]'],
+ ['different runtime request','adminAdoptionGate(request)!]','adminAdoptionGate(otherRequest)!]'],
+ ['inactive early validation','  adminAdoptionGate(request);','  if(false) adminAdoptionGate(request);'],
+ ['shadowed runtime helper','const heroGate =','const adminAdoptionGate = substituteGate; const heroGate ='],
+ ['destructured runtime helper','const heroGate =','const {adminAdoptionGate} = substituteOwner; const heroGate ='],
+ ['inactive native construction','adminAdoptionGate(request)!]','(false && adminAdoptionGate(request))!]'],
+ ['substituted native driver','script: "scripts/qa-admin-adoption-journeys.mjs" as const','script: "scripts/other-adoption-driver.mjs" as const'],
+ ['missing domain fallback','else validateCoreJourneySelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });','else missingDomainValidator({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });'],
+])test('Transport source control rejects '+name,()=>{const changed=transport.replace(from,to);assert.notEqual(changed,transport);assert.throws(()=>assertSelectedTransportBinding(changed));});
+
+const domainText=fs.readFileSync(resolve(root,'scripts/fixtures/admin-core-domain-form-journeys.mjs'),'utf8'),domainTree=ts.createSourceFile('domain.mjs',domainText,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),domainValidators=domainTree.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='validateCoreJourneySelection');assert.equal(domainValidators.length,1);
+const compile=value=>ts.transpileModule(value,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const domainValidator=new Function('assert',compile(domainValidators[0].getText(domainTree).replace(/^export /u,''))+';return validateCoreJourneySelection;')(assert);
+const actualTransport=new Function('assert','CORE_PREVIEW_PUBLIC_IMPACT_SELECTION','validateCorePreviewPublicImpactSelection','validateCoreJourneySelection',compile(transportNodes.helper.getText(transportNodes.ast).replace(/^export /u,''))+';return adminAdoptionGate;')(assert,helper.CORE_PREVIEW_PUBLIC_IMPACT_SELECTION,helper.validateCorePreviewPublicImpactSelection,domainValidator);
+test('Actual shared descriptor preserves Preview and domain validation branches with exact native CLI arguments',()=>{
+ const request={additionalSourceFiles:[],selection:'admin-adoption',adoptionScope:'core-closure',adoptionCohort:'preview-recovery-templates',adoptionJourneySelection:helper.CORE_PREVIEW_PUBLIC_IMPACT_SELECTION};
+ assert.deepEqual(actualTransport(request),{name:'admin-adoption',script:'scripts/qa-admin-adoption-journeys.mjs',args:['--core-closure','--core-cohort=preview-recovery-templates','--core-journey-selection=preview-public-impact'],limitMs:900000});
+ assert.deepEqual(actualTransport({...request,adoptionCohort:'domain-forms',adoptionJourneySelection:'text-topic-forms'}).args,['--core-closure','--core-cohort=domain-forms','--core-journey-selection=text-topic-forms']);
+ assert.deepEqual(actualTransport({additionalSourceFiles:[],selection:'admin-adoption'}).args,[]);
+ for(const patch of[{adoptionScope:'foreign'},{adoptionCohort:'domain-forms'},{selection:undefined},{adoptionJourneySelection:'foreign'},{retainedAdminBehaviorAdmissionSha256:'a'.repeat(64)}])assert.throws(()=>actualTransport({...request,...patch}));
+});
 
 const result={status:'pass',controls:checks.length,checks,scope:'Controlled pure receipt joins plus source reachability; no application Browser, DB, Docker, native or global coverage claim.',actualPublicObservations:0};console.log(JSON.stringify({...result,canonicalRequiredCases:required.length}));

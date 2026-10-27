@@ -11,13 +11,15 @@ import {
   type ContentReviewFaqItem,
   type ContentReviewInput,
 } from "../../../lib/admin/content-workflow/content-review-capability";
-import type { MediaTopicPayload } from "../../../lib/admin/media-topic-payload";
+import { parseVideoPayloadFromForm, type MediaTopicPayload } from "../../../lib/admin/media-topic-payload";
 import type { EntityReviewAnalysisCardDefinition } from "../../../lib/admin/review/entity-review-presentation";
 import AdminEntityReviewPanel, {
   AdminEntityReviewCorrectionButton,
   AdminEntityReviewDecisionCard,
+  type AdminEntityReviewPresentation,
 } from "../review/AdminEntityReviewPanel";
 import { CONTENT_EDITOR_NAVIGATION_EVENT } from "../content/editors/content-editor-navigation";
+import { AdminFormGrid } from "../ui/AdminFormRuntime";
 
 type ReviewState = ContentReviewInput & {
   status: string;
@@ -34,6 +36,7 @@ type ReviewState = ContentReviewInput & {
 };
 
 type ContentReviewPanelProps = {
+  presentation?: AdminEntityReviewPresentation;
   formId: string;
   initial: ContentReviewInput;
   publishingOptions: ReactNode;
@@ -121,13 +124,7 @@ function readMediaPayload(
   contentType: ContentReviewInput["contentType"],
 ): MediaTopicPayload | null {
   if (contentType === "video") {
-    return {
-      kind: "video",
-      provider: "youtube",
-      video_url: field(form, "video_url"),
-      duration: field(form, "video_duration") || null,
-      thumbnail: field(form, "video_thumbnail") || null,
-    };
+    return parseVideoPayloadFromForm(new FormData(form));
   }
   if (contentType === "gallery") {
     const urls = Array.from(
@@ -193,6 +190,7 @@ function statusLabel(status: string) {
 }
 
 export default function ContentReviewPanel({
+  presentation = "default",
   formId,
   initial,
   publishingOptions,
@@ -205,6 +203,7 @@ export default function ContentReviewPanel({
   initialDisplay,
   controlledValues,
 }: ContentReviewPanelProps) {
+  const panel = presentation === "panel";
   const seed = useMemo<ReviewState>(
     () => ({
       ...initial,
@@ -252,42 +251,54 @@ export default function ContentReviewPanel({
       : dateLabel && /^\d{4}-\d{2}-\d{2}$/.test(dateLabel)
         ? formatAdminDateOnly(dateLabel)
         : "سيُحدد عند أول نشر";
+  const displayDecisions = (
+    <>
+      <DisplayDecision panel={panel} label="إظهار العنوان" enabled={input.showTitle} />
+      <DisplayDecision panel={panel} label="إظهار الصورة" enabled={input.showImage} />
+      <DisplayDecision panel={panel} label="إظهار المقتطف" enabled={input.showExcerpt} />
+      <DisplayDecision panel={panel} label="إظهار التاريخ" enabled={input.showDate} />
+      <DisplayDecision panel={panel} label="إظهار التصنيف" enabled={input.showCategory} />
+      <DisplayDecision panel={panel} label="إظهار السلسلة" enabled={input.showSeries} />
+      <DisplayDecision panel={panel} label="إظهار بطاقة مقدمة الموضوع" enabled={input.showIntroCard} />
+    </>
+  );
 
   return (
     <div
       data-content-review-capability
-      data-content-review-presentation="dashboard"
+      data-content-review-presentation={panel ? "panel" : "dashboard"}
     >
       <AdminEntityReviewPanel
+        presentation={presentation}
         entityKey="content"
         navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
         checks={checks}
-        guidanceCards={CONTENT_REVIEW_GUIDANCE_CARDS}
+        guidanceCards={panel ? CONTENT_REVIEW_GUIDANCE_CARDS.map((definition) => (
+          definition.id === "image" ? { ...definition, title: "جاهزية الصورة وAlt" } : definition
+        )) : CONTENT_REVIEW_GUIDANCE_CARDS}
         decisionCards={
           <>
             {publishingOptions}
             <AdminEntityReviewDecisionCard
+              presentation={presentation}
+              icon="settings"
               id="display-settings"
               title="إعدادات العرض"
-              description="ما سيظهر داخل صفحة المحتوى."
-              badge={
+              description={panel ? undefined : "ما سيظهر داخل صفحة المحتوى."}
+              badge={panel ? undefined : (
                 <span className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[10px] text-white/45">
                   7 خيارات
                 </span>
-              }
+              )}
             >
-              <dl className="mt-3 space-y-2">
-                <DisplayDecision label="إظهار العنوان" enabled={input.showTitle} />
-                <DisplayDecision label="إظهار الصورة" enabled={input.showImage} />
-                <DisplayDecision label="إظهار المقتطف" enabled={input.showExcerpt} />
-                <DisplayDecision label="إظهار التاريخ" enabled={input.showDate} />
-                <DisplayDecision label="إظهار التصنيف" enabled={input.showCategory} />
-                <DisplayDecision label="إظهار السلسلة" enabled={input.showSeries} />
-                <DisplayDecision label="إظهار بطاقة مقدمة الموضوع" enabled={input.showIntroCard} />
-              </dl>
+              {panel ? (
+                <div className="mt-3">
+                  <AdminFormGrid columns={2} density="compact">{displayDecisions}</AdminFormGrid>
+                </div>
+              ) : <dl className="mt-3 space-y-2">{displayDecisions}</dl>}
               <AdminEntityReviewCorrectionButton
                 navigationEventName={CONTENT_EDITOR_NAVIGATION_EVENT}
-                tabId="basic"
+                tabId="display"
                 targetId="content-display-settings"
                 label="تعديل الإعدادات"
                 className="mt-3 self-start rounded-full px-4 py-2"
@@ -305,9 +316,10 @@ export default function ContentReviewPanel({
   );
 }
 
-function DisplayDecision({ label, enabled }: { label: string; enabled: boolean }) {
+function DisplayDecision({ label, enabled, panel = false }: { label: string; enabled: boolean; panel?: boolean }) {
+  const Container = panel ? "dl" : "div";
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+    <Container className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
       <dt className="text-[10px] leading-4 text-white/42">{label}</dt>
       <dd
         className={`shrink-0 text-[11px] font-semibold ${
@@ -316,6 +328,6 @@ function DisplayDecision({ label, enabled }: { label: string; enabled: boolean }
       >
         {enabled ? "ظاهر" : "مخفي"}
       </dd>
-    </div>
+    </Container>
   );
 }

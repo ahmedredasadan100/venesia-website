@@ -61,12 +61,11 @@ export default function TopicsListingModuleEditor({
   }
 
   if (section === "display") {
-    return <CollectionModuleDisplayFormattingFields display={config.display} surfacePresentation="premium" />;
+    return <CollectionModuleDisplayFormattingFields display={config.display} />;
   }
 
   return (
     <CollectionModuleEditor
-      surfacePresentation="premium"
       section={section}
       selection={{
         name: "collection",

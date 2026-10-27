@@ -157,7 +157,7 @@ function InvalidQuery({ reportId, message }: { reportId: AdminReportId; message:
   const definition = getAdminReportDefinition(reportId);
   return (
     <AdminPageExperience className="min-w-0 pb-12" state="error" dir="rtl">
-      <AdminPageContextHeader eyebrow={definition.eyebrow} title={definition.label} description={definition.description} status="error" />
+      <AdminPageContextHeader visualPreset="reports" eyebrow={definition.eyebrow} title={definition.label} description={definition.description} status="error" />
       <section className="rounded-[28px] border border-rose-400/20 bg-rose-400/[0.06] p-6 text-rose-100">
         <h2 className="text-base font-semibold">سياق التقرير غير صالح</h2>
         <p className="mt-2 text-sm leading-7 opacity-75">{message}</p>
@@ -190,6 +190,7 @@ export default function AdminReportDetailView({
     <AdminPageExperience className="min-w-0 pb-12 print:block print:bg-white" dir="rtl">
       <div className="print:hidden"><ReportNavigation current={presentation.reportId} /></div>
       <AdminPageContextHeader
+        visualPreset="reports"
         eyebrow={definition.eyebrow}
         title={definition.label}
         description={definition.description}

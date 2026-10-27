@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { resolveAdminFormReturnPath } from "../../../lib/admin/form-runtime";
@@ -13,7 +13,10 @@ import {
 } from "../../../lib/page-composition/slot-module-registry";
 import {
   AdminCard,
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminActionButton,
   AdminFormControlHeader,
+  AdminFormField,
   AdminFormGrid,
   AdminFormGridItem,
   AdminFormSection,
@@ -26,7 +29,8 @@ import {
   type AdminModuleTabsProps,
 } from "../ui";
 import type { AdminTextAlignment } from "../ui/AdminTextFormatControls";
-import AdminModuleTabs from "../ui/AdminModuleTabs";
+import AdminModuleTabs, { AdminModuleSectionHeader, AdminModuleTabIcon } from "../ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../lib/admin/admin-ui-styles";
 import BlockEditorContextHeader, {
   BlockEditorSaveFeedback,
   type BlockEditorContextHeaderProps,
@@ -82,7 +86,12 @@ export function ModuleEditorHeader({
     eyebrow: metadata.eyebrowAr,
     title: metadata.titleAr,
     description: metadata.descriptionAr,
-  };
+    visualPreset: props.visualPreset ?? (
+      moduleKind === "media-hub" || moduleKind === "media-sidebar" ? "media" :
+      moduleKind === "breadcrumb" || moduleKind === "cta" ? "navigation" :
+      moduleKind === "content" ? "content" : "blocks"
+    ),
+  } satisfies Pick<AdminPageContextHeaderProps, "eyebrow" | "title" | "description" | "visualPreset">;
 
   const returnNavigation = resolveModuleEditorReturnNavigation(
     searchParams.get(MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM),
@@ -95,6 +104,8 @@ export function ModuleEditorHeader({
       meta?: ReactNode;
       saved?: boolean;
       status?: string;
+      icon?: AdminPageContextHeaderProps["icon"];
+      artwork?: AdminPageContextHeaderProps["artwork"];
     };
     return (
       <BlockEditorContextHeader
@@ -104,6 +115,8 @@ export function ModuleEditorHeader({
         meta={contextualProps.meta}
         saved={contextualProps.saved}
         status={contextualProps.status}
+        icon={contextualProps.icon}
+        artwork={contextualProps.artwork}
       />
     );
   }
@@ -118,7 +131,10 @@ export function ModuleEditorHeader({
 type ModuleEditorTab = Omit<
   AdminModuleTab,
   "navigationLabel" | "label" | "sectionHeading" | "sectionDescription" | "icon"
->;
+> & {
+  /** Use neutral when this tab already composes independently titled section panels. */
+  contentSurface?: "panel" | "neutral";
+};
 
 type ModuleEditorTabsProps = Omit<ModuleEditorMetadataScope, "entityName"> &
   Omit<AdminModuleTabsProps, "tabs"> & {
@@ -148,16 +164,33 @@ export function ModuleEditorTabs({
         );
       }
 
-      return {
-        sourceIndex,
-        order: getModuleEditorSectionOrder(metadata),
-        tab: {
+      const resolvedTab: AdminModuleTab = {
           ...tab,
           navigationLabel: metadata.navigationLabelAr,
           sectionHeading: metadata.sectionHeadingAr,
           sectionDescription: metadata.sectionDescriptionAr,
           icon: metadata.icon,
-        } satisfies AdminModuleTab,
+      };
+      return {
+        sourceIndex,
+        order: getModuleEditorSectionOrder(metadata),
+        tab: {
+          ...resolvedTab,
+          sectionHeading: null,
+          sectionSummary: undefined,
+          content: (
+            <AdminFormSection presentation="panel" surface={tab.contentSurface} header={
+              <AdminModuleSectionHeader
+                {...resolvedTab}
+                sectionHeaderPresentation="premium"
+                standalone={tab.contentSurface === "neutral" ? true : undefined}
+                sectionHeaderClassName={[ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME, tab.sectionHeaderClassName].filter(Boolean).join(" ")}
+              />
+            }>
+              <div className={ADMIN_FORM_STACK_CLASS_NAME}>{tab.content}</div>
+            </AdminFormSection>
+          ),
+        },
       };
     })
     .sort(
@@ -248,7 +281,7 @@ export function ModuleEditorFieldGrid({
   className?: string;
 }) {
   return (
-    <AdminFormGrid columns={12} className={className}>
+    <AdminFormGrid columns={12} presentation="aligned-fields" className={className}>
       {children}
     </AdminFormGrid>
   );
@@ -269,12 +302,12 @@ export function ModuleEditorField({
   return (
     <AdminFormGridItem
       span={resolvedSpan}
-      className={`h-full ${className}`.trim()}
+      className={className}
     >
       <div
         data-module-editor-field-nature={nature}
         data-module-editor-field-span={resolvedSpan}
-        className="h-full"
+        className="contents"
       >
         {children}
       </div>
@@ -312,32 +345,21 @@ export function ModuleEditorContentGroup({
 export function ModuleEditorRepeaterGrid({
   children,
   columns = 3,
-  presentation = "default",
   className = "",
 }: {
   children: ReactNode;
   columns?: 2 | 3;
-  presentation?: "default" | "premium";
   className?: string;
 }) {
-  if (presentation === "premium") {
-    return <div data-module-editor-repeater-grid=""><AdminFormGrid columns={columns} className={className}>{children}</AdminFormGrid></div>;
-  }
-  return (
-    <div
-      data-module-editor-repeater-grid=""
-      className={`grid gap-4 lg:grid-cols-2 ${columns === 2 ? "xl:grid-cols-2" : "xl:grid-cols-3"} ${className}`.trim()}
-    >
-      {children}
-    </div>
-  );
+
+  return <div data-module-editor-repeater-grid=""><AdminFormGrid columns={columns} className={className}>{children}</AdminFormGrid></div>;
+
 }
 
 export function ModuleEditorRepeaterCard({
   title,
   description,
   icon,
-  presentation = "default",
   actions,
   children,
   className = "",
@@ -345,36 +367,23 @@ export function ModuleEditorRepeaterCard({
   title: ReactNode;
   description?: ReactNode;
   icon?: ReactNode;
-  presentation?: "default" | "premium";
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
-  if (presentation === "premium") {
-    return (
-      <AdminCard presentation="premium" className={`h-full p-3 ${className}`.trim()}>
-        <div data-module-editor-repeater-card="" className="space-y-3">
-          <header className="flex flex-wrap items-center justify-between gap-3">
-            <AdminFormControlHeader presentation="leading-icon" title={<span role="heading" aria-level={3}>{title}</span>} description={description} icon={icon} />
-            {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-          </header>
-          {children}
-        </div>
-      </AdminCard>
-    );
-  }
+
   return (
-    <article
-      data-module-editor-repeater-card=""
-      className={`min-w-0 space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4 ${className}`.trim()}
-    >
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold text-[#D8B87A]/70">{title}</h3>
-        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-      </header>
-      {children}
-    </article>
+    <AdminCard presentation="premium" className={`h-full p-3 ${className}`.trim()}>
+      <div data-module-editor-repeater-card="" className="space-y-3">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <AdminFormControlHeader presentation="leading-icon" title={<span role="heading" aria-level={3}>{title}</span>} description={description} icon={icon} />
+          {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+        </header>
+        {children}
+      </div>
+    </AdminCard>
   );
+
 }
 
 export function ModuleEditorHeadingVisibilityRow({
@@ -432,16 +441,11 @@ export function ModuleEditorStatusSwitch({
   );
 }
 
-export const MODULE_EDITOR_CONTROL_CARD_CLASS_NAME =
-  "rounded-2xl border border-white/10 bg-[#05070B]/72 p-4";
-
 type ModuleEditorVisibilityAlignRowBaseProps = {
   label: string;
   showName: string;
   showDefault?: boolean;
   enableVisibility?: boolean;
-  controlsPlacement?: "header" | "footer" | "cards";
-  presentation?: "card" | "plain" | "premium";
   description?: ReactNode;
   icon?: ReactNode;
   className?: string;
@@ -486,8 +490,6 @@ export function ModuleEditorVisibilityAlignRow({
   enableAlignment = true,
   enableBold = true,
   enableVisibility = true,
-  controlsPlacement = "header",
-  presentation = "card",
   description,
   icon,
   className = "",
@@ -544,6 +546,7 @@ export function ModuleEditorVisibilityAlignRow({
           label={show ? "ظاهر" : "مخفي"}
           checked={show}
           onChange={(event) => setShow(event.target.checked)}
+          surface={false}
           wrapLabel
           className={density === "compact" ? "!min-w-0 !gap-1 !px-1" : undefined}
         />
@@ -567,102 +570,25 @@ export function ModuleEditorVisibilityAlignRow({
     </div>
   );
 
-  if (presentation === "premium") {
-    return (
-      <AdminCard presentation="premium" className={`self-start p-3 ${className}`.trim()}>
-        <div data-module-editor-control-row="" data-module-editor-control-mode={controlMode} data-module-editor-settings-composition="compact-inline" className="space-y-2.5">
-          {submittedValues}
-          <div data-module-editor-settings-header="" className="flex min-w-0 flex-wrap items-center gap-1">
-            <div className="min-w-20 flex-1">
-              <AdminFormControlHeader title={label} description={description} icon={icon} presentation="compact-inline" />
-            </div>
-            <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1">
-              {hasAlignmentControl || hasBoldControl ? renderControls(`تنسيق ${label}`, "format", "compact") : null}
-              {enableVisibility ? renderControls(`إظهار ${label}`, "visibility", "compact") : null}
-            </div>
-          </div>
-          {children ? <div data-module-editor-settings-body="" className="min-w-0">{children}</div> : null}
-        </div>
-      </AdminCard>
-    );
-  }
-
-  if (controlsPlacement === "cards") {
-    return (
-      <div
-        data-module-editor-control-row=""
-        data-module-editor-control-mode={controlMode}
-      >
-        {submittedValues}
-        <div
-          className="grid min-w-0 gap-4 lg:grid-cols-2"
-          data-module-editor-cta-grid=""
-        >
-          {Children.toArray(children).map((child, index) => {
-            const targetLabel = index === 0 ? "الزر الأساسي" : "الزر الثانوي";
-            return (
-              <div
-                key={index}
-                className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} space-y-3`}
-                data-module-editor-cta-card={
-                  index === 0 ? "primary" : "secondary"
-                }
-              >
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="shrink-0 text-sm font-semibold text-white/78">
-                    {targetLabel}
-                  </span>
-                  {renderControls(`إعدادات ${targetLabel}`)}
-                </div>
-                {child}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div
-      data-module-editor-control-row=""
-      data-module-editor-control-mode={controlMode}
-      className={
-        presentation === "card"
-          ? `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} ${className}`.trim()
-          : className || undefined
-      }
-    >
-      {submittedValues}
-      {controlsPlacement === "header" ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <span className="shrink-0 text-sm font-semibold text-white/78">
-            {label}
-          </span>
-          {renderControls()}
+    <AdminCard presentation="premium" className={`self-start p-3 ${className}`.trim()}>
+      <div data-module-editor-control-row="" data-module-editor-control-mode={controlMode} data-module-editor-settings-composition="compact-inline" className="space-y-2.5">
+        {submittedValues}
+        <div data-module-editor-settings-header="" className="flex min-w-0 flex-wrap items-center gap-1">
+          <div className="min-w-20 flex-1">
+            <AdminFormControlHeader title={label} description={description} icon={icon} presentation="compact-inline" />
+          </div>
+          <div className="flex max-w-full shrink-0 flex-wrap items-center gap-1">
+            {hasAlignmentControl || hasBoldControl ? renderControls(`تنسيق ${label}`, "format", "compact") : null}
+            {enableVisibility ? renderControls(`إظهار ${label}`, "visibility", "compact") : null}
+          </div>
         </div>
-      ) : null}
-      {children ? (
-        <div className={controlsPlacement === "header" ? "mt-3" : ""}>
-          {children}
-        </div>
-      ) : null}
-      {controlsPlacement === "footer" ? (
-        <div
-          className={
-            presentation === "card"
-              ? "mt-3 flex flex-col gap-3 border-t border-white/8 pt-3 sm:flex-row sm:items-center sm:justify-between"
-              : "mt-3 flex w-fit flex-col gap-3 rounded-xl border border-white/10 bg-[#05070B]/72 px-3 py-2 sm:flex-row sm:items-center"
-          }
-        >
-          <span className="shrink-0 text-sm font-semibold text-white/78">
-            {label}
-          </span>
-          {renderControls()}
-        </div>
-      ) : null}
-    </div>
+        {children ? <div data-module-editor-settings-body="" className="min-w-0">{children}</div> : null}
+      </div>
+    </AdminCard>
   );
+
 }
 
 export function ModuleEditorIdentitySection({
@@ -682,41 +608,31 @@ export function ModuleEditorIdentitySection({
   inputClassName: string;
   className?: string;
 }) {
+  const nameControl = <input name="name" defaultValue={name} required className={inputClassName} />;
   return (
     <ModuleEditorSection
       data-module-editor-identity=""
-      className={`mb-5 ${className}`.trim()}
+      className={className}
     >
-      <ModuleEditorFieldGrid className="items-center md:grid-cols-2 xl:grid-cols-[minmax(20rem,26rem)_max-content_max-content] xl:justify-start">
+      <ModuleEditorFieldGrid>
         <ModuleEditorField
           nature="standard"
-          span={3}
-          className="xl:col-span-1!"
+          span={children ? 4 : 6}
         >
-          <label
-            data-module-editor-name-field=""
-            className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-3"
-          >
-            <span className="whitespace-nowrap text-sm font-medium text-white/70">
-              {nameLabel}
-            </span>
-            <input
-              name="name"
-              defaultValue={name}
-              required
-              className={inputClassName}
-            />
-          </label>
+          <div data-module-editor-name-field="" className="contents">
+              <AdminFormField label={nameLabel} required presentation="panel">
+                {nameControl}
+              </AdminFormField>
+            </div>
         </ModuleEditorField>
         {children ? (
           <ModuleEditorField
             nature="standard"
-            span={3}
-            className="xl:col-span-1!"
+            span={4}
           >
             <div
               data-module-editor-identity-control=""
-              className="h-full [&>[data-admin-form-listbox]]:grid [&>[data-admin-form-listbox]]:grid-cols-[max-content_minmax(0,1fr)] [&>[data-admin-form-listbox]]:items-center [&>[data-admin-form-listbox]]:gap-3 [&>[data-admin-form-listbox]]:space-y-0 [&>[data-admin-form-listbox]>p]:col-span-2 [&>[data-admin-form-listbox]>span]:whitespace-nowrap"
+              className="contents"
             >
               {children}
             </div>
@@ -724,14 +640,13 @@ export function ModuleEditorIdentitySection({
         ) : null}
         <ModuleEditorField
           nature="binary-state"
-          span={3}
-          className="xl:col-span-1!"
+          span={children ? 4 : 6}
         >
-          <div className="flex h-full items-center">
+          <div className="contents">
             <ModuleEditorStatusSwitch
               status={status}
               label={statusLabel}
-              surface={false}
+              surface
             />
           </div>
         </ModuleEditorField>
@@ -743,13 +658,11 @@ export function ModuleEditorIdentitySection({
 export function ModuleEditorPagesTab({
   moduleName,
   assignmentContext,
-  presentation = "default",
   showUsageBanner = true,
   children,
 }: {
   moduleName: string;
   assignmentContext: ModuleAssignmentContext;
-  presentation?: "default" | "premium";
   /** Omit repeated read-only usage details when the assignment view is the reference. */
   showUsageBanner?: boolean;
   children?: ReactNode;
@@ -766,7 +679,6 @@ export function ModuleEditorPagesTab({
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           {children}
           <ModulePageAssignmentsField
-            presentation={presentation}
             pages={assignmentContext.pages}
             assignedPageIds={assignmentContext.assignments.map(
               (row) => row.page_id,
@@ -775,7 +687,6 @@ export function ModuleEditorPagesTab({
         </div>
       ) : (
         <ModulePageAssignmentsField
-          presentation={presentation}
           pages={assignmentContext.pages}
           assignedPageIds={assignmentContext.assignments.map(
             (row) => row.page_id,
@@ -805,13 +716,9 @@ export function ModuleEditorFeedback({
 }
 
 export function ModuleEditorSaveArea({
-  title = "حفظ الموديول",
-  description = "تُحدّث التغييرات بعد اكتمال الحفظ.",
   saveLabel = "حفظ الموديول",
   className = "",
 }: {
-  title?: ReactNode;
-  description?: ReactNode;
   saveLabel?: ReactNode;
   className?: string;
 }) {
@@ -838,19 +745,14 @@ export function ModuleEditorSaveArea({
         </>
       ) : null}
       <AdminStickyFormBar
-        className={`mt-8 ${className}`.trim()}
-        title={title}
-        description={description}
+        className={className}
+        title="إجراءات النموذج"
+        description={null}
+        icon={<AdminModuleTabIcon name="content" />}
       >
-        <button
-          type="submit"
-          disabled={pending}
-          className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] ${
-            pending ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-          }`}
-        >
-          {pending ? "جارٍ الحفظ..." : saveLabel}
-        </button>
+        <AdminActionButton type="submit" variant="primary" disabled={pending}>
+            {pending ? "جارٍ الحفظ..." : saveLabel}
+          </AdminActionButton>
       </AdminStickyFormBar>
     </>
   );

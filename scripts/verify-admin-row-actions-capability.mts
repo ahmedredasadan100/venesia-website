@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as ts from "typescript";
 import { buildAdminListSearchOrFilter } from "../src/lib/admin/admin-list-search.ts";
 import { loadNormalizedAdminEntityListPage } from "../src/lib/admin/entity-list/data-engine/adapter.ts";
@@ -77,6 +78,142 @@ function check(label: string, condition: unknown) {
   assert.ok(condition, label);
   passed += 1;
   console.log(`PASS ${label}`);
+}
+
+function verifyFixedCachedUrlImportGraph() {
+  const entry = "src/fixtures/governance/fixed-cache-consumer.mts";
+  const owner = "src/fixtures/governance/fixed-cache-owner.mts";
+  const source = 'const fixtureHash = cacheFingerprint(); export async function Consumer() { const { Widget } = await import(new URL(`./fixed-cache-owner.mts?fixture=${fixtureHash}`, import.meta.url).href); return Widget(); }';
+  const overrides = (text: string) => new Map([[entry, text], [owner, "export function Widget() { return true; } export function Unused() { return false; }"]]);
+  const collect = (text: string, symbolAware: boolean) => collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], symbolAware,
+    sourceOverrides: overrides(text) });
+  for (const symbolAware of [false, true]) {
+    for (const hashSource of [source, source.replace("cacheFingerprint()", '"different-cache-value"')]) {
+      const graph = collect(hashSource, symbolAware);
+      assert.deepEqual([...graph.keys()].sort(), [entry, owner].sort());
+      assert.ok(graphUsesExecutableBinding({ root: ROOT, graph, bindings: [{ sourceFile: owner, exportNames: ["Widget"] }], sourceOverrides: overrides(hashSource) }));
+    }
+    const alias = source.replace('const { Widget } = await import(new URL(`./fixed-cache-owner.mts?fixture=${fixtureHash}`, import.meta.url).href);', 'const cachedUrl = new URL(`./fixed-cache-owner.mts?fixture=${fixtureHash}`, import.meta.url).href; const { Widget } = await import(cachedUrl);');
+    assert.ok(collect(alias, symbolAware).has(owner), "An immutable URL alias retains the same statically proven pathname");
+    const mutants = [
+      source.replace("./fixed-cache-owner.mts?fixture=", "https://example.invalid/fixed-cache-owner.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "/fixed-cache-owner.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "../../../../outside.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./%66ixed-cache-owner.mts?fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./fixed-cache-owner.mts#fixture="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./fixed-cache-owner.mts?unreviewed="),
+      source.replace("./fixed-cache-owner.mts?fixture=", "./${moduleName}.mts?fixture="),
+      source.replace("${fixtureHash}", "${fixtureHash}/another.mts"),
+      source.replace("${fixtureHash}", "${fixtureHash}${other}"),
+      source.replace("${fixtureHash}", "${cacheFingerprint()}"),
+      source.replace("import.meta.url", "callerBase"),
+      source.replace("import.meta.url", "other.url"),
+      source.replace("new URL(", "new AlternateURL("),
+      source.replace("function Consumer()", "function Consumer(URL: typeof globalThis.URL)"),
+      source.replace("const fixtureHash", "let fixtureHash"),
+      source.replace("const fixtureHash = cacheFingerprint();", ""),
+      source.replace(").href", ").pathname"),
+      source.replace("import.meta.url)", "import.meta.url, extra)"),
+    ];
+    for (const mutant of mutants) {
+      assert.notEqual(mutant, source);
+      assert.throws(() => collect(mutant, symbolAware), /unresolved dynamic import/u,
+        "Unsupported cache imports remain unresolved rather than expanding executable source admission");
+    }
+  }
+  check("fixed local cache-query imports retain pathname and executable binding in both graph modes without evaluating query code", true);
+  check("cache-query graph rejects dynamic/remote/absolute/escaping paths, altered bases, shadowed URL, mutable hashes and expanded query forms", true);
+}
+
+function verifyActualFixtureCacheImport() {
+  const entry = "scripts/fixtures/admin-interaction-fixtures.mts", owner = "scripts/fixtures/admin-page-interaction-fixtures.mts";
+  const source = read(entry), tree = parseTypeScriptSource(entry, source);
+  let statement: ts.VariableStatement | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableStatement(node) && node.getText(tree).includes("const {seedAdminPageInteractionFixtures}=await import(")) statement = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(tree); assert.ok(statement);
+  const actual = statement.getText(tree);
+  assert.equal(actual, 'const {seedAdminPageInteractionFixtures}=await import(new URL(`./admin-page-interaction-fixtures.mts?fixture=${pageFixtureHash}`, import.meta.url).href);');
+  const actualHash = createHash("sha256").update(readFileSync(join(ROOT, owner))).digest("hex");
+  const moduleUrl = pathToFileURL(join(ROOT, entry)).href;
+  for (const pageFixtureHash of [actualHash, "a".repeat(64), "b".repeat(64)]) {
+    const oldUrl = `${pathToFileURL(resolve(ROOT, "scripts/fixtures/admin-page-interaction-fixtures.mts")).href}?fixture=${pageFixtureHash}`;
+    const newUrl = new URL(`./admin-page-interaction-fixtures.mts?fixture=${pageFixtureHash}`, moduleUrl).href;
+    assert.equal(newUrl, oldUrl, "Actual local path and cache identity remain identical without evaluating the fixture seed");
+    const overrides = new Map([[entry, `const pageFixtureHash = "${pageFixtureHash}"; export async function Consumer() { ${actual} return seedAdminPageInteractionFixtures(); }`],
+      [owner, "export function seedAdminPageInteractionFixtures() { return true; }"]]);
+    for (const symbolAware of [false, true]) assert.ok(collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], sourceOverrides: overrides, symbolAware }).has(owner));
+  }
+  check("actual cached fixture import retains exact native URL/path/hash identity and both graph modes without running any database seed", true);
+}
+
+function verifyOpaqueWebpackEntryGraph() {
+  const entry = "scripts/qa-admin-form-layout.mjs", fixture = "scripts/fixtures/admin-form-layout-browser.jsx", transitive = "scripts/fixtures/uncredited-browser-child.mjs";
+  const source = read(entry).replaceAll("\r\n", "\n");
+  const graph = (input: string, target = fixture, symbolAware = false) => collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], symbolAware,
+    sourceOverrides: new Map([[entry, input], [target, 'import "./uncredited-browser-child.mjs"; export const Fixture = true;'], [transitive, "export const Uncredited = true;"]]) });
+  const positive = graph(source);
+  assert.ok(positive.has(fixture), "The actual canonical Webpack factory, fixed entry and real compile invocation must establish its direct entry");
+  assert.equal(positive.has(transitive), false, "Replacement hooks cannot credit the entry's original transitive imports");
+  assert.equal(graph(source, fixture, true).has(fixture), false, "Opaque build input proof must not establish symbol-aware Product owner binding");
+  const alternative = "scripts/fixtures/another-explicit-entry.jsx";
+  assert.ok(graph(source.replace(`entry:path.join(root,'${fixture}')`, `entry:path.join(root,'${alternative}')`), alternative).has(alternative), "Direct entry proof has no filename allowlist");
+  const tree = parseTypeScriptSource(entry, source);
+  const resourceReader = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "fixtureSource");
+  const snapshotBranch = resourceReader?.body?.statements[1]; assert.ok(snapshotBranch && ts.isIfStatement(snapshotBranch));
+  const mutations = [
+    ["unapproved factory", "next/dist/compiled/webpack/webpack", "unapproved-webpack"],
+    ["shadowed native require", "createRequire } from 'node:module'", "createRequire as originalCreateRequire } from 'node:module'"],
+    ["shadowed native path", "from 'node:path'", "from 'unowned-path'"],
+    ["dynamic execution root", "path.resolve(import.meta.dirname, '..')", "process.cwd()"],
+    ["dynamic entry", "entry:path.join(root,'scripts/fixtures/admin-form-layout-browser.jsx')", "entry:path.join(root,fixturePath)"],
+    ["escaping entry", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'../outside.jsx')"],
+    ["remote entry", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'https://example.invalid/fixture.jsx')"],
+    ["missing actual compile", "compiler.run((error,stats)", "compiler.inspect((error,stats)"],
+    ["uncalled compile", "await new Promise((resolve,reject)=>compiler.run", "if(false) await new Promise((resolve,reject)=>compiler.run"],
+    ["unknown config", "mode:'development',target:'web'", "externals:[],mode:'development',target:'web'"],
+    ["unknown plugin", "plugins:[fixtureResources,", "plugins:[unreviewedResources,fixtureResources,"],
+    ["entry replacement", "plugins:[fixtureResources,", "plugins:[new webpack.NormalModuleReplacementPlugin(/admin-form-layout-browser\\.jsx$/, 'other.jsx'),fixtureResources,"],
+    ["substituted resource", "const file=context.resourcePath;", "const file=otherSource;"],
+    ["wrong compiler hook", "compiler.hooks.compilation.tap('AdminFormFixtureResources'", "otherCompiler.hooks.compilation.tap('AdminFormFixtureResources'"],
+    ["inactive hook", "webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise", "false && webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise"],
+    ["shadowed native read", "readFile, realpath", "readFile as nativeReadFile, realpath"],
+    ["shadowed native write", "writeFile } from 'node:fs/promises'", "writeFile as nativeWriteFile } from 'node:fs/promises'"],
+    ["reader parameter shadow", "function fixtureSource(file)", "function fixtureSource(file, readFile = substitute)"],
+    ["source writer drift", "generatedSources.set(file, source)", "generatedSources.set(file, 'substitute')"],
+    ["loader source drift", "transpileModule(s,{compilerOptions", "transpileModule('substitute',{compilerOptions"],
+    ["historical source category", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'src/unsafe-historical-entry.jsx')"],
+    ["noncanonical historical path", `entry:path.join(root,'${fixture}')`, "entry:path.join(root,'./src/unsafe-historical-entry.jsx')"],
+    ["CSS else substitution", "return 'export default '+JSON.stringify(locals)+';';\n            }", "return 'export default '+JSON.stringify(locals)+';';\n            } else return 'substituted source';"],
+    ["historical reader else substitution", "return (await fixtureSource(file)).toString('utf8');", "return (await fixtureSource(file)).toString('utf8'); else return 'substituted source';"],
+    ["transpiler else substitution", "return require('typescript').transpileModule(await readFile(file,'utf8'),{compilerOptions:{jsx:4,target:9,module:99}}).outputText;", "return require('typescript').transpileModule(await readFile(file,'utf8'),{compilerOptions:{jsx:4,target:9,module:99}}).outputText; else return 'substituted source';"],
+    ["snapshot else substitution", snapshotBranch.getText(tree), snapshotBranch.getText(tree) + " else return 'substituted source';"],
+    ["absolute-path replacement", "plugins:[fixtureResources,", "plugins:[new webpack.NormalModuleReplacementPlugin(/^E:/, 'other.jsx'),fixtureResources,"],
+    ["direct native entry overwrite", "const compiler = webpack({", `await writeFile(path.join(root,'${fixture}'),'substituted source');\nconst compiler = webpack({`],
+    ["extra compiler resource hook", "let inMemoryBundle;", "let inMemoryBundle; compiler.hooks.compilation.tap('Other', compilation => webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise('Other', async context => context.resourcePath.endsWith('admin-form-layout-browser.jsx') ? 'substituted source' : undefined));"],
+    ["compiler alias escape", "let inMemoryBundle;", "let inMemoryBundle; const escaped = compiler; escaped.hooks.compilation.tap('Other', substituteSource);"],
+    ["native path alias escape", "const compiler = webpack({", "const nativePath = path; nativePath.join = substitutedPath;\nconst compiler = webpack({"],
+    ["factory alias escape", "const compiler = webpack({", "const escapedWebpack = webpack; escapedWebpack.NormalModule = substitutedModule;\nconst compiler = webpack({"],
+    ["root alias escape", "const compiler = webpack({", "const escapedRoot = root;\nconst compiler = webpack({"],
+    ["source-emitting shouldEmit hook", "'AdminFormFixtureMemory',()=>false", "'AdminFormFixtureMemory',()=>substituteSource()"],
+    ["copied-root entry replacement", "plugins:[fixtureResources,", "plugins:[new webpack.NormalModuleReplacementPlugin(/copied-workspace\\/scripts\\/fixtures\\/admin-form-layout-browser\\.jsx$/, 'other.jsx'),fixtureResources,"],
+  ] as const;
+  for (const [label, from, to] of mutations) {
+    const mutant = source.replace(from, to); assert.notEqual(mutant, source, label + " must mutate actual runner source");
+    assert.equal(graph(mutant).has(fixture), false, label + " cannot establish executable entry coverage");
+  }
+  check("actual fixed Webpack entry is positively bound to native factory/root/compile and remains opaque beyond the entry", true);
+  check("direct build entry negatives reject shadowed native dependencies, dynamic paths, uncalled builds, config/plugins/hooks and source substitution", true);
+}
+
+if (process.argv.includes("--fixed-cache-import-graph")) {
+  verifyFixedCachedUrlImportGraph();
+  verifyActualFixtureCacheImport();
+  verifyOpaqueWebpackEntryGraph();
+  console.log(`Fixed cache/direct build entry graph verification passed (${passed} affected checks; source graph only).`);
+  process.exit(0);
 }
 
 function closureStateIsConsistent(
@@ -4127,6 +4264,9 @@ check(
     ) &&
     unresolvedDynamicImportFailedClosed,
 );
+verifyFixedCachedUrlImportGraph();
+verifyActualFixtureCacheImport();
+verifyOpaqueWebpackEntryGraph();
 check(
   "dead aliases, uncalled functions, and statically false branches do not satisfy executable Source Proof",
   deadBindingGraph.has(deadBindingOwner) &&
@@ -4798,6 +4938,42 @@ check(
     entityListTableSource.includes("<AdminDataGridStickyActionsHeaderCell") &&
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
+function hasAdminEntityTableBaseClasses(source: string) {
+  const ast = ts.createSourceFile("AdminEntityListTable.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const required = ["w-full", "table-fixed", "border-separate", "border-spacing-0", "text-right"];
+  const tables: boolean[] = [];
+  function visit(node: ts.Node) {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(ast) === "table") {
+      const attribute = node.attributes.properties.find((entry) => ts.isJsxAttribute(entry) && entry.name.getText(ast) === "className");
+      const initializer = attribute && ts.isJsxAttribute(attribute) ? attribute.initializer : undefined;
+      const expression = initializer && ts.isJsxExpression(initializer) ? initializer.expression : initializer;
+      const prefix = expression && (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
+        ? expression.text
+        : expression && ts.isTemplateExpression(expression) ? expression.head.text : "";
+      const classes = new Set(prefix.trim().split(/\s+/u));
+      tables.push(required.every((token) => classes.has(token)));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  return tables.length > 0 && tables.every(Boolean);
+}
+check(
+  "shared table sizing guard accepts live literal/template classes and rejects missing tokens or unrelated source decoys",
+  (() => {
+    const tokens = ["w-full", "table-fixed", "border-separate", "border-spacing-0", "text-right"];
+    const classes = tokens.join(" ");
+    const literal = '<table className="' + classes + '" />';
+    const template = '<table className={`' + classes + ' ${cinematic ? "gold" : ""}`} />';
+    const decoys = '// <table className="' + classes + '" />\n<div className="' + classes + '" />;\n';
+    return hasAdminEntityTableBaseClasses(literal) &&
+      hasAdminEntityTableBaseClasses(template) &&
+      !hasAdminEntityTableBaseClasses(decoys) &&
+      tokens.every((missing) => !hasAdminEntityTableBaseClasses(
+        decoys + '<table className={`' + tokens.filter((token) => token !== missing).join(" ") + ' ${cinematic ? "gold" : ""}`} />',
+      ));
+  })(),
+);
 check(
   "shared sizing allocates minimum, preferred, and constrained widths from the live viewport budget",
   entityListTableSource.includes("const flexibleColumnKey =") &&
@@ -4822,7 +4998,7 @@ check(
       "ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH",
     ) &&
     entityListTableSource.includes("const observer = new ResizeObserver") &&
-    entityListTableSource.includes('className="w-full table-fixed') &&
+    hasAdminEntityTableBaseClasses(entityListTableSource) &&
     entityListTableSource.includes("fillAvailableWidth?: boolean") &&
     entityListTableSource.includes("fillAvailableWidth = false") &&
     entityListTableSource.includes(
@@ -4898,6 +5074,64 @@ check(
     dataGridSource.includes("textOnly:") &&
     dataGridSource.includes("compactIcon:") &&
     dataGridSource.includes("standardIcon:"),
+);
+
+function hasOptionalPrimaryCellPresentation(source: string) {
+  const tree = ts.createSourceFile("AdminDataGrid.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "AdminDataGridPrimaryCell",
+  );
+  const parameter = owner?.parameters[0];
+  if (!owner?.body || !parameter || !ts.isObjectBindingPattern(parameter.name)) return false;
+  const binding = parameter.name.elements.find((node) => ts.isIdentifier(node.name) && node.name.text === "presentation");
+  const properties: ts.PropertySignature[] = [];
+  const findProperties = (node: ts.Node) => {
+    if (ts.isPropertySignature(node) && node.name.getText(tree) === "presentation") properties.push(node);
+    ts.forEachChild(node, findProperties);
+  };
+  if (parameter.type) findProperties(parameter.type);
+  const property = properties[0];
+  const canonicalType = tree.statements.some((node) => ts.isImportDeclaration(node) &&
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../../../lib/admin/entity-list" &&
+    node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
+    node.importClause.namedBindings.elements.some((item) =>
+      (item.propertyName ?? item.name).text === "AdminEntityPrimaryColumnPresentation" &&
+      item.name.text === "AdminEntityPrimaryColumnPresentation"));
+  const result = owner.body.statements.find(ts.isReturnStatement)?.expression;
+  const jsx = result && ts.isParenthesizedExpression(result) ? result.expression : result;
+  if (!jsx || !ts.isJsxElement(jsx) || jsx.openingElement.tagName.getText(tree) !== "div") return false;
+  const attributes = jsx.openingElement.attributes.properties;
+  const style = attributes.find((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === "style")?.initializer;
+  const expression = style && ts.isJsxExpression(style) ? style.expression : undefined;
+  const delegated = expression && ts.isConditionalExpression(expression) &&
+    ts.isIdentifier(expression.condition) && expression.condition.text === "presentation" &&
+    ts.isCallExpression(expression.whenTrue) && ts.isIdentifier(expression.whenTrue.expression) &&
+    expression.whenTrue.expression.text === "getAdminDataGridPrimaryPresentationStyle" &&
+    expression.whenTrue.arguments.length === 1 && ts.isIdentifier(expression.whenTrue.arguments[0]!) &&
+    expression.whenTrue.arguments[0]!.text === "presentation" &&
+    ts.isIdentifier(expression.whenFalse) && expression.whenFalse.text === "undefined";
+  return Boolean(canonicalType && binding && !binding.initializer && properties.length === 1 &&
+    property?.questionToken && property.type && ts.isTypeReferenceNode(property.type) &&
+    property.type.typeName.getText(tree) === "AdminEntityPrimaryColumnPresentation" && delegated &&
+    !attributes.some(ts.isJsxSpreadAttribute));
+}
+
+check(
+  "standalone PrimaryCell optionally delegates the existing presentation contract while omitted consumers retain no style",
+  hasOptionalPrimaryCellPresentation(dataGridSource),
+);
+check(
+  "negative PrimaryCell fixtures reject required, widened or implicit-default presentation contracts",
+  !hasOptionalPrimaryCellPresentation(dataGridSource.replace("presentation?: AdminEntityPrimaryColumnPresentation", "presentation: AdminEntityPrimaryColumnPresentation")) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replace("presentation?: AdminEntityPrimaryColumnPresentation", "presentation?: string")) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replaceAll("\r\n", "\n").replace("  presentation,\n}: BaseProps & { presentation?", "  presentation = \"text-only\",\n}: BaseProps & { presentation?")),
+);
+const primaryCellStyle = "style={presentation ? getAdminDataGridPrimaryPresentationStyle(presentation) : undefined}";
+check(
+  "negative PrimaryCell fixtures reject default style changes and local padding in place of the shared helper",
+  dataGridSource.includes(primaryCellStyle) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replace(primaryCellStyle, primaryCellStyle.replace(": undefined", ": {}"))) &&
+    !hasOptionalPrimaryCellPresentation(dataGridSource.replace(primaryCellStyle, primaryCellStyle.replace("getAdminDataGridPrimaryPresentationStyle(presentation)", "{ paddingInlineStart: 20 }"))),
 );
 check(
   "Topics, Series, Projects, and Pages consume explicit primary presentations and shared sizing presets",

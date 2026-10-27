@@ -6,14 +6,16 @@ import { useMemo, useState } from "react";
 
 import {
   AdminCheckbox,
+  ADMIN_FORM_STACK_CLASS_NAME,
   AdminCard,
   AdminFormControlHeader,
+  AdminFormField,
   AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormSwitch,
   AdminStatusPill,
 } from "../ui";
-import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
 import {
   getContentTypeLabel,
@@ -39,6 +41,7 @@ import {
 } from "../../../lib/featured-modules/contract";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
+import { adminFormFieldClassName, adminFormLabelClassName } from "../../../lib/admin/admin-ui-styles";
 import { resolvePageBlockTextFormat } from "../../../lib/page-blocks/configs";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 import {
@@ -49,6 +52,7 @@ import {
   ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
+  ModuleEditorSection,
   ModuleEditorTabs,
   ModuleEditorVisibilityAlignRow,
 } from "./ModuleEditorPresentation";
@@ -85,38 +89,30 @@ function FeaturedItemsPerViewControl({
 
   if (policy.mode === "configurable") {
     return (
-      <label className="flex min-h-10 items-center justify-between gap-2">
-        <AdminFormControlHeader title="العناصر الظاهرة" presentation="leading-icon" icon={<AdminModuleTabIcon name="overview" />} />
-        <span className="flex shrink-0 items-center gap-1.5 text-sm text-[#E6C98D]">
-          <input
-            name="items_per_view"
-            type="number"
-            min={resolveFeaturedItemsPerView(variant, policy.min, itemLimit)}
-            max={resolveFeaturedItemsPerView(variant, policy.max, itemLimit)}
-            required
-            value={value}
-            onChange={(event) => onChange(event.currentTarget.value)}
-            className={fieldClassName(
-              "h-9 !w-14 !px-2 text-center [color-scheme:dark]",
-            )}
-            dir="ltr"
-            aria-label="العناصر الظاهرة"
-          />
-          <span>عنصر</span>
-        </span>
-      </label>
+      <AdminFormField label="العناصر الظاهرة" required>
+        <input
+          name="items_per_view"
+          type="number"
+          min={resolveFeaturedItemsPerView(variant, policy.min, itemLimit)}
+          max={resolveFeaturedItemsPerView(variant, policy.max, itemLimit)}
+          required
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          className={adminFormFieldClassName()}
+          dir="ltr"
+          aria-label="العناصر الظاهرة"
+        />
+      </AdminFormField>
     );
   }
-
   return (
     <>
       <input type="hidden" name="items_per_view" value={value} />
-      <div className="flex min-h-10 items-center justify-between gap-3">
-        <AdminFormControlHeader title="العناصر الظاهرة" presentation="leading-icon" icon={<AdminModuleTabIcon name="overview" />} />
-        <strong className="shrink-0 text-base text-[#E6C98D]">
+      <AdminFormField label="العناصر الظاهرة">
+        <output className={adminFormFieldClassName("block")}>
           {value} عنصر
-        </strong>
-      </div>
+        </output>
+      </AdminFormField>
     </>
   );
 }
@@ -203,13 +199,6 @@ export default function FeaturedModuleEditClient({
 
 
   const variantControls = (<>
-    <AdminCard
-      presentation="premium"
-      className="h-full p-3"
-      data-featured-items-per-view-control={
-        presentationProfile.itemsPerView.mode
-      }
-    >
       <FeaturedItemsPerViewControl
         variant={presentationVariant}
         profile={presentationProfile}
@@ -217,39 +206,32 @@ export default function FeaturedModuleEditClient({
         itemLimit={Number(itemLimit)}
         onChange={setItemsPerView}
       />
-    </AdminCard>
     {presentationProfile.supportsNavigation ? (
       <>
-        <AdminCard presentation="premium" className="h-full p-3">
         <AdminFormSwitch
           name="show_navigation_arrows"
-          label={<AdminFormControlHeader title="إظهار أسهم التنقل" presentation="leading-icon" icon={<AdminModuleTabIcon name="settings" />} />}
+          label={<span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>إظهار أسهم التنقل</span></span>}
           value="true"
           uncheckedValue="false"
           defaultChecked={navigation.showArrows}
           embedded
         />
-        </AdminCard>
-        <AdminCard presentation="premium" className="h-full p-3">
         <AdminFormSwitch
           name="show_navigation_dots"
-          label={<AdminFormControlHeader title="إظهار نقاط التنقل" presentation="leading-icon" icon={<AdminModuleTabIcon name="settings" />} />}
+          label={<span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>إظهار نقاط التنقل</span></span>}
           value="true"
           uncheckedValue="false"
           defaultChecked={navigation.showDots}
           embedded
         />
-        </AdminCard>
-        <AdminCard presentation="premium" className="h-full p-3">
         <AdminFormSwitch
           name="navigation_autoplay"
-          label={<AdminFormControlHeader title="تشغيل التنقل تلقائيًا" presentation="leading-icon" icon={<AdminModuleTabIcon name="settings" />} />}
+          label={<span className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>تشغيل التنقل تلقائيًا</span></span>}
           value="true"
           uncheckedValue="false"
           defaultChecked={navigation.autoplay}
           embedded
         />
-        </AdminCard>
       </>
     ) : (
       <>
@@ -273,7 +255,6 @@ export default function FeaturedModuleEditClient({
   </>);
   const displayControls = (<>
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="content" />}
       label="عنوان العنصر"
       showName="show_title_on_page"
@@ -286,7 +267,6 @@ export default function FeaturedModuleEditClient({
       }
     />
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="media" />}
       label="الصورة"
       showName="show_image_on_page"
@@ -294,7 +274,6 @@ export default function FeaturedModuleEditClient({
       controlMode="visibility-only"
     />
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="section" />}
       label="التصنيف"
       showName="show_category_on_page"
@@ -307,7 +286,6 @@ export default function FeaturedModuleEditClient({
       }
     />
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="plans" />}
       label="السلسلة"
       showName="show_series_on_page"
@@ -320,7 +298,6 @@ export default function FeaturedModuleEditClient({
       }
     />
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="content" />}
       label="المقتطف"
       showName="show_excerpt_on_page"
@@ -333,7 +310,6 @@ export default function FeaturedModuleEditClient({
       }
     />
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="overview" />}
       label="التاريخ"
       showName="show_date_on_page"
@@ -346,7 +322,6 @@ export default function FeaturedModuleEditClient({
       }
     />
     <ModuleEditorVisibilityAlignRow
-      presentation="premium"
       icon={<AdminModuleTabIcon name="publish" />}
       label="نص الإجراء"
       showName="show_cta"
@@ -370,7 +345,7 @@ export default function FeaturedModuleEditClient({
       <AdminCard presentation="premium" className="h-full p-3">
         <AdminFormListboxSelect
           name="source_kind"
-          label={<AdminFormControlHeader title="مصدر المحتوى" presentation="leading-icon" icon={<AdminModuleTabIcon name="content" />} />}
+          label="مصدر المحتوى"
           value={sourceKind}
           onChange={(value) =>
             setSourceKind(value as FeaturedSourceKind)
@@ -386,7 +361,7 @@ export default function FeaturedModuleEditClient({
         {sourceKind === "categories" ? (
           <AdminFormListboxSelect
             name="category_slug"
-            label={<AdminFormControlHeader title="التصنيف" presentation="leading-icon" icon={<AdminModuleTabIcon name="section" />} />}
+            label="التصنيف"
             value={categorySlug}
             onChange={setCategorySlug}
             searchable
@@ -399,7 +374,7 @@ export default function FeaturedModuleEditClient({
         ) : (
           <AdminFormListboxSelect
             name="content_type"
-            label={<AdminFormControlHeader title="نوع محتوى المركز الإعلامي" presentation="leading-icon" icon={<AdminModuleTabIcon name="media" />} />}
+            label="نوع محتوى المركز الإعلامي"
             value={contentType}
             onChange={(value) =>
               setContentType(value as typeof contentType)
@@ -417,7 +392,7 @@ export default function FeaturedModuleEditClient({
       <AdminCard presentation="premium" className="h-full p-3">
         <AdminFormListboxSelect
           name="selection_mode"
-          label={<AdminFormControlHeader title="طريقة الاختيار" presentation="leading-icon" icon={<AdminModuleTabIcon name="settings" />} />}
+          label="طريقة الاختيار"
           value={selectionMode}
           onChange={(value) =>
             setSelectionMode(value as FeaturedSelectionMode)
@@ -430,8 +405,7 @@ export default function FeaturedModuleEditClient({
         />
       </AdminCard>
       <AdminCard presentation="premium" className="h-full p-3">
-        <label className="block space-y-2">
-          <AdminFormControlHeader title="العدد المسموح به" presentation="leading-icon" icon={<AdminModuleTabIcon name="specifications" />} />
+        <AdminFormField label="العدد المسموح به" required>
           <input
             name="item_limit"
             type="number"
@@ -454,7 +428,7 @@ export default function FeaturedModuleEditClient({
             )}
             dir="ltr"
           />
-        </label>
+        </AdminFormField>
       </AdminCard>
     </AdminFormGrid>
 
@@ -606,7 +580,7 @@ export default function FeaturedModuleEditClient({
         <AdminCard presentation="premium" className="h-full p-3">
           <AdminFormListboxSelect
             name="presentation_variant"
-            label={<AdminFormControlHeader title="طريقة العرض" presentation="leading-icon" icon={<AdminModuleTabIcon name="section" />} />}
+            label="طريقة العرض"
             value={presentationVariant}
             onChange={(value) => {
               const variant = value as FeaturedPresentationVariant;
@@ -630,25 +604,27 @@ export default function FeaturedModuleEditClient({
       </ModuleEditorField>
     </ModuleEditorFieldGrid>
   </div>
-    <div className="space-y-4">
-      <AdminFormControlHeader title="إعدادات النمط المختار" icon={<AdminModuleTabIcon name="settings" />} presentation="leading-icon" />
+    <ModuleEditorSection
+      id="featured-variant-settings-panel"
+      header={<AdminModuleSectionHeader id="featured-variant-settings" standalone={false} sectionHeading="إعدادات النمط المختار" icon="settings" />}
+    >
       <div
         key={presentationVariant}
         className="space-y-4"
         data-featured-variant-settings={presentationVariant}
+        data-featured-items-per-view-control={presentationProfile.itemsPerView.mode}
       >
         <p className="text-sm leading-6 text-white/58">
           {presentationProfile.summaryAr}
         </p>
-        <AdminFormGrid columns={4}>{variantControls}</AdminFormGrid>
+        <AdminFormGrid columns={4} presentation="aligned-fields">{variantControls}</AdminFormGrid>
       </div>
-    </div></>);
+    </ModuleEditorSection></>);
   const textFields = (<div className="space-y-4">
     <AdminFormGrid columns={1} className="mt-4">
       <ModuleEditorVisibilityAlignRow
-        presentation="premium"
         icon={<AdminModuleTabIcon name="content" />}
-        description={"نص قصير يقدم القسم ويظهر فوق العنوان."}
+        description="نص قصير يقدم القسم ويظهر فوق العنوان."
         label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
         showName="show_eyebrow"
         boldName="eyebrow_bold"
@@ -665,9 +641,8 @@ export default function FeaturedModuleEditClient({
         />
       </ModuleEditorVisibilityAlignRow>
       <ModuleEditorVisibilityAlignRow
-        presentation="premium"
         icon={<AdminModuleTabIcon name="content" />}
-        description={"العنوان الرئيسي للقسم كما يظهر في الصفحة."}
+        description="العنوان الرئيسي للقسم كما يظهر في الصفحة."
         label="العنوان"
         showName="show_title"
         boldName="title_bold"
@@ -686,9 +661,8 @@ export default function FeaturedModuleEditClient({
         />
       </ModuleEditorVisibilityAlignRow>
       <ModuleEditorVisibilityAlignRow
-        presentation="premium"
         icon={<AdminModuleTabIcon name="content" />}
-        description={"وصف القسم كما يظهر في الصفحة."}
+        description="وصف القسم كما يظهر في الصفحة."
         label="الوصف"
         showName="show_description"
         boldName="description_bold"
@@ -706,15 +680,14 @@ export default function FeaturedModuleEditClient({
       </ModuleEditorVisibilityAlignRow>
     </AdminFormGrid>
   </div>);
-  const displayFields = (<div className="space-y-4">
-    <AdminFormControlHeader title="تنسيق عناصر المحتوى" icon={<AdminModuleTabIcon name="settings" />} presentation="leading-icon" />
+  const displayFields = (<section>
+    <AdminModuleSectionHeader id="featured-display-formatting" sectionHeading="تنسيق عناصر المحتوى" icon="settings" />
     <div
       data-featured-display-settings=""
     ><AdminFormGrid columns={3}>{displayControls}</AdminFormGrid></div>
-  </div>);
-
+  </section>);
   return (
-    <div className="space-y-6 pb-10" dir="rtl">
+    <div className={`${ADMIN_FORM_STACK_CLASS_NAME} pb-10`} dir="rtl">
       <ModuleEditorHeader
         moduleKind="featured"
         entityName={block.name}
@@ -734,40 +707,42 @@ export default function FeaturedModuleEditClient({
             value={block.description ?? ""}
           />
 
-          <ModuleEditorIdentitySection
-            name={block.name}
-            status={block.status}
-            inputClassName={fieldClassName("h-11")}
-          />
+          <div className={`min-w-0 ${ADMIN_FORM_STACK_CLASS_NAME}`}>
+            <ModuleEditorIdentitySection
+              name={block.name}
+              status={block.status}
+              inputClassName={fieldClassName("h-11")}
+            />
 
-          <ModuleEditorTabs
-            moduleKind="featured"
-            moduleSlug={block.slug}
-            activePanelContext={
-              <ModuleEditorFeedback
-                backHref="/admin/pages-blocks/blocks/featured"
-                saved={saved}
-              />
-            }
-            tabs={[
-              {
-                id: "content",
-                sectionHeaderPresentation: "control",
-                content: (<div className="space-y-6">{sourceFields}{variantFields}</div>),
-              },
-              { id: "text", content: textFields },
-              {
-                id: "presentation",
-                content: (<div className="space-y-6" data-featured-editor-presentation="">{displayFields}</div>),
-              },
-              {
-                id: "pages",
-                sectionHeaderPresentation: "control",
-                content: (<ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />),
-              },
-            ]}
-          />
-          <ModuleEditorSaveArea />
+            <ModuleEditorTabs
+              moduleKind="featured"
+              moduleSlug={block.slug}
+              activePanelContext={
+                <ModuleEditorFeedback
+                  backHref="/admin/pages-blocks/blocks/featured"
+                  saved={saved}
+                />
+              }
+              tabs={[
+                {
+                  id: "content",
+                  sectionHeaderPresentation: "control",
+                  content: (<div className="space-y-6">{sourceFields}{variantFields}</div>),
+                },
+                { id: "text", content: textFields },
+                {
+                  id: "presentation",
+                  content: (<div className="space-y-6" data-featured-editor-presentation="">{displayFields}</div>),
+                },
+                {
+                  id: "pages",
+                  sectionHeaderPresentation: "control",
+                  content: (<ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />),
+                },
+              ]}
+            />
+            <ModuleEditorSaveArea />
+          </div>
         </AdminFormPendingFields>
       </form>
     </div>

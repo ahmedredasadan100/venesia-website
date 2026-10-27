@@ -2,6 +2,7 @@
 
 import {
   AdminCard,
+  ADMIN_FORM_STACK_CLASS_NAME,
   AdminFormControlHeader,
   AdminFormGrid,
 } from "../../../../../../components/admin/ui";
@@ -505,6 +506,7 @@ export default function HeroEditClient({
         <AdminFormListboxSelect
           name="variant"
           label="نمط العرض"
+          presentation="panel"
           defaultValue={hero.variant}
           onChange={setGuidanceVariant}
           options={variantOptions}
@@ -519,7 +521,6 @@ export default function HeroEditClient({
         <HeroVisibilityAlignRow
           label="موقع المشروع"
           icon={<AdminModuleTabIcon name="content" />}
-          presentation="premium"
           alignmentName="eyebrow_alignment"
           showName="show_eyebrow"
           boldName="eyebrow_bold"
@@ -530,7 +531,6 @@ export default function HeroEditClient({
         <HeroVisibilityAlignRow
           label="اسم المشروع الإنجليزي"
           icon={<AdminModuleTabIcon name="content" />}
-          presentation="premium"
           alignmentName="title_alignment"
           showName="show_title"
           boldName="title_bold"
@@ -541,7 +541,6 @@ export default function HeroEditClient({
         <HeroVisibilityAlignRow
           label="اسم المشروع العربي"
           icon={<AdminModuleTabIcon name="content" />}
-          presentation="premium"
           alignmentName="subtitle_alignment"
           showName="show_subtitle"
           boldName="subtitle_bold"
@@ -552,7 +551,6 @@ export default function HeroEditClient({
         <HeroVisibilityAlignRow
           label="وصف المشروع"
           icon={<AdminModuleTabIcon name="content" />}
-          presentation="premium"
           alignmentName="description_alignment"
           showName="show_description"
           boldName="description_bold"
@@ -631,14 +629,12 @@ export default function HeroEditClient({
 
   const orderTab = (
     <div>
-      <AdminCard presentation="premium" className="p-3">
         <HeroElementOrderEditor
           defaultOrder={controls.heroElementOrder}
           allowedKeys={
             isProjectDetail ? PROJECT_DETAIL_HERO_ELEMENT_KEYS : undefined
           }
         />
-      </AdminCard>
     </div>
   );
 
@@ -652,6 +648,7 @@ export default function HeroEditClient({
       />
 
       <AdminFormRuntime key={hero.id} savedRevision={hero.updated_at} mode="edit" entityKey={`block-template-hero:${hero.id}`} redirectAction={updateHeroTemplateDetails}>
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
         <input type="hidden" name="id" value={hero.id} />
         <input type="hidden" name="slug" value={hero.slug} />
         <input
@@ -692,7 +689,6 @@ export default function HeroEditClient({
                       boldDefault={controls.ctaBold}
                       showDefault
                       enableVisibility={false}
-                      presentation="premium"
                     >
                       <HeroElementOrderEditor
                         projectActions={{
@@ -731,7 +727,8 @@ export default function HeroEditClient({
                         <AdminFormListboxSelect
                           name="image_composition"
                           sizing="full"
-                          label={<AdminFormControlHeader title="تكوين الصورة" icon={<AdminModuleTabIcon name="media" />} presentation="leading-icon" />}
+                          label="تكوين الصورة"
+                          presentation="panel"
                           defaultValue={imageComposition}
                           options={HERO_IMAGE_COMPOSITION_OPTIONS_AR}
                         />
@@ -751,6 +748,8 @@ export default function HeroEditClient({
                           defaultValue={imagesText}
                           density="compact"
                           actionPresentation="card"
+                          enableDragDrop
+                          dragFromImage
                         />
                       </AdminCard>
                     </div>
@@ -767,6 +766,8 @@ export default function HeroEditClient({
                           defaultValue={mobileImagesText}
                           density="compact"
                           actionPresentation="card"
+                          enableDragDrop
+                          dragFromImage
                         />
                       </AdminCard>
                     </div>
@@ -790,14 +791,14 @@ export default function HeroEditClient({
                 <ModuleEditorPagesTab
                   moduleName={hero.name}
                   assignmentContext={assignmentContext}
-                  presentation="premium"
                 />
               ),
             },
           ]}
         />
 
-        <ModuleEditorSaveArea title="حفظ الهيرو" saveLabel="حفظ الهيرو" />
+        <ModuleEditorSaveArea saveLabel="حفظ الهيرو" />
+        </div>
       </AdminFormRuntime>
     </div>
   );

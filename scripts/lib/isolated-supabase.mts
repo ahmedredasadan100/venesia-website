@@ -208,6 +208,16 @@ const canonical = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+/** Compare preservation metadata without treating Docker's top-level Mounts order as identity. */
+export function preservationComparisonJson(kind: "container" | "volume" | "network", row: JsonObject): string {
+  if (kind !== "container" || !Array.isArray(row.mounts)) return canonical(row);
+  const mounts = [...row.mounts].sort((left, right) => {
+    const a = canonical(left), b = canonical(right);
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  return canonical({ ...row, mounts });
+}
+
 const engineTimestamp = (value: unknown): bigint => {
   const match = typeof value === "string" ? /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/.exec(value) : null;
   requireThat(match && Number.isFinite(Date.parse(`${match[1]}Z`)), "INVALID_ENGINE_TIMESTAMP", "post-create-baseline");
@@ -780,14 +790,16 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const assertOriginalsUnchanged = (after: Inventory, baseline: Inventory | undefined = before, stage = "cleanup") => {
     requireThat(baseline, "MISSING_BASELINE", stage);
     for (const key of ["containers", "volumes", "networks"] as const) {
+      const kind = key === "containers" ? "container" : key === "volumes" ? "volume" : "network";
       for (const original of baseline[key]) {
         const actual = after[key].find(item => item.id === original.id);
-        if (!actual || canonical(actual) !== canonical(original)) {
+        const unchanged = actual && preservationComparisonJson(kind, actual) === preservationComparisonJson(kind, original);
+        if (!unchanged) {
           recordFile("existing-resource-difference.json", { kind: key, id: original.id, name: original.name,
             presentAfter: Boolean(actual), beforeSha256: sha256(canonical(original)), afterSha256: actual ? sha256(canonical(actual)) : null,
             changedFields: actual ? [...new Set([...Object.keys(original), ...Object.keys(actual)])].filter(field => canonical(original[field]) !== canonical(actual[field])) : [] });
         }
-        requireThat(actual && canonical(actual) === canonical(original), "EXISTING_RESOURCE_CHANGED", stage);
+        requireThat(unchanged, "EXISTING_RESOURCE_CHANGED", stage);
       }
     }
     requireThat(baseline.imageIds.every(id => after.imageIds.includes(id)), "EXISTING_IMAGE_MISSING", stage);

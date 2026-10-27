@@ -44,6 +44,7 @@ export default async function Page({
   return (
     <AdminPageExperience>
       <AdminPageHeader
+        visualPreset="navigation"
         eyebrow="MENU BUILDER"
         title={`محرر ${menu.name}`}
         description="إدارة عناصر القائمة عبر تبويبات منظمة وجدول إداري موحّد مع بقية لوحة التحكم."

@@ -214,6 +214,7 @@ export function TrackingStageFormModal({
               <AdminFormSwitch
                 name="is_visible"
                 label="مرئية في صفحة المتابعة"
+                surface={false}
                 defaultChecked={stage?.is_visible ?? true}
                 disabled={pending}
               />
@@ -332,6 +333,7 @@ export function TrackingItemFormModal({
               <AdminFormSwitch
                 name="is_visible"
                 label="مرئي في صفحة المتابعة"
+                surface={false}
                 defaultChecked={item?.is_visible ?? true}
                 disabled={pending}
               />
@@ -383,7 +385,7 @@ export function TrackingUpdateFormModal({
             <input type="hidden" name="project_id" value={projectId} />
             <input type="hidden" name="item_id" value={itemId} />
             {update ? <input type="hidden" name="update_id" value={update.id} /> : null}
-            <AdminFormGrid columns={12}>
+            <AdminFormGrid columns={12} presentation="aligned-fields">
               <AdminFormGridItem span={6}>
                 <AdminFormField label="عنوان التحديث" required>
                   <input
@@ -412,7 +414,7 @@ export function TrackingUpdateFormModal({
                   <AdminFormError name="occurred_on" />
                 </AdminFormField>
               </AdminFormGridItem>
-              <AdminFormGridItem span={3} className="flex items-end">
+              <AdminFormGridItem span={3}>
                 <AdminFormSwitch
                   name="publication_status"
                   label="نشر"
@@ -420,7 +422,7 @@ export function TrackingUpdateFormModal({
                   uncheckedValue="draft"
                   defaultChecked={update?.publication_status === "published"}
                   disabled={pending}
-                  surface
+                  embedded
                   className="w-full"
                 />
               </AdminFormGridItem>

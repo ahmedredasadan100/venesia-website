@@ -16,6 +16,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import {
+  ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation,
+  type AdminCollectionPresentation,
+} from "../../../lib/admin/admin-ui-styles";
+import {
   adminCollectionSearchIncludes,
   buildAdminEntityListHref,
   type AdminEntityFilterDef,
@@ -61,6 +65,8 @@ export type AdminEntityListFiltersProps = {
   contextOverrideActive?: boolean;
   /** Standalone owns its card boundary; embedded delegates it to a parent surface. */
   surface?: "standalone" | "embedded";
+  /** Presentation only; query, draft, and layer ownership stay shared. */
+  presentation?: AdminCollectionPresentation;
   /** Opt-in layout and decoration only; filter values and selection contracts stay unchanged. */
   filterPanelPresentation?: {
     variant: "premium";
@@ -133,12 +139,14 @@ function AdminFilterOptionButton({
   selected,
   onSelect,
   premium = false,
+  cinematic = false,
   icon,
 }: {
   option: AdminEntityFilterOption;
   selected: boolean;
   onSelect: () => void;
   premium?: boolean;
+  cinematic?: boolean;
   icon?: ReactNode;
 }) {
   const optionText = (
@@ -160,7 +168,9 @@ function AdminFilterOptionButton({
       disabled={option.disabled}
       onClick={onSelect}
       className={`${premium ? "flex min-w-0 items-center justify-between gap-2 rounded-[11px] border px-3 py-2.5 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45" : "min-w-0 rounded-[11px] border px-3 py-2.5 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"} ${
-        selected
+        cinematic
+          ? selected ? ADMIN_CINEMATIC_GOLD_V1.collection.optionActive : ADMIN_CINEMATIC_GOLD_V1.collection.option
+          : selected
           ? "border-[#D8B87A]/55 bg-[#D8B87A]/16 text-[#F4E7C5]"
           : "border-white/9 bg-black/18 text-white/64 hover:border-[#D8B87A]/28 hover:bg-white/[0.04] hover:text-white/85"
       }`}
@@ -180,11 +190,13 @@ function AdminFilterField({
   value,
   onChange,
   presentation,
+  collectionPresentation = "default",
 }: {
   filter: AdminEntityFilterDef;
   value: string;
   onChange: (value: string) => void;
   presentation?: AdminEntityListFiltersProps["filterPanelPresentation"];
+  collectionPresentation?: AdminCollectionPresentation;
 }) {
   const [optionQuery, setOptionQuery] = useState("");
   const allValue = filter.allValue ?? filter.defaultValue ?? "all";
@@ -200,6 +212,7 @@ function AdminFilterField({
     : allOptions;
   const isDate = filter.type === "date" || filter.type === "date_range";
   const premium = presentation?.variant === "premium";
+  const cinematic = collectionPresentation === "cinematic";
   const fullWidth = presentation?.fullWidthFilterIds?.includes(filter.id) ?? false;
   const fieldIcon = presentation?.fieldIcons?.[filter.id];
   const optionIcons = presentation?.optionIcons?.[filter.id];
@@ -212,7 +225,9 @@ function AdminFilterField({
   return (
     <fieldset
       disabled={filter.disabled}
-      className={premium
+      className={cinematic
+        ? `min-w-0 rounded-[15px] border p-3 ${ADMIN_CINEMATIC_GOLD_V1.collection.filterField} ${premium ? fullWidth ? "md:col-span-2" : "" : searchable || isDate ? "md:col-span-2" : ""}`
+        : premium
         ? `min-w-0 rounded-[15px] border border-white/10 bg-black/16 p-3 ${fullWidth ? "md:col-span-2" : ""}`
         : `min-w-0 rounded-[15px] border border-white/8 bg-black/16 p-3.5 ${searchable || isDate ? "md:col-span-2" : ""}`}
       data-admin-filter-field={filter.id}
@@ -229,7 +244,7 @@ function AdminFilterField({
           type="date"
           value={value === allValue ? "" : value}
           onChange={(event) => onChange(event.currentTarget.value || allValue)}
-          className="mt-2 h-11 w-full rounded-[11px] border border-white/10 bg-[#080B10] px-3 text-sm text-white outline-none focus:border-[#D8B87A]/45 focus:ring-2 focus:ring-[#D8B87A]/10"
+          className={`mt-2 h-11 w-full rounded-[11px] border px-3 text-sm outline-none ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.searchInput : "border-white/10 bg-[#080B10] text-white focus:border-[#D8B87A]/45 focus:ring-2 focus:ring-[#D8B87A]/10"}`}
         />
       ) : (
         <>
@@ -240,7 +255,7 @@ function AdminFilterField({
               onChange={(event) => setOptionQuery(event.currentTarget.value)}
               placeholder={filter.optionSearchPlaceholder ?? `ابحث داخل ${filter.label ?? filter.placeholder}...`}
               aria-label={premium ? filter.optionSearchPlaceholder ?? `ابحث داخل ${filter.label ?? filter.placeholder}...` : undefined}
-              className="mt-2 h-10 w-full rounded-[10px] border border-white/10 bg-[#080B10] px-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#D8B87A]/45"
+              className={`mt-2 h-10 w-full rounded-[10px] border px-3 text-sm outline-none ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.searchInput : "border-white/10 bg-[#080B10] text-white placeholder:text-white/35 focus:border-[#D8B87A]/45"}`}
             />
           ) : null}
 
@@ -254,6 +269,7 @@ function AdminFilterField({
               selected={value === allValue}
               onSelect={() => onChange(allValue)}
               premium={premium}
+              cinematic={cinematic}
               icon={optionIcons?.[allValue]}
             />
             {visibleOptions.map((option) => (
@@ -263,6 +279,7 @@ function AdminFilterField({
                 selected={value === option.value}
                 onSelect={() => onChange(option.value)}
                 premium={premium}
+                cinematic={cinematic}
                 icon={optionIcons?.[option.value]}
               />
             ))}
@@ -292,9 +309,12 @@ export default function AdminEntityListFilters({
   contextOverride,
   contextOverrideActive = false,
   surface = "standalone",
+  presentation: requestedPresentation = "default",
   filterPanelPresentation,
   className = "",
 }: AdminEntityListFiltersProps) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
+  const cinematic = presentation === "cinematic";
   const router = useRouter();
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
@@ -506,9 +526,10 @@ export default function AdminEntityListFilters({
             aria-label="اقتراحات البحث"
             dir="rtl"
             data-admin-search-suggestions=""
+            data-admin-search-suggestions-presentation={presentation}
             data-placement={suggestionPosition.placement}
             style={suggestionPosition.style}
-            className={`overflow-y-auto rounded-[14px] border border-[#D8B87A]/22 bg-[#090C11]/98 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
+            className={`overflow-y-auto rounded-[14px] border p-1.5 backdrop-blur-xl ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.menu : "border-[#D8B87A]/22 bg-[#090C11]/98 shadow-[0_24px_70px_rgba(0,0,0,0.55)]"} ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
           >
             {suggestionsLoading ? (
               <p role="status" className="px-3 py-3 text-sm text-white/48">جاري تحميل الاقتراحات...</p>
@@ -530,7 +551,7 @@ export default function AdminEntityListFilters({
                 onMouseEnter={() => setActiveSuggestion(index)}
                 onClick={() => selectSuggestion(suggestion)}
                 className={`block w-full rounded-[10px] px-3 py-2.5 text-right transition ${
-                  index === activeSuggestion ? "bg-[#D8B87A]/14" : "hover:bg-white/[0.05]"
+                  cinematic ? index === activeSuggestion ? ADMIN_CINEMATIC_GOLD_V1.collection.optionActive : ADMIN_CINEMATIC_GOLD_V1.collection.option : index === activeSuggestion ? "bg-[#D8B87A]/14" : "hover:bg-white/[0.05]"
                 }`}
               >
                 <span className="block truncate text-sm font-semibold text-white">
@@ -556,15 +577,19 @@ export default function AdminEntityListFilters({
         dir="rtl"
         data-admin-collection-toolbar-owner=""
         data-admin-collection-toolbar-surface={surface}
+        data-admin-collection-toolbar-presentation={presentation}
         className={`${
-          surface === "embedded"
+          cinematic
+            ? `${surface === "embedded" ? "overflow-visible border-b" : "overflow-visible rounded-t-[20px] border border-b-0"} ${ADMIN_CINEMATIC_GOLD_V1.collection.toolbarSurface}`
+            : surface === "embedded"
             ? "overflow-visible border-b border-[#D8B87A]/14 bg-[#080B10]/90"
             : "overflow-visible rounded-t-[20px] border border-b-0 border-[#D8B87A]/14 bg-[#080B10]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]"
         } ${className}`.trim()}
       >
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 p-3 sm:p-4">
+        <div data-admin-collection-toolbar-controls="" className={cinematic ? "flex min-w-0 flex-wrap items-center justify-between gap-2.5 px-3 py-2.5" : "flex min-w-0 flex-wrap items-center justify-between gap-3 p-3 sm:p-4"}>
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <AdminSearchInput
+              presentation={presentation}
               ref={searchAnchorRef}
               value={draftSearch}
               placeholder={search.placeholder}
@@ -639,7 +664,7 @@ export default function AdminEntityListFilters({
               aria-label={activeCount ? `الفلاتر، ${activeCount} نشطة` : "الفلاتر"}
               onClick={openFilters}
               disabled={filters.length === 0}
-              className="relative flex h-11 shrink-0 cursor-pointer items-center gap-2 rounded-[11px] border border-white/10 bg-black/24 px-3.5 text-sm font-semibold text-white/72 transition hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/9 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
+              className={`relative flex h-11 shrink-0 cursor-pointer items-center gap-2 ${cinematic ? "rounded-[10px]" : "rounded-[11px]"} border px-3.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${cinematic ? filterModalOpen ? ADMIN_CINEMATIC_GOLD_V1.collection.controlOpen : ADMIN_CINEMATIC_GOLD_V1.collection.control : "border-white/10 bg-black/24 text-white/72 hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/9 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"}`}
             >
               <FilterIcon className="h-4 w-4 text-[#D8B87A]/78" />
               <span className="hidden sm:inline">الفلاتر</span>
@@ -681,7 +706,7 @@ export default function AdminEntityListFilters({
                 {appliedFilters.map(({ filter, value }) => (
                   <span
                     key={filter.id}
-                    className="inline-flex min-w-0 items-center gap-2 rounded-[9px] border border-[#D8B87A]/16 bg-[#D8B87A]/8 px-2.5 py-1.5 text-xs text-[#F4E7C5]/82"
+                    className={`inline-flex min-w-0 items-center gap-2 rounded-[9px] border px-2.5 py-1.5 text-xs ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.chip : "border-[#D8B87A]/16 bg-[#D8B87A]/8 text-[#F4E7C5]/82"}`}
                   >
                     <span className="max-w-[230px] truncate">
                       <span className="text-white/48">{filter.label ?? filter.placeholder}: </span>
@@ -691,7 +716,7 @@ export default function AdminEntityListFilters({
                       type="button"
                       aria-label={`إزالة فلتر ${filter.label ?? filter.placeholder}`}
                       onClick={() => removeFilter(filter)}
-                      className="rounded px-1 text-white/45 transition hover:bg-white/8 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D8B87A]/70"
+                      className={`rounded px-1 transition ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.subtleAction : "text-white/45 hover:bg-white/8 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D8B87A]/70"}`}
                     >
                       ×
                     </button>
@@ -700,7 +725,7 @@ export default function AdminEntityListFilters({
                 <button
                   type="button"
                   onClick={clearAppliedFilters}
-                  className="ms-auto rounded-[9px] px-2.5 py-1.5 text-xs font-semibold text-[#D8B87A]/78 transition hover:bg-[#D8B87A]/8 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D8B87A]/70"
+                  className={`ms-auto rounded-[9px] px-2.5 py-1.5 text-xs font-semibold transition ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.subtleAction : "text-[#D8B87A]/78 hover:bg-[#D8B87A]/8 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D8B87A]/70"}`}
                 >
                   مسح كل الفلاتر
                 </button>
@@ -732,7 +757,7 @@ export default function AdminEntityListFilters({
               <button
                 type="button"
                 onClick={clearDraftFilters}
-                className="h-10 rounded-[10px] border border-white/10 px-4 text-sm font-semibold text-white/56 transition hover:border-[#D8B87A]/25 hover:bg-white/[0.04] hover:text-white/82 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className={`h-10 rounded-[10px] border px-4 text-sm font-semibold transition ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.control : "border-white/10 text-white/56 hover:border-[#D8B87A]/25 hover:bg-white/[0.04] hover:text-white/82 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"}`}
               >
                 مسح الكل
               </button>
@@ -746,6 +771,7 @@ export default function AdminEntityListFilters({
               key={filter.id}
               filter={filter}
               presentation={filterPanelPresentation}
+              collectionPresentation={presentation}
               value={activeFilterValue(filter, draftFilters)}
               onChange={(value) =>
                 setDraftFilters((current) => ({ ...current, [filter.paramKey]: value }))

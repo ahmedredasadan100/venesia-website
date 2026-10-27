@@ -1,5 +1,7 @@
 "use client";
 
+import { ADMIN_FORM_STACK_CLASS_NAME } from "../../ui";
+import { adminFormHintClassName } from "../../../../lib/admin/admin-ui-styles";
 import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
@@ -21,15 +23,15 @@ export default function AboutApproachModuleEditor({ config }: AboutApproachModul
   const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
   const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
         <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={6}>
-            <ModuleEditorVisibilityAlignRow label="النص التمهيدي" presentation="premium" icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+            <ModuleEditorVisibilityAlignRow label="النص التمهيدي" icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
               <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
             </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="short-description" span={6}>
-            <ModuleEditorVisibilityAlignRow label="العنوان — النص الكامل" presentation="premium" icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+            <ModuleEditorVisibilityAlignRow label="العنوان — النص الكامل" icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
               <textarea
                 name="title"
                 aria-label="العنوان — النص الكامل"
@@ -40,7 +42,7 @@ export default function AboutApproachModuleEditor({ config }: AboutApproachModul
             </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
-        <p className="text-xs leading-6 text-white/45">
+        <p className={adminFormHintClassName({ textInset: true })}>
           لفصل جزئي العنوان بصريًا، ضع <code dir="ltr"> — </code> بين الجزئين (مسافة قبل وبعد الشرطة).
         </p>
     </div>

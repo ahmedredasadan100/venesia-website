@@ -59,6 +59,7 @@ export default function PageBlocksHeader({
 }: PageBlocksHeaderProps) {
   return (
     <AdminPageContextHeader
+      visualPreset="pages"
       eyebrow="منشئ الصفحات"
       title={resolveEditorTitle(page)}
       description="تحكّم في إعدادات الصفحة، هيكلها، والموديولات المعروضة داخلها."

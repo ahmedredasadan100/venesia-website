@@ -31,8 +31,9 @@ function resolveInitialTabId(tab: string | undefined, hasSeoFeedback: boolean) {
 
 function PageCompositionLoadError({ title, message }: { title: string; message: string }) {
   return (
-    <AdminPageExperience state="error" dir="rtl">
+    <AdminPageExperience as="div" state="error" dir="rtl">
       <AdminPageContextHeader
+        visualPreset="pages"
         eyebrow="تكوين الصفحات"
         title={title}
         description="تعذر تحميل بيانات تكوين الصفحة. لم تُنفذ أي تغييرات."

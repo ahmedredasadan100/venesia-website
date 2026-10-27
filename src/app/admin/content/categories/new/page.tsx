@@ -20,6 +20,7 @@ export default async function NewTopicCategoryPage() {
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
+        visualPreset="categories"
         eyebrow="CATEGORIES CONTROL"
         title="إضافة تصنيف جديد"
         description="أنشئ تصنيفًا جديدًا داخل نظام المحتوى، وحدد علاقته وحالة نشره قبل الحفظ والإغلاق."

@@ -1,5 +1,6 @@
 "use client";
 
+import type { AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
 import {
   AdminDataGridRowActions,
   type AdminRowActionsCapability,
@@ -31,11 +32,13 @@ export type UnifiedContentRowActionHandlers = {
 
 export default function UnifiedContentRowActions({
   row,
+  presentation = "default",
   currentListPath,
   onMutationResult,
   handlers,
   display = "menu",
 }: {
+  presentation?: AdminCollectionPresentation;
   row: UnifiedContentRow;
   currentListPath: string;
   onMutationResult?: (result: AdminActionResult) => void;
@@ -249,6 +252,7 @@ export default function UnifiedContentRowActions({
 
   return (
     <AdminDataGridRowActions
+      presentation={presentation}
       capability={capability}
       display={display}
       size="compact"

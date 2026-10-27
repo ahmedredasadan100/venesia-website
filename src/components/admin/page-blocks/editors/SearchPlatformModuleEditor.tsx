@@ -13,7 +13,7 @@ import {
   type SearchPlatformFilter,
   type SearchPlatformPresentation,
 } from "../../../../lib/page-blocks/search-platform-config";
-import {
+import { ADMIN_FORM_STACK_CLASS_NAME,
   AdminCard,
   AdminCheckbox,
   AdminFormControlHeader,
@@ -90,9 +90,9 @@ export default function SearchPlatformModuleEditor({
   section?: "all" | "text" | "search" | "presentation";
 }) {
   return (
-    <div className="space-y-5">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {section === "all" || section === "text" ? (
-        <div className="space-y-4" data-search-interface-display-formatting="">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME} data-search-interface-display-formatting="">
           {section === "all" ? (
             <ModuleEditorSectionHeading intent="domain">
               محتوى واجهة البحث
@@ -103,7 +103,6 @@ export default function SearchPlatformModuleEditor({
               label="العنوان"
               description="العنوان الرئيسي الذي يعرّف واجهة البحث."
               icon={<AdminModuleTabIcon name="content" />}
-              presentation="premium"
               showName="show_search_title"
               boldName="search_title_bold"
               alignmentName="search_title_alignment"
@@ -124,7 +123,6 @@ export default function SearchPlatformModuleEditor({
               label="الوصف"
               description="وصف موجز يظهر أسفل عنوان البحث."
               icon={<AdminModuleTabIcon name="content" />}
-              presentation="premium"
               showName="show_search_description"
               boldName="search_description_bold"
               alignmentName="search_description_alignment"
@@ -145,7 +143,6 @@ export default function SearchPlatformModuleEditor({
               label="النص المساعد"
               description="إرشاد مختصر يساعد الزائر على استخدام البحث."
               icon={<AdminModuleTabIcon name="content" />}
-              presentation="premium"
               showName="show_search_help_text"
               boldName="search_help_text_bold"
               alignmentName="search_help_text_alignment"
@@ -172,7 +169,6 @@ export default function SearchPlatformModuleEditor({
               label="أيقونة البحث"
               description="إظهار أيقونة تنفيذ البحث داخل الحقل."
               icon={<AdminModuleTabIcon name="seo" />}
-              presentation="premium"
               showName="show_search_action"
               controlMode="visibility-only"
               showDefault={config.interfaceDisplay.searchAction.visible}
@@ -182,7 +178,6 @@ export default function SearchPlatformModuleEditor({
               label="عنوان النتائج"
               description="يعرض عدد النتائج وكلمة البحث الحالية تلقائيًا."
               icon={<AdminModuleTabIcon name="overview" />}
-              presentation="premium"
               showName="show_search_results_title"
               boldName="search_results_title_bold"
               alignmentName="search_results_title_alignment"
@@ -208,7 +203,7 @@ export default function SearchPlatformModuleEditor({
       ) : null}
 
       {section === "all" || section === "search" ? (
-        <div className="space-y-4">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           {section === "all" ? (
             <ModuleEditorSectionHeading intent="settings">
               إعدادات البحث
@@ -293,7 +288,7 @@ export default function SearchPlatformModuleEditor({
       ) : null}
 
       {section === "all" || section === "presentation" ? (
-        <div className="space-y-4">
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           {section === "all" ? (
             <ModuleEditorSectionHeading intent="settings">
               إعدادات العرض

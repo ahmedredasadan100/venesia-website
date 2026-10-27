@@ -18,6 +18,7 @@ type AdminNoticeDismissibleFrameProps = {
   dismissSearchParams?: readonly string[];
   lifecycle: AdminFeedbackLifecycle;
   onDismiss?: () => void;
+  presentation?: "default" | "compact";
 };
 
 export default function AdminNoticeDismissibleFrame({
@@ -29,6 +30,7 @@ export default function AdminNoticeDismissibleFrame({
   dismissSearchParams = DEFAULT_DISMISS_SEARCH_PARAMS,
   lifecycle,
   onDismiss,
+  presentation = "default",
 }: AdminNoticeDismissibleFrameProps) {
   const [dismissed, setDismissed] = useState(false);
 
@@ -61,6 +63,7 @@ export default function AdminNoticeDismissibleFrame({
       data-admin-notice-dismissible="true"
       data-admin-notice-lifecycle={lifecycle}
       data-admin-notice-layout={layout}
+      data-admin-notice-presentation={presentation === "compact" ? "compact" : undefined}
       className={className}
     >
       {children}
@@ -70,7 +73,9 @@ export default function AdminNoticeDismissibleFrame({
         onClick={dismiss}
         style={{ cursor: "pointer" }}
         className={
-          layout === "inline"
+          presentation === "compact"
+            ? "mt-0.5 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/30 bg-black/25 text-xl leading-none text-white shadow-sm transition hover:border-white/50 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:mt-1"
+            : layout === "inline"
             ? "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-white/30 bg-black/25 text-xl leading-none text-white shadow-sm transition hover:border-white/50 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             : "absolute left-3 top-3 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-white/30 bg-black/25 text-xl leading-none text-white shadow-sm transition hover:border-white/50 hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         }

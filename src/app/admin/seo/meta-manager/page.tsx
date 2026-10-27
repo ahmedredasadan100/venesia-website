@@ -14,8 +14,9 @@ export default async function MetaManagerPage() {
   );
 
   return (
-    <AdminPageExperience dir="rtl">
+    <AdminPageExperience as="div" dir="rtl">
       <AdminPageHeader
+        visualPreset="seo"
         eyebrow="GLOBAL SEO"
         title="Meta Manager"
         description="عقد Global SEO الفعلي بترتيب Database ثم Environment ثم Code Fallback. الحقول الموروثة لا تظهر كأنها قيم محفوظة."

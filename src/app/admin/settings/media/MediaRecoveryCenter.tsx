@@ -7,6 +7,16 @@ import {
   useAdminFeedback,
 } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminConfirmDialog from "../../../../components/admin/ui/AdminConfirmDialog";
+import {
+  ADMIN_FORM_STACK_CLASS_NAME,
+  AdminActionButton,
+  AdminFormGrid,
+  AdminFormSection,
+  AdminMetricCardsGrid,
+  AdminStatusPill,
+} from "../../../../components/admin/ui";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../../../components/admin/ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
 import type {
   MediaRecoveryAction,
   MediaRecoveryItem,
@@ -228,24 +238,16 @@ export default function MediaRecoveryCenter() {
       <section
         ref={recoveryRootRef}
         tabIndex={-1}
-        className="admin-premium-card mx-auto mb-6 w-full max-w-6xl space-y-5 rounded-[28px] p-5 sm:p-6 lg:p-8"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-white">حالات تحتاج مراجعة</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-7 text-white/50">
-              يعرض هذا القسم عمليات الحذف أو الحفظ التي توقفت في حالة آمنة. إجراءات التحقق هنا تخص الملف المعروض، بينما تاريخ الفحص الشامل يصف آخر فحص لكل مصادر الارتباط.
-            </p>
-          </div>
-          <button
+        <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id="media-recovery" sectionHeading="حالات تحتاج مراجعة" sectionDescription="يعرض هذا القسم عمليات الحذف أو الحفظ التي توقفت في حالة آمنة. إجراءات التحقق هنا تخص الملف المعروض، بينما تاريخ الفحص الشامل يصف آخر فحص لكل مصادر الارتباط." icon="media" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} sectionSummary={<AdminActionButton
             type="button"
             disabled={loading || pending !== null}
             onClick={() => void loadQueue()}
-            className="rounded-2xl border border-white/15 px-4 py-2.5 text-xs font-semibold text-white/70 disabled:opacity-40"
+            variant="dark"
           >
             {loading ? "جارٍ التحقق…" : "تحديث الحالات"}
-          </button>
-        </div>
+          </AdminActionButton>} />}>
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
 
         <AdminFeedbackChannelViewport
           channel="media-settings-recovery"
@@ -265,26 +267,11 @@ export default function MediaRecoveryCenter() {
         ) : null}
 
         {queue?.available ? (
-          <dl className="grid gap-3 text-sm sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <dt className="text-xs text-white/40">
-                عمليات حذف متوقفة{queue.truncated ? " (المعروضة)" : ""}
-              </dt>
-              <dd className="mt-2 text-xl font-bold text-white">{queue.counts.stuckDeletes}</dd>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <dt className="text-xs text-white/40">
-                أصول مفقودة أو غير مؤكدة{queue.truncated ? " (المعروضة)" : ""}
-              </dt>
-              <dd className="mt-2 text-xl font-bold text-white">{queue.counts.missingOrUncertainAssets}</dd>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <dt className="text-xs text-white/40">
-                عمليات حفظ غير محلولة{queue.truncated ? " (المعروضة)" : ""}
-              </dt>
-              <dd className="mt-2 text-xl font-bold text-white">{queue.counts.unresolvedLeaseBatches}</dd>
-            </div>
-          </dl>
+          <AdminMetricCardsGrid ariaLabel="ملخص حالات الميديا المعروضة" items={([
+            { label: "عمليات حذف متوقفة", value: queue.counts.stuckDeletes, tone: "neutral", icon: <AdminModuleTabIcon name="media" />, artwork: "unpublished" },
+            { label: "أصول مفقودة أو غير مؤكدة", value: queue.counts.missingOrUncertainAssets, tone: "neutral", icon: <AdminModuleTabIcon name="media" />, artwork: "media" },
+            { label: "عمليات حفظ غير محلولة", value: queue.counts.unresolvedLeaseBatches, tone: "neutral", icon: <AdminModuleTabIcon name="content" />, artwork: "content" },
+          ] as const).map(item => ({ ...item, label: queue.truncated ? item.label + " (المعروضة)" : item.label }))} />
         ) : null}
 
         {queue?.available && queue.items.length === 0 ? (
@@ -294,29 +281,21 @@ export default function MediaRecoveryCenter() {
         ) : null}
 
         {queue?.available && queue.items.length ? (
-          <div className="space-y-3">
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
             {queue.items.map((item) => (
               <article
                 key={`${item.kind}:${item.id}`}
-                className="rounded-2xl border border-white/10 bg-black/20 p-4"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{item.assetLabel}</p>
-                    <p className="mt-1 text-xs text-white/42">
-                      الحالة: {getStateLabel(item.state)} · عدد الأصول: {item.assetCount}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-amber-300/20 bg-amber-300/8 px-3 py-1 text-[11px] text-amber-100/75">
+                <AdminFormSection presentation="panel" header={<AdminModuleSectionHeader id={`media-recovery-${item.kind}-${item.id}`} sectionHeading={item.assetLabel} sectionDescription={<>الحالة: {getStateLabel(item.state)} · عدد الأصول: {item.assetCount}</>} icon="media" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} sectionSummary={<AdminStatusPill tone="gold">
                     {item.kind === "delete_reservation"
                       ? "حجز حذف"
                       : item.kind === "write_lease"
                         ? "عملية حفظ"
                         : "أصل يحتاج تحققًا"}
-                  </span>
-                </div>
-                <p className="mt-3 text-xs leading-6 text-white/58">{item.suggestedAction}</p>
-                <dl className="mt-3 grid gap-2 text-[11px] text-white/42 sm:grid-cols-2">
+                  </AdminStatusPill>} />}>
+                <AdminFormGrid columns={1}>
+                <p className="text-xs leading-6 text-white/58">{item.suggestedAction}</p>
+                <dl className="grid gap-2 text-[11px] text-white/42 sm:grid-cols-2">
                   <div className="min-w-0">
                     <dt>معرّف الأصل</dt>
                     <dd className="mt-1 break-all font-mono text-white/65" dir="ltr">
@@ -344,30 +323,34 @@ export default function MediaRecoveryCenter() {
                   <div><dt>آخر فحص شامل لكل المصادر</dt><dd className="mt-1 text-white/65">{formatAdminDateTime(item.lastProviderScan)}</dd></div>
                 </dl>
                 {item.blockedReasons.length ? (
-                  <ul className="mt-3 space-y-1 text-xs leading-6 text-amber-100/65">
+                  <ul className="space-y-1 text-xs leading-6 text-amber-100/65">
                     {item.blockedReasons.map((reason) => <li key={reason}>• {reason}</li>)}
                   </ul>
                 ) : null}
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-white/8 pt-4">
+                <div className="flex flex-wrap gap-2">
                   {item.allowedActions.map((action) => {
                     const operationKey = `${item.kind}:${item.id}:${action}`;
                     return (
-                      <button
+                      <AdminActionButton
                         key={action}
                         type="button"
                         disabled={pending !== null}
                         onClick={(event) => requestAction(action, item, event.currentTarget)}
-                        className="rounded-xl border border-white/12 px-3 py-2 text-xs font-semibold text-white/70 disabled:opacity-40"
+                        variant="dark"
                       >
                         {pending === operationKey ? "جارٍ التنفيذ…" : ACTION_LABELS[action]}
-                      </button>
+                      </AdminActionButton>
                     );
                   })}
                 </div>
+                </AdminFormGrid>
+                </AdminFormSection>
               </article>
             ))}
           </div>
         ) : null}
+        </div>
+        </AdminFormSection>
       </section>
 
       <AdminConfirmDialog

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation, ADMIN_DATA_GRID_SELECTION, type AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
+
 import type {
   ChangeEventHandler,
   DragEventHandler,
@@ -35,6 +37,7 @@ type SortLabelProps = BaseProps & {
 };
 
 type GridProps = BaseProps & {
+  presentation?: AdminCollectionPresentation;
   /** Query changes retain rows; same-query background refreshes stay quiet. */
   queryPending?: boolean;
   summary?: ReactNode;
@@ -69,6 +72,7 @@ export type AdminDataGridAction =
 export type AdminDataGridActionIconSize = "sm" | "md" | "lg";
 
 type ActionButtonProps = {
+  presentation?: AdminCollectionPresentation;
   children?: ReactNode;
   title?: string;
   ariaLabel?: string;
@@ -97,6 +101,7 @@ type ActionButtonProps = {
 };
 
 type CheckboxProps = {
+  presentation?: AdminCollectionPresentation;
   checked: boolean;
   onChange: ChangeEventHandler<HTMLInputElement>;
   label: string;
@@ -110,6 +115,8 @@ type ReorderHandleProps = {
   disabled?: boolean;
   pending?: boolean;
   disabledReason?: string;
+  /** Explicit consumer tone; omitted handles retain their current appearance. */
+  tone?: "default" | "gold";
   onMoveTo: (position: number) => void;
   onDragStart?: DragEventHandler<HTMLButtonElement>;
   onDragOver?: DragEventHandler<HTMLButtonElement>;
@@ -335,7 +342,7 @@ export const ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES =
 
 /** Shared table header surface — Admin Data Grid + manual grid headers (Topics list, Categories tree). */
 export const ADMIN_DATA_GRID_HEADER_CLASSES =
-  "border-b border-[#D8B87A]/18 bg-[linear-gradient(135deg,rgba(216,184,122,0.14),rgba(56,189,248,0.08),rgba(255,255,255,0.03))] text-sm font-bold text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl";
+  ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyHeader;
 
 /** Width in px for a fixed actions column — use in gridTemplateColumns. */
 export function getAdminDataGridActionsColumnWidth(
@@ -415,6 +422,7 @@ export function AdminDataGridReorderHandle({
   disabled = false,
   pending = false,
   disabledReason,
+  tone = "default",
   onMoveTo,
   onDragStart,
   onDragOver,
@@ -450,7 +458,9 @@ export function AdminDataGridReorderHandle({
         event.preventDefault();
         if (nextPosition !== position) onMoveTo(nextPosition);
       }}
-      className="inline-flex size-8 cursor-grab items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/48 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+      className={tone === "gold"
+        ? "inline-flex size-8 cursor-grab items-center justify-center rounded-xl border border-[#D8B87A]/30 bg-[#080B10]/90 text-[#D8B87A] transition hover:border-[#D8B87A]/55 hover:text-[#F1C668] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+        : "inline-flex size-8 cursor-grab items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/48 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"}
     >
       <svg aria-hidden="true" viewBox="0 0 20 20" className={`size-4 ${pending ? "animate-pulse" : ""}`} fill="currentColor">
         <circle cx="6" cy="4" r="1.25" />
@@ -620,18 +630,22 @@ export function AdminDataGrid({
   summary,
   scrollLabel = "منطقة بيانات الإدارة",
   surface = "standalone",
+  presentation: requestedPresentation = "default",
   className = "",
 }: GridProps) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const embedded = surface === "embedded";
 
   return (
     <section
       data-admin-data-grid-surface={surface}
+      data-admin-data-grid-presentation={presentation}
       data-admin-data-grid-query-pending={queryPending ? "true" : "false"}
+      data-admin-edge-motion={embedded ? undefined : "entry"}
       className={`${queryPending ? "relative " : ""}${
         embedded
           ? "min-w-0"
-          : "rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl"
+          : ADMIN_CINEMATIC_GOLD_V1.collection.frame
       } ${className}`.trim()}
     >
       <div
@@ -640,8 +654,8 @@ export function AdminDataGrid({
         aria-label={scrollLabel}
         tabIndex={0}
         data-admin-data-grid-scroll=""
-        className={`overflow-x-auto overflow-y-hidden bg-black/14 overscroll-x-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
-          embedded ? "" : "rounded-[14px] border border-white/8"
+        className={`overflow-x-auto overflow-y-hidden ${presentation === "cinematic" ? "" : "bg-black/14"} overscroll-x-contain focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
+          embedded ? "" : presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.dataGrid.scroll : "rounded-[14px] border border-white/8"
         } ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`.trim()}
       >
         {children}
@@ -665,7 +679,8 @@ export function AdminDataGridHeader({
 }: GridActionLineProps) {
   return (
     <div
-      className={`grid gap-0 ${ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES} ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-40 [&>*:last-child]:bg-[#10151C]" : ""} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
+      data-admin-grid-header=""
+      className={`grid gap-0 ${ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES} [&>*]:py-3 ${horizontalScroll ? "w-max min-w-full" : "max-xl:hidden"} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-40 [&>*:last-child]:bg-[#10151C]" : ""} ${ADMIN_DATA_GRID_HEADER_CLASSES} ${className}`}
       style={{ gridTemplateColumns: columns, columnGap: 0 }}
     >
       {children}
@@ -683,7 +698,8 @@ export function AdminDataGridRow({
 }: GridActionLineProps & { divided?: boolean }) {
   return (
     <article
-      className={`grid gap-0 ${ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES} transition hover:bg-white/[0.035] ${horizontalScroll ? "w-max min-w-full" : ""} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-30 [&>*:last-child]:bg-[#080B10] hover:[&>*:last-child]:bg-[#0D1117]" : ""} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
+      data-admin-grid-row=""
+      className={`grid gap-0 ${ADMIN_DATA_GRID_BODY_ROW_CELL_CLASSES} ${ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyRow} ${horizontalScroll ? "w-max min-w-full" : ""} ${stickyActions ? "[&>*:last-child]:sticky [&>*:last-child]:end-0 [&>*:last-child]:z-30" : ""} ${divided ? ADMIN_DATA_GRID_RULES.rowDivider : ""} ${className}`}
       style={{ gridTemplateColumns: columns, columnGap: 0 }}
     >
       {children}
@@ -709,6 +725,7 @@ export function AdminDataGridCheckboxCell({
 }) {
   return (
     <div
+      data-admin-grid-checkbox-cell=""
       data-admin-grid-sticky={sticky ? "inline-start" : undefined}
       className={`flex items-center justify-center ${
         sticky
@@ -731,8 +748,19 @@ export function AdminDataGridCheckboxCell({
  * enabled state belongs to the shared Row Actions/Information presentation,
  * unless the Adoption Manifest declares an explicit surface contract.
  */
-export function AdminDataGridPrimaryCell({ children, className = "" }: BaseProps) {
-  return <div className={`min-w-0 text-right ${className}`}>{children}</div>;
+export function AdminDataGridPrimaryCell({
+  children,
+  className = "",
+  presentation,
+}: BaseProps & { presentation?: AdminEntityPrimaryColumnPresentation }) {
+  return (
+    <div
+      className={`min-w-0 text-right ${className}`}
+      style={presentation ? getAdminDataGridPrimaryPresentationStyle(presentation) : undefined}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** Secondary column cell — centered, truncate-safe (type / category / count / slug). */
@@ -829,7 +857,8 @@ export function AdminDataGridSortLink({
   );
 }
 
-export function AdminDataGridCheckbox({ checked, onChange, label, inputRef }: CheckboxProps) {
+export function AdminDataGridCheckbox({ checked, onChange, label, inputRef, presentation: requestedPresentation = "default" }: CheckboxProps) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   return (
     <AdminCheckbox
       inputRef={inputRef}
@@ -837,6 +866,7 @@ export function AdminDataGridCheckbox({ checked, onChange, label, inputRef }: Ch
       onChange={onChange}
       label={label}
       presentation="native"
+      className={presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.dataGrid.checkbox : ADMIN_DATA_GRID_SELECTION.checkbox}
     />
   );
 }
@@ -957,7 +987,9 @@ export function AdminDataGridActionButton({
   buttonRef,
   size = "default",
   iconSize = "sm",
+  presentation: requestedPresentation = "default",
 }: ActionButtonProps) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const visibilityPresentation =
     action === "visibility"
       ? resolveAdminDataGridVisibilityAction(
@@ -995,7 +1027,10 @@ export function AdminDataGridActionButton({
       : size === "compact"
         ? ADMIN_DATA_GRID_RULES.actionButtonCompact
         : ADMIN_DATA_GRID_RULES.actionButton;
-  const classes = `flex ${sizeClass} items-center justify-center border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${actionTones[resolvedTone]} ${className}`;
+  const toneClasses = presentation === "cinematic" && (resolvedTone === "gold" || resolvedTone === "dark")
+    ? ADMIN_CINEMATIC_GOLD_V1.dataGrid[resolvedTone === "gold" ? "actionGold" : "actionDark"]
+    : actionTones[resolvedTone];
+  const classes = `flex ${sizeClass} items-center justify-center border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${toneClasses} ${presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.dataGrid.action : ""} ${className}`;
 
   if (href && !disabled && !pending) {
     return (

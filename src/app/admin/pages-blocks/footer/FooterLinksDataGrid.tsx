@@ -3,11 +3,9 @@
 import { useMemo, useState } from "react";
 
 import VenesiaModal, {
-  ADMIN_FORM,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
   adminFormFieldClassName,
-  adminFormLabelClassName,
 } from "../../../../components/admin/VenesiaModal";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
@@ -17,14 +15,21 @@ import {
   AdminDataGrid,
   AdminDataGridActionButton,
   AdminDataGridActionsCell,
+  AdminDataGridActionsHeaderCell,
+  AdminDataGridCenterCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
+  AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridRowActions,
+  AdminDataGridStatusCell,
   AdminStatusPill,
   AdminTablePagination,
   AdminLinkField,
   AdminFormSwitch,
+  AdminFormField,
+  AdminFormGrid,
+  ADMIN_FORM_STACK_CLASS_NAME,
   AdminListboxSelect,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
@@ -218,14 +223,14 @@ export default function FooterLinksDataGrid({
       </div>
 
       <AdminDataGrid>
-        <AdminDataGridHeader columns={columns}>
-          <span className="text-center">#</span>
-          <span>اسم العنصر</span>
-          <span>الرابط</span>
-          <span className="text-center">الهدف</span>
-          <span className="text-center">الحالة</span>
-          <span className="text-center">الترتيب</span>
-          <span className="text-center">الإجراءات</span>
+        <AdminDataGridHeader columns={columns} horizontalScroll>
+          <AdminDataGridCenterCell>#</AdminDataGridCenterCell>
+          <AdminDataGridPrimaryCell>اسم العنصر</AdminDataGridPrimaryCell>
+          <AdminDataGridCenterCell>الرابط</AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>الهدف</AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+          <AdminDataGridCenterCell>الترتيب</AdminDataGridCenterCell>
+          <AdminDataGridActionsHeaderCell>الإجراءات</AdminDataGridActionsHeaderCell>
         </AdminDataGridHeader>
 
         {paginatedLinks.length ? (
@@ -294,29 +299,29 @@ export default function FooterLinksDataGrid({
               <AdminDataGridRow
                 key={`link-${index}-${item.label}`}
                 columns={columns}
+                horizontalScroll
               >
-                <span className="text-center text-sm font-en text-white/45">
+                <AdminDataGridCenterCell className="text-sm font-en text-white/45">
                   {index + 1}
-                </span>
-                <span className="truncate text-sm text-white/85">
+                </AdminDataGridCenterCell>
+                <AdminDataGridPrimaryCell className="truncate text-sm text-white/85">
                   {item.label || "—"}
-                </span>
-                <span
-                  className="truncate font-en text-xs text-white/45"
-                  dir="ltr"
-                >
-                  {manualLinkHrefLabel(item)}
-                </span>
-                <span className="text-center text-xs text-white/45">
+                </AdminDataGridPrimaryCell>
+                <AdminDataGridCenterCell>
+                  <span className="block truncate font-en text-xs text-white/45" dir="ltr">
+                    {manualLinkHrefLabel(item)}
+                  </span>
+                </AdminDataGridCenterCell>
+                <AdminDataGridCenterCell className="text-xs text-white/45">
                   {item.target === "_blank" ? "تبويب" : "نفس"}
-                </span>
-                <span className="flex justify-center">
+                </AdminDataGridCenterCell>
+                <AdminDataGridStatusCell>
                   <AdminStatusPill
                     tone={item.visible !== false ? "green" : "muted"}
                   >
                     {item.visible !== false ? "ظاهر" : "مخفي"}
                   </AdminStatusPill>
-                </span>
+                </AdminDataGridStatusCell>
                 <AdminDataGridActionsCell compact>
                   <AdminDataGridActionButton
                     tone="dark"
@@ -384,10 +389,9 @@ export default function FooterLinksDataGrid({
           </>
         }
       >
-        <div className="space-y-4">
-          <div className={ADMIN_FORM.gridTwoCol}>
-            <label className={adminFormLabelClassName()}>
-              <span>اسم العنصر</span>
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+          <AdminFormGrid columns={2} presentation="aligned-fields">
+            <AdminFormField label="اسم العنصر">
               <input
                 value={draft.label}
                 onChange={(event) =>
@@ -396,9 +400,8 @@ export default function FooterLinksDataGrid({
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
-            </label>
-            <div className={adminFormLabelClassName()}>
-              <span>فتح الرابط</span>
+            </AdminFormField>
+            <AdminFormField label="فتح الرابط">
               <AdminListboxSelect
                 value={draft.target ?? "_self"}
                 onChange={(value) =>
@@ -413,17 +416,17 @@ export default function FooterLinksDataGrid({
                 ]}
                 ariaLabel="فتح الرابط"
               />
-            </div>
+            </AdminFormField>
             <AdminFormSwitch
               label="إظهار في الفوتر"
               checked={draft.visible !== false}
               onChange={(event) =>
                 setDraft((prev) => ({ ...prev, visible: event.target.checked }))
               }
-              surface
+              embedded
               className="md:col-span-2"
             />
-          </div>
+          </AdminFormGrid>
           <AdminLinkField
             prefix="footer_manual_link"
             label="الرابط"

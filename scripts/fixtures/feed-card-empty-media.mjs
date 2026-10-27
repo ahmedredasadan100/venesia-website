@@ -3,15 +3,32 @@ import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
-import {readFileSync,readdirSync} from 'node:fs';
+import {lstatSync,realpathSync,readFileSync,readdirSync} from 'node:fs';
 import path from 'node:path';
 import {chromium} from 'playwright';
 
 /** Existing Feed verifier executes actual consumers and next/image. Only Link
  * navigation and uncalled server read ports are isolated; no DB or Storage writes. */
-export async function verifyFeedCardEmptyMedia(){
-  const root=process.cwd(),output=path.join(root,'.tmp-qa/feed-card-empty-media'),require=createRequire(import.meta.url);
-  await mkdir(output,{recursive:true});
+export function resolveFeedCardEmptyMediaOutput(root,requested){
+  if(requested===undefined)return path.join(root,'.tmp-qa/feed-card-empty-media');
+  assert(typeof requested==='string'&&/^\.tmp-qa\/[A-Za-z0-9._/-]+$/u.test(requested),'Fresh Feed evidence must be a literal repository .tmp-qa descendant');
+  const parts=requested.split('/');
+  assert(parts.every(part=>part&&part!=='.'&&part!=='..'),'Fresh Feed evidence cannot contain empty or traversal segments');
+  const resolvedRoot=path.resolve(root),rootState=lstatSync(resolvedRoot);
+  assert(rootState.isDirectory()&&!rootState.isSymbolicLink(),'Fresh Feed evidence requires a real directory root');
+  assert(path.relative(realpathSync(resolvedRoot),resolvedRoot)==='','Fresh Feed evidence root must be canonical');
+  let ancestor=resolvedRoot;
+  for(const part of parts.slice(0,-1)){
+    ancestor=path.join(ancestor,part);const state=lstatSync(ancestor);
+    assert(state.isDirectory()&&!state.isSymbolicLink(),'Fresh Feed evidence cannot traverse a symlink or junction');
+  }
+  const output=path.resolve(root,requested);
+  try{lstatSync(output);assert.fail('Fresh Feed evidence output already exists');}catch(error){if(error.code!=='ENOENT')throw error;}
+  return output;
+}
+export async function verifyFeedCardEmptyMedia({outputDirectory}={}){
+  const root=process.cwd(),output=resolveFeedCardEmptyMediaOutput(root,outputDirectory),require=createRequire(import.meta.url);
+  await mkdir(output,{recursive:outputDirectory===undefined});
   const expose={
     'FeaturedCarousel.tsx':['FeaturedEditorialSecondaryCard'],
     'MediaCenterCollectionItems.tsx':['CollectionListItem','CollectionGridItem'],

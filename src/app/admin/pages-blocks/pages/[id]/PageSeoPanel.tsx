@@ -3,6 +3,9 @@
 import type { GlobalSeoSettings } from "../../../../../lib/seo/global-seo-types";
 
 import { AdminFormPendingFields } from "../../../../../components/admin/ui/AdminFormRuntime";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminStickyFormBar } from "../../../../../components/admin/ui/AdminForm";
+import { AdminModuleTabIcon } from "../../../../../components/admin/ui/AdminModuleTabs";
+import AdminActionButton from "../../../../../components/admin/ui/AdminActionButton";
 
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
 import AdminEntitySeoPanel, {
@@ -57,7 +60,7 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
   const publicSlug = props.path === "/" ? "" : props.path.replace(/^\/+/, "");
 
   return (
-    <section className="space-y-5" dir="rtl">
+    <section className={ADMIN_FORM_STACK_CLASS_NAME} dir="rtl">
       <AdminFeedbackRegion
         channel={`page-seo:${props.pageId}`}
         label="نتيجة حفظ إعدادات السيو"
@@ -88,9 +91,9 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
 
       <form
         action={savePageSeoAction}
-        className="space-y-5"
+        className={ADMIN_FORM_STACK_CLASS_NAME}
       >
-        <AdminFormPendingFields className="space-y-5">
+        <AdminFormPendingFields className="min-w-0">
           <input type="hidden" name="page_id" value={props.pageId} />
           <input type="hidden" name="redirect_to" value={adminFormEditHref(`/admin/pages-blocks/pages/${props.pageId}?tab=seo`, props.returnTo, "/admin/pages-blocks/pages")} />
           <input type="hidden" name="page_title" value={props.pageTitle} />
@@ -100,7 +103,9 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
           <input type="hidden" name="page_image" value="" />
           <input type="hidden" name="page_image_alt" value="" />
 
+          <div className={ADMIN_FORM_STACK_CLASS_NAME}>
           <AdminEntitySeoPanel
+            presentation="panel"
             seoSettings={props.seoSettings}
             id="page-entity-seo-panel"
             entityLabel="الصفحة"
@@ -158,13 +163,15 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
             }}
           />
 
-          <div className="flex justify-end">
-            <button
+          <AdminStickyFormBar title="إجراءات النموذج" description={null} icon={<AdminModuleTabIcon name="content" />}>
+            <AdminActionButton
               type="submit"
-              className="inline-flex min-h-11 cursor-pointer items-center rounded-2xl bg-[#D8B87A] px-6 text-sm font-bold text-[#06101C] transition hover:bg-[#e5c98d] disabled:cursor-not-allowed disabled:opacity-60"
+              variant="primary"
+              className="disabled:cursor-not-allowed disabled:opacity-60"
             >
               حفظ إعدادات السيو
-            </button>
+            </AdminActionButton>
+          </AdminStickyFormBar>
           </div>
         </AdminFormPendingFields>
       </form>

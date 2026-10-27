@@ -118,6 +118,7 @@ function createTopicAnalysisExtension(
 export default function SeoPanel(props: SeoPanelProps) {
   return (
     <AdminEntitySeoPanel
+      presentation="panel"
       seoSettings={props.seoSettings}
       id="seo-command-center"
       entityLabel="الموضوع"

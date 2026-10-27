@@ -798,15 +798,20 @@ for (const publicCtaCapability of ["showCta", "ctaBold", "ctaAlignment"]) {
   assert.ok(collectionHeader.includes(publicCtaCapability));
 }
 assert.ok(
-  collectionFields.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME"),
+  collectionFields.includes("<AdminCard") &&
+    collectionFields.includes("<ModuleEditorFieldGrid>") &&
+    !collectionFields.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME") &&
+    !collectionFields.includes("surfacePresentation"),
 );
 for (const editorOrganizationToken of [
   'data-collection-presentation-fields=""',
   "إعدادات النمط المختار",
   'data-collection-presentation-settings={activeLayout}',
   'data-collection-presentation-context=""',
-  "COLLECTION_PRESENTATION_CONTROL_SURFACE_CLASS_NAME",
-  "COLLECTION_PRESENTATION_LISTBOX_CLASS_NAME",
+  'name="item_limit"',
+  'name="secondary_item_count"',
+  'name="items_per_row"',
+  'name="collection_card_variant"',
   "{contextLabel}",
   "LAYOUT_SUMMARIES[activeLayout]",
   "variantCapabilities.itemsPerRow",
@@ -949,7 +954,50 @@ assert.ok(capabilityFields.includes('name="secondary_item_count"'));
 assert.ok(capabilityFields.includes('name="collection_layout"'));
 assert.ok(capabilityFields.includes('name="items_per_row"'));
 assert.ok(capabilityFields.includes('name="collection_card_variant"'));
-assert.ok(capabilityFields.includes('title="طريقة العرض"') && capabilityFields.includes(': "طريقة العرض"'));
+function hasCanonicalLayoutSelection(input: string) {
+  const tree = ts.createSourceFile("CollectionModuleFields.tsx", input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const canonical = (name: string) => tree.statements.some(node => ts.isImportDeclaration(node) &&
+    ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "../ui" && node.importClause?.namedBindings &&
+    ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => !binding.propertyName && binding.name.text === name));
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "CollectionLayoutField");
+  const attributes = (node: ts.JsxOpeningLikeElement, name: string) => node.attributes.properties.find((attr): attr is ts.JsxAttribute => ts.isJsxAttribute(attr) && attr.name.getText(tree) === name)?.initializer;
+  const text = (node: ts.JsxOpeningLikeElement, name: string) => attributes(node, name)?.getText(tree);
+  const controls: ts.JsxSelfClosingElement[] = [], headers: ts.JsxSelfClosingElement[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "AdminFormListboxSelect") controls.push(node);
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "AdminFormControlHeader") headers.push(node);
+    ts.forEachChild(node, visit);
+  };
+  if (owner) visit(owner);
+  const control = controls[0], header = headers[0], label = control && attributes(control, "label");
+  const change = control && attributes(control, "onChange");
+  const changeExpression = change && ts.isJsxExpression(change) ? change.expression : undefined;
+  const composition = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "CollectionPresentationFields");
+  const order: string[] = [];
+  const ordered = (node: ts.Node) => {
+    if (ts.isJsxSelfClosingElement(node) && ["CollectionLayoutField", "CollectionItemLimitField", "CollectionViewVariantFields", "CollectionContentHierarchyFields"].includes(node.tagName.getText(tree))) order.push(node.tagName.getText(tree));
+    ts.forEachChild(node, ordered);
+  };
+  if (composition) ordered(composition);
+  return Boolean(canonical("AdminFormListboxSelect") && canonical("AdminFormControlHeader") && controls.length === 1 && headers.length === 1 &&
+    control && header && label && ts.isJsxExpression(label) && label.expression === header && text(header, "title") === '"طريقة العرض"' &&
+    text(header, "presentation") === '"compact-inline"' && text(control, "name") === '"collection_layout"' &&
+    text(control, "value") === "{activeLayout}" && text(control, "sizing") === '"full"' &&
+    text(control, "options")?.includes("capabilities.layouts.map") && text(control, "options")?.includes("LAYOUT_LABELS[layout]") &&
+    changeExpression && ts.isArrowFunction(changeExpression) && ts.isCallExpression(changeExpression.body) && changeExpression.body.expression.getText(tree) === "onLayoutChange" &&
+    order.join("|") === "CollectionLayoutField|CollectionItemLimitField|CollectionViewVariantFields|CollectionContentHierarchyFields");
+}
+assert.ok(hasCanonicalLayoutSelection(capabilityFields), "Layout selection delegates its real label/header, state, options and ordered settings to canonical owners");
+for (const negative of [
+  capabilityFields.replace('title="طريقة العرض"', 'title="عنوان غير صحيح"'),
+  capabilityFields.replace('label={<AdminFormControlHeader title="طريقة العرض"', 'hint={<AdminFormControlHeader title="طريقة العرض"'),
+  capabilityFields.replaceAll("AdminFormControlHeader", "UnownedControlHeader"),
+  capabilityFields.replace("onLayoutChange(layout as CollectionLayout)", "unownedChange(layout as CollectionLayout)"),
+  capabilityFields.replace("<CollectionItemLimitField", "<SwappedSettings").replace("<CollectionViewVariantFields", "<CollectionItemLimitField").replace("<SwappedSettings", "<CollectionViewVariantFields"),
+]) {
+  assert.notEqual(negative, capabilityFields, "Layout negative must mutate current source");
+  assert.equal(hasCanonicalLayoutSelection(negative), false, "Missing/renamed labels, owners, callbacks and reordered fields must fail");
+}
 assert.ok(capabilityFields.includes("4 لأربعة أعمدة"));
 assert.ok(capabilityFields.includes('mosaic: "فسيفساء بصرية"'));
 assert.ok(capabilityFields.includes('timeline: "خط زمني بالبطاقات"'));

@@ -42,6 +42,7 @@ export default async function EditSeriesPage({
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
+        visualPreset="series"
         eyebrow="SERIES CONTROL"
         title={truncateWords(series.name || "بدون اسم")}
         description="تعديل سلسلة — حدّث بيانات السلسلة مع الحفاظ على Slug الثابت وروابط الموضوعات الحالية."

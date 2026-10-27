@@ -251,6 +251,31 @@ expand verification or block the unsupported claim, never prove exclusion.
 The existing focused contract guard is
 `node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
 
+Positive command coverage may follow literal `npm run <registered-name>` chains
+joined by `&&` in the bound `package.json`, retaining the selected parent check
+as the execution boundary. Cycles, unknown names, dynamic commands and unsupported
+shell syntax cannot establish coverage. Resolving a child entry must not append
+another child execution to the canonical Full Local Gate. Likewise, a dynamic
+cache query can preserve a proven fixed local module pathname; a dynamic pathname,
+URL base or shadowed constructor cannot establish an executable graph edge.
+
+The already-owned Admin adoption tail may supply positive coverage through the
+same fixed gate descriptor used by execution, bound to the complete fresh,
+unscoped `admin-adoption` Final Quality Gate request and source snapshot. Its
+native gate name is not an npm prefix command and must not cause early or duplicate
+execution. Scoped, retained, measurement or different selections cannot borrow
+that coverage; cached coverage must retain the exact selected descriptor.
+
+For the existing layout runner, a positively bound file-derived workspace root,
+literal Webpack entry, canonical compiler binding and actual compiler execution
+may establish execution of that entry file only. Replacement/resource hooks make
+its downstream imports opaque: never credit those dependencies through this edge.
+The registered opt-in `qa:admin-form-layout:taxonomy-current` selects the existing
+portable taxonomy consistency-after branch with fresh workspace-local output.
+It does not select legacy/default, Settings or Meta historical-comparison branches,
+and does not imply their behavior or visual coverage. Existing evidence for those
+branches retains its separate input and contract validity requirements.
+
 Run every affected check in the same task and maintain proven stale expectations
 under Section 3.2.2. A changed Test/Guard/Fixture invalidates its affected proof
 and dependent coverage; do not leave it outside the selected set. Use current

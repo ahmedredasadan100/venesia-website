@@ -31,7 +31,9 @@ const migration = read("sql/migrations/20260807120000_system_publication_summary
 const featuredMigration = read("sql/migrations/20260828233733_featured_page_composition_module.sql");
 const metricCard = read("src/components/admin/ui/AdminMetricCard.tsx");
 const metricGrid = read("src/components/admin/ui/AdminMetricCardsGrid.tsx");
+const metricStyles = read("src/lib/admin/admin-ui-styles.ts");
 const topics = read("src/components/admin/content/TopicsListClient.tsx");
+const topicsFilters = read("src/components/admin/content/UnifiedContentFilters.tsx");
 const topicContract = read("src/lib/admin/content/entity-list-contracts/topics.ts");
 const topicLoader = read("src/lib/admin/content/load-unified-content.ts");
 const categories = read("src/app/admin/content/categories/CategoriesListClient.tsx");
@@ -345,27 +347,33 @@ check(
   metricCard.includes("onClick?: () => void") &&
     metricCard.includes('const Component = onClick ? "button" : "div"') &&
     metricCard.includes('"aria-pressed": active') &&
-    (metricCard.match(/font-bold/g) ?? []).length >= 2 &&
-    metricCard.includes("hoverGlow") &&
-    metricCard.includes("radial-gradient") &&
+    metricCard.includes("resolveAdminCollectionPresentation(presentation)") &&
+    metricCard.includes("ADMIN_CINEMATIC_GOLD_V1.metric") &&
+    metricStyles.includes("font-bold tabular-nums") &&
+    metricStyles.includes("hover:shadow-") &&
+    metricStyles.includes("radial-gradient") &&
     metricGrid.includes("AdminMetricCard"),
 );
 
 const topicLabels = [
-  "إجمالي الموضوعات",
+  "الموضوعات",
   "منشور",
   "غير منشور",
-  "بدون صورة",
   "مرتبطة بسلسلة",
   "مميزة",
   "متوسط SEO",
 ];
+const actualTopicCardLabels = [...topics.slice(topics.indexOf("const metricItems"), topics.indexOf("const trashCount")).matchAll(/label: "([^"]+)"/g)].map(match => match[1]);
 check(
   "Topics exposes the exact real summary set and delegates actionable cards to Shared Collection Filters",
-  topicLabels.every((label) => topics.includes(`label: "${label}"`)) &&
+  JSON.stringify(actualTopicCardLabels) === JSON.stringify(topicLabels) &&
+    topicLabels.every((label, index) => topics.includes(`label: "${label}"`) &&
+    (index === 0 || topics.indexOf(`label: "${label}"`) > topics.indexOf(`label: "${topicLabels[index - 1]}"`))) &&
+    !topics.includes('label: "بدون صورة"') &&
     topics.includes('controller.setFilter("status", "published")') &&
     topics.includes('controller.setFilter("status", "unpublished")') &&
-    topics.includes('controller.setFilter("image", "without")') &&
+    topicsFilters.includes('value: "without", label: "بدون صورة"') &&
+    topics.includes('image: controller.query.filters.image') &&
     topics.includes('controller.setFilter("seriesId", "any")') &&
     topics.includes('controller.setFilter("featured", "yes")') &&
     topics.includes('resetToView("active")') &&

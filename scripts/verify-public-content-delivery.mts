@@ -16,6 +16,7 @@ type CommonJsFactory = (
   exports: Record<string, unknown>,
   filename: string,
   directory: string,
+  fetchImplementation: typeof fetch,
 ) => void;
 
 type QueryError = {
@@ -89,6 +90,7 @@ function check(label: string, condition: unknown) {
 function loadTranspiledModule(
   filename: string,
   overrides: Record<string, unknown> = {},
+  fetchImplementation: typeof fetch = globalThis.fetch,
 ) {
   const absoluteFilename = resolve(ROOT, filename);
   const compiled = ts.transpileModule(read(filename), {
@@ -102,7 +104,7 @@ function loadTranspiledModule(
   }).outputText;
   const targetModule: CommonJsModule = { exports: {} };
   const wrapper = new vm.Script(
-    `(function (require, module, exports, __filename, __dirname) { ${compiled}\n})`,
+    `(function (require, module, exports, __filename, __dirname, fetch) { ${compiled}\n})`,
     { filename: absoluteFilename },
   );
   const factory = wrapper.runInThisContext() as CommonJsFactory;
@@ -115,6 +117,7 @@ function loadTranspiledModule(
     targetModule.exports,
     absoluteFilename,
     dirname(absoluteFilename),
+    fetchImplementation,
   );
   return targetModule.exports;
 }
@@ -424,6 +427,7 @@ const publicContract = await jiti.import<Record<string, unknown>>(
 );
 
 const loggedFailures: Array<{ message: unknown; error: unknown }> = [];
+let metaFetchImplementation: typeof fetch = async () => { throw new Error("Unplanned external request"); };
 const owner = loadTranspiledModule(
   "src/lib/content/public-content-read/owner.ts",
   {
@@ -464,6 +468,7 @@ const owner = loadTranspiledModule(
     "../public-content-path": publicContentPath,
     "./contract": publicContract,
   },
+  (input, init) => metaFetchImplementation(input, init),
 );
 
 const loadPublicContentCollection = owner.loadPublicContentCollection as (
@@ -481,6 +486,99 @@ const loadPublicContentFeedCategories = owner.loadPublicContentFeedCategories as
 const loadPublicContentFeedSeries = owner.loadPublicContentFeedSeries as (
   input: Record<string, unknown>,
 ) => Promise<PublicFeedSeries[]>;
+
+const readMetaVideoEmbed = owner.readMetaVideoEmbed as (
+  payload: { provider: string; video_url: string },
+) => Promise<Record<string, unknown>>;
+const metaPayloads = [
+  { provider: "facebook", video_url: "https://m.facebook.com/Meta/videos/10153231379946729/?tracking=1", sourceUrl: "https://www.facebook.com/watch?v=10153231379946729", path: "/v25.0/oembed_video" },
+  { provider: "instagram", video_url: "https://www.instagram.com/reel/DGOSAUyC903/?igsh=tracking", sourceUrl: "https://www.instagram.com/reel/DGOSAUyC903/", path: "/v25.0/instagram_oembed" },
+] as const;
+function metaResponse(payload: typeof metaPayloads[number]) {
+  return {
+    version: "1.0", provider_name: payload.provider === "facebook" ? "Facebook" : "Instagram",
+    provider_url: `https://www.${payload.provider}.com/`, type: payload.provider === "facebook" ? "video" : "rich",
+    html: payload.provider === "facebook"
+      ? `<div class="fb-video" data-href="${payload.sourceUrl}"></div>`
+      : `<blockquote class="instagram-media" data-instgrm-permalink="${payload.sourceUrl}?utm_source=ig_embed&amp;utm_campaign=loading"></blockquote>`,
+  };
+}
+const metaFetchCalls: Array<{ url: URL; init?: RequestInit }> = [];
+for (const payload of metaPayloads) {
+  metaFetchImplementation = async (input, init) => {
+    const url = new URL(String(input));
+    metaFetchCalls.push({ url, init });
+    check(`Meta ${payload.provider} uses a fixed official HTTPS endpoint only`, url.origin === "https://graph.facebook.com" && url.pathname === payload.path && url.searchParams.get("url") === payload.sourceUrl && url.searchParams.get("omitscript") === "true" && url.searchParams.get("maxwidth") === "658");
+    const headers = new Headers(init?.headers);
+    check(`Meta ${payload.provider} forwards no auth, cookies, referrer, redirects or cache`, init?.method === "GET" && init.redirect === "error" && init.credentials === "omit" && init.referrerPolicy === "no-referrer" && init.cache === "no-store" && init.signal instanceof AbortSignal && [...headers.keys()].join(",") === "accept");
+    return new Response(JSON.stringify(metaResponse(payload)), { headers: { "content-type": "text/javascript; charset=UTF-8" } });
+  };
+  check(`Meta ${payload.provider} official JSON MIME narrows to canonical identity without HTML or metadata`, JSON.stringify(await readMetaVideoEmbed(payload)) === JSON.stringify({ status: "ready", provider: payload.provider, sourceUrl: payload.sourceUrl }));
+}
+const beforeUnsupported = metaFetchCalls.length;
+for (const payload of [
+  { provider: "youtube", video_url: "https://www.youtube.com/watch?v=123" },
+  { provider: "direct", video_url: "https://169.254.169.254/film.mp4" },
+  { provider: "facebook", video_url: "https://www.facebook.com/share/v/short" },
+  { provider: "facebook", video_url: "https://user:password@www.facebook.com/reel/123" },
+  { provider: "facebook", video_url: "https://facebook.com.evil.test/reel/123" },
+  { provider: "instagram", video_url: "https://www.instagram.com/p/DGOSAUyC903/" },
+  { provider: "instagram", video_url: "http://127.0.0.1/reel/ABC123/" },
+]) {
+  check(`Meta unsupported or unsafe ${payload.provider} request is rejected before network`, (await readMetaVideoEmbed(payload)).reason === "unsupported");
+}
+check("Meta unsupported requests perform no fetch", metaFetchCalls.length === beforeUnsupported);
+const metaPositive = metaPayloads[0];
+for (const [label, response, reason] of [
+  ["non-JSON login HTML", new Response("<html><body>Log in</body></html>"), "invalid_response"],
+  ["JavaScript body", new Response("(()=>{throw new Error('must never execute')})()"), "invalid_response"],
+  ["provider identity mismatch", new Response(JSON.stringify({ ...metaResponse(metaPositive), provider_name: "Other" })), "invalid_response"],
+  ["source identity mismatch", new Response(JSON.stringify({ ...metaResponse(metaPositive), html: '<div class="fb-video" data-href="https://www.facebook.com/reel/456"></div>' })), "invalid_response"],
+  ["not embeddable JSON", new Response(JSON.stringify({ error: { code: 24, message: "Not permitted" } })), "denied"],
+  ["HTTP denied", new Response("Forbidden", { status: 403 }), "denied"],
+  ["HTTP throttled", new Response("Try later", { status: 429 }), "network"],
+  ["declared oversized body", new Response("{}", { headers: { "content-length": "65537" } }), "invalid_response"],
+] as const) {
+  metaFetchImplementation = async () => response;
+  const result = await readMetaVideoEmbed(metaPositive);
+  check(`Meta ${label} fails safely without returning external content`, result.status === "unavailable" && result.reason === reason && Object.keys(result).sort().join(",") === "reason,status");
+}
+let cancelledOversizedStream = false;
+let oversizedChunksRead = 0;
+metaFetchImplementation = async () => new Response(new ReadableStream<Uint8Array>({
+  pull(controller) { oversizedChunksRead += 1; controller.enqueue(new Uint8Array(32_768)); },
+  cancel() { cancelledOversizedStream = true; },
+}));
+check("Meta streamed body is bounded and cancelled even without Content-Length", (await readMetaVideoEmbed(metaPositive)).reason === "invalid_response" && cancelledOversizedStream && oversizedChunksRead <= 4);
+const redirectedMetaResponse = new Response(JSON.stringify(metaResponse(metaPositive)));
+Object.defineProperty(redirectedMetaResponse, "redirected", { value: true });
+metaFetchImplementation = async () => redirectedMetaResponse;
+check("Meta redirected response is rejected even if a transport returns it", (await readMetaVideoEmbed(metaPositive)).reason === "invalid_response");
+metaFetchImplementation = async () => { throw new Error("Transport error; must not reflect URL, credentials or upstream HTML"); };
+check("Meta transport failure remains a bounded source fallback result", JSON.stringify(await readMetaVideoEmbed(metaPositive)) === JSON.stringify({ status: "unavailable", reason: "network" }));
+metaFetchImplementation = async (_input, init) => new Promise((_resolve, reject) => {
+  init!.signal!.addEventListener("abort", () => reject(new DOMException("Timed out", "AbortError")), { once: true });
+});
+const metaTimeoutStarted = Date.now();
+check("Meta request has a real five-second deadline and timeout fallback", (await readMetaVideoEmbed(metaPositive)).reason === "timeout" && Date.now() - metaTimeoutStarted < 6_500);
+
+let metaAdminAllowed = false;
+const metaActionOrder: string[] = [];
+const mediaValidationActions = loadTranspiledModule("src/app/admin/content/topics/media-actions/validation.ts", {
+  "../../../../../lib/admin/auth/require-admin-session": { requireAdminSession: async () => { metaActionOrder.push("auth"); if (!metaAdminAllowed) throw new Error("Unauthorized"); } },
+  "../../../../../lib/content/public-content-read/owner": owner,
+  "../../../../../lib/logging": { logError() {} },
+  "../../../../../lib/supabase-admin": { getSupabaseAdmin() { throw new Error("Meta read must not access database"); } },
+  "../../../../../lib/admin/content/content-types": contentTypes,
+});
+const readMediaVideoEmbed = mediaValidationActions.readMediaVideoEmbed as typeof readMetaVideoEmbed;
+metaFetchImplementation = async () => { metaActionOrder.push("fetch"); return new Response(JSON.stringify(metaResponse(metaPositive))); };
+await assert.rejects(() => readMediaVideoEmbed(metaPositive), /Unauthorized/);
+check("Meta Admin action authenticates before any external request", metaActionOrder.join(",") === "auth");
+metaAdminAllowed = true;
+metaActionOrder.length = 0;
+check("Meta Admin action delegates to the exact bounded public read owner after authentication", (await readMediaVideoEmbed(metaPositive)).status === "ready" && metaActionOrder.join(",") === "auth,fetch");
+metaFetchImplementation = async () => { throw new Error("Unplanned external request"); };
 
 const mediaTypes = await jiti.import<Record<string, unknown>>(
   "../src/lib/media-center/types.ts",
@@ -1921,6 +2019,110 @@ check(
 );
 assertPlanConsumed("Video thumbnail");
 
+for (const [form, videoUrl] of [
+  ["watch", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+  ["embed", "https://www.youtube.com/embed/dQw4w9WgXcQ"],
+  ["shorts", "https://www.youtube.com/shorts/dQw4w9WgXcQ"],
+] as const) {
+  resetScenario();
+  replaceQueryPlan([{
+    label: `Video Detail supported ${form} URL`,
+    table: "topics",
+    result: success(topicRow({
+      id: 203,
+      slug: `video-supported-${form}`,
+      content_type: "video",
+      image: "",
+      media_payload: {
+        kind: "video", provider: "youtube", video_url: videoUrl,
+        thumbnail: VIDEO_THUMBNAIL, duration: "legacy-duration",
+      },
+    })),
+  }]);
+  const supportedVideoDetail = await loadPublicContentDetail("video", `video-supported-${form}`);
+  check(`Video Detail ${form} URL reaches the canonical playable contract`,
+    supportedVideoDetail?.videoUrl === "https://www.youtube.com/watch?v=dQw4w9WgXcQ" &&
+    supportedVideoDetail.videoDuration === "legacy-duration" &&
+    supportedVideoDetail.image === VIDEO_THUMBNAIL);
+  assertPlanConsumed(`Video supported ${form}`);
+}
+
+for (const [provider, videoUrl, startSeconds] of [
+  ["youtube", "https://youtu.be/dQw4w9WgXcQ", 75],
+  ["vimeo", "https://vimeo.com/123456789", 75],
+  ["facebook", "https://www.facebook.com/watch/?v=123456789", 0],
+  ["tiktok", "https://www.tiktok.com/@venesia/video/1234567890123456789", 0],
+  ["instagram", "https://www.instagram.com/reel/ABCdef123_-", 0],
+  ["direct", "https://cdn.example.com/movie.mp4", 75],
+] as const) {
+  resetScenario();
+  const authoredVideoRow = topicRow({
+    id: 203,
+    slug: `video-provider-${provider}`,
+    content_type: "video",
+    image: "https://cdn.example.test/main-video-image.jpg",
+    og_image: "https://cdn.example.test/explicit-open-graph.jpg",
+    media_payload: {
+      kind: "video", provider, video_url: videoUrl, start_seconds: startSeconds,
+      thumbnail: VIDEO_THUMBNAIL, duration: "legacy-duration",
+    },
+  });
+  const authoredBefore = JSON.stringify(authoredVideoRow);
+  replaceQueryPlan([{
+    label: `Video Detail provider ${provider}`,
+    table: "topics",
+    result: success(authoredVideoRow),
+  }]);
+  const providerDetail = await loadPublicContentDetail("video", `video-provider-${provider}`);
+  const providerItem = providerDetail ? adaptPublicContentToMediaItem(providerDetail) : null;
+  check(`Video ${provider} payload provider and start time reach the public playback adapter`,
+    providerDetail?.videoProvider === provider && providerDetail.videoStartSeconds === startSeconds &&
+    providerItem?.videoProvider === provider && providerItem.videoStartSeconds === startSeconds &&
+    Boolean(providerItem.videoUrl));
+  check(`Video ${provider} manual thumbnail is preferred while explicit Open Graph and duration remain independent`,
+    providerDetail?.image === VIDEO_THUMBNAIL && providerItem?.image === VIDEO_THUMBNAIL &&
+    providerDetail.ogImage === "https://cdn.example.test/explicit-open-graph.jpg" &&
+    providerDetail.videoDuration === "legacy-duration" && providerItem.duration === "legacy-duration" &&
+    JSON.stringify(authoredVideoRow) === authoredBefore);
+  assertPlanConsumed(`Video provider ${provider}`);
+}
+
+for (const [label, thumbnail, image, expectedImage] of [
+  ["main image fallback", null, "https://cdn.example.test/main-video-image.jpg", "https://cdn.example.test/main-video-image.jpg"],
+  ["absent images", null, "", ""],
+] as const) {
+  resetScenario();
+  replaceQueryPlan([{
+    label: `Video ${label}`,
+    table: "topics",
+    result: success(topicRow({
+      id: 203, slug: `video-${label}`, content_type: "video", image,
+      media_payload: { kind: "video", provider: "youtube", video_url: "https://youtu.be/dQw4w9WgXcQ", thumbnail },
+    })),
+  }]);
+  const detail = await loadPublicContentDetail("video", `video-${label}`);
+  check(`Video ${label} does not invent a provider thumbnail or alter the existing fallback`, detail?.image === expectedImage);
+  assertPlanConsumed(`Video ${label}`);
+}
+
+resetScenario();
+deletedMediaValues.add(VIDEO_THUMBNAIL);
+const retainedVideoSource = topicRow({
+  id: 203, slug: "video-deleted-thumbnail", content_type: "video",
+  image: "https://cdn.example.test/main-video-image.jpg",
+  media_payload: {
+    kind: "video", provider: "youtube", video_url: "https://youtu.be/dQw4w9WgXcQ",
+    thumbnail: VIDEO_THUMBNAIL, duration: "legacy-duration",
+  },
+});
+const retainedVideoBefore = JSON.stringify(retainedVideoSource);
+replaceQueryPlan([{ label: "Video unavailable manual thumbnail", table: "topics", result: success(retainedVideoSource) }]);
+const unavailableThumbnailVideo = await loadPublicContentDetail("video", "video-deleted-thumbnail");
+check("Video unavailable managed thumbnail preserves catalog absence, playback and stored values without inventing a provider cover",
+  unavailableThumbnailVideo?.image === "" && unavailableThumbnailVideo.videoUrl === "https://www.youtube.com/watch?v=dQw4w9WgXcQ" &&
+  unavailableThumbnailVideo.videoDuration === "legacy-duration" && JSON.stringify(retainedVideoSource) === retainedVideoBefore);
+assertPlanConsumed("Video unavailable manual thumbnail");
+
 async function verifyInvalidRichMediaDetail(
   label: string,
   contentType: "gallery" | "video",
@@ -2015,6 +2217,32 @@ await verifyInvalidRichMediaDetail(
     },
   },
 );
+for (const [label, slug, videoUrl] of [
+  ["Video Detail with a lookalike YouTube host", "video-lookalike-host", "https://notyoutube.com/watch?v=dQw4w9WgXcQ"],
+  ["Video Detail with a YouTube channel URL", "video-channel-url", "https://www.youtube.com/channel/dQw4w9WgXcQ"],
+] as const) {
+  await verifyInvalidRichMediaDetail(label, "video", slug, {
+    media_payload: {
+      kind: "video", provider: "youtube", video_url: videoUrl,
+      thumbnail: VIDEO_THUMBNAIL, duration: "1:23",
+    },
+  });
+}
+for (const [provider, videoUrl, startSeconds] of [
+  ["vimeo", "https://vimeo.com.example.test/123456789", 0],
+  ["facebook", "https://www.facebook.com/some-page", 0],
+  ["tiktok", "https://www.tiktok.com/@venesia", 0],
+  ["instagram", "https://www.instagram.com/venesia", 0],
+  ["direct", "http://cdn.example.com/movie.mp4", 0],
+  ["tiktok", "https://www.tiktok.com/@venesia/video/1234567890123456789", 75],
+] as const) {
+  await verifyInvalidRichMediaDetail(`Video ${provider} invalid source or unsupported start time`, "video", `video-${provider}-invalid`, {
+    media_payload: {
+      kind: "video", provider, video_url: videoUrl, start_seconds: startSeconds,
+      thumbnail: VIDEO_THUMBNAIL, duration: "legacy-duration",
+    },
+  });
+}
 await verifyInvalidRichMediaDetail(
   "Video Detail with mismatched Gallery payload",
   "video",
@@ -2033,13 +2261,13 @@ await verifyInvalidRichMediaDetail(
   },
 );
 await verifyInvalidRichMediaDetail(
-  "Video Detail with malformed payload",
+  "Video Detail with unsupported provider payload",
   "video",
   "video-malformed-payload",
   {
     media_payload: {
       kind: "video",
-      provider: "vimeo",
+      provider: "unsupported-provider",
       video_url: "https://vimeo.com/123",
       thumbnail: VIDEO_THUMBNAIL,
       duration: null,

@@ -31,6 +31,29 @@ const GATES = [
   { name: "public-e2e", module: "playwright/cli.js", args: ["test", "tests/e2e/public-foundation.spec.ts", "tests/e2e/topic-view-integrity.spec.ts", "--workers=1", "--retries=0"], limitMs: 600_000 },
 ] as const;
 
+/** The existing owned Admin tail; selection validation and execution share it. */
+export function adminAdoptionGate(request: PublicGateRequest) {
+  const adoption = request.selection === "admin-adoption";
+  assert.ok(request.adoptionScope === undefined || (adoption && request.adoptionScope === "core-closure"), "Unknown fixed adoption scope.");
+  assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(request.adoptionCohort)), "Unknown Core cohort.");
+  if (request.adoptionJourneySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) validateCorePreviewPublicImpactSelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
+  else validateCoreJourneySelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
+  if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption");
+  if (!adoption) return undefined;
+  assert.equal(request.retainedAdminBehaviorAdmissionSha256, undefined, "Retained admission cannot execute the Admin adoption tail.");
+  assert.equal(request.adminMeasurement, undefined, "Measurement cannot execute the Admin adoption tail.");
+  return { name: "admin-adoption" as const, script: "scripts/qa-admin-adoption-journeys.mjs" as const,
+    args: request.adoptionScope === "core-closure" ? ["--core-closure", ...(request.adoptionCohort ? ["--core-cohort=" + request.adoptionCohort] : []), ...(request.adoptionJourneySelection ? ["--core-journey-selection=" + request.adoptionJourneySelection] : [])] : [],
+    limitMs: request.adoptionCohort === "media-recovery" ? 1_200_000 : (request.adoptionCohort === "domain-commands" || request.adoptionCohort === "query-presentation") ? 1_800_000 : 900_000 };
+}
+
+/** Only the complete fresh, unscoped tail proves this batch's driver inputs. */
+function localVerificationNativeGate(request?: PublicGateRequest) {
+  const gate = request ? adminAdoptionGate(request) : undefined;
+  return request?.finalQualityGate === true && request.adoptionScope === undefined && request.adoptionCohort === undefined &&
+    request.adoptionJourneySelection === undefined ? gate : undefined;
+}
+
 /** Derive coverage from the one package owner; reject shell or tail drift. */
 export function finalQualityScriptNames(scripts: Readonly<Record<string, string>>) {
   assert.equal(typeof scripts["ci:check"], "string");
@@ -65,6 +88,7 @@ export type LocalVerificationInputs = {
   baselineHead: string; finalHead: string; sourceSha256: string;
   changes: readonly Pick<LocalVerificationChange, "file" | "beforeSha256" | "afterSha256">[];
   verificationCoverage?: readonly { file: string; checks: readonly string[] }[];
+  verificationNativeGate?: NonNullable<ReturnType<typeof adminAdoptionGate>>;
 };
 /** A reviewed batch evidence record, not an owner/dependency/test registry. */
 export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage"> & {
@@ -73,8 +97,13 @@ export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | 
 };
 
 /** Select existing named checks; unresolved impact widens to the unchanged full gate. */
-export function planLocalVerification(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact, actual: LocalVerificationInputs) {
+export function planLocalVerification(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact, actual: LocalVerificationInputs, request?: PublicGateRequest) {
   const fullPrefix = finalQualityScriptNames(scripts);
+  const nativeGate = localVerificationNativeGate(request);
+  if (actual.verificationNativeGate || impact.changes.some(row => row.checks.includes("admin-adoption"))) {
+    assert.ok(nativeGate, "Native coverage requires the actually selected complete fresh Admin tail.");
+    assert.deepEqual(actual.verificationNativeGate, nativeGate, "Coverage must bind the selected native gate descriptor.");
+  }
   for (const input of [impact, actual]) {
     assert.match(input.baselineHead, /^[a-f0-9]{40}$/u); assert.match(input.finalHead, /^[a-f0-9]{40}$/u);
     assert.match(input.sourceSha256, /^[a-f0-9]{64}$/u);
@@ -112,11 +141,11 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
       [row.adoption.applicabilityEvidence, row.adoption.sourceProofEvidence, row.adoption.consumerEvidence]
         .every(check => present(check) && check !== "lint" && check !== "typecheck" && row.checks.includes(check)));
     for (const check of row.checks) {
-      assert.ok(/^(?:lint|typecheck|(?:verify|qa):[a-zA-Z0-9:_-]+)$/u.test(check) && Object.hasOwn(scripts, check),
+      assert.ok(check === nativeGate?.name || /^(?:lint|typecheck|(?:verify|qa):[a-zA-Z0-9:_-]+)$/u.test(check) && Object.hasOwn(scripts, check),
         "Covering checks must be existing named verification commands.");
       assert.ok(!["build", "verify:product-surface-identity-build", "verify:platform-contracts", "test:e2e:public"].includes(check),
         "Canonical Public gates belong to the unchanged tail.");
-      selected.add(check);
+      if (check !== nativeGate?.name) selected.add(check);
     }
     if (/^(?:scripts|tests)\//u.test(row.file)) {
       assert.ok(row.checks.some(check => check !== "lint" && check !== "typecheck"), "Changed verification inputs require a fresh executable check.");
@@ -129,12 +158,14 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   assert.ok(Object.hasOwn(scripts, "lint") && Object.hasOwn(scripts, "typecheck"));
   const mode = rank <= 1 && bounded ? "bounded" : "full";
   const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...selected])];
-  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs };
+  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs, ...(nativeGate ? { nativeGate } : {}) };
 }
 
 /** Bounded requests cannot borrow an older subset/retained/measurement admission. */
 export function assertLocalVerificationRequest(request: PublicGateRequest, plan: ReturnType<typeof planLocalVerification>) {
   assert.ok(request.localVerification);
+  if (plan.nativeGate) assert.deepEqual(localVerificationNativeGate(request), plan.nativeGate,
+    "Native tail coverage cannot be borrowed by a different request, script, cohort or argument selection.");
   assert.deepEqual(plan.unresolvedVerificationInputs, [],
     "Full Gate selection alone cannot prove an affected verification input executes; supply positive coverage or stop.");
   if (plan.mode === "full") {
@@ -148,7 +179,7 @@ export function assertLocalVerificationRequest(request: PublicGateRequest, plan:
 
 /** Bind reviewed impact to Git's actual delta and source bytes; Git remains the membership owner. */
 function readLocalVerificationInputs(context: PrivatePublicVerificationContext, impact: LocalVerificationImpact,
-  manifest: readonly { file: string; sha256: string }[], additionalSourceFiles: readonly string[], previous?: LocalVerificationInputs): LocalVerificationInputs {
+  manifest: readonly { file: string; sha256: string }[], additionalSourceFiles: readonly string[], request: PublicGateRequest, previous?: LocalVerificationInputs): LocalVerificationInputs {
   assert.match(impact.baselineHead, /^[a-f0-9]{40}$/u);
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(),
     windowsHide: true, timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
@@ -171,26 +202,64 @@ function readLocalVerificationInputs(context: PrivatePublicVerificationContext, 
       afterSha256 };
   });
   const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
-  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest);
-  return { baselineHead: impact.baselineHead, finalHead, sourceSha256: digest(JSON.stringify(manifest)), changes, verificationCoverage };
+  const verificationNativeGate = localVerificationNativeGate(request);
+  if (previous) assert.deepEqual(verificationNativeGate, previous.verificationNativeGate, "Cached executable coverage cannot change its selected native tail.");
+  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest, request);
+  return { baselineHead: impact.baselineHead, finalHead, sourceSha256: digest(JSON.stringify(manifest)), changes, verificationCoverage,
+    ...(verificationNativeGate ? { verificationNativeGate } : {}) };
+}
+
+/** Inspect literal registered command chains without executing or expanding the gate prefix. */
+export function registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[] {
+  const resolved = new Map<string, Set<string>>(), active = new Set<string>();
+  const visit = (name: string): Set<string> => {
+    assert.ok(/^[a-zA-Z0-9:_-]+$/u.test(name) && Object.hasOwn(scripts, name) && typeof scripts[name] === "string",
+      "Verification wrappers must name an existing literal package command.");
+    assert.ok(!active.has(name), "Verification package command cycles cannot prove executable coverage.");
+    const cached = resolved.get(name); if (cached) return cached;
+    active.add(name);
+    const command = scripts[name];
+    assert.ok(!/[\r\n]/u.test(command), "Verification commands cannot contain shell line separators.");
+    const entries = new Set<string>();
+    for (const part of command.split("&&")) {
+      const step = part.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
+      if (wrapper) {
+        for (const entry of visit(wrapper[1])) entries.add(entry);
+      } else {
+        const node = /^node (?:--experimental-strip-types )?([a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts))(?: [a-zA-Z0-9_./:=+,-]+)*$/u.exec(step);
+        assert.ok(node && sourceIncluded(node[1]),
+          "Verification coverage requires literal Node entries or argument-free npm run wrappers; shell, environment and dynamic commands are unsupported.");
+        entries.add(node[1]);
+      }
+    }
+    active.delete(name); resolved.set(name, entries); return entries;
+  };
+  return [...visit(check)];
 }
 
 /** Positive executable proof only; dynamic/non-import fixture use cannot authorize a bounded gate. */
 export function localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact,
-  manifest: readonly { file: string; sha256: string }[]) {
+  manifest: readonly { file: string; sha256: string }[], request?: PublicGateRequest) {
   const coverage = new Map(impact.changes.filter(row => /^(?:scripts|tests)\//u.test(row.file)).map(row => [row.file, new Set<string>()]));
-  const sourceOverrides = impact.verificationEntries?.length ? new Map(manifest.filter(row => /\.(?:[cm]?[jt]sx?)$/u.test(row.file))
+  const nativeGate = localVerificationNativeGate(request);
+  const sourceOverrides = impact.verificationEntries?.length || nativeGate ? new Map(manifest.filter(row => /\.(?:[cm]?[jt]sx?)$/u.test(row.file))
     .map(row => [row.file, readFileSync(safeSourcePath(row.file), "utf8")])) : undefined;
   for (const binding of impact.verificationEntries ?? []) {
     assert.ok(/^(?:verify|qa):[a-zA-Z0-9:_-]+$/u.test(binding.check) && Object.hasOwn(scripts, binding.check));
     assert.ok(/^scripts\/[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)$/u.test(binding.entry) && sourceIncluded(binding.entry));
     assert.ok(manifest.some(row => row.file === binding.entry), "A verification entry must belong to the bound source snapshot.");
     assert.ok(impact.changes.some(row => row.checks.includes(binding.check)), "An executable binding must be a selected fresh check.");
-    const invocation = new RegExp("^node (?:--experimental-strip-types )?" + binding.entry.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&") + "(?: |$)", "u");
-    assert.ok(scripts[binding.check].split(/\s*&&\s*/u).some(step => invocation.test(step)),
-      "Use an existing directly registered Node entry/aggregate; npm wrapper reachability is not inferred.");
+    assert.ok(registeredVerificationNodeEntries(scripts, binding.check).includes(binding.entry),
+      "A verification entry must be positively reachable through its selected literal registered command chain.");
     const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [binding.entry], symbolAware: false, sourceOverrides });
     for (const [file, checks] of coverage) if (graph.has(file)) checks.add(binding.check);
+  }
+  if (nativeGate && impact.changes.some(row => row.checks.includes(nativeGate.name))) {
+    const driver = manifest.find(row => row.file === nativeGate.script);
+    assert.ok(driver, "The selected native driver must belong to the bound source snapshot.");
+    assert.equal(digest(sourceOverrides!.get(nativeGate.script)!), driver.sha256, "Native driver coverage must bind its actual source bytes.");
+    const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [nativeGate.script], symbolAware: false, sourceOverrides });
+    for (const [file, checks] of coverage) if (graph.has(file)) checks.add(nativeGate.name);
   }
   for (const [file, checks] of coverage) if (GATES.some(gate => gate.name === "public-e2e" && (gate.args as readonly string[]).includes(file))) checks.add("test:e2e:public");
   return [...coverage].map(([file, checks]) => ({ file, checks: [...checks] }));
@@ -1921,11 +1990,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     assert.deepEqual(request.additionalSourceFiles, []);
     assert.match(request.retainedAdminBehaviorAdmissionSha256!, /^[a-f0-9]{64}$/u);
   }
-  assert.ok(request.adoptionScope === undefined || (adoption && request.adoptionScope === "core-closure"), "Unknown fixed adoption scope.");
-  assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(request.adoptionCohort)), "Unknown Core cohort.");
-  if (request.adoptionJourneySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) validateCorePreviewPublicImpactSelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
-  else validateCoreJourneySelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
-  if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption");
+  adminAdoptionGate(request);
   assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && (adoption || retainedQuality || heroCompatibility)), "Final Quality Gate requires complete Admin adoption, retained Final27 admission, or the explicit Hero compatibility final HEAD.");
   const credentials = measurement || adoption || mediaUpload || heroCompatibility ? adminCredentials.get(context) : undefined;
   if (adoption || mediaUpload || heroCompatibility) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");
@@ -2003,7 +2068,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       .reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
   }
   const heroGate = { name: "hero-compatibility", script: "scripts/fixtures/hero-compatibility-journey.mjs", args: [], limitMs: 600_000 };
-  const gates = heroCompatibility ? [GATES[0], heroGate] : mediaUpload ? [GATES[0], { name: "media-upload-limit", script: "scripts/fixtures/media-upload-limit-journey.mjs", args: [], limitMs: 600_000 }] : adoption ? [...(request.adoptionCohort && !request.finalQualityGate ? GATES.filter(gate => gate.name !== "public-e2e") : GATES), { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: request.adoptionScope === "core-closure" ? ["--core-closure", ...(request.adoptionCohort ? ["--core-cohort=" + request.adoptionCohort] : []), ...(request.adoptionJourneySelection ? ["--core-journey-selection=" + request.adoptionJourneySelection] : [])] : [], limitMs: request.adoptionCohort === "media-recovery" ? 1_200_000 : (request.adoptionCohort === "domain-commands" || request.adoptionCohort === "query-presentation") ? 1_800_000 : 900_000 }] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
+  const gates = heroCompatibility ? [GATES[0], heroGate] : mediaUpload ? [GATES[0], { name: "media-upload-limit", script: "scripts/fixtures/media-upload-limit-journey.mjs", args: [], limitMs: 600_000 }] : adoption ? [...(request.adoptionCohort && !request.finalQualityGate ? GATES.filter(gate => gate.name !== "public-e2e") : GATES), adminAdoptionGate(request)!] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
     ? GATES.filter(gate => gate.name !== "public-e2e") : GATES;
   assert.equal(gates.length, heroCompatibility ? 2 : mediaUpload ? 2 : adoption ? (request.adoptionCohort && !request.finalQualityGate ? 4 : 5) : measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
   assert.equal(completed.has(originalContext), false, "Successful selected gates cannot be rerun in this fixture.");
@@ -2019,8 +2084,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     if (frozenManifest) assert.equal(sha256, frozenManifest.find(row => row.file === file)!.sha256);
     return { file, sha256 };
   });
-  const localInputs = localImpact ? readLocalVerificationInputs(context, localImpact, manifest, request.additionalSourceFiles) : undefined;
-  const localPlan = localImpact ? planLocalVerification(JSON.parse(readFileSync(sourcePath("package.json"), "utf8")).scripts, localImpact, localInputs!) : undefined;
+  const localInputs = localImpact ? readLocalVerificationInputs(context, localImpact, manifest, request.additionalSourceFiles, request) : undefined;
+  const localPlan = localImpact ? planLocalVerification(JSON.parse(readFileSync(sourcePath("package.json"), "utf8")).scripts, localImpact, localInputs!, request) : undefined;
   if (localPlan) assertLocalVerificationRequest(request, localPlan);
   const sourceConfig = manifest.find(row => row.file === "next.config.ts");
   assert.ok(sourceConfig, "The isolated image environment must derive from the canonical Product config.");
@@ -2046,7 +2111,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const verifySource = () => {
     if (localImpact) {
       assert.equal(digest(JSON.stringify(request.localVerification)), localImpactSha256, "Reviewed risk evidence changed during verification.");
-      assert.deepEqual(readLocalVerificationInputs(context, localImpact, manifest, request.additionalSourceFiles, localInputs), localInputs,
+      assert.deepEqual(readLocalVerificationInputs(context, localImpact, manifest, request.additionalSourceFiles, request, localInputs), localInputs,
         "Risk evidence no longer matches the actual Git/source delta.");
     }
     if (downloadFixture) assert.equal(digest(readFileSync(join(sourceDirectory, "public", CORE_DOWNLOAD_MEDIA_KEY))), digest(downloadFixture));

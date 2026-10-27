@@ -17,10 +17,15 @@ import {
   type AdminContentCategory,
 } from "../../admin/content/category-hierarchy";
 import {
-  normalizeYouTubeUrl,
+  normalizeVideoUrl,
+  parseMetaVideoEmbedResponse,
   parseMediaTopicPayload,
+  resolveMetaVideoEmbedRequest,
   validateGalleryPayload,
   validateVideoPayload,
+  type VideoProvider,
+  type VideoMediaPayload,
+  type MetaVideoEmbedResult,
 } from "../../admin/media-topic-payload";
 import { formatArabicContentDate } from "../../content-dates";
 import type { Json } from "../../database.types";
@@ -45,6 +50,64 @@ import {
 const PUBLIC_CONTENT_CACHE_TAG = "public-content";
 const ARTICLE_IMAGE_FALLBACK = "";
 const MEDIA_IMAGE_FALLBACK = "";
+
+/** Fetches only the fixed official oEmbed endpoint; never a caller-supplied host or embed HTML. */
+export async function readMetaVideoEmbed(
+  payload: Pick<VideoMediaPayload, "provider" | "video_url">,
+): Promise<MetaVideoEmbedResult> {
+  const request = resolveMetaVideoEmbedRequest(payload);
+  if (!request) return { status: "unavailable", reason: "unsupported" };
+  const endpoint = new URL(request.endpoint);
+  endpoint.searchParams.set("url", request.sourceUrl);
+  endpoint.searchParams.set("omitscript", "true");
+  endpoint.searchParams.set("maxwidth", "658");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      redirect: "error",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      return { status: "unavailable", reason: [400, 401, 403, 404].includes(response.status) ? "denied" : "network" };
+    }
+    if (response.redirected || !response.body || Number(response.headers.get("content-length")) > 65_536) {
+      await response.body?.cancel();
+      return { status: "unavailable", reason: "invalid_response" };
+    }
+    reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let size = 0;
+    let body = "";
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > 65_536) {
+        await reader.cancel();
+        return { status: "unavailable", reason: "invalid_response" };
+      }
+      body += decoder.decode(chunk.value, { stream: true });
+    }
+    body += decoder.decode();
+    // Meta currently serves JSON as text/javascript. Parse JSON; never evaluate it.
+    let value: unknown;
+    try { value = JSON.parse(body); } catch { return { status: "unavailable", reason: "invalid_response" }; }
+    return parseMetaVideoEmbedResponse(value, payload);
+  } catch {
+    return { status: "unavailable", reason: controller.signal.aborted ? "timeout" : "network" };
+  } finally {
+    clearTimeout(timeout);
+    reader?.releaseLock();
+  }
+}
 
 /** Exact projection for every Public Collection read. Body and SEO fields are excluded. */
 export const PUBLIC_CONTENT_COLLECTION_SELECT =
@@ -155,6 +218,8 @@ export type PublicContentDetail = PublicContentSummary & {
   readingTime: string;
   videoUrl: string;
   videoDuration: string;
+  videoProvider?: VideoProvider;
+  videoStartSeconds?: number;
   galleryImages: Array<{ url: string; alt?: string | null; caption?: string | null }>;
 };
 
@@ -944,7 +1009,7 @@ function mapDetailRow(row: PublicContentRow): PublicContentDetail {
       details: { rowId: row.id, contentType: row.content_type },
     });
   }
-  const normalizedVideoUrl = normalizeYouTubeUrl(video?.video_url ?? "");
+  const normalizedVideoUrl = video ? normalizeVideoUrl(video.provider, video.video_url) : null;
 
   return {
     ...summary,
@@ -965,6 +1030,7 @@ function mapDetailRow(row: PublicContentRow): PublicContentDetail {
     readingTime: estimateReadingTimeLabel(row.content),
     videoUrl: normalizedVideoUrl ?? "",
     videoDuration: video?.duration?.trim() ?? "",
+    ...(video ? { videoProvider: video.provider, videoStartSeconds: video.start_seconds ?? 0 } : {}),
     galleryImages: gallery?.images ?? [],
   };
 }

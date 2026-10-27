@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ContentType } from "../../../../../lib/admin/content/content-types";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
+import { slugifyFromTitle } from "../../../../../lib/admin/slug";
 import {
   AdminFormError,
   useOptionalAdminFormRuntime,
@@ -14,73 +15,71 @@ type TopicSlugInputProps = {
   titleValue?: string;
   required?: boolean;
   contentType?: ContentType;
+  /** Optional shared label/stack classes; omitted consumers retain their current presentation. */
+  labelClassName?: string;
+  /** A recovered raw value, including blank, is an explicit user draft. */
+  draftRestored?: boolean;
 };
-
-const arabicMap: Record<string, string> = {
-  ا: "a",
-  أ: "a",
-  إ: "e",
-  آ: "a",
-  ب: "b",
-  ت: "t",
-  ث: "th",
-  ج: "g",
-  ح: "h",
-  خ: "kh",
-  د: "d",
-  ذ: "z",
-  ر: "r",
-  ز: "z",
-  س: "s",
-  ش: "sh",
-  ص: "s",
-  ض: "d",
-  ط: "t",
-  ظ: "z",
-  ع: "a",
-  غ: "gh",
-  ف: "f",
-  ق: "q",
-  ك: "k",
-  ل: "l",
-  م: "m",
-  ن: "n",
-  ه: "h",
-  و: "w",
-  ي: "y",
-  ى: "a",
-  ة: "h",
-  ء: "",
-  ئ: "e",
-  ؤ: "o",
-};
-
-function slugify(value: string) {
-  return value
-    .split("")
-    .map((char) => arabicMap[char] ?? char)
-    .join("")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-{2,}/g, "-");
-}
 
 export default function TopicSlugInput({
   defaultValue = "",
   titleInputName = "title",
   titleValue,
   required = true,
+  labelClassName,
+  draftRestored = false,
 }: TopicSlugInputProps) {
   const [value, setValue] = useState(defaultValue ?? "");
-  const [isManual, setIsManual] = useState(Boolean(defaultValue));
+  const [isManual, setIsManual] = useState(draftRestored || Boolean(defaultValue));
   const resolvedValue =
-    titleValue !== undefined && !isManual ? slugify(titleValue) : value;
+    titleValue !== undefined && !isManual ? slugifyFromTitle(titleValue) : value;
   const inputRef = useRef<HTMLInputElement>(null);
+  const previousValueRef = useRef(resolvedValue);
   const hasError = Boolean(
     useOptionalAdminFormRuntime()?.fieldErrors.slug?.length,
   );
+
+  useEffect(() => {
+    if (previousValueRef.current === resolvedValue) return;
+    previousValueRef.current = resolvedValue;
+    // Notify the existing dirty and SEO observers after React commits the value.
+    inputRef.current?.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [resolvedValue]);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    const form = input?.form;
+    if (!input || !form) return;
+
+    // A confirmed save protects this value from later title-only edits.
+    const protectSavedSlug = () => {
+      setValue(input.value);
+      setIsManual(true);
+    };
+
+    form.addEventListener("admin-form-saved", protectSavedSlug);
+    return () => form.removeEventListener("admin-form-saved", protectSavedSlug);
+  }, []);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    const form = input?.form;
+    if (!input || !form) return;
+
+    const finalizeSlug = () => {
+      const titleInput = form.elements.namedItem(titleInputName);
+      const currentTitle = titleInput instanceof HTMLInputElement || titleInput instanceof HTMLTextAreaElement
+        ? titleInput.value
+        : titleValue ?? "";
+      const rawValue = input.value;
+      const normalized = slugifyFromTitle(rawValue.trim() || currentTitle);
+      // Retain an invalid nonempty candidate for the existing server validation.
+      if (normalized || !rawValue.trim()) setValue(normalized);
+    };
+
+    form.addEventListener("admin-form-before-submit", finalizeSlug);
+    return () => form.removeEventListener("admin-form-before-submit", finalizeSlug);
+  }, [titleInputName, titleValue]);
 
   useEffect(() => {
     if (titleValue !== undefined) return;
@@ -91,7 +90,7 @@ export default function TopicSlugInput({
 
     function syncSlug() {
       if (isManual) return;
-      setValue(slugify(titleInput?.value ?? ""));
+      setValue(slugifyFromTitle(titleInput?.value ?? ""));
     }
 
     titleInput.addEventListener("input", syncSlug);
@@ -101,8 +100,8 @@ export default function TopicSlugInput({
   }, [isManual, titleInputName, titleValue]);
 
   return (
-    <div className="space-y-1.5">
-      <label htmlFor="topic-slug" className="text-xs font-medium text-white/58">
+    <div className={labelClassName ?? "space-y-1.5"}>
+      <label data-admin-form-label-text htmlFor="topic-slug" className={labelClassName === undefined ? "text-xs font-medium text-white/58" : undefined}>
         الرابط المختصر (Slug) <span className="text-red-400">*</span>
       </label>
       <div className="relative" data-topic-slug-field>
@@ -112,8 +111,15 @@ export default function TopicSlugInput({
           name="slug"
           value={resolvedValue}
           onChange={(event) => {
-            setValue(slugify(event.target.value));
+            setValue(event.target.value);
             setIsManual(true);
+          }}
+          onBlur={(event) => {
+            if (isManual && event.currentTarget.value !== (defaultValue ?? "")) {
+              const rawValue = event.currentTarget.value;
+              const normalized = slugifyFromTitle(rawValue);
+              if (normalized || !rawValue.trim()) setValue(normalized);
+            }
           }}
           required={required}
           aria-invalid={hasError || undefined}
@@ -128,9 +134,12 @@ export default function TopicSlugInput({
           type="button"
           onClick={() => {
             const form = inputRef.current?.form;
-            const titleInput = form?.elements.namedItem(titleInputName) as HTMLInputElement | null;
+            const titleInput = form?.elements.namedItem(titleInputName);
+            const currentTitle = titleInput instanceof HTMLInputElement || titleInput instanceof HTMLTextAreaElement
+              ? titleInput.value
+              : titleValue ?? "";
             setValue(
-              slugify(titleValue ?? titleInput?.value ?? ""),
+              slugifyFromTitle(currentTitle),
             );
             setIsManual(false);
           }}

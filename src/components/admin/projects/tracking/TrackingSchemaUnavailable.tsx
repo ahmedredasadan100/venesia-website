@@ -12,6 +12,7 @@ export default function TrackingSchemaUnavailable({
   return (
     <AdminEntityListPageLayout dir="rtl">
       <AdminPageContextHeader
+        visualPreset="construction"
         eyebrow="PROJECT TRACKING DOMAIN"
         title="تعذر فتح متابعة المشروع"
         description="يتطلب هذا السطح تطبيق Migration نطاق Construction Tracking أولًا."

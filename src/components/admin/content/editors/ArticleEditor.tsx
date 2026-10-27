@@ -1,6 +1,8 @@
 "use client";
 
 import type { GlobalSeoSettings } from "../../../../lib/seo/global-seo-types";
+import type { TopicDraftSession } from "../../../../lib/admin/content/topic-revision";
+import { applyTopicFormDraftFields, getTopicDraftDisplayDate } from "./content-form-definition";
 
 import {
   AdminActionButton,
@@ -104,6 +106,7 @@ export default function ArticleEditor({
   series,
   errorMessage,
   returnPath = "/admin/content/topics",
+  draftSession,
 }: {
   seoSettings?: GlobalSeoSettings;
   topic: ArticleEditorTopic;
@@ -111,14 +114,13 @@ export default function ArticleEditor({
   series: ArticleEditorSeries[];
   errorMessage?: string | null;
   returnPath?: string;
+  draftSession?: TopicDraftSession;
 }) {
   const safeCategories = categories;
   const categoryOptions = flattenAdminCategoryTree(
     buildAdminCategoryTree(safeCategories),
   );
   const safeSeries = series;
-  const faq = getFaq(topic.faq);
-  const seoKeywords = getSeoKeywords(topic.seo_keywords);
   const status = topic.status || "unpublished";
   const previewCapability = buildAdminContentPreviewCapability({
     entityType: "topic",
@@ -128,8 +130,6 @@ export default function ArticleEditor({
     publicationStatus: status,
     allowedActions: ["internal-preview", "public-view"],
   });
-  const publishInput = topicRowToPublishInput({ ...topic, faq });
-  const selectedCategory = safeCategories.find((category) => category.slug === topic.category_slug)?.name ?? topic.category_slug ?? "—";
   const initialModelValue: ContentEditorModelValue = {
     title: topic.title ?? "",
     excerpt: topic.excerpt ?? "",
@@ -141,30 +141,44 @@ export default function ArticleEditor({
   const templateContext = { target: "article" } as const;
 
   function renderTabs(model: ContentEditorModel) {
+    const effectiveTopic = applyTopicFormDraftFields(topic, model.recoveryFields, "article");
+    const faq = getFaq(effectiveTopic.faq);
+    const seoKeywords = getSeoKeywords(effectiveTopic.seo_keywords);
+    const status = effectiveTopic.status || "unpublished";
+    const selectedCategory = safeCategories.find(category => category.id === effectiveTopic.category_id);
+    const selectedSeries = safeSeries.find(item => item.id === effectiveTopic.series_id);
+    const publishInput = topicRowToPublishInput({
+      ...effectiveTopic,
+      category_slug: selectedCategory?.slug ?? effectiveTopic.category_slug,
+      faq,
+    });
     return [
       {
         id: "basic",
         navigationLabel: "المحتوى",
-        sectionHeading: "بيانات الموضوع والمحتوى",
-        sectionDescription: "حدّث المحتوى الأساسي والتصنيف والصورة وإعدادات الظهور.",
         icon: "content" as const,
         content: (
           <ContentBasicDataPanel
+            presentation="panel"
+            heading="بيانات الموضوع والمحتوى"
             formId="topic-edit-form"
             contentType="article"
             mode="edit"
+            slugDraftRestored={Object.hasOwn(model.recoveryFields ?? {}, "slug")}
             categories={categoryOptions}
             series={safeSeries}
             contentEditor={(
               <TopicMarkdownEditor
-                defaultValue={topic.content ?? ""}
+                defaultValue={effectiveTopic.content ?? ""}
                 value={model.value.content}
                 onValueChange={(nextValue) =>
                   model.setField("content", nextValue)
                 }
                 variant="compact"
+                presentation="panel"
                 draftIdentity={`topic:article:${topic.id}`}
                 baselineRevision={topic.updated_at}
+                formDraftManaged={model.recoveryEnabled}
               />
             )}
             controlledValues={{
@@ -172,68 +186,74 @@ export default function ArticleEditor({
               excerpt: model.value.excerpt,
             }}
             onControlledValueChange={model.setField}
-            displaySettings={
-              <ContentDisplaySettings
-                showTitle={topic.show_title_on_page}
-                showImage={topic.show_image_on_page}
-                showExcerpt={topic.show_excerpt_on_page}
-                showDate={topic.show_date_on_page}
-                showCategory={topic.show_category_on_page}
-                showSeries={topic.show_series_on_page}
-                showIntroCard={topic.show_intro_card_on_page}
-              />
-            }
             values={{
-              title: topic.title,
-              slug: topic.slug,
-              excerpt: topic.excerpt,
-              image: topic.image,
-              imageAlt: topic.image_alt,
-              categoryId: topic.category_id,
-              seriesId: topic.series_id,
-              series: topic.series,
-              seriesSlug: topic.series_slug,
+              title: effectiveTopic.title,
+              slug: effectiveTopic.slug,
+              excerpt: effectiveTopic.excerpt,
+              image: effectiveTopic.image,
+              imageAlt: effectiveTopic.image_alt,
+              categoryId: effectiveTopic.category_id,
+              seriesId: effectiveTopic.series_id,
+              series: selectedSeries?.name ?? effectiveTopic.series,
+              seriesSlug: selectedSeries?.slug ?? effectiveTopic.series_slug,
             }}
+          />
+        ),
+      },
+      {
+        id: "display",
+        navigationLabel: "إعدادات العرض",
+        icon: "settings" as const,
+        content: (
+          <ContentDisplaySettings
+            sectionHeading="إعدادات العرض"
+            columns={4}
+            introCardSpan={1}
+            presentation="premium-inline"
+            showTitle={effectiveTopic.show_title_on_page}
+            showImage={effectiveTopic.show_image_on_page}
+            showExcerpt={effectiveTopic.show_excerpt_on_page}
+            showDate={effectiveTopic.show_date_on_page}
+            showCategory={effectiveTopic.show_category_on_page}
+            showSeries={effectiveTopic.show_series_on_page}
+            showIntroCard={effectiveTopic.show_intro_card_on_page}
           />
         ),
       },
       {
         id: "faq",
         navigationLabel: "الأسئلة",
-        sectionHeading: "الأسئلة الشائعة وإعدادات الظهور",
-        sectionDescription: "راجع الأسئلة والأجوبة وطريقة ظهور القسم في صفحة الموضوع.",
         icon: "faq" as const,
         content: (
           <FaqEditor
+            presentation="panel"
             defaultFaq={faq}
-            defaultVisible={topic.show_faq_on_page}
-            defaultTitleVisible={topic.show_faq_title_on_page}
+            defaultVisible={effectiveTopic.show_faq_on_page}
+            defaultTitleVisible={effectiveTopic.show_faq_title_on_page}
           />
         ),
       },
       {
         id: "seo",
         navigationLabel: "SEO",
-        sectionHeading: "تحسين محركات البحث والمشاركة",
-        sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
         icon: "seo" as const,
         content: (
           <SeoPanel seoSettings={seoSettings}
-            title={topic.title ?? ""}
-            excerpt={topic.excerpt ?? ""}
-            slug={topic.slug ?? ""}
-            content={topic.content ?? ""}
-            image={topic.image ?? ""}
-            imageAlt={topic.image_alt ?? ""}
-            seoTitle={topic.seo_title ?? ""}
-            seoDescription={topic.seo_description ?? ""}
+            title={effectiveTopic.title ?? ""}
+            excerpt={effectiveTopic.excerpt ?? ""}
+            slug={effectiveTopic.slug ?? ""}
+            content={effectiveTopic.content ?? ""}
+            image={effectiveTopic.image ?? ""}
+            imageAlt={effectiveTopic.image_alt ?? ""}
+            seoTitle={effectiveTopic.seo_title ?? ""}
+            seoDescription={effectiveTopic.seo_description ?? ""}
             seoKeywords={seoKeywords}
-            focusKeyword={topic.focus_keyword ?? ""}
-            canonicalUrl={topic.canonical_url ?? ""}
-            robotsIndex={topic.robots_index ?? null}
-            robotsFollow={topic.robots_follow ?? null}
-            ogImage={topic.og_image ?? ""}
-            ogImageAlt={topic.og_image_alt ?? ""}
+            focusKeyword={effectiveTopic.focus_keyword ?? ""}
+            canonicalUrl={effectiveTopic.canonical_url ?? ""}
+            robotsIndex={effectiveTopic.robots_index ?? null}
+            robotsFollow={effectiveTopic.robots_follow ?? null}
+            ogImage={effectiveTopic.og_image ?? ""}
+            ogImageAlt={effectiveTopic.og_image_alt ?? ""}
             faq={faq}
             controlledValues={{
               title: model.value.title,
@@ -250,9 +270,11 @@ export default function ArticleEditor({
       {
         id: "publish",
         navigationLabel: "المراجعة",
+        sectionHeaderPresentation: "premium" as const,
         icon: "publish" as const,
         content: (
           <ContentReviewPanel
+            presentation="panel"
             formId="topic-edit-form"
             initial={{
               ...publishInput,
@@ -272,30 +294,32 @@ export default function ArticleEditor({
             }}
             publishingOptions={
               <ContentPublishingOptions
+                presentation="panel"
                 status={status}
-                featured={Boolean(topic.is_featured)}
-                popular={Boolean(topic.is_popular)}
+                featured={Boolean(effectiveTopic.is_featured)}
+                popular={Boolean(effectiveTopic.is_popular)}
                 publishedAt={topic.published_at}
-                dateLabel={topic.date_label}
+                dateLabel={effectiveTopic.date_label}
+                draftDisplayDate={getTopicDraftDisplayDate(model.recoveryFields, topic.published_at)}
               />
             }
             status={status}
             publishedAt={topic.published_at}
-            dateLabel={topic.date_label}
-            featured={Boolean(topic.is_featured)}
-            popular={Boolean(topic.is_popular)}
+            dateLabel={effectiveTopic.date_label}
+            featured={Boolean(effectiveTopic.is_featured)}
+            popular={Boolean(effectiveTopic.is_popular)}
             updatedAt={topic.updated_at}
             contentTypeLabel="مقال"
-            categoryLabel={selectedCategory}
-            seriesLabel={topic.series ?? "—"}
+            categoryLabel={selectedCategory?.name ?? effectiveTopic.category_slug ?? "—"}
+            seriesLabel={selectedSeries?.name ?? effectiveTopic.series ?? "—"}
             initialDisplay={{
-              title: topic.show_title_on_page,
-              image: topic.show_image_on_page,
-              excerpt: topic.show_excerpt_on_page,
-              date: topic.show_date_on_page,
-              category: topic.show_category_on_page,
-              series: topic.show_series_on_page,
-              introCard: topic.show_intro_card_on_page,
+              title: effectiveTopic.show_title_on_page,
+              image: effectiveTopic.show_image_on_page,
+              excerpt: effectiveTopic.show_excerpt_on_page,
+              date: effectiveTopic.show_date_on_page,
+              category: effectiveTopic.show_category_on_page,
+              series: effectiveTopic.show_series_on_page,
+              introCard: effectiveTopic.show_intro_card_on_page,
             }}
           />
         ),
@@ -306,6 +330,7 @@ export default function ArticleEditor({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="topics"
         eyebrow="EDIT TOPIC"
         title={truncateWords(topic.title || "بدون عنوان")}
         description="تعديل موضوع."
@@ -322,6 +347,7 @@ export default function ArticleEditor({
       <TopicMediaCatalogSyncSignal formId="topic-edit-form" />
 
       <ContentEditorShell
+        draftSession={draftSession}
         action={saveContentForm}
         initialState={
           errorMessage

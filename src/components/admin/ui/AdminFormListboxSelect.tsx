@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { adminFormHintClassName, adminFormLabelClassName } from "../../../lib/admin/admin-ui-styles";
 
 import AdminListboxSelect, {
   type AdminListboxSelectOption,
@@ -12,7 +13,13 @@ export type AdminFormListboxSelectProps = {
   options: readonly AdminListboxSelectOption[];
   id?: string;
   focusTargetId?: string;
+  /** Additional field descriptions are retained alongside the current status. */
+  ariaDescribedBy?: string;
   label?: ReactNode;
+  /** Optional canonical title-row styling; does not alter control geometry. */
+  labelClassName?: string;
+  /** @deprecated Both values resolve to the canonical field presentation. */
+  presentation?: "default" | "panel";
   value?: string;
   defaultValue?: string;
   onChange?: (value: string) => void;
@@ -30,6 +37,9 @@ export type AdminFormListboxSelectProps = {
   hint?: ReactNode;
   className?: string;
   inline?: boolean;
+  inlineClassName?: AdminListboxSelectProps["inlineClassName"];
+  inlineOptionsClassName?: AdminListboxSelectProps["inlineOptionsClassName"];
+  inlineOptionClassName?: AdminListboxSelectProps["inlineOptionClassName"];
   dir?: "rtl" | "ltr";
   sizing?: AdminListboxSelectProps["sizing"];
 };
@@ -39,7 +49,9 @@ export default function AdminFormListboxSelect({
   options,
   id,
   focusTargetId,
+  ariaDescribedBy,
   label,
+  labelClassName,
   value: controlledValue,
   defaultValue = "",
   onChange,
@@ -57,6 +69,9 @@ export default function AdminFormListboxSelect({
   hint,
   className = "",
   inline = false,
+  inlineClassName,
+  inlineOptionsClassName,
+  inlineOptionClassName,
   dir = "rtl",
   sizing = "content-relaxed",
 }: AdminFormListboxSelectProps) {
@@ -84,23 +99,26 @@ export default function AdminFormListboxSelect({
   const unavailable = options.length === 0;
   const statusId = `${controlId}-status`;
   const labelId = `${controlId}-label`;
-  const describedBy =
-    loading || error || unavailable || hint ? statusId : undefined;
+  const describedBy = [
+    ariaDescribedBy,
+    loading || error || unavailable || hint ? statusId : undefined,
+  ].filter(Boolean).join(" ") || undefined;
   const labelText = typeof label === "string" ? label : placeholder;
+  const titleClassName = labelClassName ?? adminFormLabelClassName({ textInset: true });
 
   return (
     <div
       dir={dir}
+      data-admin-form-field=""
       data-admin-form-listbox=""
       data-admin-form-listbox-state={
         loading ? "loading" : error ? "error" : unavailable ? "empty" : "ready"
       }
-      className={`space-y-2 ${className}`.trim()}
+      className={`min-w-0 space-y-2 ${className}`.trim()}
     >
       {label ? (
-        <span id={labelId} className="block text-sm font-medium text-white/70">
-          {label}
-          {required ? " *" : null}
+        <span id={labelId} className={titleClassName}>
+          <span data-admin-form-label-text>{label}{required ? <> <span className="text-red-400">*</span></> : null}</span>
         </span>
       ) : null}
 
@@ -131,6 +149,7 @@ export default function AdminFormListboxSelect({
         ))}
       </select>
 
+      <div data-admin-form-field-control="" className="min-w-0">
       <AdminListboxSelect
         id={controlId}
         triggerId={focusTargetId}
@@ -149,10 +168,14 @@ export default function AdminFormListboxSelect({
         searchPlaceholder={searchPlaceholder}
         emptyMessage={emptyMessage}
         inline={inline}
+        inlineClassName={inlineClassName}
+        inlineOptionsClassName={inlineOptionsClassName}
+        inlineOptionClassName={inlineOptionClassName}
         dir={dir}
         sizing={sizing}
         className={sizing === "full" ? "w-full" : "max-w-full"}
       />
+      </div>
 
       {loading ? (
         <p id={statusId} role="status" className="text-xs text-white/45">
@@ -171,7 +194,7 @@ export default function AdminFormListboxSelect({
           {emptyMessage}
         </p>
       ) : hint ? (
-        <p id={statusId} className="text-xs leading-5 text-white/40">
+        <p id={statusId} className={adminFormHintClassName({ textInset: true })}>
           {hint}
         </p>
       ) : null}

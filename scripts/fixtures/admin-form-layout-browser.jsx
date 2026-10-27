@@ -1,9 +1,28 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SingleIntro from '../../src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor';
 import FeaturedModule from '../../src/components/admin/page-blocks/FeaturedModuleEditClient';
 import { createDefaultFeaturedModuleConfig, buildFeaturedModuleConfig } from '../../src/lib/featured-modules/config';
 import ContentBasicDataPanel from '../../src/components/admin/content/editors/ContentBasicDataPanel';
+import ContentEditorShell from '../../src/components/admin/content/editors/ContentEditorShell';
+import CompanyIdentityPanel from '../../src/app/admin/settings/general/CompanyIdentityPanel';
+import MaintenanceModePanel from '../../src/app/admin/settings/general/MaintenanceModePanel';
+import SecuritySettingsClient from '../../src/app/admin/settings/security/SecuritySettingsClient';
+import MediaSettingsPanel from '../../src/app/admin/settings/media/MediaSettingsPanel';
+import MediaRecoveryCenter from '../../src/app/admin/settings/media/MediaRecoveryCenter';
+import AdminIntegrationsPlatform from '../../src/components/admin/integrations/AdminIntegrationsPlatform';
+import IntegrationConnectionWizard from '../../src/components/admin/integrations/IntegrationConnectionWizard';
+import IntegrationsServerConfiguration from '../../src/components/admin/integrations/IntegrationsServerConfiguration';
+import AdminPlaceholderPage from '../../src/components/admin/AdminPlaceholderPage';
+import MetaManagerClient from '../../src/app/admin/seo/meta-manager/MetaManagerClient';
+import { getGlobalSeoDefaults } from '../../src/lib/seo/global-seo-defaults';
+import { GLOBAL_SEO_FIELD_KEYS, GLOBAL_SEO_SETTING_KEY } from '../../src/lib/seo/global-seo-types';
+import { GLOBAL_SEO_ENVIRONMENT_KEYS } from '../../src/lib/seo/global-seo-environment';
+import { AdminPageExperience, AdminPageContextHeader, AdminPageHeader } from '../../src/components/admin/ui';
+import { ADMIN_COMPANY_DEFAULT } from '../../src/config/admin/company';
+import { INTEGRATION_DEFINITIONS, INTEGRATIONS_CONTRACT_VERSION } from '../../src/lib/admin/integrations/integrations-contract';
+import { INTEGRATION_APP_CONFIGURATION_DEFINITIONS, INTEGRATION_APP_CONFIGURATION_SURFACE_DEFINITIONS, INTEGRATIONS_SERVER_CONFIGURATION_CONTRACT_VERSION } from '../../src/lib/admin/integrations/server-configuration-contract';
 import SeriesForm from '../../src/app/admin/content/series/SeriesForm';
 import CategoryForm from '../../src/app/admin/content/categories/CategoryForm';
 import AdminFormRuntime, { AdminFormGrid, AdminFormGridItem } from '../../src/components/admin/ui/AdminFormRuntime';
@@ -28,7 +47,7 @@ import Gallery from '../../src/components/admin/media/AdminMediaGalleryField';
 import ImageField from '../../src/components/admin/media/AdminMediaImageField';
 import HomeProjects from '../../src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor';
 import { asHomeProjectsConfig, asAboutIntroSingleImageConfig } from '../../src/lib/page-blocks/configs';
-import { adminFormLabelClassName, adminFormFieldClassName, adminChoiceButtonClassName } from '../../src/lib/admin/admin-ui-styles';
+import { adminFormLabelClassName, adminFormHintClassName, adminFormFieldClassName, adminChoiceButtonClassName } from '../../src/lib/admin/admin-ui-styles';
 import { parseAdminLinkFromFormData } from '../../src/lib/admin/links/form-fields';
 import Feedback from '../../src/components/admin/AdminFeedbackProvider';
 import { mediaContentSlot } from '../../src/lib/media-center/detail-page-config';
@@ -54,28 +73,64 @@ function SharedPresentationFixtures() {
       <div data-qa-choice-states className="flex flex-wrap gap-2">{['selected','unselected','disabled'].map(state=><button key={state} type="button" data-qa-choice={state} disabled={state==='disabled'} className={adminChoiceButtonClassName(state==='selected')} onClick={()=>{window.sharedChoiceClicked=state;}}>{state==='selected'?'مختار':state==='disabled'?'معطل':'متاح'}</button>)}</div>
       <AdminFormGrid columns={2}>{cardVariants.map(([key,props])=><div data-qa-card={key} key={key}><AdminCard {...props} className="p-4">{field('card-'+key)}</AdminCard></div>)}</AdminFormGrid>
       <AdminFormGrid columns={2}><div data-qa-section="implicit"><AdminFormSection title="عنوان مشترك" description="وصف القسم المشترك">{field('section-implicit')}</AdminFormSection></div><div data-qa-section="default"><AdminFormSection variant="default" density="default" title="عنوان مشترك" description="وصف القسم المشترك">{field('section-default')}</AdminFormSection></div></AdminFormGrid>
+      <AdminFormGrid columns={2}><div data-qa-field-default="omitted">{field('legacy-omitted')}</div><div data-qa-field-default="explicit"><AdminFormField presentation="default" label="حقل مشترك" hint="مساعدة الحقل"><input name="legacy-explicit" defaultValue="نص عربي واضح" className={adminFormFieldClassName()}/></AdminFormField></div><div data-qa-field-default="legacy-port"><AdminFormField label="حقل مشترك" hint="مساعدة الحقل" labelClassName={adminFormLabelClassName({textInset:true})}><input name="legacy-title-port" defaultValue="نص عربي واضح" className={adminFormFieldClassName()}/></AdminFormField></div></AdminFormGrid>
+    </main>;
+}
+
+function MetaManagerFixture() {
+    const persistedSettings={defaultTitle:'عنوان محفوظ محليًا',defaultOgImage:'/original.png',defaultRobotsIndex:false,organizationLogo:'/wide.png',organizationName:'مؤسسة محلية',organizationKnowsAbout:['موضوع محفوظ'],organizationSocialLinks:[{label:'منصة أولى',href:'https://local.example.test/first'},{label:'منصة ثانية',href:'https://local.example.test/second'}],robotsTxtDisallow:['/local-private/']};
+    const settings={...getGlobalSeoDefaults(),siteName:'اسم بيئة محلية',siteUrl:'https://local.example.test',canonicalBaseUrl:'https://local.example.test',...persistedSettings};
+    const fields=Object.fromEntries(GLOBAL_SEO_FIELD_KEYS.map(key=>[key,{key,value:settings[key],persisted:Object.hasOwn(persistedSettings,key),source:Object.hasOwn(persistedSettings,key)?'database':key==='siteName'?'environment':'code_fallback',environmentKey:GLOBAL_SEO_ENVIRONMENT_KEYS[key]}]));
+    const contract={settingKey:GLOBAL_SEO_SETTING_KEY,databaseStatus:'loaded',persistedSettings,settings,fields,sourceIssues:[]};
+    return <main dir="rtl" className="mx-auto max-w-6xl p-4 text-white" data-family="meta-manager"><AdminPageExperience as="div" dir="rtl"><AdminPageHeader visualPreset="seo" eyebrow="GLOBAL SEO" title="Meta Manager" description="عقد Global SEO الفعلي بترتيب Database ثم Environment ثم Code Fallback. الحقول الموروثة لا تظهر كأنها قيم محفوظة." meta="Database connected"/><MetaManagerClient contract={contract}/></AdminPageExperience></main>;
+}
+
+function SettingsFamilyFixture() {
+    const query=new URLSearchParams(location.search),surface=query.get('surface')||'general',unavailable=query.get('state')==='unavailable';
+    const company={...ADMIN_COMPANY_DEFAULT,source:'database',name:'شركة الاختبار المحلية',logoUrl:'/original.png',compactLogoUrl:'/wide.png'};
+    const settings={maxImageBytes:2097152,maxDocumentBytes:4194304,allowedKinds:['image','document'],allowedImageExtensions:['.jpg','.png'],allowedDocumentExtensions:['.pdf'],mimeVerification:true,collisionPolicy:'unique_name',safeDeletePolicy:'authoritative_zero_references'};
+    const readiness={catalogAvailable:!unavailable,managedStorageAvailable:!unavailable,context:{identity:unavailable?null:'isolated-local-context',provider:'supabase',environment:'fixture',imageBucket:'images'},usageResultsAuthoritative:!unavailable,lastCompletedScanAt:null,unscannedAssetCount:1,reasons:unavailable?['catalog_unavailable']:[]};
+    const now='2026-10-25T00:00:00Z';
+    const integrations=INTEGRATION_DEFINITIONS.map((definition,index)=>({...definition,connectionId:'local-connection-'+index,status:index===0?'connected':index===3?'pending_selection':'disconnected',checkedAt:now,lastSyncAt:index===0?now:null,nextSyncAt:null,message:'حالة محلية معزولة',security:'guarded',configureHref:'/admin/settings/integrations/'+definition.key,testHref:null,reportsAvailable:index===0,availableAssets:definition.requiredAssetTypes.map((type,n)=>({id:'local-'+type,type,externalId:'local-'+type,parentExternalId:n?'local-business':null,displayName:'أصل محلي '+type,permissions:[],metadata:{}})),selectedAssets:[],missingConfiguration:[],appConfigurationStatus:'ready_to_connect',appConfigurationSource:'cms_vault',appConfigurationLastTestedAt:now}));
+    const snapshot={contractVersion:INTEGRATIONS_CONTRACT_VERSION,state:unavailable?'unavailable':'ready',checkedAt:now,security:'guarded',vaultAvailable:!unavailable,databaseAvailable:!unavailable,migrationRegistered:!unavailable,lastSyncAt:now,statistics:{total:integrations.length,connected:1,needsAttention:1,disconnected:6,connecting:0,syncing:0,unavailable:0},integrations};
+    const configuration={contractVersion:INTEGRATIONS_SERVER_CONFIGURATION_CONTRACT_VERSION,state:unavailable?'unavailable':'ready',checkedAt:now,migrationRegistered:!unavailable,vaultAvailable:!unavailable,canonicalOrigin:'http://127.0.0.1:48199',surfaces:INTEGRATION_APP_CONFIGURATION_SURFACE_DEFINITIONS.map(surface=>{const definition=INTEGRATION_APP_CONFIGURATION_DEFINITIONS.find(owner=>owner.key===surface.owner);return{key:surface.key,owner:surface.owner,label:surface.label,description:'تهيئة محلية معزولة',sharedOwnerLabel:surface.key==='whatsapp'?'Meta':null,source:'cms_vault',version:1,updatedAt:now,fields:definition.fields.map(field=>({...field,configured:true,safeValue:field.secret?null:'local-public-value'})),validations:surface.integrations.map(integration=>({integration,label:integration,status:'ready_to_connect',configured:true,missing:[],lastTestedAt:now,safeErrorCode:null})),callbackUrls:[]};})};
+    const heading=(title,visualPreset='settings')=><AdminPageContextHeader title={title} description="معاينة المستهلك الفعلي ببيانات محلية معزولة" visualPreset={visualPreset}/>;
+    return <main dir="rtl" className="mx-auto max-w-6xl p-4 text-white" data-family="settings-family" data-settings-surface={surface}>
+      {surface==='general'?<AdminPageExperience as="div">{heading('الإعدادات العامة')}<CompanyIdentityPanel company={company}/><MaintenanceModePanel initialReadState={unavailable?{status:'unavailable'}:{status:'ready',enabled:false}}/></AdminPageExperience>:null}
+      {surface==='security'?<SecuritySettingsClient username="local_admin" email="local@example.invalid" fullName="حساب محلي" lastLoginAt={now}/>:null}
+      {surface==='media'?<AdminPageExperience as="div">{heading('إعدادات الميديا','media')}<MediaSettingsPanel settings={settings} readiness={readiness}/><MediaRecoveryCenter/></AdminPageExperience>:null}
+      {surface==='integrations'?<AdminIntegrationsPlatform snapshot={snapshot}/>:null}
+      {surface==='connection'?<IntegrationConnectionWizard item={{...integrations.find(item=>item.key==='meta_business'),...(query.get('state')==='selection'?{status:'pending_selection'}:{})}} requestedAction={null} callbackError={unavailable?'isolated-callback-failure':null}/>:null}
+      {surface==='server-configuration'?<IntegrationsServerConfiguration snapshot={configuration}/>:null}
+      {surface==='theme'||surface==='appearance'?<AdminPlaceholderPage title={surface==='theme'?'الثيم':'المظهر'} visualPreset="settings"/>:null}
     </main>;
 }
 
 function ConsistencyFixtures() {
     const createTaxonomy = new URLSearchParams(location.search).get('taxonomy') === 'create';
+    const taxonomyOnly = new URLSearchParams(location.search).get('family') === 'taxonomy';
+    const taxonomyEntity = new URLSearchParams(location.search).get('entity');
+    const [queryClient] = useState(() => new QueryClient({defaultOptions:{queries:{retry:false}}}));
+    const savedTaxonomy = kind => JSON.parse(localStorage.getItem('taxonomy-'+kind)||'null');
     const [revision, setRevision] = useState(0);
     const [featured, setFeatured] = useState(() => ({ ...createDefaultFeaturedModuleConfig('market', 'three-cards'), presentation: { ...createDefaultFeaturedModuleConfig('market', 'three-cards').presentation, eyebrow: 'اختياراتنا', title: 'موضوعات مميزة', description: 'اكتشف أحدث الموضوعات' } }));
     const [button, setButton] = useState(initial);
     const categories = [{ id: 17, name: 'السوق العقاري', slug: 'market', depth: 0, is_active: true, status: 'published' }, { id: 18, name: 'نصائح عقارية', slug: 'tips', depth: 0, is_active: true, status: 'published' }];
     const series = [{ id: 187, name: 'السلسلة الأولى', slug: 'first', category_id: 17 }, { id: 188, name: 'سلسلة النصائح', slug: 'second', category_id: 18 }];
-    const options = categories.map(c => ({ value: String(c.id), label: c.name }));
+    const options = [...categories.map(c => ({ value: String(c.id), label: c.name })), ...(taxonomyOnly ? Array.from({length:7},(_,index)=>({value:String(19+index),label:'تصنيف محلي '+(index+1)})) : [])];
     async function saveFeatured(data) { window.consistencyFeatured = Object.fromEntries(data); localStorage.setItem('consistency-featured', JSON.stringify(buildFeaturedModuleConfig(data))); }
     async function saveTopic(previous, data) { window.consistencyTopic = Object.fromEntries(data); return { ...previous, status: 'error', revision: previous.revision + 1, title: 'رفض محلي معزول', message: 'لم يتم إرسال أي بيانات إلى الخادم', fieldErrors: { title: ['فشل حفظ تجريبي'] } }; }
     function saveButton(event) { event.preventDefault(); const data = new FormData(event.currentTarget), fields = Object.fromEntries(data); window.consistencyButton = fields; localStorage.setItem('consistency-button', JSON.stringify({ ...button, button: { ...button.button, label: fields.button_label, alignment: fields.button_alignment, icon: fields.button_icon, iconPosition: fields.button_icon_position, target: fields.button_open_target, link: parseAdminLinkFromFormData(data, 'button') } })); }
-    return <main dir="rtl" className="mx-auto max-w-6xl space-y-8 bg-slate-950 p-4 text-white">
-      <section data-family="consistency-featured" key={'featured-' + revision}><FeaturedModule block={{ ...block, description: '' }} config={featured} editorOptions={{ categories: [{ id: 17, name: 'السوق العقاري', slug: 'market', scopeSlugs: ['market'] }], items: [] }} assignmentContext={assignments} updateAction={saveFeatured}/><button type="button" onClick={() => { setFeatured(JSON.parse(localStorage.getItem('consistency-featured'))); setRevision(v => v + 1); }}>Reload Featured local</button></section>
+    return <QueryClientProvider client={queryClient}><main dir="rtl" className="mx-auto max-w-6xl space-y-8 bg-slate-950 p-4 text-white">
+      {!taxonomyOnly ? <><section data-family="consistency-featured" key={'featured-' + revision}><FeaturedModule block={{ ...block, description: '' }} config={featured} editorOptions={{ categories: [{ id: 17, name: 'السوق العقاري', slug: 'market', scopeSlugs: ['market'] }], items: [] }} assignmentContext={assignments} updateAction={saveFeatured}/><button type="button" onClick={() => { setFeatured(JSON.parse(localStorage.getItem('consistency-featured'))); setRevision(v => v + 1); }}>Reload Featured local</button></section>
       <form data-family="consistency-button" key={'button-' + revision} onSubmit={saveButton}><Story editorMode="home-story" section="cta" config={button}/><button type="submit">Save Button local</button><button type="button" onClick={() => { setButton(JSON.parse(localStorage.getItem('consistency-button'))); setRevision(v => v + 1); }}>Reload Button local</button></form>
       {['edit', 'create'].map(mode => <section data-family={'consistency-topic-' + mode} key={mode + revision}><AdminFormRuntime action={saveTopic} mode={mode} closeHref="/admin/content/topics" formId={'consistency-topic-' + mode}><ContentBasicDataPanel formId={'consistency-topic-' + mode} mode={mode} contentType="article" categories={categories} series={series} values={mode === 'edit' ? { title: 'موضوع الاختبار', slug: 'fixture-topic', categoryId: 17, seriesId: 187 } : undefined} contentEditor={null}/><button type="submit">Reject Topic local</button></AdminFormRuntime></section>)}
-      <section data-family="consistency-series"><SeriesForm mode={createTaxonomy ? "create" : "edit"} series={createTaxonomy ? undefined : { id: 187, name: 'السلسلة الأولى', slug: 'first', category_id: 17, status: 'published', updated_at: '2026-10-16T00:00:00Z' }} categoryOptions={options}/></section>
-      <section data-family="consistency-existing-aligned"><FeaturedProjects config={{ selectionMode: "latest_published", limit: 6, autoplayMs: 5000 }}/></section>
-      <section data-family="consistency-category"><CategoryForm mode={createTaxonomy ? "create" : "edit"} category={createTaxonomy ? undefined : { id: 17, name: 'السوق العقاري', slug: 'market', parent_id: null, status: 'published', color_token: 'gold', updated_at: '2026-10-16T00:00:00Z' }} parentOptions={options.slice(1)}/></section>
-    </main>;
+      </> : null}
+      {taxonomyOnly && taxonomyEntity==='reference' ? <section data-family="taxonomy-reference"><ContentEditorShell action={saveTopic} mode="edit" baselineRevision="2026-10-16T00:00:00Z" contentType="article" closeHref="/admin/content/topics" formId="taxonomy-topic-reference" tabs={[{id:'basic',navigationLabel:'المحتوى',content:<ContentBasicDataPanel presentation="panel" formId="taxonomy-topic-reference" mode="edit" contentType="article" categories={categories} series={series} values={{title:'مرجع الموضوع الفعلي',slug:'topic-reference',categoryId:17,seriesId:187}} contentEditor={null}/>}]} /><p data-taxonomy-reference-hint className={adminFormHintClassName({textInset:true})}>مرجع المساعدة عند المالك المشترك</p><label className={adminFormLabelClassName({textInset:true})}><span data-admin-form-label-text>مرجع سياق المساعدة</span><span data-taxonomy-reference-label-hint className={adminFormHintClassName({textInset:true})}>مرجع المساعدة داخل Label المشترك</span></label></section> : null}
+      {!taxonomyOnly || !taxonomyEntity || taxonomyEntity==='series' ? <section data-family="consistency-series"><SeriesForm mode={createTaxonomy ? "create" : "edit"} series={createTaxonomy ? undefined : savedTaxonomy('series') ?? { id: 187, name: 'السلسلة الأولى', slug: 'first', category_id: 17, status: 'published', updated_at: '2026-10-16T00:00:00Z' }} categoryOptions={options}/></section> : null}
+      {!taxonomyOnly ? <section data-family="consistency-existing-aligned"><FeaturedProjects config={{ selectionMode: "latest_published", limit: 6, autoplayMs: 5000 }}/></section> : null}
+      {!taxonomyOnly || !taxonomyEntity || taxonomyEntity==='category' ? <section data-family="consistency-category"><CategoryForm mode={createTaxonomy ? "create" : "edit"} category={createTaxonomy ? undefined : savedTaxonomy('category') ?? { id: 17, name: 'السوق العقاري', slug: 'market', parent_id: null, status: 'published', color_token: 'gold', updated_at: '2026-10-16T00:00:00Z' }} parentOptions={options.slice(1)}/></section> : null}
+    </main></QueryClientProvider>;
 }
 
 function FinalVisualFixtures() {
@@ -148,4 +203,4 @@ function App() {
  <FinalVisualFixtures/>
  </main>;
 }
-createRoot(document.getElementById('root')).render(<Feedback>{new URLSearchParams(location.search).get('scope') === 'shared-presentation' ? <SharedPresentationFixtures/> : new URLSearchParams(location.search).get('scope') === 'pixel' ? <PixelStoryFixture/> : new URLSearchParams(location.search).get('scope') === 'consistency' ? <ConsistencyFixtures/> : <App/>}</Feedback>);
+createRoot(document.getElementById('root')).render(<Feedback>{new URLSearchParams(location.search).get('scope') === 'meta-manager' ? <MetaManagerFixture/> : new URLSearchParams(location.search).get('scope') === 'settings-family' ? <SettingsFamilyFixture/> : new URLSearchParams(location.search).get('scope') === 'shared-presentation' ? <SharedPresentationFixtures/> : new URLSearchParams(location.search).get('scope') === 'pixel' ? <PixelStoryFixture/> : new URLSearchParams(location.search).get('scope') === 'consistency' ? <ConsistencyFixtures/> : <App/>}</Feedback>);

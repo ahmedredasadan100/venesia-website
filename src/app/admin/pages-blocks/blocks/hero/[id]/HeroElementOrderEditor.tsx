@@ -8,6 +8,7 @@ import {
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import { AdminActionButton, AdminFormSwitch } from "../../../../../../components/admin/ui";
 import { AdminModuleTabIcon } from "../../../../../../components/admin/ui/AdminModuleTabs";
+import { adminFormHintClassName } from "../../../../../../lib/admin/admin-ui-styles";
 import {
   DEFAULT_HERO_ELEMENT_ORDER,
   HERO_ELEMENT_LABELS_AR,
@@ -62,7 +63,7 @@ function ProjectHeroActionOrderEditor({
         value={JSON.stringify(order)}
       />
       <div data-project-hero-action-cards="">
-        <ModuleEditorRepeaterGrid presentation="premium">
+        <ModuleEditorRepeaterGrid>
           {order.map((key, index) => {
             const label = PROJECT_HERO_ACTION_LABELS_AR[key];
             return (
@@ -75,7 +76,6 @@ function ProjectHeroActionOrderEditor({
                 <ModuleEditorRepeaterCard
                   title={label}
                   icon={<AdminModuleTabIcon name="section" />}
-                  presentation="premium"
                   actions={
                     <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.045] font-en text-[10px] font-semibold text-[#D8B87A]/70">
                       {index + 1}
@@ -148,69 +148,38 @@ export default function HeroElementOrderEditor({
     });
   };
 
+
   return (
-    <div data-hero-element-order-editor="" className="space-y-4">
-      <p className="rounded-2xl border border-white/10 bg-[#05070B]/72 px-4 py-3 text-xs leading-6 text-white/45">
+    <div data-hero-element-order-editor="" className="space-y-5">
+      <p className={adminFormHintClassName({ textInset: true })}>
         حرّك العناصر بالأسهم. العنصر المخفي يحتفظ بمكانه في الترتيب.
       </p>
-      <input
-        type="hidden"
-        name="hero_element_order"
-        value={JSON.stringify(order)}
-      />
-      <ul className="space-y-2">
+      <input type="hidden" name="hero_element_order" value={JSON.stringify(order)} />
+      <ul className="space-y-3">
         {order.map((key, index) => (
-          <li
-            key={key}
-            className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-white/10 bg-[#05070B]/72 p-3"
-          >
-            <span className="inline-flex size-8 items-center justify-center rounded-xl bg-white/[0.045] font-en text-[11px] font-semibold text-[#D8B87A]/70">
-              {index + 1}
-            </span>
-            <span className="min-w-0 text-sm font-medium text-white/80">
-              {HERO_ELEMENT_LABELS_AR[key]}
-            </span>
-            <div
-              className="inline-flex shrink-0 gap-1 rounded-xl border border-white/10 bg-black/20 p-1"
-              role="group"
-              aria-label={`ترتيب ${HERO_ELEMENT_LABELS_AR[key]}`}
+          <li key={key} className="min-w-0">
+            <ModuleEditorRepeaterCard
+              title={HERO_ELEMENT_LABELS_AR[key]}
+              icon={<AdminModuleTabIcon name="section" />}
+              actions={<span className="font-en text-xs text-white/55">{index + 1}</span>}
             >
-              <button
-                type="button"
-                title={index === 0 ? "العنصر في أول الترتيب" : "تحريك لأعلى"}
-                aria-label={
-                  index === 0
-                    ? `${HERO_ELEMENT_LABELS_AR[key]} في أول الترتيب ولا يمكن تحريكه لأعلى`
-                    : `تحريك ${HERO_ELEMENT_LABELS_AR[key]} لأعلى`
-                }
-                disabled={index === 0}
-                onClick={() => move(index, -1)}
-                className="inline-flex h-8 w-10 items-center justify-center rounded-lg text-sm text-white/65 transition enabled:hover:bg-white/[0.05] enabled:hover:text-[#F2D99B] disabled:cursor-not-allowed disabled:opacity-25"
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                title={
-                  index === order.length - 1
-                    ? "العنصر في آخر الترتيب"
-                    : "تحريك لأسفل"
-                }
-                aria-label={
-                  index === order.length - 1
-                    ? `${HERO_ELEMENT_LABELS_AR[key]} في آخر الترتيب ولا يمكن تحريكه لأسفل`
-                    : `تحريك ${HERO_ELEMENT_LABELS_AR[key]} لأسفل`
-                }
-                disabled={index === order.length - 1}
-                onClick={() => move(index, 1)}
-                className="inline-flex h-8 w-10 items-center justify-center rounded-lg text-sm text-white/65 transition enabled:hover:bg-white/[0.05] enabled:hover:text-[#F2D99B] disabled:cursor-not-allowed disabled:opacity-25"
-              >
-                ↓
-              </button>
-            </div>
+              <div className="flex justify-end gap-2" role="group" aria-label={`ترتيب ${HERO_ELEMENT_LABELS_AR[key]}`}>
+                <AdminActionButton size="icon" disabled={index === 0} onClick={() => move(index, -1)}
+                  title={index === 0 ? "العنصر في أول الترتيب" : "تحريك لأعلى"}
+                  aria-label={index === 0 ? `${HERO_ELEMENT_LABELS_AR[key]} في أول الترتيب ولا يمكن تحريكه لأعلى` : `تحريك ${HERO_ELEMENT_LABELS_AR[key]} لأعلى`}>
+                  ↑
+                </AdminActionButton>
+                <AdminActionButton size="icon" disabled={index === order.length - 1} onClick={() => move(index, 1)}
+                  title={index === order.length - 1 ? "العنصر في آخر الترتيب" : "تحريك لأسفل"}
+                  aria-label={index === order.length - 1 ? `${HERO_ELEMENT_LABELS_AR[key]} في آخر الترتيب ولا يمكن تحريكه لأسفل` : `تحريك ${HERO_ELEMENT_LABELS_AR[key]} لأسفل`}>
+                  ↓
+                </AdminActionButton>
+              </div>
+            </ModuleEditorRepeaterCard>
           </li>
         ))}
       </ul>
     </div>
   );
+
 }

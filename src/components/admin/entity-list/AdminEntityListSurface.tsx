@@ -6,6 +6,10 @@ import {
   type ReactNode,
 } from "react";
 import { AdminFloatingLayerProvider } from "./AdminFloatingLayerContext";
+import {
+  ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation,
+  type AdminCollectionPresentation,
+} from "../../../lib/admin/admin-ui-styles";
 
 const PRIMARY_SECTION_MARKER_CLASS = "admin-entity-list-primary-section";
 const SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7";
@@ -74,14 +78,24 @@ export function AdminEntityListPrimarySection({
  */
 export function AdminEntityListTableRegion({
   className = "",
+  presentation: requestedPresentation = "default",
+  edgeMotion = "entry",
   ...props
-}: ComponentPropsWithoutRef<"div">) {
+}: ComponentPropsWithoutRef<"div"> & {
+  /** The region owns the joined frame; child owners retain scroll and layers. */
+  presentation?: AdminCollectionPresentation;
+  /** Entry is the official default; explicit continuous keeps its existing contract. */
+  edgeMotion?: "continuous" | "entry";
+}) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   return (
     <div
       {...props}
-      className={`${PRIMARY_SECTION_MARKER_CLASS} ${TABLE_REGION_LAYOUT_CLASSES} ${className}`.trim()}
+      className={`${PRIMARY_SECTION_MARKER_CLASS} ${presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.collection.frame : TABLE_REGION_LAYOUT_CLASSES} ${className}`.trim()}
       data-admin-entity-list-primary-section=""
       data-admin-entity-list-table-region=""
+      data-admin-entity-list-table-region-presentation={presentation}
+      data-admin-edge-motion={presentation === "cinematic" ? edgeMotion : undefined}
     />
   );
 }

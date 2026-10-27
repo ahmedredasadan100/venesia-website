@@ -467,6 +467,7 @@ export default function UsersManagementClient({
     <>
       <AdminEntityListPageLayout className="pb-10" dir="rtl">
         <AdminPageContextHeader
+          visualPreset="users"
           eyebrow="ADMIN USERS DATA ENGINE"
           title="المستخدمون والصلاحيات"
           description="إدارة حسابات دخول لوحة التحكم. التعطيل هو الإجراء المعتمد بدل الحذف، ويتم إبطال جلسات المستخدم فورًا عند التعطيل أو تغيير بيانات الدخول."

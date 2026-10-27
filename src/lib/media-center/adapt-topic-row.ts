@@ -28,6 +28,10 @@ export function adaptPublicContentToMediaItem(
     project: item.mediaProject || undefined,
     duration: item.mediaDuration || detail?.videoDuration || undefined,
     videoUrl: detail?.videoUrl || undefined,
+    ...(item.contentType === "video" && detail ? {
+      videoProvider: detail.videoProvider,
+      videoStartSeconds: detail.videoStartSeconds,
+    } : {}),
     content: detail?.content,
     galleryImages:
       item.contentType === "gallery" && detail

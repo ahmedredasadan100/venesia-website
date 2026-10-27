@@ -44,6 +44,10 @@ import {
   topicRevisionMatches,
   TopicRevisionConflictError,
 } from "../../../../../lib/admin/content/topic-revision";
+import {
+  isTopicSlugUniqueViolation,
+  TopicSlugConflictError,
+} from "../../../../../lib/admin/content/topic-write-errors";
 
 type FieldErrors = Record<string, string[]>;
 
@@ -146,11 +150,11 @@ export async function saveMediaContentAdapter(
     payload,
   );
   if (!writePayload.ok) {
-    const field = requestedType === "video"
+    const field = writePayload.field ?? (requestedType === "video"
       ? "video_url"
       : requestedType === "gallery"
         ? "gallery_image_url"
-        : "content";
+        : "content");
     return failure(writePayload.message, { [field]: [writePayload.message] });
   }
 
@@ -275,8 +279,13 @@ export async function saveMediaContentAdapter(
             })
             .select("id,slug")
             .single();
+          if (isTopicSlugUniqueViolation(error)) {
+            throw new TopicSlugConflictError(payload.slug, { cause: error });
+          }
           if (error || !data) {
-            throw new Error(error?.message ?? "تعذر إنشاء المحتوى.");
+            throw new Error(error?.message ?? "تعذر إنشاء المحتوى.", {
+              cause: error ?? undefined,
+            });
           }
           return data;
         } else {
@@ -299,7 +308,10 @@ export async function saveMediaContentAdapter(
           const { data, error } = await guardedQuery
             .select("id,slug")
             .maybeSingle();
-          if (error) throw new Error(error.message);
+          if (isTopicSlugUniqueViolation(error)) {
+            throw new TopicSlugConflictError(payload.slug, { cause: error });
+          }
+          if (error) throw new Error(error.message, { cause: error });
           if (!data) throw new TopicRevisionConflictError();
           return data;
         }
@@ -309,6 +321,11 @@ export async function saveMediaContentAdapter(
   } catch (error) {
     if (error instanceof TopicRevisionConflictError) {
       return revisionConflict();
+    }
+    if (error instanceof TopicSlugConflictError) {
+      return failure("هذا الـ Slug مستخدم بالفعل في محتوى آخر.", {
+        slug: ["اختر Slug مختلفًا."],
+      });
     }
     return failure(
       error instanceof MediaReferenceWriteLeaseError

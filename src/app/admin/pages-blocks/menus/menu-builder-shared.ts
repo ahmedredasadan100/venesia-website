@@ -46,17 +46,6 @@ export type FlatMenuItemRow = {
   ancestorLines: boolean[];
 };
 
-export function menuFieldClassName(extra = "") {
-  return [
-    "admin-select min-h-11 rounded-2xl border border-white/10 bg-[#0B0F16] px-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-[#D8B87A]/45 focus:bg-[#111722]",
-    extra,
-  ].join(" ");
-}
-
-export function menuLabelClassName() {
-  return "space-y-2 text-xs font-medium text-white/48";
-}
-
 export function buildMenuTree(items: MenuItem[], parentId: number | null = null): TreeMenuItem[] {
   return items
     .filter((item) => item.parent_id === parentId)

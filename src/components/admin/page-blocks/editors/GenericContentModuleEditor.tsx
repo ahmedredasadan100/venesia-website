@@ -17,7 +17,6 @@ import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-ed
 type GenericContentModuleEditorProps = {
   config: ContentBlockConfig;
   introPresentation?: boolean;
-  presentation?: "default" | "premium";
 };
 
 function formatDefaults(
@@ -34,7 +33,6 @@ function formatDefaults(
 export default function GenericContentModuleEditor({
   config,
   introPresentation = false,
-  presentation = "default",
 }: GenericContentModuleEditorProps) {
   const fields = [
     { field: "eyebrow" as const, label: MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr, name: "eyebrow", value: config.eyebrow ?? "" },
@@ -51,7 +49,6 @@ export default function GenericContentModuleEditor({
             <ModuleEditorField key={item.field} nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label={item.label}
-              presentation={presentation === "premium" ? "premium" : "card"}
               icon={<AdminModuleTabIcon name="content" />}
               showName={`show_${item.field}`}
               boldName={`${item.field}_bold`}
@@ -74,7 +71,6 @@ export default function GenericContentModuleEditor({
         <ModuleEditorField nature="short-description" span={6}>
         <ModuleEditorVisibilityAlignRow
           label="الوصف"
-          presentation={presentation === "premium" ? "premium" : "card"}
           icon={<AdminModuleTabIcon name="content" />}
           showName="show_description"
           boldName="description_bold"

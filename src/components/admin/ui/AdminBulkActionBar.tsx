@@ -1,5 +1,6 @@
 "use client";
 
+import { ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation, ADMIN_DATA_GRID_SELECTION, type AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
 import { useRef, useState } from "react";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { useFormStatus } from "react-dom";
@@ -10,6 +11,8 @@ import type { AdminGridId } from "./useAdminGridSelection";
 type BulkOption = {
   value: string;
   label: string;
+  /** Presentation only; no additional action or confirmation semantics. */
+  tone?: "default" | "danger";
   confirmation?: {
     title: string;
     description: string;
@@ -25,6 +28,7 @@ export type AdminBulkActionRequest<T extends AdminGridId = AdminGridId> = {
 };
 
 type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
+  presentation?: AdminCollectionPresentation;
   selectedIds: T[];
   entityLabel: string;
   action?: (formData: FormData) => void | Promise<void>;
@@ -74,6 +78,7 @@ function AdminBulkActionConfirm({
 }
 
 export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>({
+  presentation: requestedPresentation = "default",
   selectedIds,
   entityLabel,
   action,
@@ -90,6 +95,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   additionalControls,
   actionValue,
 }: AdminBulkActionBarProps<T>) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const [selectedAction, setSelectedAction] = useState(options[0]?.value ?? "");
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const confirmedSubmitRef = useRef(false);
@@ -99,6 +105,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   const resolvedOption = options.find(
     (option) => option.value === resolvedAction,
   );
+  const dangerPresentation = resolvedOption?.tone === "danger" || resolvedAction === "delete";
   const resolvedConfirmation =
     resolvedOption?.confirmation ??
     (resolvedAction === "delete"
@@ -153,24 +160,28 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
       onSubmit={handleSubmit}
       aria-busy={isBusy || undefined}
       data-admin-bulk-action-bar=""
-      className="flex flex-col gap-4 rounded-[18px] border border-[#D8B87A]/14 bg-[#080B10]/92 px-4 py-4 shadow-[0_18px_70px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.035)] md:flex-row md:items-center md:justify-between"
+      data-admin-bulk-presentation={presentation}
+      className={`flex flex-col gap-3 rounded-[16px] border px-4 py-3.5 md:flex-row md:items-center md:justify-between ${ADMIN_DATA_GRID_SELECTION.bulk}`}
     >
       {Object.entries(hiddenFields ?? {}).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       <input type="hidden" name={actionFieldName} value={resolvedAction} />
 
-      <div className="text-sm font-bold text-white/72">
-        تم تحديد <span className="font-en text-[#D8B87A]">{selectedIds.length}</span> {entityLabel}
+      <div className={ADMIN_DATA_GRID_SELECTION.bulkSummary}>
+        <span>تم تحديد</span>
+        <span data-admin-bulk-selected-count="" className={ADMIN_DATA_GRID_SELECTION.bulkCount}>{selectedIds.length}</span>
+        <span>{entityLabel}</span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className={ADMIN_DATA_GRID_SELECTION.bulkControls}>
         {selectedIds.map((id) => (
           <input key={String(id)} type="hidden" name={idsFieldName} value={String(id)} />
         ))}
 
         {actionControl ?? (
           <AdminListboxSelect
+            presentation={presentation}
             id={formId ? `${formId}-bulk-action` : undefined}
             value={selectedAction}
             onChange={setSelectedAction}
@@ -186,7 +197,8 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           ref={submitRef}
           type="submit"
           disabled={isBusy}
-          className="h-11 cursor-pointer rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 text-sm font-bold text-[#06101C] transition hover:bg-[#e4c88d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55"
+          data-admin-bulk-action-tone={dangerPresentation ? "danger" : "default"}
+          className={`h-11 cursor-pointer rounded-xl border px-5 text-sm font-bold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--admin-grid-focus,#78BDFA)] disabled:cursor-not-allowed disabled:opacity-55 ${dangerPresentation ? ADMIN_DATA_GRID_SELECTION.bulkDanger : ADMIN_CINEMATIC_GOLD_V1.action.primary}`}
         >
           {isBusy ? "جار التنفيذ..." : "تنفيذ"}
         </button>
@@ -195,7 +207,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
           type="button"
           onClick={onClearSelection}
           disabled={isBusy}
-          className="h-11 cursor-pointer rounded-2xl border border-transparent px-4 text-sm font-semibold text-white/50 transition hover:text-white/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-55"
+          className={`h-11 cursor-pointer rounded-xl border px-4 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--admin-grid-focus,#78BDFA)] disabled:cursor-not-allowed disabled:opacity-55 ${ADMIN_DATA_GRID_SELECTION.bulkClear}`}
         >
           إلغاء التحديد
         </button>

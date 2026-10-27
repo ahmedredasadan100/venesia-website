@@ -32,6 +32,10 @@ type ContentActionOutcome =
 type ContentHarnessOptions = {
   actionOutcomes?: ContentActionOutcome[];
   deferAction?: boolean;
+  premiumSwitches?: boolean;
+  faqSwitches?: boolean;
+  markdownVariant?: "default" | "compact";
+  markdownPresentation?: "default" | "panel";
   seedDraft?: {
     content: string;
     baselineRevision: string | null;
@@ -41,6 +45,7 @@ type ContentHarnessOptions = {
 type ContentEditorModelSnapshot = {
   value: Record<string, string>;
   requestPreset: (presetKey: string) => boolean;
+  setField: (field: string, value: string) => void;
 };
 
 type RouterEvent = {
@@ -119,6 +124,9 @@ import TopicMarkdownEditor from "@topic-markdown-editor";
 import SeoPanel from "@seo-panel";
 import MediaVideoFields from "@media-video-fields";
 import AdminMediaGalleryField from "@admin-media-gallery-field";
+import AdminFormSwitch from "@admin-form-switch";
+import ContentDisplaySettings from "@content-display-settings";
+import FaqEditor from "@faq-editor";
 import { createTopicDraft } from "@topic-revision";
 import { useQueryClient } from "@tanstack/react-query";
 import AdminEntityListQueryProvider from "@admin-query-provider";
@@ -276,7 +284,8 @@ function ModelTextArea({ id, name, field, model }) {
   });
 }
 
-function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
+function ContentHarness({ actionOutcomes = ["success"], deferAction = false, premiumSwitches = false, faqSwitches = false, markdownVariant = "compact", markdownPresentation = "default" }) {
+  const [controlledSwitch, setControlledSwitch] = React.useState(false);
   const action = React.useCallback(
     async (previousState, formData) => {
       qa.actionCalls += 1;
@@ -368,20 +377,37 @@ function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
               field: "excerpt",
               model,
             }),
+            premiumSwitches ? React.createElement(React.Fragment, null,
+              React.createElement(ContentDisplaySettings, { columns: 3, presentation: "premium" }),
+              React.createElement(AdminFormSwitch, { presentation: "premium", name: "qa_controlled_switch", label: "Controlled premium", checked: controlledSwitch, onChange: (event) => setControlledSwitch(event.currentTarget.checked), value: "true", uncheckedValue: "false" }),
+              React.createElement(AdminFormSwitch, { presentation: "premium", name: "qa_uncontrolled_switch", label: "Uncontrolled premium", defaultChecked: true, value: "1", uncheckedValue: "0" }),
+            ) : null,
+            faqSwitches ? React.createElement(FaqEditor, { defaultFaq: [{ question: "QA FAQ question", answer: "QA FAQ answer" }] }) : null,
             React.createElement(TopicMarkdownEditor, {
               defaultValue: INITIAL_CONTENT_MODEL.content,
               value: model.value.content,
               onValueChange: (value) => model.setField("content", value),
-              variant: "compact",
+              variant: markdownVariant,
+              presentation: markdownPresentation,
               draftIdentity: CONTENT_DRAFT_IDENTITY,
               baselineRevision: null,
             }),
-            React.createElement(MediaVideoFields, {
+            React.createElement(RuntimeProbe),
+          ),
+        },
+        {
+          id: "video",
+          navigationLabel: "Video",
+          content: React.createElement(MediaVideoFields, {
               defaultVideoUrl: "https://www.youtube.com/watch?v=qa",
               defaultDuration: "1:30",
               defaultThumbnail: "",
-            }),
-            React.createElement(AdminMediaGalleryField, {
+          }),
+        },
+        {
+          id: "gallery",
+          navigationLabel: "Gallery",
+          content: React.createElement(AdminMediaGalleryField, {
               valueMode: "items",
               name: "gallery_image_url",
               altName: "gallery_image_alt",
@@ -396,9 +422,7 @@ function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
               ],
               focusTargetId: "gallery_image_url",
               altFocusTargetId: "gallery_image_alt",
-            }),
-            React.createElement(RuntimeProbe),
-          ),
+          }),
         },
         {
           id: "seo",
@@ -434,7 +458,7 @@ function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
         },
       ];
     },
-    [],
+    [controlledSwitch, premiumSwitches, faqSwitches, markdownVariant, markdownPresentation],
   );
 
   return React.createElement(
@@ -730,6 +754,7 @@ export default function Link({ href, children, ...props }) {
 
 const imageMockSource = String.raw`
 import * as React from "react";
+export { getImageProps } from "next/dist/shared/lib/image-external";
 export default function Image({ fill, priority, loader, unoptimized, ...props }) {
   return React.createElement("img", props);
 }
@@ -760,10 +785,21 @@ export function AdminMediaPickerModal({ open, onClose, onSelect }) {
 export default AdminMediaPickerModal;
 `;
 
+// Same public named exports as the FAQ's UI barrel, bound to actual owners.
+// The isolated browser fixture must not eagerly import unrelated server Actions.
+const faqUiBindingSource = String.raw`
+export {default as AdminActionButton} from "@faq-action-button";
+export {default as AdminCard} from "@faq-card";
+export {default as AdminConfirmDialog} from "@faq-confirm-dialog";
+export {AdminFormControlHeader,AdminFormField} from "@faq-form-fields";
+export {AdminFormGrid} from "@admin-form-runtime";
+`;
+
 async function compileHarness(rootDir: string, tempDir: string) {
   const navigationMockPath = path.join(tempDir, "next-navigation.mock.js");
   const linkMockPath = path.join(tempDir, "next-link.mock.js");
   const imageMockPath = path.join(tempDir, "next-image.mock.js");
+  const faqUiBindingPath = path.join(tempDir, "faq-ui.bindings.js");
   const mediaPickerMockPath = path.join(
     tempDir,
     "admin-media-picker-modal.mock.js",
@@ -773,6 +809,7 @@ async function compileHarness(rootDir: string, tempDir: string) {
     writeFile(linkMockPath, linkMockSource, "utf8"),
     writeFile(imageMockPath, imageMockSource, "utf8"),
     writeFile(mediaPickerMockPath, mediaPickerMockSource, "utf8"),
+    writeFile(faqUiBindingPath, faqUiBindingSource, "utf8"),
   ]);
 
   const { loadBindings } = require("next/dist/build/swc") as {
@@ -822,6 +859,13 @@ async function compileHarness(rootDir: string, tempDir: string) {
           rootDir,
           "src/components/admin/ui/AdminFormRuntime.tsx",
         ),
+        "@admin-form-switch": path.join(rootDir, "src/components/admin/ui/AdminFormSwitch.tsx"),
+        "@content-display-settings": path.join(rootDir, "src/components/admin/content/editors/ContentDisplaySettings.tsx"),
+        "@faq-editor": path.join(rootDir, "src/components/admin/content/editors/article/FaqEditor.tsx"),
+        "@faq-action-button": path.join(rootDir, "src/components/admin/ui/AdminActionButton.tsx"),
+        "@faq-card": path.join(rootDir, "src/components/admin/ui/AdminCard.tsx"),
+        "@faq-confirm-dialog": path.join(rootDir, "src/components/admin/ui/AdminConfirmDialog.tsx"),
+        "@faq-form-fields": path.join(rootDir, "src/components/admin/ui/AdminForm.tsx"),
         "@topic-content-type-control": path.join(
           rootDir,
           "src/components/admin/content/editors/TopicContentTypeControl.tsx",
@@ -854,6 +898,7 @@ async function compileHarness(rootDir: string, tempDir: string) {
           rootDir,
           "src/components/admin/ui/AdminForm.tsx",
         ),
+        "../../../ui$": faqUiBindingPath,
         "next/navigation": navigationMockPath,
         "next/link": linkMockPath,
         "next/image": imageMockPath,
@@ -1061,7 +1106,10 @@ async function openContentHarness(
     state: "attached",
     timeout: 10_000,
   });
-  await page.locator('[data-admin-rich-text-scope] [contenteditable="true"]').waitFor({
+  // This fixture mounts the real editor with baselineRevision=null. A stale
+  // draft keeps its current model clean and read-only until recovery is chosen.
+  const draftConflicted = Boolean(options.seedDraft && options.seedDraft.baselineRevision !== null);
+  await page.locator(`[data-admin-rich-text-scope] [contenteditable="${draftConflicted ? "false" : "true"}"]`).waitFor({
     state: "attached",
     timeout: 10_000,
   });
@@ -1075,7 +1123,7 @@ async function openContentHarness(
         .querySelector("#qa-content-form")
         ?.getAttribute("data-admin-form-dirty") === expectedDirty
     );
-  }, options.seedDraft ? "true" : "false");
+  }, options.seedDraft && !draftConflicted ? "true" : "false");
   return { page, allowedFailedRequestUrls };
 }
 
@@ -1339,6 +1387,7 @@ let server: Server | null = null;
 
 try {
   const webpackWarnings = await compileHarness(rootDir, tempDir);
+  if (webpackWarnings.length) console.error("Guarded-navigation fixture Webpack warnings:", JSON.stringify(webpackWarnings));
   const harnessServer = await startHarnessServer(
     path.join(tempDir, "admin-form-navigation.bundle.js"),
   );
@@ -1884,7 +1933,8 @@ try {
       '[data-admin-media-image-field="video_thumbnail"]',
     );
     check(
-      "thumbnail errors focus the actionable shared Media picker control with valid ARIA",
+      "thumbnail errors open Video and focus the actionable shared Media picker control with valid ARIA",
+      (await page.getByRole("tab", { name: "Video", exact: true }).getAttribute("aria-selected")) === "true" &&
       (await thumbnailControl.evaluate((element) => element.tagName)) ===
         "BUTTON" &&
         (await thumbnailControl.getAttribute("role")) === null &&
@@ -2111,7 +2161,8 @@ try {
     await page.waitForFunction(() => document.activeElement?.id === "video_url");
     const videoErrorSubmission = await getLastSubmission(page);
     check(
-      "video field errors render inline with ARIA, focus the first visible field, and preserve canonical values",
+      "video field errors open Video, render inline with ARIA, focus the first visible field, and preserve canonical values",
+      (await page.getByRole("tab", { name: "Video", exact: true }).getAttribute("aria-selected")) === "true" &&
       (await page.locator("#video_url-error").textContent()) ===
           "Video URL is invalid." &&
         (await page.locator("#video_duration-error").textContent()) ===
@@ -2162,11 +2213,13 @@ try {
       { actionOutcomes: ["gallery-error", "success"] },
       browserIssues,
     );
+    await page.getByRole("tab", { name: "Gallery", exact: true }).click();
     await page
       .locator('[data-admin-media-gallery-index="0"] [data-admin-media-gallery-action="replace"]')
       .click();
     await page.locator("[data-admin-media-picker-qa-confirm]").click();
     await waitForRuntime(page, { dirty: "true" });
+    await page.getByRole("tab", { name: "Basic", exact: true }).click();
     await page.locator('[data-admin-form-action="save"]').click();
     await waitForRuntime(page, {
       dirty: "true",
@@ -2178,6 +2231,7 @@ try {
     );
     const galleryErrorSubmission = await getLastSubmission(page);
     const galleryErrorEvidence = {
+      owningTabSelected: (await page.getByRole("tab", { name: "Gallery", exact: true }).getAttribute("aria-selected")) === "true",
       urlError:
         (await page.locator("#gallery_image_url-error").textContent()) ===
         "Gallery image URL is required.",
@@ -2279,6 +2333,181 @@ try {
         (await page.getByText("تم استرجاع آخر مسودة محفوظة محليًا لهذا المقال.").count()) ===
           1 &&
         (await getActionCalls(page)) === 0,
+    );
+    await closePage(page);
+  }
+
+  {
+    const { page } = await openContentHarness(browser, harnessUrl,
+      { premiumSwitches: true, actionOutcomes: ["video-error", "success"], deferAction: true }, browserIssues);
+    const controlled = page.locator('input[name="qa_controlled_switch"][type="checkbox"]');
+    const uncontrolled = page.locator('input[name="qa_uncontrolled_switch"][type="checkbox"]');
+    const display = page.locator('[data-content-display-settings]');
+    check("each independent display Boolean delegates its own canonical Premium Card", await display.locator('[data-admin-form-switch-surface="premium"]').count() === 7 && await display.locator('input[type="checkbox"][role="switch"]').count() === 7 && await display.evaluate((element) => {
+      const labels = [...element.querySelectorAll('[data-admin-form-switch-surface="premium"]')];
+      return new Set(labels.map((label) => label.parentElement)).size === labels.length && labels.every((label) => label.parentElement?.tagName === "SECTION" && label.parentElement.children.length === 1);
+    }));
+    await controlled.focus();
+    await controlled.press("Space");
+    check("controlled premium switch preserves native Space, focus and checked projection", await controlled.isChecked() && await controlled.evaluate((element) => document.activeElement === element) && await page.evaluate(() => JSON.stringify(new FormData(document.querySelector<HTMLFormElement>('#qa-content-form')!).getAll("qa_controlled_switch"))) === '["false","true"]');
+    await uncontrolled.focus();
+    await uncontrolled.press("Space");
+    check("uncontrolled premium switch preserves unchecked ordering and focused native checkbox", !await uncontrolled.isChecked() && await uncontrolled.evaluate((element) => document.activeElement === element) && await page.evaluate(() => JSON.stringify(new FormData(document.querySelector<HTMLFormElement>('#qa-content-form')!).getAll("qa_uncontrolled_switch"))) === '["0"]');
+    const titleSwitch = display.locator('input[name="show_title_on_page"]');
+    await titleSwitch.focus();
+    await titleSwitch.press("Space");
+    await waitForRuntime(page, { dirty: "true" });
+    check("display opt-in retains unchecked omission and never submits on Space", !await titleSwitch.isChecked() && !(await getLiveFormValues(page))?.show_title_on_page && await getActionCalls(page) === 0);
+    await page.locator('[data-admin-form-action="save"]').click();
+    await waitForRuntime(page, { pending: "true" });
+    check("Runtime pending disables premium controlled, uncontrolled and display inputs without resetting values", await controlled.isDisabled() && await uncontrolled.isDisabled() && await titleSwitch.isDisabled() && await controlled.isChecked() && !await uncontrolled.isChecked() && !await titleSwitch.isChecked());
+    await page.evaluate(() => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.releaseAction?.());
+    await waitForRuntime(page, { dirty: "true", pending: "false", status: "error" });
+    const failed = await getLastSubmission(page);
+    check("failed native action preserves premium values and original checked/unchecked payload", !await controlled.isDisabled() && await controlled.isChecked() && !await uncontrolled.isChecked() && !await titleSwitch.isChecked() && failed.qa_controlled_switch === "true" && failed.qa_uncontrolled_switch === "0" && !Object.hasOwn(failed, "show_title_on_page") && await getActionCalls(page) === 1);
+    await page.locator('[data-admin-form-action="save"]').click();
+    await waitForRuntime(page, { dirty: "false", pending: "false", status: "success" });
+    check("premium retry succeeds once with the same native payload and controlled state", await getActionCalls(page) === 2 && (await getLastSubmission(page)).qa_controlled_switch === "true" && (await getLastSubmission(page)).qa_uncontrolled_switch === "0" && await controlled.isChecked() && !await uncontrolled.isChecked());
+    await closePage(page);
+  }
+
+  for (const markdownCase of [
+    { label: "default", variant: "default", presentation: "default" },
+    { label: "compact", variant: "compact", presentation: "default" },
+    { label: "panel", variant: "compact", presentation: "panel" },
+    { label: "panel-default", variant: "default", presentation: "panel" },
+  ] as const) {
+    const { label: markdownLabel, variant: markdownVariant, presentation: markdownPresentation } = markdownCase;
+    const { page } = await openContentHarness(browser, harnessUrl, { actionOutcomes: ["success"], markdownVariant, markdownPresentation, deferAction: markdownPresentation === "panel" }, browserIssues);
+    const markdown = page.locator('[data-topic-content-editor]');
+    check(`${markdownLabel} Markdown keeps its intended title and six counters`, await markdown.getAttribute("data-topic-content-editor") === markdownVariant && await markdown.locator('h3').filter({ hasText: "المحتوى" }).count() === (markdownVariant === "default" && markdownPresentation !== "panel" ? 1 : 0) && await markdown.locator('[data-topic-editor-stats] [data-topic-stat]').count() === 6);
+    if (markdownPresentation === "panel") {
+      const headerEvidence = await markdown.locator('[data-admin-tab-section-heading="content-body"]').evaluate(header => ({ presentation: header.getAttribute("data-admin-tab-section-presentation"), parentTag: header.parentElement?.tagName, parentClass: header.parentElement?.className, grandparentId: header.parentElement?.parentElement?.id, heading: header.querySelector('[role="heading"][aria-level="2"]')?.textContent, counters: header.querySelectorAll('[data-admin-tab-section-summary="content-body"] [data-topic-stat]').length }));
+      console.log(`INFO ${markdownLabel} Markdown canonical Header DOM: ${JSON.stringify(headerEvidence)}`);
+      check("panel Markdown owns one shared Premium Header with the six-counter summary inside its one Premium content Card", await markdown.getAttribute("data-topic-content-presentation") === "panel" && await markdown.locator('[data-admin-tab-section-heading="content-body"][data-admin-tab-section-presentation="premium"]').count() === 1 && await markdown.locator('[data-admin-tab-section-summary="content-body"] [data-topic-stat]').count() === 6 && headerEvidence.parentTag === "SECTION" && headerEvidence.grandparentId === "topic-content-editor" && headerEvidence.heading === "المحتوى" && await markdown.locator('[contenteditable="true"]').count() === 1 && await markdown.locator('input[type="hidden"][name="content"]').count() === 1);
+    }
+    const content = "## Heading\n\nOne two three.\n\n### Detail\n\n[Inside](/topics/example)";
+    await page.evaluate((value) => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.contentModel?.setField("content", value), content);
+    await waitForContentModelValue(page, { content });
+    await page.waitForFunction(() => document.querySelector('[data-topic-stat="H2"] p')?.textContent === "1");
+    const readStats = () => page.locator('[data-topic-editor-stats] [data-topic-stat]').evaluateAll((elements) => Object.fromEntries(elements.map((element) => [element.getAttribute("data-topic-stat"), element.querySelector("p")?.textContent])));
+    check(`${markdownLabel}: all six existing Markdown statistics reflect the current controlled content model`, JSON.stringify(await readStats()) === JSON.stringify({ "كلمة": "4", "فقرة": "4", H2: "1", H3: "1", "قراءة": "1 د", "روابط داخلية": "1" }) && (await getLiveFormValues(page))?.content === content && await getActionCalls(page) === 0);
+    await page.evaluate(() => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.contentModel?.setField("content", ""));
+    await waitForContentModelValue(page, { content: "" });
+    await page.waitForFunction(() => document.querySelector('[data-topic-stat="H2"] p')?.textContent === "0");
+    check(`${markdownLabel}: clearing the current model resets every existing statistic without a stale fallback or save`, JSON.stringify(await readStats()) === JSON.stringify({ "كلمة": "0", "فقرة": "0", H2: "0", H3: "0", "قراءة": "0 د", "روابط داخلية": "0" }) && (await getLiveFormValues(page))?.content === "" && await getActionCalls(page) === 0);
+    await page.evaluate(() => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.contentModel?.setField("content", "Alpha beta"));
+    await waitForContentModelValue(page, { content: "Alpha beta" });
+    const editor = markdown.locator('#content-editor');
+    await page.waitForFunction(() => document.querySelector('#content-editor')?.textContent === "Alpha beta");
+    await editor.evaluate((element) => {
+      element.focus();
+      const text = element.querySelector('p,h1,h2,h3')?.firstChild;
+      if (!text) throw new Error("Actual rich editor text must exist before selecting it.");
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 5);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    await page.waitForFunction(() => window.getSelection()?.toString() === "Alpha");
+    await markdown.getByRole('button', { name: "تنسيق عريض", exact: true }).click();
+    await waitForContentModelValue(page, { content: "**Alpha** beta" });
+    check(`${markdownLabel}: canonical toolbar preserves selected text, editor focus and native Markdown projection`, await editor.locator('strong').textContent() === "Alpha" && await editor.evaluate((element) => element.contains(document.activeElement) && window.getSelection()?.toString() === "Alpha") && (await getLiveFormValues(page))?.content === "**Alpha** beta" && await page.locator('input[type="hidden"][name="content"]').inputValue() === "**Alpha** beta" && await getActionCalls(page) === 0);
+    if (markdownPresentation === "panel") {
+      await page.locator('[data-admin-form-action="save"]').click();
+      await waitForRuntime(page, { pending: "true" });
+      check("panel Markdown keeps the shared pending fieldset and submits the current native projection once", await page.locator('[data-admin-form-action="save"]').isDisabled() && await page.locator('input[type="hidden"][name="content"]').isDisabled() && (await getLastSubmission(page)).content === "**Alpha** beta" && await getActionCalls(page) === 1);
+      await page.evaluate(() => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.releaseAction?.());
+      await waitForRuntime(page, { dirty: "false", pending: "false", status: "success" });
+      check("panel Markdown retains its controlled content and six summary counters after the shared save completes", (await getLiveFormValues(page))?.content === "**Alpha** beta" && await markdown.locator('[data-admin-tab-section-summary="content-body"] [data-topic-stat]').count() === 6 && await getActionCalls(page) === 1);
+    }
+    await closePage(page);
+  }
+
+  {
+    const { page } = await openContentHarness(browser, harnessUrl,
+      { faqSwitches: true, actionOutcomes: ["video-error", "success"], deferAction: true }, browserIssues);
+    const faq = page.locator('[data-topic-faq-editor]');
+    const sectionSwitch = faq.locator('input[name="show_faq_on_page"][type="checkbox"]');
+    const titleSwitch = faq.locator('input[name="show_faq_title_on_page"][type="checkbox"]');
+    const preview = faq.locator('[data-topic-faq-preview]');
+    check("actual FAQ retains two checked native controls with one Premium Card per setting", await faq.locator('[data-topic-faq-settings] [data-admin-form-switch-surface="premium"]').count() === 2 && await sectionSwitch.isChecked() && await titleSwitch.isChecked() && await faq.locator('[data-topic-faq-settings]').evaluate((element) => {
+      const labels = [...element.querySelectorAll('[data-admin-form-switch-surface="premium"]')];
+      return new Set(labels.map((label) => label.parentElement)).size === 2 && labels.every((label) => label.parentElement?.tagName === "SECTION" && label.parentElement.children.length === 1);
+    }));
+    await sectionSwitch.focus();
+    await sectionSwitch.press("Space");
+    await waitForRuntime(page, { dirty: "true", pending: "false" });
+    const hiddenSection = await getLiveFormValues(page);
+    check("FAQ section Space invokes its controlled preview callback, retains focus and omits unchecked payload", !await sectionSwitch.isChecked() && await sectionSwitch.evaluate((element) => document.activeElement === element) && await preview.getByText("قسم الأسئلة الشائعة مخفي من الصفحة.", { exact: true }).isVisible() && !Object.hasOwn(hiddenSection!, "show_faq_on_page") && hiddenSection?.show_faq_title_on_page === "on" && await getActionCalls(page) === 0);
+    await sectionSwitch.press("Space");
+    await titleSwitch.focus();
+    await titleSwitch.press("Space");
+    const hiddenTitle = await getLiveFormValues(page);
+    check("FAQ title Space invokes its controlled preview callback and preserves independent section visibility", await sectionSwitch.isChecked() && !await titleSwitch.isChecked() && await titleSwitch.evaluate((element) => document.activeElement === element) && await preview.getByText("الأسئلة الشائعة", { exact: true }).count() === 0 && await preview.getByText("QA FAQ question", { exact: true }).isVisible() && hiddenTitle?.show_faq_on_page === "on" && !Object.hasOwn(hiddenTitle!, "show_faq_title_on_page") && hiddenTitle?.faq_question === "QA FAQ question" && hiddenTitle?.faq_answer === "QA FAQ answer" && await getActionCalls(page) === 0);
+    await page.locator('[data-admin-form-action="save"]').click();
+    await waitForRuntime(page, { pending: "true" });
+    check("FAQ premium controls obey Runtime pending disable while keeping controlled values", await sectionSwitch.isDisabled() && await titleSwitch.isDisabled() && await sectionSwitch.isChecked() && !await titleSwitch.isChecked());
+    await page.evaluate(() => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.releaseAction?.());
+    await waitForRuntime(page, { dirty: "true", pending: "false", status: "error" });
+    const failedFaq = await getLastSubmission(page);
+    check("FAQ failure retains native visibility payload and authored question/answer for retry", !await sectionSwitch.isDisabled() && !await titleSwitch.isDisabled() && await sectionSwitch.isChecked() && !await titleSwitch.isChecked() && failedFaq.show_faq_on_page === "on" && !Object.hasOwn(failedFaq, "show_faq_title_on_page") && failedFaq.faq_question === "QA FAQ question" && failedFaq.faq_answer === "QA FAQ answer" && await getActionCalls(page) === 1);
+    await page.locator('[data-admin-form-action="save"]').click();
+    await waitForRuntime(page, { dirty: "false", pending: "false", status: "success" });
+    const savedFaq = await getLastSubmission(page);
+    check("FAQ successful retry submits its unchanged controlled contract exactly once more", await getActionCalls(page) === 2 && savedFaq.show_faq_on_page === "on" && !Object.hasOwn(savedFaq, "show_faq_title_on_page") && savedFaq.faq_question === "QA FAQ question" && savedFaq.faq_answer === "QA FAQ answer" && await sectionSwitch.isChecked() && !await titleSwitch.isChecked());
+    await closePage(page);
+  }
+
+  for (const recoveryCase of [
+    { recovery: "restore", presentation: "default" },
+    { recovery: "discard", presentation: "default" },
+    { recovery: "restore", presentation: "panel" },
+    { recovery: "discard", presentation: "panel" },
+  ] as const) {
+    const { recovery, presentation: markdownPresentation } = recoveryCase;
+    const staleDraft = "# Conflicting local draft\n\nContent from an older server revision.";
+    const { page } = await openContentHarness(
+      browser,
+      harnessUrl,
+      {
+        actionOutcomes: ["success"],
+        markdownPresentation,
+        seedDraft: { content: staleDraft, baselineRevision: "2000-01-01T00:00:00.000Z" },
+      },
+      browserIssues,
+    );
+    await page.locator("[data-topic-draft-conflict]").waitFor();
+    await waitForRuntime(page, { dirty: "false", pending: "false" });
+    const originalModel = await getContentModelValue(page);
+    const originalForm = await getLiveFormValues(page);
+    assert.ok(originalModel && originalForm, "The actual content model and native form must be mounted.");
+    const control = page.locator(`[data-topic-draft-${recovery}]`);
+    check(
+      `${markdownPresentation}/${recovery} conflict action keeps its canonical non-submitting button and protects the current model before selection`,
+      await control.evaluate((element) => element.tagName) === "BUTTON" &&
+        await control.getAttribute("type") === "button" &&
+        await page.locator("#content-editor").getAttribute("contenteditable") === "false" &&
+        originalModel?.content !== staleDraft && originalForm.content === originalModel?.content &&
+        await getActionCalls(page) === 0,
+    );
+    await control.focus();
+    await control.press("Enter");
+    await page.locator("[data-topic-draft-conflict]").waitFor({ state: "hidden" });
+    const expectedContent = recovery === "restore" ? staleDraft : originalModel?.content;
+    await waitForContentModelValue(page, { content: expectedContent });
+    await waitForRuntime(page, { dirty: recovery === "restore" ? "true" : "false", pending: "false" });
+    await page.waitForFunction(() => document.querySelector("#content-editor")?.getAttribute("contenteditable") === "true");
+    const recoveredForm = await getLiveFormValues(page);
+    check(
+      `${markdownPresentation}/${recovery} conflict action preserves native content, dirty state and editable recovery without submitting`,
+      recoveredForm?.content === expectedContent &&
+        await page.locator('input[type="hidden"][name="content"]').inputValue() === expectedContent &&
+        await getActionCalls(page) === 0 &&
+        await page.getByText("تم استرجاع آخر مسودة محفوظة محليًا لهذا المقال.").count() === (recovery === "restore" ? 1 : 0),
     );
     await closePage(page);
   }

@@ -65,3 +65,34 @@ verification contract in `docs/QA_RELEASE_CLOSURE.md` Section 3.2.2 for failure
 classification and correction of proven stale expectations. Do not weaken
 assertions or defer affected maintenance to release. Existing ownership,
 contracts, Stop Conditions, authorizations, and batch-gate timing remain intact.
+
+## Continuous owner, consumer, and capability documentation
+
+Every task that develops, fixes, unifies, adopts, or changes the system or its
+presentation MUST maintain the affected scope of
+`docs/VENESIA_ADMIN_SYSTEM_REGISTRY.md`, even when the Owner does not explicitly
+request documentation. Read the affected entries before work, record and classify
+discoveries during work, and update current adoption, preserved/lost capabilities,
+evidence, open gaps, approval status, and a brief previous-to-current history
+before delivery. Documentation completion is a delivery condition.
+
+Follow the authoritative workflow in `docs/AI_WORKING_RULES.md` Section 10.1.3.
+Existing Adoption Manifests and owner contracts remain executable authority;
+update them when their contract or actual adoption changes. Do not create a
+parallel registry, repeat a system-wide inventory or tests for documentation
+alone, erase historical evidence, infer adoption without proof, or treat an
+out-of-scope discovery as authority to change Product or Production.
+
+For every requested component, presentation, or capability generalization,
+apply **Adoption Completeness Before Delivery** in
+`docs/AI_WORKING_RULES.md` Section 10.1.4 automatically. Derive the actual
+consumer inventory from source and existing manifests before implementation,
+then reconcile it with final applicable capabilities, presentation, legitimate
+exceptions, evidence and open gaps. Unproven consumers remain Pending; shared
+component use or Source Proof alone cannot establish complete presentation
+adoption. Do not report a generalization complete while an applicable consumer
+is unresolved or unclassified.
+
+The same Section 10.1.4 governs the approved reference, per-element
+Required/Optional/Not Applicable dispositions, scoped completion claims, and
+RCA with regression protection after an Owner Review gap.

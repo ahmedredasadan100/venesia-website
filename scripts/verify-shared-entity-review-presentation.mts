@@ -20,6 +20,7 @@ require.extensions[".ts"] = (module, filename) => {
       moduleResolution: ts.ModuleResolutionKind.Node10,
       target: ts.ScriptTarget.ES2022,
       esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
     },
     fileName: filename,
   }).outputText;
@@ -28,6 +29,7 @@ require.extensions[".ts"] = (module, filename) => {
     filename,
   );
 };
+require.extensions[".tsx"] = require.extensions[".ts"];
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
@@ -46,6 +48,8 @@ const moduleTabs = read("src/components/admin/ui/AdminModuleTabs.tsx");
 const contentPublishing = read(
   "src/components/admin/content/editors/ContentPublishingOptions.tsx",
 );
+const mediaFormPath = "src/components/admin/content/editors/media/MediaContentForm.tsx";
+const mediaForm = read(mediaFormPath);
 const {
   assessProjectEntryPayload,
   createEmptyProjectEntry,
@@ -71,12 +75,62 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
+function hasMediaReviewPanel(input: string) {
+  const tree = ts.createSourceFile(mediaFormPath, input, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const nodes: ts.Node[] = [];
+  const visit = (node: ts.Node) => { nodes.push(node); ts.forEachChild(node, visit); };
+  visit(tree);
+  const unwrap = (node: ts.Expression): ts.Expression => ts.isParenthesizedExpression(node) || ts.isAsExpression(node) ? unwrap(node.expression) : node;
+  const attribute = (node: ts.JsxOpeningLikeElement, name: string) => {
+    const value = node.attributes.properties.find((property): property is ts.JsxAttribute => ts.isJsxAttribute(property) && property.name.getText(tree) === name)?.initializer;
+    return value && (ts.isJsxExpression(value) ? value.expression : value);
+  };
+  const staticValue = (node: ts.Expression | undefined, expected: string | undefined) => {
+    if (!node) return false;
+    node = unwrap(node);
+    return expected === undefined ? ts.isIdentifier(node) && node.text === "undefined" : ts.isStringLiteral(node) && node.text === expected;
+  };
+  const imports = new Map<string, string>();
+  for (const node of tree.statements) {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.importClause?.name) {
+      imports.set(node.importClause.name.text, resolve(dirname(resolve(ROOT, mediaFormPath)), `${node.moduleSpecifier.text}.tsx`));
+    }
+  }
+  const owners = [
+    ["ContentReviewPanel", "src/components/admin/content-workflow/ContentReviewPanel.tsx"],
+    ["ContentPublishingOptions", "src/components/admin/content/editors/ContentPublishingOptions.tsx"],
+  ];
+  for (const [owner, path] of owners) {
+    const calls = nodes.filter((node): node is ts.JsxOpeningLikeElement => (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(tree) === owner);
+    if (imports.get(owner!) !== resolve(ROOT, path!) || calls.length !== 1 || calls[0]!.attributes.properties.some(ts.isJsxSpreadAttribute) || !staticValue(attribute(calls[0]!, "presentation"), "panel")) return false;
+  }
+  const publishTabs = nodes.filter(ts.isObjectLiteralExpression).filter((node) => node.properties.some((property) =>
+    ts.isPropertyAssignment(property) && property.name.getText(tree) === "id" && staticValue(property.initializer, "publish")));
+  const header = publishTabs[0]?.properties.find((property): property is ts.PropertyAssignment => ts.isPropertyAssignment(property) && property.name.getText(tree) === "sectionHeaderPresentation");
+  const shells = nodes.filter((node): node is ts.JsxOpeningLikeElement => (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(tree) === "ContentEditorShell");
+  return publishTabs.length === 1 && staticValue(header?.initializer, "premium") && shells.length === 1 &&
+    attribute(shells[0]!, "mode")?.getText(tree) === "mode" && attribute(shells[0]!, "contentType")?.getText(tree) === "contentType";
+}
+
+check("All five Media Create/Edit consumers explicitly forward Panel to existing Review and Publishing owners and the Premium tab header", hasMediaReviewPanel(mediaForm));
+for (const [label, mutated] of [
+  ["record gate", mediaForm.replace(/(<ContentReviewPanel\s+)presentation="panel"/, '$1presentation={values?.id === 1639 ? "panel" : undefined}')],
+  ["one type only", mediaForm.replace(/(<ContentReviewPanel\s+)presentation="panel"/, '$1presentation={contentType === "video" ? "panel" : undefined}')],
+  ["dashboard fallback", mediaForm.replace(/(<ContentReviewPanel\s+)presentation="panel"/, '$1presentation="default"')],
+  ["dropped forwarding", mediaForm.replace(/(<ContentReviewPanel\s+)presentation="panel"/, '$1')],
+  ["lost header opt-in", mediaForm.replace('sectionHeaderPresentation: "premium" as const,', '')],
+  ["parallel owner", mediaForm.replace('/content-workflow/ContentReviewPanel"', '/content-workflow/ParallelReviewPanel"')],
+  ["lost Create mode", mediaForm.replaceAll('mode={mode}', 'mode="edit"')],
+] as const) {
+  check(`negative Media review fixture rejects ${label}`, mutated !== mediaForm && !hasMediaReviewPanel(mutated));
+}
+
 check(
   "one neutral shared Entity Review Presentation owns the dashboard",
   sharedPanel.includes("export default function AdminEntityReviewPanel") &&
     sharedPanel.includes("AdminEntityReviewDecisionCard") &&
     sharedPanel.includes("AdminEntityReviewCorrectionButton") &&
-    sharedPanel.includes('data-admin-entity-review-presentation="dashboard"'),
+    sharedPanel.includes('data-admin-entity-review-presentation={panel ? "panel" : "dashboard"}') && sharedPanel.includes('presentation = "default"'),
 );
 check(
   "Content and Project both adopt the one shared presentation",
@@ -336,4 +390,45 @@ check(
     getEntityReviewScore(validReadiness.checks as never) === 100,
 );
 
+const React = require("react") as typeof import("react");
+const { renderToStaticMarkup } = require("react-dom/server") as typeof import("react-dom/server");
+const SharedReview = (require("../src/components/admin/review/AdminEntityReviewPanel.tsx") as typeof import("../src/components/admin/review/AdminEntityReviewPanel.tsx")).default;
+const renderReview = (checks: readonly import("../src/lib/admin/review/entity-review-presentation.ts").EntityReviewCheck[], presentation?: "default" | "panel") => renderToStaticMarkup(React.createElement(SharedReview, {
+  entityKey: "content", navigationEventName: "fixture:review", checks,
+  guidanceCards: [
+    { id: "content", title: "جاهزية المحتوى", description: "محتوى", group: "content" },
+    { id: "image", title: "جاهزية الصور وAlt", description: "صورة", group: "image" },
+    { id: "seo", title: "تحليل SEO", description: "بحث", group: "seo" },
+  ], decisionCards: null, summaryEntries: [{ id: "save", title: "آخر حفظ", value: "لم يُحفظ بعد" }], ...(presentation ? { presentation } : {}),
+}));
+const allPass: import("../src/lib/admin/review/entity-review-presentation.ts").EntityReviewCheck[] = ["content", "image", "seo"].map((group, index) => ({ id: "pass-" + index, label: "فحص " + index, hint: "سليم", group: group as "content" | "image" | "seo", status: "pass", severity: "success", blocksPublish: true }));
+const reviewStates = [
+  { name: "empty", checks: [] },
+  { name: "all-pass", checks: allPass },
+  { name: "blocking-and-notes", checks: [{ ...allPass[0]!, status: "fail", severity: "error" }, { ...allPass[1]!, status: "warn", severity: "warning", blocksPublish: false }, { ...allPass[2]!, status: "info", severity: "info", blocksPublish: false }] },
+] satisfies Array<{ name: string; checks: import("../src/lib/admin/review/entity-review-presentation.ts").EntityReviewCheck[] }>;
+for (const state of reviewStates) {
+  const omitted = renderReview(state.checks), explicit = renderReview(state.checks, "default"), panel = renderReview(state.checks, "panel");
+  check(`actual ${state.name} Review keeps omitted and explicit default output identical`, omitted === explicit && omitted.includes('data-admin-entity-review-presentation="dashboard"') && !omitted.includes('data-admin-tab-section-presentation="premium"'));
+  check(`actual ${state.name} panel retains production score and blocking/notes fallback semantics`, panel.includes('data-admin-entity-review-presentation="panel"') && panel.includes(`aria-label="درجة جاهزية النشر ${getEntityReviewScore(state.checks)} من 100"`) && panel.includes(state.checks.some(item => item.blocksPublish && item.status === "fail") ? "النشر ممنوع" : "النشر مسموح") && (state.checks.some(item => item.status === "warn" || item.status === "info") ? panel.includes("سليم") : panel.includes("لا توجد اقتراحات غير مانعة في الحالة الحالية.")) && !panel.includes('name="status"'));
+  check(`actual ${state.name} panel removes only the top-issue heading and retains the real issue or healthy fallback`, omitted.includes("أهم مشكلة") && !panel.includes("أهم مشكلة") && (state.checks.some(item => item.status !== "pass") ? panel.includes("فحص 0") && panel.includes("سليم") : panel.includes("لا توجد مشكلات حالية.")));
+}
+const ContentReview = (require("../src/components/admin/content-workflow/ContentReviewPanel.tsx") as typeof import("../src/components/admin/content-workflow/ContentReviewPanel.tsx")).default;
+const Publishing = (require("../src/components/admin/content/editors/ContentPublishingOptions.tsx") as typeof import("../src/components/admin/content/editors/ContentPublishingOptions.tsx")).default;
+const renderContentReview = (presentation?: "default" | "panel", contentType: "article" | "video" = "article") => renderToStaticMarkup(React.createElement(ContentReview, {
+  formId: "review-presentation-fixture", contentTypeLabel: contentType === "video" ? "فيديو" : "مقال", initial: { contentType, title: "", slug: "", excerpt: "", content: "", image: "", imageAlt: "", categorySlug: "", seoTitle: "", seoDescription: "", focusKeyword: "", canonicalUrl: "", ogImage: "", ogImageAlt: "" }, publishingOptions: React.createElement(Publishing, presentation ? { presentation } : {}), ...(presentation ? { presentation } : {}),
+}));
+const defaultContent = renderContentReview(), panelContent = renderContentReview("panel");
+const removedPanelDescriptions = ["تحكم مباشر في المميز والشائع.", "حالة المحتوى وموعد ظهوره العام.", "اكتمال مادة المحتوى والمتطلبات الخاصة بنوعها.", "توفر الصورة ووصفها البديل للعرض وإتاحة الوصول.", "سلامة بيانات البحث والمشاركة والربط الداخلي.", "ما سيظهر داخل صفحة المحتوى.", "أهم مشكلة"];
+check("actual Content adapter and Publishing preserve omitted default output, legacy descriptions and score advisory", defaultContent === renderContentReview("default") && removedPanelDescriptions.every(text => defaultContent.includes(text)) && defaultContent.includes("7 خيارات") && defaultContent.includes("الدرجة إرشادية ولا تمنع النشر وحدها."));
+check("actual Content panel removes only requested descriptions and badge copy", removedPanelDescriptions.every(text => !panelContent.includes(text)) && !panelContent.includes("7 حالات") && !panelContent.includes("7 خيارات"));
+check("actual Content panel removes the score advisory only while retaining validation truth and actual top issue", !panelContent.includes("الدرجة إرشادية ولا تمنع النشر وحدها.") && panelContent.includes("يعرض موانع النشر المعروفة") && panelContent.includes("أضف عنوانًا واضحًا للمحتوى.") && panelContent.includes("حالة النشر والتاريخ"));
+check("actual Content panel retains seven read-only display entries and the existing edit action", panelContent.includes("تعديل الإعدادات") && (panelContent.match(/<dt[^>]*>إظهار [^<]*<\/dt>/g) ?? []).length === 7);
+const videoDefault = renderContentReview(undefined, "video"), videoPanel = renderContentReview("panel", "video");
+check("actual Video review preserves omitted defaults and canonical readiness, validation, navigation and native publishing contracts", videoDefault === renderContentReview("default", "video") &&
+  videoPanel.includes('data-admin-entity-review-presentation="panel"') && videoPanel.includes("درجة جاهزية النشر") && videoPanel.includes("النشر ممنوع") &&
+  videoPanel.includes('data-admin-entity-review-status-summary') && videoPanel.includes('md:grid-cols-3') && videoPanel.includes('data-admin-entity-review-notes') &&
+  videoPanel.includes("حالة النشر والتاريخ") && videoPanel.includes('name="status"') && videoPanel.includes('name="published_at"') &&
+  videoPanel.includes('name="is_featured"') && videoPanel.includes('name="is_popular"') && videoPanel.includes("تعديل الإعدادات") &&
+  (videoPanel.match(/<dt[^>]*>إظهار [^<]*<\/dt>/g) ?? []).length === 7 && removedPanelDescriptions.every(text => !videoPanel.includes(text)));
 console.log(`verify:shared-entity-review-presentation passed (${passed} assertions)`);

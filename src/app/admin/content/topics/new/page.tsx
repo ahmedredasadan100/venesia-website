@@ -10,10 +10,12 @@ import {
   flattenAdminCategoryTree,
 } from "../../../../../lib/admin/content/category-hierarchy";
 import {
+  getContentTypeLabel,
   isContentType,
   isMediaEditableContentType,
 } from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { resolveTopicDraftSession } from "../../../../../lib/admin/content/topic-draft-session";
 import { loadTopicTaxonomyFormDependencies } from "../../../../../lib/admin/content/load-taxonomy-form-data";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
 
@@ -26,7 +28,8 @@ export default async function NewUnifiedContentPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
+  const draftSession = await resolveTopicDraftSession(actor);
   const seoSettings = await loadGlobalSeoSettings();
   const query = await searchParams;
   const contentType = isContentType(query?.type) ? query.type : "article";
@@ -39,6 +42,7 @@ export default async function NewUnifiedContentPage({
   if (contentType === "article") {
     return (
       <ArticleCreateEditor seoSettings={seoSettings}
+        draftSession={draftSession}
         categories={categories}
         series={series}
         errorMessage={errorMessage}
@@ -54,8 +58,9 @@ export default async function NewUnifiedContentPage({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageContextHeader
+        visualPreset="topics"
         eyebrow="UNIFIED CONTENT ENGINE"
-        title={`إضافة ${contentType}`}
+        title={`إضافة ${getContentTypeLabel(contentType)}`}
         description="التصنيف والسلسلة مستقلان عن نوع المحتوى ويُحمّلان مباشرة من قاعدة البيانات."
         actions={
           <>
@@ -66,6 +71,7 @@ export default async function NewUnifiedContentPage({
         }
       />
       <MediaContentForm seoSettings={seoSettings}
+        draftSession={draftSession}
         mode="create"
         contentType={contentType}
         categories={flattenedCategories}

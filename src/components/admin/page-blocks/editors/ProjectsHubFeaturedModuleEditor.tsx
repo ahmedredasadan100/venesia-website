@@ -4,11 +4,10 @@ import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
-import {
+import { ADMIN_FORM_STACK_CLASS_NAME,
   AdminCard,
   AdminFormControlHeader,
   AdminFormGrid,
@@ -16,7 +15,7 @@ import {
   AdminFormSwitch,
 } from "../../ui";
 import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
-import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
+import { adminFormLabelClassName, adminFormHintClassName } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
 import {
@@ -65,11 +64,11 @@ export default function ProjectsHubFeaturedModuleEditor({
   });
   const subtitleFormat = resolvePageBlockTextFormat(config, "subtitle");
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <input type="hidden" name="config_schema" value="projects-hub-featured" />
 
       <>
-        <p className="text-xs leading-6 text-white/45">
+        <p className={adminFormHintClassName({ textInset: true })}>
           يتحكّم في عنوان القسم فقط، وليس في بيانات المشروعات.
         </p>
 
@@ -77,7 +76,6 @@ export default function ProjectsHubFeaturedModuleEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="العنوان"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_title"
               boldName="title_bold"
@@ -97,7 +95,6 @@ export default function ProjectsHubFeaturedModuleEditor({
           <ModuleEditorField nature="short-text" span={6}>
             <ModuleEditorVisibilityAlignRow
               label="العنوان الفرعي"
-              presentation="premium"
               icon={<AdminModuleTabIcon name="content" />}
               showName="show_subtitle"
               boldName="subtitle_bold"
@@ -119,11 +116,9 @@ export default function ProjectsHubFeaturedModuleEditor({
         </ModuleEditorFieldGrid>
       </>
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="domain">
-          البيانات الظاهرة داخل المشروع المميز
-        </ModuleEditorSectionHeading>
-        <p className="text-xs leading-6 text-white/45">
+      <ModuleEditorSection presentation="panel" title="البيانات الظاهرة داخل المشروع المميز">
+
+        <p className={adminFormHintClassName({ textInset: true })}>
           إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة الرئيسية والبطاقات
           الجانبية. لا يغيّر قيم المشروع.
         </p>
@@ -167,19 +162,14 @@ export default function ProjectsHubFeaturedModuleEditor({
         </AdminFormGrid>
       </ModuleEditorSection>
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading
-          intent="settings"
-          actions={
+      <ModuleEditorSection presentation="panel" title="إعدادات عرض المشروعات المميزة" actions={
             <VisibilityToggle
               name="show_slider_dots"
               label="إظهار مؤشر السلايد"
               defaultChecked={config.showSliderDots !== false}
             />
-          }
-        >
-          إعدادات عرض المشروعات المميزة
-        </ModuleEditorSectionHeading>
+          }>
+
 
         <AdminFormGrid columns={3} className="mt-4">
           <AdminCard presentation="premium" className="self-start p-3">
@@ -193,7 +183,7 @@ export default function ProjectsHubFeaturedModuleEditor({
           </AdminCard>
 
           <AdminCard presentation="premium" className="self-start p-3">
-          <label className={ADMIN_FORM.labelStack}>
+          <label className={adminFormLabelClassName({ textInset: true })}>
             <AdminFormControlHeader title="الحد الأقصى (اختياري)" presentation="compact-inline" icon={<AdminModuleTabIcon name="overview" />} />
             <input
               name="limit"
@@ -209,7 +199,7 @@ export default function ProjectsHubFeaturedModuleEditor({
           </AdminCard>
 
           <AdminCard presentation="premium" className="self-start p-3">
-          <label className={ADMIN_FORM.labelStack}>
+          <label className={adminFormLabelClassName({ textInset: true })}>
             <AdminFormControlHeader title="التشغيل التلقائي (مللي ثانية)" presentation="compact-inline" icon={<AdminModuleTabIcon name="settings" />} />
             <input
               name="autoplay_ms"

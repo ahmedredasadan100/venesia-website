@@ -29,8 +29,8 @@ function load(relative, ports = {}, modules = new Map()) {
   });
   return m.exports;
 }
-export async function verifyMediaDimensionsContract({ authoringOnly = false } = {}) {
-  await verifyMediaGuidanceBrowser({ authoringOnly });
+export async function verifyMediaDimensionsContract({ authoringOnly = false, outputDir } = {}) {
+  await verifyMediaGuidanceBrowser({ authoringOnly, outputDir });
   const adminPresentation = load("src/components/admin/media/AdminDeletedMediaNotice.tsx");
   const payloadOwner = load("src/lib/admin/media-topic-payload.ts");
   for (const status of ["active", "deleted", "missing", "empty"]) {
@@ -100,8 +100,33 @@ export async function verifyMediaDimensionsContract({ authoringOnly = false } = 
   const recommended = {...fixture, design: {kind: "recommended", width: 1234, height: 876, rationale: "density rationale", composition: "Safe Area crop"}};
   const guidance = renderToStaticMarkup(React.createElement(Component, {slot: recommended}));
   assert.match(guidance, /1234 × 876 px/);
+  assert.match(guidance, /^<p\b[^>]*>المقاس التصميمي الموصى به: /);
+  assert.doesNotMatch(guidance, /<details\b|<summary\b/, "Omitted Slot guidance presentation retains its existing flat paragraph");
   assert.doesNotMatch(guidance, /density|Safe Area|crop|2:3|شرط/);
   assert.ok(guidance.includes("fixture/new-template"));
+  const originalState = {key: "fixture", count: 0, deleted: [], missing: [], available: true, originals: [{value: "/original.png", width: 400, height: 600}]};
+  const originalMarkup = (props) => renderToStaticMarkup(React.createElement(adminPresentation.AdminMediaOriginalDimensions, props));
+  const originalDefault = originalMarkup({value: "/original.png", state: originalState});
+  assert.match(originalDefault, /^<p\b[^>]*>الأبعاد الأصلية: <bdi>400 × 600 px<\/bdi><\/p>$/);
+  assert.doesNotMatch(originalDefault, /<details\b|<summary\b/, "Omitted original-dimensions presentation retains its flat paragraph");
+  assert.match(originalMarkup({value: "/original.png", state: null}), /جارٍ قراءة أبعاد الأصل…/);
+  assert.match(originalMarkup({value: "/unknown.png", state: originalState}), /غير متاحة/);
+  assert.equal(originalMarkup({value: "", state: null}), "", "An omitted presentation still hides an empty original reference");
+  const disclosureGuidance = renderToStaticMarkup(React.createElement(Component, {slot: recommended, presentation: "disclosure"}));
+  const disclosureOriginal = originalMarkup({value: "/original.png", state: originalState, presentation: "disclosure"});
+  assert.match(disclosureGuidance, /^<details\b[^>]*data-admin-media-dimension="recommended"/);
+  assert.match(disclosureGuidance, /<summary\b[^>]*>الموصى به<\/summary>/);
+  assert.match(disclosureGuidance, /1234 × 876 px/);
+  assert.match(disclosureGuidance, /<bdi>1234×876<span/);
+  assert.match(disclosureGuidance, /title="الأبعاد بوحدة البكسل \(px\)"/);
+  assert.match(disclosureOriginal, /^<details\b[^>]*data-admin-media-dimension="original"/);
+  assert.match(disclosureOriginal, /<summary\b[^>]*>الأبعاد الأصلية<\/summary>/);
+  assert.match(disclosureOriginal, /400 × 600 px/);
+  for (const markup of [disclosureGuidance, disclosureOriginal]) assert.doesNotMatch(markup, /\sopen(?:=|>)/, "Dimension disclosures start closed");
+  assert.equal(disclosureGuidance.match(/class="([^"]*)"/)?.[1], disclosureOriginal.match(/class="([^"]*)"/)?.[1], "The two dimension owners share the same disclosure surface");
+  assert.match(originalMarkup({value: "/original.png", state: null, presentation: "disclosure"}), /جارٍ قراءة أبعاد الأصل…/);
+  assert.match(originalMarkup({value: "/unknown.png", state: originalState, presentation: "disclosure"}), /غير متاحة/);
+  assert.equal(renderToStaticMarkup(React.createElement(Component, {slot: mobile, presentation: "disclosure"})), "", "Disclosure presentation cannot invent a recommendation");
   assert.match(hero.resolveHeroMediaSlot("internal-page", "desktop").display.description, /62vh/);
   const queryCalls = [];
   const query = { select(value) { queryCalls.push(value); return this; }, eq(key, value) { queryCalls.push([key,value]); return this; }, async in(key, values) { queryCalls.push([key,values]); return { data: [{ bucket: "images", object_key: "images/original.png", width: 400, height: 600 }], error: null }; } };

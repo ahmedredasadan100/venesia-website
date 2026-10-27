@@ -9,6 +9,10 @@ type AdminTagsFieldProps = {
   placeholder?: string;
   helperText?: string;
   appearance?: "dark" | "light";
+  /** Optional shared form typography; tag editing and serialization stay unchanged. */
+  labelClassName?: string;
+  helperClassName?: string;
+  className?: string;
 };
 
 const TAG_SPLIT_PATTERN = /[,;،؛]+/;
@@ -43,6 +47,9 @@ export default function AdminTagsField({
   placeholder = "اكتب كلمة مفتاحية ثم Enter أو , أو ;",
   helperText = "يمكن أن تحتوي الكلمة على مسافات، مثل: بيت الوطن",
   appearance = "dark",
+  labelClassName,
+  helperClassName,
+  className = "mt-6",
 }: AdminTagsFieldProps) {
   const [tags, setTags] = useState<string[]>(() => defaultTags.filter(Boolean));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -213,10 +220,12 @@ export default function AdminTagsField({
   }
 
   return (
-    <div ref={rootRef} data-admin-tags-field className="mt-6">
+    <div ref={rootRef} data-admin-tags-field className={className}>
       <input ref={hiddenRef} type="hidden" name={name} defaultValue={tags.join(", ")} />
 
-      <span className={`text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/75"}`}>{label}</span>
+      <span className={labelClassName ?? `text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/75"}`}>
+        {labelClassName ? <span data-admin-form-label-text>{label}</span> : label}
+      </span>
 
       <div className={`mt-3 rounded-2xl border px-3 py-3 focus-within:border-[#D8B87A]/45 ${appearance === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-black/30"}`}>
         {tags.length ? (
@@ -280,7 +289,7 @@ export default function AdminTagsField({
         />
       </div>
 
-      <p className={`mt-2 text-xs ${appearance === "light" ? "text-slate-500" : "text-white/35"}`}>
+      <p className={helperClassName ?? `mt-2 text-xs ${appearance === "light" ? "text-slate-500" : "text-white/35"}`}>
         {helperText} — عدد الكلمات الحالية: {tags.length}
       </p>
     </div>

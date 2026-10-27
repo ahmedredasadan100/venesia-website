@@ -1,15 +1,18 @@
 "use client";
 
 import { adminFormFieldClassName } from "../../../../components/admin/VenesiaModal";
+import { ADMIN_FORM_STACK_CLASS_NAME } from "../../../../components/admin/ui/AdminForm";
 import {
   AdminActionButton,
+  AdminDataGridActionIcon,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormSection,
   AdminFormSwitch,
   AdminListboxSelect,
 } from "../../../../components/admin/ui";
 import {
-  ADMIN_FORM,
   adminFormHintClassName,
-  adminFormLabelClassName,
 } from "../../../../lib/admin/admin-ui-styles";
 import type {
   FooterContactItem,
@@ -62,39 +65,30 @@ export function ContactItemsField({
   }
 
   return (
-    <div className="space-y-3">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {hint ? <p className={adminFormHintClassName()}>{hint}</p> : null}
       {rows.map((item, index) => (
-        <div
+        <AdminFormSection
           key={`contact-row-${index}`}
-          className={`space-y-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4 ${
+          className={`space-y-3 ${
             item.visible === false ? "opacity-55" : ""
           }`}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-white/75">
-              عنصر #{index + 1}
-              {item.visible === false ? (
-                <span className="ms-2 text-xs font-normal text-white/40">
-                  (مخفي في الفوتر)
-                </span>
-              ) : null}
-            </p>
+          title={`عنصر #${index + 1}`}
+          description={item.visible === false ? "مخفي في الفوتر" : undefined}
+          actions={
             <AdminActionButton
-              variant="ghost"
-              className="!min-h-8 !px-3 !py-1.5 text-xs text-red-300"
+              variant="danger-ghost"
               onClick={() =>
                 onChange(rows.filter((_, rowIndex) => rowIndex !== index))
               }
             >
+              <AdminDataGridActionIcon action="delete" />
               حذف
             </AdminActionButton>
-          </div>
+          }
+        >
 
-          <div className="rounded-2xl border border-white/8 bg-[#05070B]/70 px-4 py-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
-              معاينة
-            </p>
+          <AdminFormSection title="معاينة">
             <div className="text-[13px] text-white/50">
               {item.icon?.trim() || item.label?.trim() ? (
                 <div className="flex items-center gap-2">
@@ -120,11 +114,10 @@ export function ContactItemsField({
                 <p className="text-white/30">بدون محتوى</p>
               ) : null}
             </div>
-          </div>
+          </AdminFormSection>
 
-          <div className={ADMIN_FORM.gridTwoCol}>
-            <label className={adminFormLabelClassName()}>
-              <span>التسمية</span>
+          <AdminFormGrid columns={2} presentation="aligned-fields">
+            <AdminFormField label="التسمية">
               <input
                 value={item.label}
                 onChange={(event) =>
@@ -133,9 +126,8 @@ export function ContactItemsField({
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
-            </label>
-            <label className={adminFormLabelClassName()}>
-              <span>القيمة</span>
+            </AdminFormField>
+            <AdminFormField label="القيمة">
               <input
                 value={item.value}
                 onChange={(event) =>
@@ -144,9 +136,8 @@ export function ContactItemsField({
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
-            </label>
-            <label className={`${adminFormLabelClassName()} md:col-span-2`}>
-              <span>الرابط (اختياري)</span>
+            </AdminFormField>
+            <AdminFormField label="الرابط (اختياري)" className="md:col-span-2">
               <input
                 value={item.href ?? ""}
                 onChange={(event) =>
@@ -155,9 +146,8 @@ export function ContactItemsField({
                 className={adminFormFieldClassName()}
                 dir="ltr"
               />
-            </label>
-            <label className={adminFormLabelClassName()}>
-              <span>أيقونة (اختياري)</span>
+            </AdminFormField>
+            <AdminFormField label="أيقونة (اختياري)">
               <input
                 value={item.icon ?? ""}
                 onChange={(event) =>
@@ -165,7 +155,7 @@ export function ContactItemsField({
                 }
                 className={adminFormFieldClassName()}
               />
-            </label>
+            </AdminFormField>
             <AdminFormSwitch
               label="إظهار"
               checked={item.visible !== false}
@@ -174,10 +164,10 @@ export function ContactItemsField({
                   visible: event.target.checked ? undefined : false,
                 })
               }
-              surface
+              embedded
             />
-          </div>
-        </div>
+          </AdminFormGrid>
+        </AdminFormSection>
       ))}
       <AdminActionButton
         variant="gold"
@@ -223,29 +213,26 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
   const rows = links.length ? links : [emptySocialRow()];
 
   return (
-    <div className="space-y-3">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {rows.map((item, index) => (
-        <div
+        <AdminFormSection
           key={`social-${index}`}
-          className="space-y-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-white/75">
-              رابط #{index + 1}
-            </p>
+          className="space-y-3"
+          title={`رابط #${index + 1}`}
+          actions={
             <AdminActionButton
-              variant="ghost"
-              className="!min-h-8 !px-3 !py-1.5 text-xs text-red-300"
+              variant="danger-ghost"
               onClick={() =>
                 onChange(rows.filter((_, rowIndex) => rowIndex !== index))
               }
             >
+              <AdminDataGridActionIcon action="delete" />
               حذف
             </AdminActionButton>
-          </div>
-          <div className={ADMIN_FORM.gridTwoCol}>
-            <div className={adminFormLabelClassName()}>
-              <span id={`footer-social-platform-${index}-label`}>المنصة</span>
+          }
+        >
+          <AdminFormGrid columns={2} presentation="aligned-fields">
+            <AdminFormField label={<span id={`footer-social-platform-${index}-label`}>المنصة</span>}>
               <AdminListboxSelect
                 value={item.platform}
                 onChange={(value) => {
@@ -262,9 +249,8 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
                 }))}
                 ariaLabelledBy={`footer-social-platform-${index}-label`}
               />
-            </div>
-            <label className={adminFormLabelClassName()}>
-              <span>التسمية</span>
+            </AdminFormField>
+            <AdminFormField label="التسمية">
               <input
                 value={item.label}
                 onChange={(event) =>
@@ -279,9 +265,8 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
-            </label>
-            <label className={`${adminFormLabelClassName()} md:col-span-2`}>
-              <span>الرابط</span>
+            </AdminFormField>
+            <AdminFormField label="الرابط" className="md:col-span-2">
               <input
                 value={item.href}
                 onChange={(event) =>
@@ -296,7 +281,7 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
                 className={adminFormFieldClassName()}
                 dir="ltr"
               />
-            </label>
+            </AdminFormField>
             <AdminFormSwitch
               label="إظهار في الشريط السفلي"
               checked={item.visible !== false}
@@ -309,11 +294,11 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
                   ),
                 )
               }
-              surface
+              embedded
               className="md:col-span-2"
             />
-          </div>
-        </div>
+          </AdminFormGrid>
+        </AdminFormSection>
       ))}
       <AdminActionButton
         variant="gold"
@@ -332,9 +317,8 @@ type LegalFieldsProps = {
 
 export function LegalFields({ legal, onChange }: LegalFieldsProps) {
   return (
-    <div className={ADMIN_FORM.gridTwoCol}>
-      <label className={adminFormLabelClassName()}>
-        <span>Copyright</span>
+    <AdminFormGrid columns={2} presentation="aligned-fields">
+      <AdminFormField label="Copyright">
         <input
           value={legal.copyright}
           onChange={(event) =>
@@ -342,9 +326,8 @@ export function LegalFields({ legal, onChange }: LegalFieldsProps) {
           }
           className={adminFormFieldClassName()}
         />
-      </label>
-      <label className={adminFormLabelClassName()}>
-        <span>Legal Tagline</span>
+      </AdminFormField>
+      <AdminFormField label="Legal Tagline">
         <input
           value={legal.tagline}
           onChange={(event) =>
@@ -352,7 +335,7 @@ export function LegalFields({ legal, onChange }: LegalFieldsProps) {
           }
           className={adminFormFieldClassName()}
         />
-      </label>
-    </div>
+      </AdminFormField>
+    </AdminFormGrid>
   );
 }

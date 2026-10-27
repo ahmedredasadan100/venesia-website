@@ -402,8 +402,6 @@ export function AdminStatusPill({ children }) {
 const presentationMockSource = String.raw`
 import * as React from "react";
 
-export const MODULE_EDITOR_CONTROL_CARD_CLASS_NAME = "";
-
 export function ModuleEditorHeader() {
   return null;
 }

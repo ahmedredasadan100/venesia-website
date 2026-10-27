@@ -14,8 +14,8 @@ export function assertFeaturedSecondaryFrames(frames){
  assert.equal(frames.length,3,'Featured fixture must retain its lead and both secondary image frames');
  assert(frames.slice(1).every(frame=>frame.width===973&&frame.height===175),JSON.stringify({viewport:1023,frames}));
 }
-export async function verifyMediaGuidanceBrowser({authoringOnly=false}={}){
- const require=createRequire(import.meta.url),root=process.cwd(),out=path.join(root,'.tmp-qa/media-guidance-browser');await mkdir(out,{recursive:true});
+export async function verifyMediaGuidanceBrowser({authoringOnly=false,outputDir}={}){
+ const require=createRequire(import.meta.url),root=process.cwd(),out=outputDir??path.join(root,'.tmp-qa/media-guidance-browser');await mkdir(out,{recursive:true});
  const loader=path.join(out,'loader.cjs'),picker=path.join(out,'picker.js');
  await writeFile(loader,`module.exports=function(source){return require('typescript').transpileModule(source,{compilerOptions:{jsx:4,target:9,module:99}}).outputText;};`);
  await writeFile(picker,`import React from 'react'; export default function Picker({open,onSelect,onClose}) { return open ? React.createElement('button',{type:'button',onClick:()=>{onSelect('/original.png');onClose();}},'Select fixture asset') : null; }`);
@@ -54,7 +54,27 @@ export async function verifyMediaGuidanceBrowser({authoringOnly=false}={}){
  const cards=page.locator('[data-qa="gallery"] [data-admin-media-gallery-card="image"]');assert.equal(await cards.count(),3);
  const expected=['400 × 600 px','900 × 300 px','غير متاحة'];for(let n=0;n<3;n++){assert((await cards.nth(n).locator('[data-media-original]').innerText()).includes(expected[n]));assert(await cards.nth(n).evaluate(el=>{const img=el.querySelector('img'),text=el.querySelector('[data-media-original]');return text.getBoundingClientRect().top>=img.getBoundingClientRect().bottom-1&&text.getBoundingClientRect().bottom<=el.getBoundingClientRect().bottom;}));}
  assert.equal(await page.locator('[data-qa="gallery"] [data-media-original]').count(),3);assert.equal(requests.filter(r=>r.assets.length===3).length,1,'Gallery batch, no per-card reads');
- assert.equal(await page.locator('[data-qa="topic"] [data-media-slot]').innerText(),'المقاس التصميمي الموصى به: 3840 × 2560 px');
+ const topic=page.locator('[data-qa="topic"]'),recommended=topic.locator('[data-admin-media-dimension="recommended"]'),original=topic.locator('[data-admin-media-dimension="original"]');
+ const preservedTopicValues=async()=>({image:await topic.locator('[name="image"]').inputValue(),alt:await topic.locator('[name="image_alt"]').inputValue()});
+ const topicValues=await preservedTopicValues();
+ assert.equal(await topic.locator('[data-admin-media-image-dimensions] details').count(),2,'Article adopts both existing dimension owners as adjacent disclosures');
+ for(const [control,title] of [[recommended,'الموصى به'],[original,'الأبعاد الأصلية']]){
+  assert.equal(await control.evaluate(element=>element.tagName),'DETAILS');
+  assert.equal(await control.locator('summary').innerText(),title);
+  assert.equal(await control.getAttribute('open'),null,'Dimension values start collapsed');
+  assert.equal(await control.innerText(),title,'Collapsed dimensions expose the title only');
+ }
+ await recommended.locator('summary').click();assert.equal(await recommended.locator('p').getAttribute('aria-label'),'3840 × 2560 px');assert.match(await recommended.locator('bdi').innerText(),/^3840×2560(?: px)?$/);assert.notEqual(await recommended.getAttribute('open'),null);
+ await original.locator('summary').focus();await original.locator('summary').press('Enter');assert.equal(await original.locator('p').getAttribute('aria-label'),'400 × 600 px');assert.match(await original.locator('bdi').innerText(),/^400×600(?: px)?$/);assert.notEqual(await original.getAttribute('open'),null);
+ assert.deepEqual(await preservedTopicValues(),topicValues,'Opening dimension controls cannot mutate image or Alt');
+ assert(await topic.locator('[data-admin-media-image-dimensions]').evaluate(element=>{
+  const bounds=element.getBoundingClientRect(),frame=element.closest('[data-admin-media-image-field]').querySelector('[data-admin-media-image-frame]').getBoundingClientRect(),controls=[...element.querySelectorAll('details')].map(control=>control.getBoundingClientRect());
+  return bounds.top>=frame.bottom-1&&controls.length===2&&Math.abs(controls[0].top-controls[1].top)<1&&(controls[0].right<=controls[1].left+1||controls[1].right<=controls[0].left+1);
+ }),'Article dimensions sit below the preview in one adjacent row');
+ await topic.screenshot({path:path.join(out,'topic-dimensions-open-desktop.png')});
+ await original.locator('summary').press('Space');assert.equal(await original.getAttribute('open'),null,'Original dimensions close with the keyboard');
+ await recommended.locator('summary').click();assert.equal(await recommended.getAttribute('open'),null,'Recommended dimensions close independently');
+ assert.deepEqual(await preservedTopicValues(),topicValues,'Closing dimensions cannot mutate image or Alt');
  await page.getByRole('button',{name:'Change presentation'}).click();assert.equal(await page.locator('[data-qa="variant"] [data-media-slot]').innerText(),'المقاس التصميمي الموصى به: 2560 × 1920 px');assert.match(await page.locator('[data-qa="variant"] [data-media-original]').innerText(),/400 × 600/);
  for(const name of ['deleted-default','deleted-compact']){
   const field=page.locator('[data-qa="'+name+'"]');
@@ -62,7 +82,7 @@ export async function verifyMediaGuidanceBrowser({authoringOnly=false}={}){
   assert.equal(await field.getByRole('button',{name:'اختيار بديل',exact:true}).count(),1);
  }
  assert.doesNotMatch(await page.locator('main').innerText(),/100vh|Responsive|cover|crop|density|Safe Area|ليست شرطًا|لا يوجد مقاس|نسبة حاوية|تملأ الصورة|بياناته محفوظة|تفاصيل المرجع المحفوظ/iu);
- for(const name of ['topic','variant','gallery']){
+ for(const name of ['variant','gallery']){
   const field=page.locator('[data-qa="'+name+'"]');
   assert(await field.locator('[data-media-slot]').evaluate(el=>el.getBoundingClientRect().bottom<=el.parentElement.querySelector('img').getBoundingClientRect().top));
  }

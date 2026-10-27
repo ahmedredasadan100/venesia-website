@@ -1,4 +1,8 @@
 import type { ReactNode } from "react";
+import AdminCard from "./AdminCard";
+import { AdminFormControlHeader, AdminModuleSectionHeader, AdminModuleTabIcon } from "./AdminModuleTabs";
+export { AdminFormControlHeader } from "./AdminModuleTabs";
+import { ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME, adminFormHintClassName, adminFormLabelClassName } from "../../../lib/admin/admin-ui-styles";
 
 export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-5";
 
@@ -8,6 +12,11 @@ type AdminFormLayoutProps = {
   className?: string;
   asideClassName?: string;
   mobileAsideFirst?: boolean;
+  /** @deprecated Both values use the canonical layout; kept for existing consumers. */
+  presentation?: "default" | "panel";
+  /** Lets the canonical Grid compose direct cards while this owner retains the panel geometry. */
+  renderGrid?: (props: { children: ReactNode; className: string }) => ReactNode;
+  secondary?: ReactNode;
 };
 
 export function AdminFormLayout({
@@ -16,32 +25,37 @@ export function AdminFormLayout({
   className = "",
   asideClassName = "",
   mobileAsideFirst = false,
+  renderGrid,
+  secondary,
 }: AdminFormLayoutProps) {
-  return (
-    <section className={`grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] ${className}`.trim()}>
-      <div className="space-y-5">{children}</div>
-      {aside ? (
-        <aside
-          className={`space-y-5 ${mobileAsideFirst ? "order-first xl:order-none" : ""} ${asideClassName}`.trim()}
-        >
-          {aside}
-        </aside>
-      ) : null}
-    </section>
-  );
+    if (renderGrid) {
+      return renderGrid({
+        className: `min-w-0 gap-x-3 gap-y-3 ${aside ? "xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)]" : ""} ${className}`.trim(),
+        children: <>{children}{aside}{secondary ? <div className="min-w-0 xl:col-start-1">{secondary}</div> : null}</>,
+      });
+    }
+    return (
+      <section
+        data-admin-form-layout="panel"
+        className={`grid min-w-0 items-start gap-3 ${aside ? "xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)]" : ""} ${className}`.trim()}
+      >
+        <div className={`min-w-0 ${ADMIN_FORM_STACK_CLASS_NAME}`}>{children}</div>
+        {aside ? (
+          <aside className={`min-w-0 xl:row-span-2 ${mobileAsideFirst ? "order-first xl:order-none" : ""} ${asideClassName}`.trim()}>
+            {aside}
+          </aside>
+        ) : null}
+        {secondary ? <div className="min-w-0 xl:col-start-1">{secondary}</div> : null}
+      </section>
+    );
 }
 
-const ADMIN_FORM_SECTION_SURFACE_CLASSES =
-  "rounded-[28px] border border-white/10 bg-[#080B10]/92 shadow-[0_24px_80px_rgba(0,0,0,0.28)]";
-
 export const ADMIN_FORM_SECTION_CLASSES =
-  `${ADMIN_FORM_SECTION_SURFACE_CLASSES} p-5`;
+  `relative ${ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME} min-w-0 p-3`;
 
-const ADMIN_FORM_SECTION_COMPACT_CLASSES =
-  `${ADMIN_FORM_SECTION_SURFACE_CLASSES} px-6 py-4`;
-
+/** @deprecated Module sections share the same canonical panel surface. */
 export const ADMIN_FORM_MODULE_SECTION_CLASSES =
-  "space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5";
+  ADMIN_FORM_SECTION_CLASSES;
 
 type AdminFormSectionProps = {
   id?: string;
@@ -54,6 +68,11 @@ type AdminFormSectionProps = {
   compactHeader?: boolean;
   density?: "default" | "compact";
   variant?: "default" | "module";
+  /** @deprecated Both values resolve to the canonical Panel owner. */
+  presentation?: "default" | "panel";
+  /** Neutral sections retain semantic/header ownership inside an existing visual panel. */
+  surface?: "panel" | "neutral";
+  header?: ReactNode;
   className?: string;
 };
 
@@ -65,96 +84,38 @@ export function AdminFormSection({
   eyebrowClassName = "text-[#D8B87A]/70",
   description,
   actions,
-  compactHeader = false,
-  density = "default",
-  variant = "default",
+  header,
+  surface = "panel",
   className = "",
 }: AdminFormSectionProps) {
   const hasHeader = eyebrow || title || description || actions;
-  const sectionClassName =
-    variant === "module"
-      ? ADMIN_FORM_MODULE_SECTION_CLASSES
-      : density === "compact"
-      ? ADMIN_FORM_SECTION_COMPACT_CLASSES
-      : ADMIN_FORM_SECTION_CLASSES;
-
+  const sectionHeader = header ?? (title || eyebrow ? (
+    <AdminModuleSectionHeader
+      id={id ?? "admin-form-section"}
+      standalone={surface === "neutral"}
+      sectionHeading={title ?? eyebrow}
+      sectionDescription={description || (title && eyebrow) ? <>{title && eyebrow ? <span className={eyebrowClassName}>{eyebrow}</span> : null}{description}</> : undefined}
+      sectionSummary={actions}
+    />
+  ) : hasHeader ? (
+    <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-3">
+      {description ? <p className={adminFormHintClassName({ textInset: true })}>{description}</p> : null}
+      {actions}
+    </div>
+  ) : null);
+  if (surface === "neutral") {
+    return (
+      <section id={id} data-admin-form-section-surface="neutral" className={`min-w-0 ${className}`.trim()}>
+        {sectionHeader}
+        {children}
+      </section>
+    );
+  }
   return (
-    <section id={id} className={`${sectionClassName} ${className}`.trim()}>
-      {hasHeader ? (
-        <div className={`flex flex-wrap items-start justify-between gap-3 ${compactHeader ? "mb-4" : "mb-5"}`}>
-          <div>
-            {eyebrow ? (
-              <p className={`font-en text-xs tracking-[0.28em] ${eyebrowClassName}`}>{eyebrow}</p>
-            ) : null}
-            {title ? (
-              <h2 className={`mt-2 font-semibold text-white ${compactHeader ? "text-lg font-bold" : "text-xl"}`}>
-                {title}
-              </h2>
-            ) : null}
-            {description ? <p className="mt-1 text-sm text-white/45">{description}</p> : null}
-          </div>
-          {actions}
-        </div>
-      ) : null}
+    <AdminCard id={id} className={`min-w-0 p-3 ${className}`.trim()}>
+      {sectionHeader}
       {children}
-    </section>
-  );
-}
-
-type AdminFormControlHeaderProps = {
-  title: ReactNode;
-  description?: ReactNode;
-  icon?: ReactNode;
-  presentation?: "default" | "leading-icon" | "compact-inline";
-};
-
-/** Label-safe presentation; the field owner supplies the accessible association. */
-export function AdminFormControlHeader({
-  title,
-  description,
-  icon,
-  presentation = "default",
-}: AdminFormControlHeaderProps) {
-  const compact = presentation === "compact-inline";
-  const leadingIcon = presentation === "leading-icon" || compact;
-  const iconFrame = icon ? (
-    <span
-      aria-hidden="true"
-      className={compact
-        ? "inline-flex size-6 shrink-0 items-center justify-center rounded-lg border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] [&>svg]:size-4"
-        : leadingIcon
-        ? "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] [&>svg]:size-5"
-        : "inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.045] text-white/85 [&>svg]:size-5"}
-    >
-      {icon}
-    </span>
-  ) : null;
-
-  return (
-    <span
-      data-admin-form-control-header=""
-      data-admin-form-control-presentation={leadingIcon ? presentation : undefined}
-      className={compact
-        ? "flex min-w-0 items-center gap-1"
-        : leadingIcon
-        ? "flex min-w-0 items-center gap-3"
-        : "flex min-w-0 items-start justify-between gap-3"}
-    >
-      {leadingIcon ? iconFrame : null}
-      {leadingIcon && icon ? (
-        <span
-          aria-hidden="true"
-          className="h-8 w-px shrink-0 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent"
-        />
-      ) : null}
-      <span className="flex min-w-0 flex-col gap-1">
-        <span className={`${compact ? "break-words " : ""}text-sm font-semibold text-white`}>{title}</span>
-        {description ? (
-          <span className="text-xs leading-5 text-white/55">{description}</span>
-        ) : null}
-      </span>
-      {!leadingIcon ? iconFrame : null}
-    </span>
+    </AdminCard>
   );
 }
 
@@ -165,42 +126,41 @@ type AdminFormFieldProps = {
   required?: boolean;
   children: ReactNode;
   className?: string;
+  /** Optional title-only presentation; field spacing and controls retain their existing contract. */
+  labelClassName?: string;
+  /** @deprecated Both values use the canonical field presentation. */
+  presentation?: "default" | "panel";
 };
 
-export function AdminFormField({ label, hint, error, required, children, className = "" }: AdminFormFieldProps) {
-  return (
-    <label className={`block ${className}`.trim()}>
-      <span className="text-sm font-medium text-white/70">
-        {label}
-        {required ? " *" : null}
-      </span>
-      {hint ? <span className="mt-1 block text-xs text-white/45">{hint}</span> : null}
-      <div className="mt-2.5">{children}</div>
-      {error ? (
-        <span role="alert" className="mt-2 block text-xs font-semibold text-red-300">
-          {error}
+export function AdminFormField({ label, hint, error, required, children, className = "", labelClassName }: AdminFormFieldProps) {
+    return (
+      <label data-admin-form-field="" className={`${labelClassName ?? adminFormLabelClassName({ textInset: true })} ${className}`.trim()}>
+        <span data-admin-form-label-text>
+          {label}{required ? <> <span className="text-red-400">*</span></> : null}
         </span>
-      ) : null}
-    </label>
-  );
+        <div data-admin-form-field-control="" className="min-w-0">{children}</div>
+        {hint ? <span className={adminFormHintClassName({ textInset: true })}>{hint}</span> : null}
+        {error ? <span role="alert" className="mt-2 block text-xs font-semibold text-red-300">{error}</span> : null}
+      </label>
+    );
 }
 
 type AdminStickyFormBarProps = {
   title: ReactNode;
   description?: ReactNode;
+  icon?: ReactNode;
   children: ReactNode;
   className?: string;
 };
 
-export function AdminStickyFormBar({ title, description, children, className = "" }: AdminStickyFormBarProps) {
+export function AdminStickyFormBar({ title, description, icon = <AdminModuleTabIcon name="content" />, children, className = "" }: AdminStickyFormBarProps) {
   return (
     <div
       className={`sticky bottom-5 z-40 rounded-[26px] border border-white/10 bg-[#080B10]/95 p-4 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl ${className}`.trim()}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm font-semibold text-white">{title}</p>
-          {description ? <p className="mt-1 text-xs text-white/45">{description}</p> : null}
+          <AdminFormControlHeader title={title} description={description} icon={icon} presentation="leading-icon" />
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">{children}</div>
       </div>

@@ -1,4 +1,5 @@
 "use client";
+import { adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
@@ -14,7 +15,7 @@ import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
-import { AdminActionButton, AdminCard, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminActionButton, AdminFormControlHeader, AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
@@ -112,12 +113,12 @@ export default function AboutCtaModuleEditor({
   const textFields = showText ? (
       <ModuleEditorFieldGrid>
       <ModuleEditorField nature="short-text" span={6}>
-      <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} presentation="premium" description={isHomeContact ? "نص قصير يقدم فكرة القسم ويظهر فوق العنوان." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} description={isHomeContact ? "نص قصير يقدم فكرة القسم ويظهر فوق العنوان." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
         <input name="eyebrow" aria-label={fieldLabels.eyebrow} defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
       </ModuleEditorVisibilityAlignRow>
       </ModuleEditorField>
       <ModuleEditorField nature="short-text" span={6}>
-      <ModuleEditorVisibilityAlignRow label={fieldLabels.title} presentation="premium" description={isHomeContact ? "العنوان الرئيسي للقسم مع الحفاظ على فواصل الأسطر." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.title} description={isHomeContact ? "العنوان الرئيسي للقسم مع الحفاظ على فواصل الأسطر." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
         {isHomeContact ? (
           <textarea
             name="title"
@@ -132,7 +133,7 @@ export default function AboutCtaModuleEditor({
       </ModuleEditorVisibilityAlignRow>
       </ModuleEditorField>
       <ModuleEditorField nature="long-content" span={12}>
-      <ModuleEditorVisibilityAlignRow label={fieldLabels.description} presentation="premium" description={isHomeContact ? "وصف القسم كما يظهر في الصفحة." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.description} description={isHomeContact ? "وصف القسم كما يظهر في الصفحة." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
         <textarea
           name="description"
           aria-label={fieldLabels.description}
@@ -148,8 +149,8 @@ export default function AboutCtaModuleEditor({
   const ctaContent = (
       <>
       <AdminFormGrid>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">{fieldLabels.buttonLabel}</span>
+        <label className={adminFormLabelClassName({ textInset: true })}>
+          <span data-admin-form-label-text>{fieldLabels.buttonLabel}</span>
           <input name="button_label" defaultValue={config.button?.label ?? ""} className={fieldClassName()} />
         </label>
         <AdminLinkField
@@ -162,14 +163,14 @@ export default function AboutCtaModuleEditor({
           showAnchor
         />
       </AdminFormGrid>
-      <label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">{fieldLabels.note}</span>
+      <label className={adminFormLabelClassName({ textInset: true })}>
+        <span data-admin-form-label-text>{fieldLabels.note}</span>
         <input name="note" defaultValue={config.note ?? ""} className={fieldClassName()} />
       </label>
       </>
   );
   const ctaFields = showCta ? (
-    <AdminCard presentation="premium" className="space-y-4 p-4">{ctaContent}</AdminCard>
+    <ModuleEditorSection surface="neutral" className={ADMIN_FORM_STACK_CLASS_NAME}>{ctaContent}</ModuleEditorSection>
   ) : null;
 
   const imageContent = (
@@ -187,16 +188,15 @@ export default function AboutCtaModuleEditor({
       />
   );
   const imageFields = showImage ? (
-    <AdminCard presentation="premium" className="space-y-4 p-4"><AdminFormControlHeader presentation="leading-icon" title="صورة القسم" icon={<AdminModuleTabIcon name="media" />} />{imageContent}</AdminCard>
+    <ModuleEditorSection surface="neutral" className={ADMIN_FORM_STACK_CLASS_NAME}><AdminFormControlHeader presentation="leading-icon" title="صورة القسم" icon={<AdminModuleTabIcon name="media" />} />{imageContent}</ModuleEditorSection>
   ) : null;
 
   const contactsFields = showContacts ? (
-      <ModuleEditorSection>
-      <ModuleEditorRepeaterGrid columns={isHomeContact ? 2 : 3} presentation="premium">
+      <ModuleEditorSection surface="neutral">
+      <ModuleEditorRepeaterGrid columns={isHomeContact ? 2 : 3}>
         {contactRows.map((row, index) => (
           <ModuleEditorRepeaterCard
             key={row.uid}
-            presentation="premium"
             icon={isHomeContact ? <AdminModuleTabIcon name="location" /> : undefined}
             description={isHomeContact ? "بيانات وسيلة التواصل ورابطها وترتيبها." : undefined}
             title={`وسيلة ${index + 1}`}
@@ -224,8 +224,8 @@ export default function AboutCtaModuleEditor({
             )}
           >
 
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">{fieldLabels.contactLabel}</span>
+            <label className={adminFormLabelClassName({ textInset: true })}>
+              <span data-admin-form-label-text>{fieldLabels.contactLabel}</span>
               <input
                 name={`contact_${index}_label`}
                 value={row.label}
@@ -234,8 +234,8 @@ export default function AboutCtaModuleEditor({
               />
             </label>
 
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">{fieldLabels.contactValue}</span>
+            <label className={adminFormLabelClassName({ textInset: true })}>
+              <span data-admin-form-label-text>{fieldLabels.contactValue}</span>
               <input
                 name={`contact_${index}_value`}
                 value={row.value}
@@ -245,8 +245,8 @@ export default function AboutCtaModuleEditor({
             </label>
 
             {isHomeContact && row.icon === "whatsapp" ? (
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">رقم واتساب الثاني — اختياري</span>
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text>رقم واتساب الثاني — اختياري</span>
                 <input
                   name={`contact_${index}_secondary_value`}
                   value={row.secondaryValue}
@@ -256,8 +256,8 @@ export default function AboutCtaModuleEditor({
               </label>
             ) : null}
 
-            <div className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">الأيقونة</span>
+            <div className={adminFormLabelClassName({ textInset: true })}>
+              <span data-admin-form-label-text>الأيقونة</span>
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#D8B87A]/22 bg-[#D8B87A]/[0.07] text-[#D8B87A]/75">
                   {renderContactIcon(row.icon)}
@@ -287,7 +287,7 @@ export default function AboutCtaModuleEditor({
   ) : null;
 
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {textFields}
       {imageFields}
       {ctaFields}

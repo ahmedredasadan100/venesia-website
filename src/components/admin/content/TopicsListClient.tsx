@@ -670,13 +670,12 @@ export default function TopicsListClient({
   const seoAverage = controller.result.metrics?.seoAverage;
   const seoAverageUnavailable = metricsError || seoAverage == null;
   const metricItems: AdminMetricCardsGridItem[] = [
-    { label: "إجمالي الموضوعات", value: metricsError ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", icon: <AdminModuleTabIcon name="database" />, compact: true, onClick: () => resetToView("active"), active: !isTrashView && !controller.query.search && controller.query.filters.contentType === "all" && !controller.query.filters.categoryId && !controller.query.filters.seriesId && controller.query.filters.status === "all" && controller.query.filters.featured === "all" && controller.query.filters.image === "all" },
-    { label: "منشور", value: metricsError ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", icon: <AdminDataGridActionIcon action="visibility" size="lg" />, compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
-    { label: "غير منشور", value: metricsError ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", icon: <AdminDataGridActionIcon action="visibility" isCurrentlyHidden size="lg" />, compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
-    { label: "بدون صورة", value: metricsError ? "—" : (controller.result.metrics?.withoutImage ?? 0), tone: "amber", icon: <AdminModuleTabIcon name="media" />, compact: true, onClick: () => controller.setFilter("image", "without"), active: !isTrashView && controller.query.filters.image === "without" },
-    { label: "مرتبطة بسلسلة", value: metricsError ? "—" : (controller.result.metrics?.withSeries ?? 0), tone: "cyan", icon: <AdminDataGridActionIcon action="copy-link" size="lg" />, compact: true, onClick: () => controller.setFilter("seriesId", "any"), active: !isTrashView && controller.query.filters.seriesId === "any" },
-    { label: "مميزة", value: metricsError ? "—" : (controller.result.metrics?.featured ?? 0), tone: "gold", icon: <AdminDataGridActionIcon action="feature" active size="lg" />, compact: true, onClick: () => controller.setFilter("featured", "yes"), active: !isTrashView && controller.query.filters.featured === "yes" },
-    { label: "متوسط SEO", value: seoAverageUnavailable ? "—" : seoAverage, suffix: seoAverageUnavailable ? undefined : "/100", tone: "blue", icon: <AdminModuleTabIcon name="statistics" />, compact: true },
+    { label: "الموضوعات", artwork: "content", value: metricsError ? "—" : (controller.result.metrics?.total ?? 0), tone: "blue", icon: <AdminModuleTabIcon name="content" />, compact: true, onClick: () => resetToView("active"), active: !isTrashView && !controller.query.search && controller.query.filters.contentType === "all" && !controller.query.filters.categoryId && !controller.query.filters.seriesId && controller.query.filters.status === "all" && controller.query.filters.featured === "all" && controller.query.filters.image === "all" },
+    { label: "منشور", artwork: "published", value: metricsError ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", cinematicTone: "emerald", icon: <AdminDataGridActionIcon action="visibility" size="lg" />, compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
+    { label: "غير منشور", artwork: "unpublished", value: metricsError ? "—" : (controller.result.metrics?.unpublished ?? 0), tone: "violet", cinematicTone: "red", icon: <AdminDataGridActionIcon action="visibility" isCurrentlyHidden size="lg" />, compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
+    { label: "مرتبطة بسلسلة", artwork: "series", value: metricsError ? "—" : (controller.result.metrics?.withSeries ?? 0), tone: "violet", icon: <AdminDataGridActionIcon action="copy-link" size="lg" />, compact: true, onClick: () => controller.setFilter("seriesId", "any"), active: !isTrashView && controller.query.filters.seriesId === "any" },
+    { label: "مميزة", artwork: "featured", value: metricsError ? "—" : (controller.result.metrics?.featured ?? 0), tone: "gold", icon: <AdminDataGridActionIcon action="feature" active size="lg" />, compact: true, onClick: () => controller.setFilter("featured", "yes"), active: !isTrashView && controller.query.filters.featured === "yes" },
+    { label: "متوسط SEO", artwork: "seo", value: seoAverageUnavailable ? "—" : seoAverage, suffix: seoAverageUnavailable ? undefined : "/100", tone: "blue", icon: <AdminModuleTabIcon name="statistics" />, compact: true },
   ];
   const trashCount = metricsError
     ? 0
@@ -701,17 +700,20 @@ export default function TopicsListClient({
         />
       ) : null}
       <AdminEntityListPrimarySection>
-        <AdminMetricCardsGrid items={metricItems} />
+        <AdminMetricCardsGrid items={metricItems} presentation="cinematic" ariaLabel="مؤشرات الموضوعات" />
       </AdminEntityListPrimarySection>
 
       {/* Quiet pending indicator only; aria-busy is reserved for the row
           action that owns the in-flight mutation. */}
       <AdminEntityListTableRegion
+        presentation="cinematic"
+        edgeMotion="entry"
         data-admin-entity-list-pending={
           controller.queryPending ? "true" : "false"
         }
       >
         <UnifiedContentList
+          presentation="cinematic"
           rows={controller.result.rows}
           queryPending={controller.queryPending}
           queryError={controller.error?.message}
@@ -751,6 +753,7 @@ export default function TopicsListClient({
           }}
         />
         <AdminTablePagination
+          presentation="cinematic"
           basePath={ADMIN_CONTENT_ROUTES.topics}
           totalCount={controller.result.pagination.totalRows}
           pageSize={String(controller.result.pagination.pageSize)}

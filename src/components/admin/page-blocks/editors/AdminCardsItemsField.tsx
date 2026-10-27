@@ -7,6 +7,7 @@ import AdminActionButton from "../../ui/AdminActionButton";
 import { AdminFormControlHeader } from "../../ui/AdminForm";
 import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 
+import { adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { CardsBlockItem } from "../../../../lib/page-blocks/configs";
 import {
@@ -18,7 +19,7 @@ import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-ed
 type AdminCardsItemsFieldProps = {
   items: CardsBlockItem[];
   label?: string;
-  presentation?: "default" | "premium";
+
   minItems?: number;
   maxItems?: number;
   showIcon?: boolean;
@@ -38,13 +39,13 @@ function padItems(items: CardsBlockItem[], minItems: number): CardsEditorItem[] 
 export default function AdminCardsItemsField({
   items,
   label = "البطاقات",
-  presentation = "default",
+
   minItems = 1,
   maxItems = 12,
   showIcon = true,
   renderHref,
 }: AdminCardsItemsFieldProps) {
-  const premium = presentation === "premium";
+
   const [rows, setRows] = useState<CardsEditorItem[]>(() =>
     padItems(items, minItems).slice(0, maxItems),
   );
@@ -77,70 +78,47 @@ export default function AdminCardsItemsField({
       { clientKey: `new-card-${Date.now()}-${current.length}` },
     ]);
   }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {premium ? (
-          <AdminFormControlHeader
+        <AdminFormControlHeader
             presentation="leading-icon"
             title={<span role="heading" aria-level={3}>{label}</span>}
             icon={<AdminModuleTabIcon name="section" />}
           />
-        ) : (
-          <h3 className="text-sm font-semibold text-white">{label}</h3>
-        )}
-        {premium ? (
-          <AdminActionButton variant="gold" onClick={addItem} disabled={rows.length >= maxItems}>
+        <AdminActionButton variant="gold" onClick={addItem} disabled={rows.length >= maxItems}>
             <PlusIcon className="size-5" />
             إضافة بطاقة
           </AdminActionButton>
-        ) : (
-        <button
-          type="button"
-          onClick={addItem}
-          disabled={rows.length >= maxItems}
-          className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          إضافة بطاقة
-        </button>
-        )}
       </div>
 
-      <ModuleEditorRepeaterGrid presentation={presentation} columns={3}>
+      <ModuleEditorRepeaterGrid columns={3}>
         {rows.map((item, index) => (
           <ModuleEditorRepeaterCard
             key={item.clientKey}
-            presentation={presentation}
-            icon={premium ? <AdminModuleTabIcon name="section" /> : undefined}
+            icon={<AdminModuleTabIcon name="section" />}
             title={`بطاقة ${index + 1}`}
-            actions={premium ? (
+            actions={(
               <>
                 <AdminActionButton size="icon" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك البطاقة ${index + 1} لأعلى`}>↑</AdminActionButton>
                 <AdminActionButton size="icon" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك البطاقة ${index + 1} لأسفل`}>↓</AdminActionButton>
                 <AdminActionButton size="icon" variant="danger" onClick={() => removeItem(index)} disabled={rows.length <= minItems} aria-label={`حذف البطاقة ${index + 1}`}><TrashIcon className="size-5" /></AdminActionButton>
               </>
-            ) : (
-              <>
-                <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك البطاقة ${index + 1} لأعلى`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↑</button>
-                <button type="button" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك البطاقة ${index + 1} لأسفل`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↓</button>
-                <button type="button" onClick={() => removeItem(index)} disabled={rows.length <= minItems} aria-label={`حذف البطاقة ${index + 1}`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">حذف</button>
-              </>
             )}
           >
             <div className="space-y-3">
               {showIcon ? (
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
+                <label className={adminFormLabelClassName({ textInset: true })}>
+                  <span data-admin-form-label-text="">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
                   <input name={`item_${index}_icon`} value={item.icon ?? ""} onChange={(event) => updateItem(index, { icon: event.target.value })} className={fieldClassName()} />
                 </label>
               ) : null}
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">العنوان</span>
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text="">العنوان</span>
                 <input name={`item_${index}_title`} value={item.title ?? ""} onChange={(event) => updateItem(index, { title: event.target.value })} className={fieldClassName()} />
               </label>
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}</span>
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text="">{MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}</span>
                 <textarea name={`item_${index}_body`} value={item.body ?? ""} onChange={(event) => updateItem(index, { body: event.target.value })} rows={2} className={fieldClassName("resize-y leading-7")} />
               </label>
               {renderHref ? (

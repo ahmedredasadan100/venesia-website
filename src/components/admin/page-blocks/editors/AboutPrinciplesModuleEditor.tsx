@@ -1,4 +1,5 @@
 "use client";
+import { adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
@@ -7,16 +8,17 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
-import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminActionButton, AdminFormControlHeader, AdminFormListboxSelect } from "../../ui";
+import { TrashIcon } from "../../AdminRowActions";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminActionButton, AdminFormListboxSelect } from "../../ui";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   ABOUT_PRINCIPLES_ICON_KEYS,
@@ -88,25 +90,25 @@ export default function AboutPrinciplesModuleEditor({
   };
 
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {isHomeTrust && showText ? <input type="hidden" name="include_home_trust_intro" value="1" /> : null}
       {showCards ? <input type="hidden" name="principle_count" value={String(items.length)} /> : null}
 
       {showText ? (
         <ModuleEditorFieldGrid>
         <ModuleEditorField nature="short-text" span={6}>
-        <ModuleEditorVisibilityAlignRow label="النص التمهيدي" presentation="premium" description={isHomeTrust ? "نص قصير يقدم فكرة القسم ويظهر فوق العنوان." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+        <ModuleEditorVisibilityAlignRow label="النص التمهيدي" description={isHomeTrust ? "نص قصير يقدم فكرة القسم ويظهر فوق العنوان." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
           <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
         </ModuleEditorVisibilityAlignRow>
         </ModuleEditorField>
         <ModuleEditorField nature="short-text" span={6}>
-        <ModuleEditorVisibilityAlignRow label="العنوان الرئيسي" presentation="premium" description={isHomeTrust ? "العنوان الرئيسي للقسم ويظهر بحجم أكبر في الصفحة." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+        <ModuleEditorVisibilityAlignRow label="العنوان الرئيسي" description={isHomeTrust ? "العنوان الرئيسي للقسم ويظهر بحجم أكبر في الصفحة." : undefined} icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
           <input name="title" aria-label="العنوان الرئيسي" defaultValue={config.title ?? ""} className={fieldClassName()} />
         </ModuleEditorVisibilityAlignRow>
         </ModuleEditorField>
         {isHomeTrust ? (
           <ModuleEditorField nature="long-content" span={12}>
-          <ModuleEditorVisibilityAlignRow label="الفقرة التعريفية" presentation="premium" description="محتوى تفصيلي يشرح فكرة القسم ويظهر في الصفحة." icon={<AdminModuleTabIcon name="content" />} showName="show_description" showDefault={descriptionFormat.visible} controlMode="visibility-only">
+          <ModuleEditorVisibilityAlignRow label="الفقرة التعريفية" description="محتوى تفصيلي يشرح فكرة القسم ويظهر في الصفحة." icon={<AdminModuleTabIcon name="content" />} showName="show_description" showDefault={descriptionFormat.visible} controlMode="visibility-only">
           <AdminRichTextEditor
             name="principles_intro"
             label="الفقرة التعريفية"
@@ -124,10 +126,7 @@ export default function AboutPrinciplesModuleEditor({
       ) : null}
 
       {showCards ? (
-      <ModuleEditorSection>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {isHomeTrust ? <ModuleEditorSectionHeading intent="repeater">بطاقات الثقة (4)</ModuleEditorSectionHeading> : <AdminFormControlHeader title="المبادئ (حتى 6)" />}
-          {!isHomeTrust ? (
+      <ModuleEditorSection presentation="panel" header={<AdminModuleSectionHeader id="content-principles" sectionHeading={isHomeTrust ? "بطاقات الثقة (4)" : "المبادئ (حتى 6)"} icon="section" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} sectionSummary={!isHomeTrust ? (
             <AdminActionButton
               type="button"
               onClick={addItem}
@@ -136,14 +135,12 @@ export default function AboutPrinciplesModuleEditor({
             >
               إضافة عنصر
             </AdminActionButton>
-          ) : null}
-        </div>
+          ) : null} />}>
 
-        <ModuleEditorRepeaterGrid columns={isHomeTrust ? 2 : 3} presentation="premium">
+        <ModuleEditorRepeaterGrid columns={isHomeTrust ? 2 : 3}>
           {items.map((item, index) => (
             <ModuleEditorRepeaterCard
               key={index}
-              presentation="premium"
               icon={isHomeTrust ? <AdminModuleTabIcon name="section" /> : undefined}
               description={isHomeTrust ? "عنوان البطاقة ووصفها وصورتها الاختيارية." : undefined}
               title={isHomeTrust ? `بطاقة ${index + 1}` : `عنصر ${index + 1}`}
@@ -172,8 +169,11 @@ export default function AboutPrinciplesModuleEditor({
                       onClick={() => removeItem(index)}
                       disabled={items.length <= 1}
                       variant="danger"
+                      size="icon"
+                      title={`حذف المبدأ ${index + 1}`}
+                      aria-label={`حذف المبدأ ${index + 1}`}
                     >
-                      حذف
+                      <TrashIcon className="size-5" />
                     </AdminActionButton>
                 </>
               ) : undefined}
@@ -193,8 +193,8 @@ export default function AboutPrinciplesModuleEditor({
               ) : (
                 <input type="hidden" name={`principle_${index}_icon`} value={item.icon ?? "land"} />
               )}
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text>
                   {isHomeTrust ? "عنوان البطاقة" : "عنوان العنصر"}
                 </span>
                 <input
@@ -203,8 +203,8 @@ export default function AboutPrinciplesModuleEditor({
                   className={fieldClassName()}
                 />
               </label>
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold text-white/55">
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text>
                   {isHomeTrust ? "وصف البطاقة" : "وصف العنصر"}
                 </span>
                 <textarea

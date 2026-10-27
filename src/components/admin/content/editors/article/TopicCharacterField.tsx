@@ -14,12 +14,16 @@ type TopicCharacterFieldProps = {
   id?: string;
   name: string;
   label: string;
+  /** Optional shared label/stack classes; omitted consumers retain their current presentation. */
+  labelClassName?: string;
   defaultValue?: string | null;
   value?: string;
   onValueChange?: (value: string) => void;
   placeholder: string;
   required?: boolean;
   rows?: number;
+  /** Honor authored rows without the legacy textarea floor in compact panels. */
+  textareaSizing?: "default" | "rows";
   dir?: "rtl" | "ltr";
 };
 
@@ -28,12 +32,14 @@ export default function TopicCharacterField({
   id,
   name,
   label,
+  labelClassName,
   defaultValue = "",
   value,
   onValueChange,
   placeholder,
   required = false,
   rows = 3,
+  textareaSizing = "default",
   dir = "rtl",
 }: TopicCharacterFieldProps) {
   const initialValue = defaultValue ?? "";
@@ -70,7 +76,7 @@ export default function TopicCharacterField({
         aria-invalid={hasError || undefined}
         aria-describedby={hasError ? `${name}-error` : undefined}
         dir={dir}
-        className={`${className} h-auto min-h-40 resize-y overflow-y-auto leading-6 ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
+        className={`${className} h-auto${textareaSizing === "rows" ? "" : " min-h-40"} resize-y overflow-y-auto leading-6 ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
       />
     ) : (
       <input
@@ -87,8 +93,8 @@ export default function TopicCharacterField({
     );
 
   return (
-    <label htmlFor={id} className="block space-y-1.5">
-      <span className="inline-flex items-center gap-2 text-xs font-medium text-white/58">
+    <label htmlFor={id} className={labelClassName ?? "block space-y-1.5"}>
+      <span data-admin-form-label-text className={`inline-flex items-center gap-2${labelClassName === undefined ? " text-xs font-medium text-white/58" : ""}`}>
         <span>
           {label} {required ? <span className="text-red-400">*</span> : null}
         </span>

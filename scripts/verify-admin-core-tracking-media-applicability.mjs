@@ -9,7 +9,20 @@ import {coreTrackingMediaSourceBindings,coreTrackingNonMediaFields,coreTrackingN
 const root=path.resolve(import.meta.dirname,'..'),checks=[],check=(name,task)=>{task();checks.push(name);},read=file=>fs.readFileSync(path.resolve(root,file),'utf8');
 function declaration(file,name){const source=read(file),ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),nodes=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.equal(nodes.length,1);return nodes[0].getText(ast).replace(/^export /u,'');}
 const {retainedTrackingMediaCases,assertHistoricalCoreCaseIdentity}=new Function('assert','createHash',declaration('scripts/qa-admin-adoption-journeys.mjs','retainedTrackingMediaCases')+'\n'+declaration('scripts/qa-admin-adoption-journeys.mjs','assertHistoricalCoreCaseIdentity')+';return {retainedTrackingMediaCases,assertHistoricalCoreCaseIdentity};')(assert,createHash);
-const output=path.resolve(root,'.tmp-qa/core-final-closure/tracking-media-applicability-controls');fs.mkdirSync(output,{recursive:true});
+const requestedOutput=process.env.CORE_TRACKING_MEDIA_OUTPUT,qaRoot=path.join(root,'.tmp-qa');
+const output=requestedOutput===undefined?path.join(qaRoot,'core-final-closure/tracking-media-applicability-controls'):path.resolve(root,requestedOutput);
+if(requestedOutput!==undefined){
+ const relative=path.relative(qaRoot,output);
+ assert.ok(requestedOutput.trim()&&relative&&!path.isAbsolute(relative)&&relative!=='..'&&!relative.startsWith('..'+path.sep),'Fresh Tracking Media QA output must remain strictly inside the repository .tmp-qa tree.');
+ let ancestor=qaRoot;
+ for(const part of ['',...relative.split(path.sep).slice(0,-1)]){
+  ancestor=path.join(ancestor,part);
+  try{const state=fs.lstatSync(ancestor);assert.ok(state.isDirectory()&&!state.isSymbolicLink(),'Fresh Tracking Media QA output cannot traverse symlinks or junctions.');}
+  catch(error){if(error.code!=='ENOENT')throw error;}
+ }
+ fs.mkdirSync(path.dirname(output),{recursive:true});
+ fs.mkdirSync(output); // Exclusive target creation preserves every previous receipt.
+}else fs.mkdirSync(output,{recursive:true});
 const result=spawnSync(process.execPath,['scripts/qa-admin-adoption-journeys.mjs','--core-closure','--inventory-only'],{cwd:root,encoding:'utf8',timeout:120000,maxBuffer:4000000,windowsHide:true,env:{...process.env,QA_ADMIN_OUTPUT:path.join(output,'inventory'),QA_ADMIN_USERNAME:'',QA_ADMIN_PASSWORD:''}});assert.ifError(result.error);assert.equal(result.status,0,result.stderr||result.stdout);
 const inventory=JSON.parse(fs.readFileSync(path.join(output,'inventory/admin-adoption-browser.json'),'utf8'));assert.equal(inventory.inventoryOnly,true);assert.equal(inventory.driverCompleted,false);assert.deepEqual(inventory.evidence,[]);assert.equal(inventory.globalClosed,false);const requiredCases=inventory.requiredCases;
 const accountingSource=ts.transpile(declaration('scripts/verify-admin-adoption-readback-isolated.mts','assertCoreHistoricalCoverageAccounting'),{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None});const accountingJoin=new Function('assert',accountingSource+';return assertCoreHistoricalCoverageAccounting;')(assert);

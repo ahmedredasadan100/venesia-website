@@ -34,7 +34,7 @@ import {resolveHeroContentControlsForVariant} from '@src/lib/hero/hero-content-c
 const root=createRoot(document.getElementById('root'));
 const assignmentContext={assignments:[],pages:[]};
 const block={id:51,name:'Proof block',slug:'',description:null,style_preset:'premium-dark',status:'unpublished',updated_at:'2026-09-13T00:00:00.000Z'};
-window.calls=0;window.payloads=[];window.mode='failure';window.holdMediaResult=false;
+window.calls=0;window.payloads=[];window.mode='failure';window.holdMediaResult=false;window.__remainingContentProofMetaReadCalls=0;
 window.__remainingContentProofNavigation={href:null,calls:[]};
 window.__remainingContentProofNativeNavigation=window.navigation;
 window.action=async(...args)=>{
@@ -72,11 +72,17 @@ export const useRouter=()=>router;export const usePathname=()=>'/proof';export c
 await writeFile(path.join(out, "link.tsx"), `import React from 'react';export default function Link({href,children,prefetch,...props}){return <a href={href} {...props}>{children}</a>}`);
 await writeFile(path.join(out, "image.tsx"), `import React from 'react';export default function Image({fill,priority,unoptimized,quality,loader,...props}){return <img {...props}/>}`);
 await writeFile(path.join(out, "actions.ts"), `export const updateHeroTemplateDetails=(...args)=>window.action(...args);export const saveContentForm=(...args)=>window.action(...args);`);
+await writeFile(path.join(out, "media-validation.ts"), `export async function readMediaVideoEmbed(payload){window.__remainingContentProofMetaReadCalls++;throw new Error("Unexpected Meta embed Server Function read outside remaining-content proof scope");}`);
 await writeFile(path.join(out, "link-actions.ts"), `export const browseAdminLinksAjax=async()=>[];export const browseMenusPickerAjax=async()=>[];export const browseMenuItemsPickerAjax=async()=>[];export const browseTopicCategoriesPickerAjax=async()=>[];export const resolveAdminLinkAjax=async()=>[];`);
 const { loadBindings } = require("next/dist/build/swc"); await loadBindings();
 const webpack = require("next/dist/compiled/webpack/webpack").webpack;
+function replaceRemainingMediaReadAction(resource) {
+  const full = path.resolve(resource.context, resource.request).replaceAll("\\", "/");
+  const canonical = path.join(root, "src/app/admin/content/topics/media-actions/validation").replaceAll("\\", "/");
+  if (full === canonical) resource.request = path.join(out, "media-validation.ts");
+}
 const compiler = webpack({ mode: "development", target: "web", context: root, entry: path.join(out, "entry.tsx"), output: { path: out, filename: "fixture.js" }, devtool: false,
-  plugins: [new webpack.NormalModuleReplacementPlugin(/(actions|save|\/ui)$/, resource => {
+  plugins: [new webpack.NormalModuleReplacementPlugin(/(?:^|\/)media-actions\/validation$/, replaceRemainingMediaReadAction), new webpack.NormalModuleReplacementPlugin(/(actions|save|\/ui)$/, resource => {
     const full = path.resolve(resource.context, resource.request).replaceAll("\\", "/");
     if (full.endsWith("/components/admin/ui")) resource.request = path.join(root, "src/components/admin/ui/index.ts");
     else if (full.endsWith("/lib/admin/links/actions")) resource.request = path.join(out, "link-actions.ts");
@@ -118,8 +124,11 @@ async function check(name, run) {
   });
   try {
     await page.goto(origin); await page.waitForFunction(() => typeof window.mount === "function");
-    const detail = await run(page); assert.deepEqual(errors, []);
-    results.push({ name, status: "PASS", ...detail, blockedRequests: blocked }); console.log(`PASS ${name}`);
+    const detail = await run(page);
+    const metaReadActionCalls = await page.evaluate(() => window.__remainingContentProofMetaReadCalls);
+    assert.equal(metaReadActionCalls, 0, "Current remaining-content cases do not invoke the isolated Meta read Server Function");
+    assert.deepEqual(errors, []);
+    results.push({ name, status: "PASS", ...detail, blockedRequests: blocked, metaReadActionCalls }); console.log(`PASS ${name}`);
   } catch (error) {
     attempts.push({ name, message: String(error), errors });
     await page.screenshot({ path: path.join(out, `${name}-failure.png`), fullPage: true });
@@ -201,11 +210,61 @@ try {
     return { canonicalPresentation: parsed, isolatedRenderer: true, mountedInputRetention: true, redirectSaveAcknowledged: false, viewportWidths: [1280, 390] };
   });
   for (const type of ["news", "press", "site_update", "gallery"]) await check(`media-create-${type}`, async page => {
-    const values = { category_id: 1, image: "/proof.svg", image_alt: "Proof cover", slug: `remaining-${type}`, title: `Scoped ${type} creation`, excerpt: "Scoped excerpt", content: "Scoped body", ...(type === "gallery" ? { media_payload: { kind: "gallery", images: [{ url: "/proof.svg", alt: "First proof", caption: "First caption" }] } } : {}) };
+    const values = { category_id: 1, image: "/proof.svg", image_alt: "Proof cover", slug: `remaining-${type}`, title: `Scoped ${type} creation`, excerpt: "Scoped excerpt", content: "Scoped body", ...(type === "gallery" ? { media_payload: { kind: "gallery", images: [{ url: "/proof.svg", alt: "First proof", caption: "First caption" }, { url: "/proof.svg?second", alt: "Second proof", caption: "Second caption" }] } } : {}) };
     await mount(page, `media:${type}`, {}, values);
     await fill(page, "title", `Preserved ${type} create input`);
     if (type === "news" || type === "site_update") await fill(page, "media_project", "P101");
-    if (type === "gallery") await fill(page, "gallery_image_caption", "Preserved gallery caption");
+    let galleryActions;
+    if (type === "gallery") {
+      const catalogReads = [];
+      const replacement = { id: "qa-gallery-replacement", provider: "supabase", bucket: "cms-images", objectKey: "images/map-proof.svg", publicUrl: managedImageUrl, originalFilename: "map-proof.svg", displayName: "QA Gallery replacement", kind: "image", mimeType: "image/svg+xml", extension: "svg", sizeBytes: proofSvg.length, width: 300, height: 200, checksum: null, folderPath: "images", status: "active", uploadedBy: 7, defaultAltText: "Library default must not replace item Alt", defaultTitle: null, defaultCaption: "Library default must not replace item Caption", reconciliationState: "synced", missingObject: false, catalogRegistered: true, source: "catalog_storage", createdAt: "2026-10-22T00:00:00.000Z", updatedAt: "2026-10-22T00:00:00.000Z", referenceCount: 0 };
+      // Existing browser port: serve a fixed read-only catalog; every write stays blocked.
+      await page.route("**/api/admin/media-library?**", route => {
+        assert.equal(route.request().method(), "GET");
+        catalogReads.push(route.request().url());
+        return route.fulfill({ json: { catalogState: "available", warning: null, assets: [replacement], folders: [], page: 1, pageSize: 10, total: 1, totalPages: 1, summary: { assetCount: 1, folderCount: 0, imageCount: 1, documentCount: 0, totalBytes: proofSvg.length, managedStorageAssetCount: 1, readOnlyAssetCount: 0, unknownSizeCount: 0, largestAsset: null, catalogRegisteredCount: 1, unreconciledAssetCount: 0, usageUnknownCount: 0, missingObjectCount: 0 }, readiness: { safeDeleteReady: false, usageResultsAuthoritative: false, reasons: [] } } });
+      });
+      const captureGallery = () => page.evaluate(() => {
+        const data = new FormData(document.querySelector('form[data-admin-form-runtime]'));
+        const urls = data.getAll("gallery_image_url"), alts = data.getAll("gallery_image_alt"), captions = data.getAll("gallery_image_caption");
+        return urls.map((url, index) => ({ url, alt: alts[index], caption: captions[index] }));
+      });
+      const first = { url: "/proof.svg", alt: "First proof", caption: "First caption" };
+      const second = { url: "/proof.svg?second", alt: "Second proof", caption: "Second caption" };
+      const card = index => page.locator(`[data-admin-media-gallery-card="image"][data-admin-media-gallery-index="${index}"]`);
+      await reveal(page.locator('[name="gallery_image_caption"]').first());
+      assert.equal(await page.locator('[data-admin-media-gallery-card="image"] [data-admin-media-image-actions]').count(), 2);
+      assert.deepEqual(await captureGallery(), [first, second]);
+      assert.equal(await card(0).locator('[data-admin-media-gallery-action="move-up"]').isDisabled(), true);
+      assert.equal(await card(1).locator('[data-admin-media-gallery-action="move-down"]').isDisabled(), true);
+      await card(0).locator('[data-admin-media-gallery-action="move-down"]').click();
+      assert.deepEqual(await captureGallery(), [second, first], "Moving an item preserves its ordered URL/Alt/Caption tuple");
+      const replace = card(0).locator('[data-admin-media-gallery-action="replace"]');
+      assert.equal(await replace.getAttribute("type"), "button");
+      assert.equal(await replace.locator("svg").count(), 1, "Selected card Replace uses its canonical icon action");
+      await replace.click();
+      const picker = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true });
+      await picker.waitFor({ state: "visible" });
+      await page.keyboard.press("Escape");
+      await picker.waitFor({ state: "hidden" });
+      await page.waitForFunction(() => document.activeElement === document.querySelector('[data-admin-media-gallery-index="0"] [data-admin-media-gallery-action="replace"]'));
+      assert.deepEqual(await captureGallery(), [second, first], "Cancelling Replace preserves both item tuples");
+      await replace.click();
+      await picker.locator('article > button[aria-pressed]').filter({ hasText: "QA Gallery replacement" }).click();
+      await picker.getByRole("button", { name: "تأكيد الاختيار", exact: true }).click();
+      await picker.waitFor({ state: "hidden" });
+      const replaced = { ...second, url: managedImageUrl };
+      assert.deepEqual(await captureGallery(), [replaced, first], "Replacing changes only the selected URL, retaining item Alt/Caption");
+      const remove = card(1).locator('[data-admin-media-image-actions] [data-admin-media-gallery-action="remove"]');
+      assert.equal(await remove.getAttribute("type"), "button");
+      assert.equal(await remove.locator("svg").count(), 1, "Selected card Remove uses its canonical icon action");
+      await remove.click();
+      assert.deepEqual(await captureGallery(), [replaced], "Remove deletes only the selected item and keeps the surviving tuple");
+      assert.equal(await page.evaluate(() => window.calls), 0, "Gallery controls never submit the parent form");
+      assert.ok(catalogReads.length > 0, "Replace selects through the real picker read-only catalog port");
+      await fill(page, "gallery_image_caption", "Preserved gallery caption");
+      galleryActions = { canonicalCardIcons: true, replaceCancelFocusReturn: true, replaceRetainsItemMetadata: true, reorderRetainsItemMetadata: true, removeRetainsSurvivorMetadata: true, zeroActionCallsBeforeSave: true, readOnlyCatalogRequests: catalogReads.length };
+    }
     const before = owners.state.writes;
     await submit(page); await release(page);
     assert.equal(owners.state.writes, before); assert.equal(await page.locator('[name="title"]').inputValue(), `Preserved ${type} create input`);
@@ -229,7 +288,7 @@ try {
     assert.equal(owners.state.writes, before + 1, "Delayed create handoff must not repeat persistence");
     assert.equal(await page.evaluate(() => window.calls), 2, "One rejected submission and one successful retry");
     if (type === "news" || type === "site_update") assert.equal(row.media_project, "P101");
-    if (type === "gallery") { assert.equal(row.content, ""); assert.equal(row.media_payload.images[0].caption, "Preserved gallery caption"); }
+    if (type === "gallery") { assert.equal(row.content, ""); assert.deepEqual(row.media_payload.images, [{ url: managedImageUrl, alt: "Second proof", caption: "Preserved gallery caption" }]); }
     await mount(page, `media:${type}`, {}, JSON.parse(JSON.stringify(row)));
     assert.equal(await page.locator('[name="title"]').inputValue(), row.title);
     const readBack = form(await page.evaluate(() => window.capture()));
@@ -237,7 +296,8 @@ try {
     const duplicate = form(await page.evaluate(() => window.payloads.at(-1))); duplicate.delete("id");
     const duplicateResult = await owners.media.saveMediaContentAdapter({ status: "idle", mode: "create", revision: 0 }, duplicate);
     assert.equal(duplicateResult.status, "error"); assert.ok(duplicateResult.fieldErrors?.slug); assert.equal(owners.state.writes, before + 1);
-    return { isolatedCreateAction: true, mountedFailureRetry: true, createToEditResult: true, delayedHandoffVerified: true, nativeNavigationPreserved: true, exactNavigationCalls: 1, successfulWrites: 1, duplicateRejected: true, row };
+    if (type === "gallery") assert.deepEqual({ urls: readBack.getAll("gallery_image_url"), alts: readBack.getAll("gallery_image_alt"), captions: readBack.getAll("gallery_image_caption") }, { urls: [managedImageUrl], alts: ["Second proof"], captions: ["Preserved gallery caption"] });
+    return { isolatedCreateAction: true, mountedFailureRetry: true, createToEditResult: true, delayedHandoffVerified: true, nativeNavigationPreserved: true, exactNavigationCalls: 1, successfulWrites: 1, duplicateRejected: true, ...(galleryActions ? { galleryActions } : {}), row };
   });
 } finally {
   await browser.close(); await new Promise(resolve => server.close(resolve)); globalThis.fetch = originalFetch;

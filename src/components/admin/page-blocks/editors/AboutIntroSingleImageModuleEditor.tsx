@@ -13,9 +13,9 @@ import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminCard, AdminFormControlHeader, AdminFormGrid } from "../../ui";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminCard, AdminFormControlHeader, AdminFormGrid } from "../../ui";
 import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
-import { ADMIN_FORM, adminChoiceButtonClassName } from "../../../../lib/admin/admin-ui-styles";
+import { ADMIN_FORM, adminChoiceButtonClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   resolvePageBlockTextFormat,
@@ -52,28 +52,28 @@ export default function AboutIntroSingleImageModuleEditor({
   const showCards = section === "all" || section === "cards";
 
   return (
-    <div className="space-y-4">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       {/* config_schema is owned by ContentModuleEditClient — avoid duplicate FormData names */}
       {showText ? (
       <div>
         <ModuleEditorFieldGrid>
           <ModuleEditorField nature="short-text" span={6}>
-          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow icon={<AdminModuleTabIcon name="content" />} label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
             <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="short-text" span={6}>
-          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow icon={<AdminModuleTabIcon name="content" />} label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
             <input name="title" aria-label="العنوان" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="short-text" span={12}>
-          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="العنوان الفرعي" showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
+          <ModuleEditorVisibilityAlignRow icon={<AdminModuleTabIcon name="content" />} label="العنوان الفرعي" showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
             <input name="subtitle" aria-label="العنوان الفرعي" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
           </ModuleEditorVisibilityAlignRow>
           </ModuleEditorField>
           <ModuleEditorField nature="long-content" span={12}>
-          <ModuleEditorVisibilityAlignRow presentation="premium" icon={<AdminModuleTabIcon name="content" />} label="الوصف" showName="show_description" showDefault={descriptionFormat.visible} controlMode="visibility-only">
+          <ModuleEditorVisibilityAlignRow icon={<AdminModuleTabIcon name="content" />} label="الوصف" showName="show_description" showDefault={descriptionFormat.visible} controlMode="visibility-only">
           <AdminRichTextEditor
             name="body"
             label="الوصف"
@@ -138,11 +138,11 @@ export default function AboutIntroSingleImageModuleEditor({
       ) : null}
 
       {showCards ? (
-        <ModuleEditorRepeaterGrid presentation="premium">
+        <ModuleEditorRepeaterGrid>
           {beats.map((beat, index) => (
-            <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`} presentation="premium" icon={<AdminModuleTabIcon name="section" />}>
-              <label className={ADMIN_FORM.labelStack}>
-                <span className="text-xs font-semibold text-white/55">الرقم / الشارة</span>
+            <ModuleEditorRepeaterCard key={index} title={`بطاقة ${index + 1}`} icon={<AdminModuleTabIcon name="section" />}>
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text>الرقم / الشارة</span>
                 <input
                   name={`beat_${index}_num`}
                   defaultValue={beat.num ?? ""}
@@ -150,16 +150,16 @@ export default function AboutIntroSingleImageModuleEditor({
                   className={fieldClassName("h-11")}
                 />
               </label>
-              <label className={ADMIN_FORM.labelStack}>
-                <span className="text-xs font-semibold text-white/55">العنوان</span>
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text>العنوان</span>
                 <input
                   name={`beat_${index}_title`}
                   defaultValue={beat.title ?? ""}
                   className={fieldClassName("h-11")}
                 />
               </label>
-              <label className={ADMIN_FORM.labelStack}>
-                <span className="text-xs font-semibold text-white/55">الوصف</span>
+              <label className={adminFormLabelClassName({ textInset: true })}>
+                <span data-admin-form-label-text>الوصف</span>
                 <textarea
                   name={`beat_${index}_text`}
                   defaultValue={beat.text ?? ""}

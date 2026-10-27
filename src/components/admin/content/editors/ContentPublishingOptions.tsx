@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { formatAdminDateTime } from "../../../../lib/content-dates";
+import { ADMIN_FORM } from "../../../../lib/admin/admin-ui-styles";
 import { AdminFormError } from "../../ui/AdminFormRuntime";
 import AdminFormSwitch from "../../ui/AdminFormSwitch";
-import { AdminEntityReviewDecisionCard } from "../../review/AdminEntityReviewPanel";
+import { AdminEntityReviewDecisionCard, type AdminEntityReviewPresentation } from "../../review/AdminEntityReviewPanel";
 import TopicDateLabelField from "./article/TopicDateLabelField";
 import TopicFormSwitch from "./article/TopicFormSwitch";
 
@@ -14,22 +15,29 @@ export default function ContentPublishingOptions({
   popular = false,
   publishedAt,
   dateLabel,
+  draftDisplayDate,
+  presentation = "default",
 }: {
   status?: string | null;
   featured?: boolean;
   popular?: boolean;
   publishedAt?: string | null;
   dateLabel?: string | null;
+  draftDisplayDate?: string;
+  presentation?: AdminEntityReviewPresentation;
 }) {
   const [published, setPublished] = useState(status === "published");
   const lastPublishTime = publishedAt ? formatAdminDateTime(publishedAt) : null;
+  const panel = presentation === "panel";
 
   return (
     <>
       <AdminEntityReviewDecisionCard
         id="publication-schedule"
         title="حالة النشر والتاريخ"
-        description="حالة المحتوى وموعد ظهوره العام."
+        description={panel ? undefined : "حالة المحتوى وموعد ظهوره العام."}
+        presentation={presentation}
+        icon="publish"
       >
         <input
           type="hidden"
@@ -51,14 +59,16 @@ export default function ContentPublishingOptions({
           <TopicDateLabelField
             defaultValue={dateLabel}
             publishedAt={publishedAt}
+            draftDisplayDate={draftDisplayDate}
             disabled={Boolean(publishedAt)}
             className="border-white/8 bg-black/20 px-3 py-3"
+            labelClassName={panel ? ADMIN_FORM.helperTextInset : undefined}
           />
         </div>
-        <p className="mt-2 text-[10px] leading-5 text-white/38">
+        <p className={panel ? `mt-2 text-[10px] leading-5 text-white/38 ${ADMIN_FORM.helperTextInset}` : "mt-2 text-[10px] leading-5 text-white/38"}>
           {lastPublishTime ? `آخر نشر · ${lastPublishTime}` : "لم يُنشر بعد"}
         </p>
-        <p id="content-publication-hint" className="mt-1 text-[10px] leading-5 text-white/32">
+        <p id="content-publication-hint" className={panel ? `mt-1 text-[10px] leading-5 text-white/32 ${ADMIN_FORM.helperTextInset}` : "mt-1 text-[10px] leading-5 text-white/32"}>
           غير المنشور لا يظهر للعامة ويمكن تحريره في أي وقت.
         </p>
         <AdminFormError name="status" />
@@ -66,8 +76,10 @@ export default function ContentPublishingOptions({
 
       <AdminEntityReviewDecisionCard
         id="featured-popular"
-        title="التمييز والانتشار"
-        description="تحكم مباشر في المميز والشائع."
+        title={panel ? "التمييز والاقتراح" : "التمييز والانتشار"}
+        description={panel ? undefined : "تحكم مباشر في المميز والشائع."}
+        presentation={presentation}
+        icon="settings"
       >
         <div className="mt-3 space-y-2">
           <div data-content-review-field="featured">

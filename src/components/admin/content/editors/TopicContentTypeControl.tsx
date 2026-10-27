@@ -15,16 +15,19 @@ import {
 export default function TopicContentTypeControl({
   value,
   mode,
+  labelClassName,
 }: {
   value: ContentType;
   mode: "create" | "edit";
+  /** Optional shared label/stack classes; omitted consumers retain their current presentation. */
+  labelClassName?: string;
 }) {
   const { fieldErrors, requestInternalNavigation } = useAdminFormRuntime();
   const hasError = Boolean(fieldErrors.content_type?.length);
 
   return (
-    <label className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5">
-      <span className="text-xs font-medium text-white/58">نوع المحتوى</span>
+    <label className={labelClassName ?? "inline-grid min-w-0 max-w-full shrink-0 space-y-1.5"}>
+      <span data-admin-form-label-text className={labelClassName === undefined ? "text-xs font-medium text-white/58" : undefined}>نوع المحتوى</span>
       <AdminListboxSelect
         id="topic-content-type-popover"
         triggerId="topic-content-type-popover-trigger"

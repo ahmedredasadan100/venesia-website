@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Admin Interaction System governance ledger.
  *
  * The system is a contracts/governance umbrella only. It does not own a
@@ -9,6 +9,8 @@
 
 import type { AdminEntityListEntityKey } from "../entity-list/data-engine/registry";
 import type { PageModuleKind } from "../../page-blocks/types.ts";
+import type { AdminMetricCardArtwork } from "../../../components/admin/ui/AdminMetricCard";
+import type { AdminHeaderVisualPreset } from "../../../components/admin/ui/AdminPageContextHeader";
 import type {
   AdminRowActionMoreKind,
   AdminRowActionPrimaryKind,
@@ -881,7 +883,7 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
       "src/components/admin/ui/AdminEntityPreviewActions.tsx",
     ],
     rationale:
-      "Media Topic Edit delegates internal Preview resolution and rendering to the same shared capability as Article Edit.",
+      "Media Topic Edit delegates internal Preview and eligible published Public View resolution and rendering to the same shared capability as Article Edit; unsaved entities have no actions and saved drafts retain internal Preview only.",
   },
   {
     id: "topic-category-collection-preview",
@@ -1621,6 +1623,34 @@ export type AdminCollectionConsumerAdoptionEvidence = {
   dataRegistryEntities: readonly AdminEntityListEntityKey[];
   genuineExceptions: readonly string[];
   requiredAdoption: readonly string[];
+  visualPresentation?: AdminConsumerVisualPresentationContract;
+};
+
+/** Consumer-specific visual requirements; these do not add a runtime or an audit axis.
+ * Component/source adoption, behavior proof and Owner approval stay separate evidence. */
+export type AdminConsumerVisualPresentationContract = {
+  moduleHeaders?: readonly (
+    | {
+        sourceFile: string;
+        state: "required";
+        semanticPresets: readonly [AdminHeaderVisualPreset, ...AdminHeaderVisualPreset[]];
+        icon: "required";
+        artwork: "required";
+      }
+    | {
+        sourceFile: string;
+        state: "not_applicable";
+        rationale: string;
+      }
+  )[];
+  metricCards?: readonly {
+    sourceFile: string;
+    items: readonly {
+      label: string;
+      icon: "required";
+      artwork: AdminMetricCardArtwork;
+    }[];
+  }[];
 };
 
 export type AdminCollectionTransportConsumer = {
@@ -1643,6 +1673,8 @@ export type AdminCollectionNavigationPrefetch = {
 
 export type AdminCollectionSurfaceInventoryEntry = {
   id: string;
+  /** Normative visual elements for this consumer, never proof of visual approval. */
+  visualPresentation?: AdminConsumerVisualPresentationContract;
   /** Omitted means active; deprecated entries require owner-backed evidence. */
   lifecycle?: "active" | "deprecated";
   deprecationEvidence?: {
@@ -1948,10 +1980,72 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
   defineAdminCollectionSurfaceAdoption({
     scope: "all_admin_collection_and_list_surfaces",
     proofBoundary: "source_and_executable_reachability",
+    visualPresentation: {
+      moduleHeaderPresentation: {
+        name: "06 Refined — Floating Gold",
+        ownerSourceFile: "src/components/admin/ui/AdminPageContextHeader.tsx",
+        styleOwnerSourceFile: "src/lib/admin/admin-ui-styles.ts",
+        decorativeBackgroundLinesHook: "data-admin-header-background-lines",
+        defaultAdoption: "shared_default_source_adopted",
+        consumerEvidence: ".tmp-qa/admin-development-batch-01/floating-gold-20261024/adoption-evidence.json",
+        proofBoundary: "individual_consumer_browser_or_source_evidence",
+        ownerFunctionalVisualReview: "pending",
+        globalClosed: false,
+      },
+      metricCardPresentation: {
+        name: "19 Refined A — Premium Hybrid 60%",
+        ownerSourceFiles: [
+          "src/components/admin/ui/AdminMetricCard.tsx",
+          "src/components/admin/ui/AdminMetricCardsGrid.tsx",
+        ],
+        styleOwnerSourceFile: "src/lib/admin/admin-ui-styles.ts",
+        semanticColorVariable: "--admin-metric-color",
+        defaultAdoption: "shared_default_source_adopted",
+        consumerEvidence: ".tmp-qa/admin-development-batch-01/kpi-datagrid-refined-20261024/adoption-evidence.json",
+        proofBoundary: "individual_consumer_browser_or_source_evidence",
+        preservedContract: "Existing semantic tones, values, icons, artwork, geometry, hover, focus and active/filter commands retain their current owners.",
+        ownerFunctionalVisualReview: "pending",
+        globalClosed: false,
+      },
+      dataGridPresentation: {
+        name: "02 Balanced Refined",
+        ownerSourceFiles: [
+          "src/components/admin/ui/AdminDataGrid.tsx",
+          "src/components/admin/entity-list/AdminEntityListSurface.tsx",
+          "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+        ],
+        styleOwnerSourceFile: "src/lib/admin/admin-ui-styles.ts",
+        outerFrameOwner: "ADMIN_CINEMATIC_GOLD_V1.collection.frame",
+        toolbarOwner: "AdminEntityListFilters",
+        defaultAdoption: "shared_default_source_adopted",
+        consumerEvidence: ".tmp-qa/admin-development-batch-01/kpi-datagrid-refined-20261024/adoption-evidence.json",
+        proofBoundary: "individual_consumer_browser_or_source_evidence",
+        preservedContract: "Embedded parent surfaces and joined-toolbar geometry remain intentional. Existing row colors, selection, hover, focus and consumer-specific bulk/state contracts are preserved; Topics selection is not generalized to other tables.",
+        ownerFunctionalVisualReview: "pending",
+        globalClosed: false,
+      },
+      sharedOwnerBoundaries: [
+        { sourceFile: "src/components/admin/ui/AdminPageHeader.tsx", state: "delegated", rationale: "The canonical Page wrapper forwards the caller's explicit semantic preset, icon and artwork; it does not infer module identity." },
+        { sourceFile: "src/components/admin/page-blocks/BlockEditorContextHeader.tsx", state: "delegated", rationale: "The existing contextual wrapper forwards semantic identity while preserving Save, status and return navigation." },
+        { sourceFile: "src/components/admin/page-blocks/ModuleEditorPresentation.tsx", state: "delegated", rationale: "The existing Module Editor header resolves its explicit moduleKind or caller override, then forwards icon/artwork through both direct and contextual return paths." },
+        { sourceFile: "src/components/admin/AdminPlaceholderPage.tsx", state: "delegated", rationale: "The existing placeholder forwards its caller's explicit semantic preset; Theme/Appearance remain Settings function placeholders." },
+        { sourceFile: "src/app/admin/error.tsx", state: "not_applicable", rationale: "Global route error has no single module identity; icon/artwork decoration is not applicable. Its one title still inherits shared shimmer, the current static module frame and geometry." },
+        { sourceFile: "src/app/admin/loading.tsx", state: "not_applicable", rationale: "Global route loading has no resolved module identity; icon/artwork decoration is not applicable. Its one title still inherits shared shimmer, the current static module frame and geometry." },
+        { sourceFile: "src/app/admin/not-found.tsx", state: "not_applicable", rationale: "The global missing-route boundary has no valid module identity; icon/artwork decoration is not applicable. Its one title still inherits shared shimmer, the current static module frame and geometry." },
+        { sourceFile: "src/components/admin/AdminShell.tsx", state: "not_applicable", rationale: "The minimal pending/fallback identity is navigation-owned and transient; module icon/artwork decoration is not applicable. Its title still inherits shared shimmer, the current static module frame and geometry; the independent System Header is unchanged." },
+      ],
+    },
     genericAdoptionGaps: [],
     canonicalSectionGap: "gap-7",
     canonicalTableFooterGap: "gap-4",
     ownerSourceFiles: {
+      // Shared tokens define the current default; this ledger records ownership, not a second style configuration.
+      presentation: "src/lib/admin/admin-ui-styles.ts",
+      table: "src/components/admin/ui/AdminDataGrid.tsx",
+      metrics: [
+        "src/components/admin/ui/AdminMetricCard.tsx",
+        "src/components/admin/ui/AdminMetricCardsGrid.tsx",
+      ],
       header: "src/components/admin/ui/AdminPageContextHeader.tsx",
       rowActions: "src/components/admin/ui/AdminDataGridRowActions.tsx",
       columns: "src/components/admin/entity-list/AdminEntityList.tsx",
@@ -1966,6 +2060,56 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-topics",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/content/topics/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "topics"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ],
+        metricCards: [
+          {
+            sourceFile: "src/components/admin/content/TopicsListClient.tsx",
+            items: [
+              {
+                label: "الموضوعات",
+                icon: "required",
+                artwork: "content"
+              },
+              {
+                label: "منشور",
+                icon: "required",
+                artwork: "published"
+              },
+              {
+                label: "غير منشور",
+                icon: "required",
+                artwork: "unpublished"
+              },
+              {
+                label: "مرتبطة بسلسلة",
+                icon: "required",
+                artwork: "series"
+              },
+              {
+                label: "مميزة",
+                icon: "required",
+                artwork: "featured"
+              },
+              {
+                label: "متوسط SEO",
+                icon: "required",
+                artwork: "seo"
+              }
+            ]
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
@@ -2032,11 +2176,56 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Generic content collection with shared metrics, filters, configurable columns, pagination, and Row Actions.",
+        "Generic content collection with shared metrics, filters, configurable columns, pagination, and Row Actions. Current system-wide presentation adoption uses the official shared Module Header and Collection/DataGrid default through the existing presentation resolver and current owners, including legacy grid-row consumers where their existing structure supports it. Historical Cinematic v1.0/v1.1 Topics-only opt-in boundaries remain historical evidence in the Admin System Registry; they are not the current default-adoption limit. Topics preserves its declared reading minimum through the existing sizing strategy, while other tables retain their applicable responsive width contract. Selection remains visible-page scoped; no new Project selection or bulk commands are adopted. Existing query, column preferences, row/bulk actions, permissions, confirmation and failure behavior remain authoritative. KPI metric binding and current filters, including image filters outside the six-card row, are preserved. Source reachability, representative browser evidence and Owner Functional/Visual Review remain separate.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-categories",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/content/categories/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "categories"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ],
+        metricCards: [
+          {
+            sourceFile: "src/app/admin/content/categories/CategoriesListClient.tsx",
+            items: [
+              {
+                label: "إجمالي التصنيفات",
+                icon: "required",
+                artwork: "taxonomy"
+              },
+              {
+                label: "إجمالي الموضوعات",
+                icon: "required",
+                artwork: "content"
+              },
+              {
+                label: "إجمالي السلاسل",
+                icon: "required",
+                artwork: "series"
+              },
+              {
+                label: "منشور",
+                icon: "required",
+                artwork: "published"
+              },
+              {
+                label: "غير منشور",
+                icon: "required",
+                artwork: "unpublished"
+              }
+            ]
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
         {},
@@ -2079,11 +2268,56 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Generic taxonomy collection; relation-aware delete remains a domain adapter behind shared presentation.",
+        "Generic taxonomy collection; relation-aware delete remains a domain adapter behind shared presentation. Categories metrics consume the canonical Metric Card/Grid official default, preserving the existing five values, supplied icons and static versus filter-action contracts. Historical omitted-presentation legacy chrome is not current adoption; consumer presentation completeness is verified separately from executable owner reachability.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-series",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/content/series/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "series"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ],
+        metricCards: [
+          {
+            sourceFile: "src/app/admin/content/series/SeriesTableClient.tsx",
+            items: [
+              {
+                label: "إجمالي السلاسل",
+                icon: "required",
+                artwork: "series"
+              },
+              {
+                label: "إجمالي الموضوعات",
+                icon: "required",
+                artwork: "content"
+              },
+              {
+                label: "متوسط الموضوعات لكل سلسلة",
+                icon: "required",
+                artwork: "series"
+              },
+              {
+                label: "منشور",
+                icon: "required",
+                artwork: "published"
+              },
+              {
+                label: "غير منشور",
+                icon: "required",
+                artwork: "unpublished"
+              }
+            ]
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
         {},
@@ -2124,11 +2358,24 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Generic taxonomy collection using the same list, columns, pagination, and Row Actions owners.",
+        "Generic taxonomy collection using the same list, columns, pagination, and Row Actions owners. Its existing five metrics inherit the canonical Metric Card/Grid official default; counts, supplied icons and filter-action behavior remain owned by this consumer. Presentation adoption and Owner Visual Review remain separate evidence boundaries.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "pages",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "pages"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_MODAL_CONSUMER_CAPABILITIES,
         {},
@@ -2174,6 +2421,28 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "projects-residential-commercial",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/projects/commercial/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "projects"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/projects/residential/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "projects"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
         {},
@@ -2206,7 +2475,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         sourceFieldNames: ["publication_status", "featured"],
       },
       columnVisibility: "shared_optional_columns",
-      summaryCards: true,
+      // Route + client expose result pagination, not a top-level KPI card row.
+      summaryCards: false,
       filtersOrToolbar: true,
       paginationState: "adopted",
       paginationOwner: "AdminTablePagination",
@@ -2220,11 +2490,33 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Residential and Commercial are locked Project query configurations over the same shared collection, publication-aware read model, columns, and action declaration.",
+        "Residential and Commercial are locked Project query configurations over the same shared collection, publication-aware read model, columns, and action declaration. Current route and client JSX expose no top-level KPI cards; summaryCards is corrected to false rather than inventing metrics or inferring their presence from collection result counts. Selection and Project bulk capabilities remain unadopted.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "project-locations",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/projects/locations/ProjectLocationManagementPage.tsx",
+            state: "required",
+            semanticPresets: [
+              "locations"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "locations"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
@@ -2288,6 +2580,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "seo-redirects",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/seo/redirects/RedirectsClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "seo"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
@@ -2343,10 +2648,23 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "project-locations-hub",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/projects/locations/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "locations"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       feedbackOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
       ),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
@@ -2376,10 +2694,23 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "projects-hub",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/projects/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "projects"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       feedbackOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
       ),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
@@ -2410,10 +2741,23 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "blocks-library-hub",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/blocks/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "blocks"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       feedbackOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
       ),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
@@ -2442,6 +2786,56 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "dashboard-recent-content",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/components/admin/dashboard/AdminDashboardView.tsx",
+            state: "required",
+            semanticPresets: [
+              "dashboard"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ],
+        metricCards: [
+          {
+            sourceFile: "src/components/admin/dashboard/AdminDashboardView.tsx",
+            items: [
+              {
+                label: "المحتوى النشط",
+                icon: "required",
+                artwork: "content"
+              },
+              {
+                label: "المحتوى المنشور",
+                icon: "required",
+                artwork: "published"
+              },
+              {
+                label: "إجمالي المشاريع",
+                icon: "required",
+                artwork: "projects"
+              },
+              {
+                label: "الصفحات",
+                icon: "required",
+                artwork: "pages"
+              },
+              {
+                label: "الميديا المدارة",
+                icon: "required",
+                artwork: "media"
+              },
+              {
+                label: "التصنيفات المنشورة",
+                icon: "required",
+                artwork: "taxonomy"
+              }
+            ]
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
@@ -2480,11 +2874,24 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       exceptionRationale:
         "The Dashboard view exposes bounded edit navigation but is not a standalone collection lifecycle.",
       rationale:
-        "Recent content and projects are bounded read-model snapshots; the recent-content table and edit/information actions adopt the shared Data Grid and Row Actions presentation owners. This Dashboard snapshot explicitly groups type, category, publication label, and update time below its wrapping title and uses the shared two-action width calculation. Optional topics.image/projects.image references use the existing Media Catalog availability projection and shared PublicMediaImage renderer, with a reserved decorative fallback and no per-row reads. Four-item content/activity excerpts link to the existing full lists; query limits and collection lifecycles remain unchanged.",
+        "Recent content and projects are bounded read-model snapshots; the recent-content table and edit/information actions adopt the shared Data Grid and Row Actions presentation owners. This Dashboard snapshot explicitly groups type, category, publication label, and update time below its wrapping title and uses the shared two-action width calculation. Optional topics.image/projects.image references use the existing Media Catalog availability projection and shared PublicMediaImage renderer, with a reserved decorative fallback and no per-row reads. Four-item content/activity excerpts link to the existing full lists; query limits and collection lifecycles remain unchanged. Cinematic Admin UI v1.0 and v1.1 refinements are registered as bounded opt-in presentation through the existing shared metric owners, including shared gold-border/hover motion, optional semantic artwork and scoped typography; the six KPI values remain projections of loadAdminDashboard and admin_dashboard_truth_v1, with no invented trend or comparison. Dashboard Module Header now inherits the official shared cinematic default, including its existing statistics artwork/icon and current action destinations. Historical actions-only adoption and the former default outer header remain historical evidence; current header/action presentation follows the same existing owners as other applicable modules. The inherited AdminShell System Header keeps its existing identity, permissions, and actions; reduced-motion, keyboard behavior and source proof do not grant Owner Functional/Visual Approval.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "activity-log",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/activity-log/ActivityLogClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "activity"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
@@ -2533,6 +2940,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "media-library",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/media-library/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "media"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_MEDIA_CONSUMER_CAPABILITIES,
         { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
@@ -2573,9 +2993,31 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "media-recovery-queue",
+      visualPresentation: {
+        metricCards: [{
+          sourceFile: "src/app/admin/settings/media/MediaRecoveryCenter.tsx",
+          items: [
+            { label: "عمليات حذف متوقفة", icon: "required", artwork: "unpublished" },
+            { label: "أصول مفقودة أو غير مؤكدة", icon: "required", artwork: "media" },
+            { label: "عمليات حفظ غير محلولة", icon: "required", artwork: "content" },
+          ],
+        }],
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/settings/media/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "media"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_CONSUMER_CAPABILITIES,
         {
+          scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
           busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
         },
       ),
@@ -2609,11 +3051,46 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "construction-updates-hub",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/projects/construction-updates/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "construction"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ],
+        metricCards: [
+          {
+            sourceFile: "src/app/admin/projects/construction-updates/page.tsx",
+            items: [
+              {
+                label: "المشروعات المتاحة",
+                icon: "required",
+                artwork: "projects"
+              },
+              {
+                label: "مراحل المتابعة",
+                icon: "required",
+                artwork: "series"
+              },
+              {
+                label: "التحديثات التاريخية",
+                icon: "required",
+                artwork: "content"
+              }
+            ]
+          }
+        ]
+      },
       feedbackOwner: "not_applicable",
       confirmationOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -2641,11 +3118,33 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       exceptionRationale:
         "This is a dynamic project-selection and aggregate-summary hub, not a record Collection and not a fixed structural catalog.",
       rationale:
-        "The project tracking destination hub composes the existing shared Page Experience and presentation owners without claiming Collection adoption.",
+        "The project tracking destination hub composes the existing shared Page Experience and presentation owners without claiming Collection adoption. Its three existing static summary metrics inherit the canonical Metric Card/Grid official default; they do not become clickable or add collection capabilities. This KPI presentation adoption does not create a Project selection or bulk domain contract.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "project-construction-tracking",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/components/admin/projects/tracking/TrackingCollections.tsx",
+            state: "required",
+            semanticPresets: [
+              "construction"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/projects/tracking/TrackingSchemaUnavailable.tsx",
+            state: "required",
+            semanticPresets: [
+              "construction"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
@@ -2837,6 +3336,47 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "block-template-libraries",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "media"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "blocks"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "blocks"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "navigation",
+              "blocks"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
@@ -2967,11 +3507,24 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       exceptionRationale:
         "Each template-library consumer proves search, filtering, sorting, selection, publication bulk actions, optional columns, pagination, Row Actions, and shared Runtime adoption independently. Unsupported Media lifecycle commands remain explicit at their two consumers.",
       rationale:
-        "Every registry-derived template library uses bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between distinct presentation adapters.",
+        "Every registry-derived template library uses bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between distinct presentation adapters. The final Owner Review corrects fixed-track presentation at the four existing adapters: both Header and Rows select the canonical horizontalScroll port inside AdminDataGrid's existing accessible scroll container. Columns, query/sort/pagination, visibility preferences, selection, action capabilities and empty states retain their current owners. Shared component reachability alone does not establish responsive geometry, functional parity or Owner visual approval; those remain separately scoped evidence.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "menus-list",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "navigation"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
@@ -3023,6 +3576,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "menu-editor-shell",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/menus/[id]/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "navigation"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
@@ -3094,17 +3660,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         ],
         sourceObjectNames: ["item"],
         sourceFieldNames: ["is_visible"],
-        explicitSurfaceContracts: [
-          {
-            state: "visibility",
-            sourceFile:
-              "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
-            component: "AdminStatusPill",
-            surface: "dedicated_status_column",
-            rationale:
-              "The declared item Status column is an explicit hierarchy-reading contract; Shared Row Actions remains the visibility mutation and Information presentation owner.",
-          },
-        ],
+        explicitSurfaceContracts: [],
       },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
@@ -3121,6 +3677,28 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "page-composition-shell",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx",
+            state: "required",
+            semanticPresets: [
+              "pages"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/pages-blocks/pages/[id]/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "pages"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
@@ -3221,6 +3799,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "footer-builder-shell",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/pages-blocks/footer/FooterBuilderClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "footer"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
@@ -3364,6 +3955,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         "Identity mutations, role validation, session invalidation, and self-protection remain with Auth and Permissions owners.",
       ],
       id: "users-and-roles",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/users-roles/UsersManagementClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "users"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
         {},
@@ -3419,6 +4023,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "sitemap-monitor",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/seo/sitemap/SitemapMonitorClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "seo"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       feedbackOwner: "not_applicable",
       confirmationOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
@@ -3455,6 +4072,91 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "content-editor-pages",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/content/categories/new/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "categories"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/content/categories/[id]/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "categories"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/content/series/new/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "series"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/content/series/[id]/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "series"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/content/topics/new/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "topics"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/content/topics/[id]/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "topics"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/content/topics/[id]/preview/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "topics"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/content/editors/ArticleCreateEditor.tsx",
+            state: "required",
+            semanticPresets: [
+              "topics"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/content/editors/ArticleEditor.tsx",
+            state: "required",
+            semanticPresets: [
+              "topics"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
@@ -3512,9 +4214,41 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "project-editor-pages",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/projects/new/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "projects"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/projects/[id]/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "projects"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/projects/[id]/preview/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "projects"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
+          scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
           busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
         },
       ),
@@ -3555,9 +4289,63 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "settings-pages",
+      visualPresentation: {
+        metricCards: [{
+          sourceFile: "src/components/admin/integrations/AdminIntegrationsPlatform.tsx",
+          items: [
+            { label: "إجمالي التكاملات", icon: "required", artwork: "series" },
+            { label: "المتصل", icon: "required", artwork: "series" },
+            { label: "يحتاج انتباه", icon: "required", artwork: "series" },
+            { label: "غير المتصل", icon: "required", artwork: "series" },
+            { label: "حالة الأمان", icon: "required", artwork: "series" },
+            { label: "آخر مزامنة", icon: "required", artwork: "series" },
+          ],
+        }],
+        moduleHeaders: [
+          { sourceFile: "src/app/admin/settings/appearance/page.tsx", state: "required", semanticPresets: ["settings"], icon: "required", artwork: "required" },
+          { sourceFile: "src/app/admin/settings/theme/page.tsx", state: "required", semanticPresets: ["settings"], icon: "required", artwork: "required" },
+          {
+            sourceFile: "src/app/admin/settings/general/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "settings"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/app/admin/settings/security/SecuritySettingsClient.tsx",
+            state: "required",
+            semanticPresets: [
+              "security"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/integrations/AdminIntegrationsPlatform.tsx",
+            state: "required",
+            semanticPresets: [
+              "integrations"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
+            state: "required",
+            semanticPresets: [
+              "integrations"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
+          scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
           busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
           search: {
             state: "approved_exception",
@@ -3610,7 +4398,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       rowActionsState: "not_applicable",
       rowActionsOwner: "not_applicable",
       columnVisibility: "not_applicable",
-      summaryCards: false,
+      summaryCards: true,
       filtersOrToolbar: true,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
@@ -3628,10 +4416,32 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "reports-hub",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/components/admin/reports/AdminReportDetailView.tsx",
+            state: "required",
+            semanticPresets: [
+              "reports"
+            ],
+            icon: "required",
+            artwork: "required"
+          },
+          {
+            sourceFile: "src/components/admin/reports/AdminReportsView.tsx",
+            state: "required",
+            semanticPresets: [
+              "reports"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       feedbackOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        { scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION },
       ),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
@@ -3691,9 +4501,23 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "seo-meta-manager",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/seo/meta-manager/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "seo"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+        ADMIN_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
+          scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
           busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
         },
       ),
@@ -3762,6 +4586,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "topics-without-image-report",
+      visualPresentation: {
+        moduleHeaders: [
+          {
+            sourceFile: "src/app/admin/reports/topics-without-image/page.tsx",
+            state: "required",
+            semanticPresets: [
+              "reports"
+            ],
+            icon: "required",
+            artwork: "required"
+          }
+        ]
+      },
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
         {
@@ -3829,6 +4666,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
 } as const) satisfies {
   scope: "all_admin_collection_and_list_surfaces";
   proofBoundary: "source_and_executable_reachability";
+  visualPresentation: {
+    sharedOwnerBoundaries: readonly {
+      sourceFile: string;
+      state: "delegated" | "not_applicable";
+      rationale: string;
+    }[];
+  };
   globalClosed: boolean;
   globalClosureBlockers: readonly AdminGovernanceClosureBlocker[];
   genericAdoptionGaps: readonly string[];
@@ -4232,6 +5076,8 @@ export type ProductSurfaceWorkflowOwner =
 
 export type ProductSurfaceIdentity = {
   id: string;
+  /** Shared visual applicability is independent of the Product lifecycle classification. */
+  visualPresentation?: AdminConsumerVisualPresentationContract;
   scope: ProductSurfaceScope;
   route: string | null;
   sourceFiles: readonly [string, ...string[]];
@@ -4497,6 +5343,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-breadcrumb-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "navigation"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/breadcrumb/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/breadcrumb/[id]/page.tsx"],
@@ -4526,6 +5385,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-cards-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "blocks"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/cards/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/cards/[id]/page.tsx"],
@@ -4555,6 +5427,20 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "content",
+            "blocks"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/content/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/content/[id]/page.tsx"],
@@ -4581,6 +5467,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-cta-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "navigation"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/cta/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/cta/[id]/page.tsx"],
@@ -4610,6 +5509,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-feed-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "blocks"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/feed/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/feed/[id]/page.tsx"],
@@ -4639,6 +5551,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-featured-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "blocks"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/featured/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/featured/[id]/page.tsx"],
@@ -4668,6 +5593,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-hero-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "blocks"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/hero/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx"],
@@ -4694,6 +5632,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-hub-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "media"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/media-hub/[id]",
     sourceFiles: ["src/app/admin/pages-blocks/blocks/media-hub/[id]/page.tsx"],
@@ -4720,6 +5671,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-sidebar-block-builder",
+    visualPresentation: {
+      moduleHeaders: [
+        {
+          sourceFile: "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+          state: "required",
+          semanticPresets: [
+            "media"
+          ],
+          icon: "required",
+          artwork: "required"
+        }
+      ]
+    },
     scope: "admin_route",
     route: "/admin/pages-blocks/blocks/media-sidebar/[id]",
     sourceFiles: [

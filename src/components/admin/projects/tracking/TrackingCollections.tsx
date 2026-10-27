@@ -661,11 +661,12 @@ export function TrackingStagesCollection({
     <>
       <AdminEntityListPageLayout className="pb-10" dir="rtl">
         <AdminPageContextHeader
+          visualPreset="construction"
           eyebrow="PROJECT TRACKING DOMAIN"
           title={`متابعة تنفيذ — ${project.arabic_name}`}
           description="ملف المتابعة والمراحل الديناميكية المرتبطة بالمشروع دون إضافة أي حقول إلى Project Aggregate."
           actions={
-            <div className="flex flex-wrap gap-2">
+            <>
               <AdminActionButton
                 href={`/admin/projects/${projectId}`}
                 variant="dark"
@@ -684,7 +685,7 @@ export function TrackingStagesCollection({
               >
                 إضافة مرحلة
               </AdminActionButton>
-            </div>
+            </>
           }
         />
         <AdminEntityListPrimarySection>
@@ -1292,11 +1293,12 @@ export function TrackingItemsCollection({
     <>
       <AdminEntityListPageLayout className="pb-10" dir="rtl">
         <AdminPageContextHeader
+          visualPreset="construction"
           eyebrow="PROJECT TRACKING — STAGE"
           title={metrics.stage.name}
           description={`إدارة بنود المرحلة داخل ${metrics.project.arabic_name}. حالة المرحلة مشتقة من هذه البنود.`}
           actions={
-            <div className="flex flex-wrap gap-2">
+            <>
               <AdminActionButton
                 href={trackingProjectPath(projectId)}
                 variant="dark"
@@ -1309,7 +1311,7 @@ export function TrackingItemsCollection({
               >
                 إضافة بند
               </AdminActionButton>
-            </div>
+            </>
           }
         />
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.items}>
@@ -1730,11 +1732,12 @@ export function TrackingUpdatesCollection({
     <>
       <AdminEntityListPageLayout className="pb-10" dir="rtl">
         <AdminPageContextHeader
+          visualPreset="construction"
           eyebrow="PROJECT TRACKING — ITEM HISTORY"
           title={metrics.item.name}
           description={`سجل تحديثات تاريخي داخل مرحلة ${metrics.stage.name}. المسودات لا تظهر للعامة.`}
           actions={
-            <div className="flex flex-wrap gap-2">
+            <>
               <AdminActionButton
                 href={trackingStagePath(projectId, metrics.stage.id)}
                 variant="dark"
@@ -1747,7 +1750,7 @@ export function TrackingUpdatesCollection({
               >
                 إضافة تحديث
               </AdminActionButton>
-            </div>
+            </>
           }
         />
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.updates}>

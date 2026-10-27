@@ -34,6 +34,13 @@ function check(label, condition) {
   if (!condition) failures.push(label);
 }
 
+// This SSR transport consumes Next-only props before rendering a native anchor;
+// production Link policy is asserted separately on the actual owner props.
+function SsrNextLink({ prefetch, children, ...props }) {
+  void prefetch;
+  return React.createElement("a", props, children);
+}
+
 function findAdminEntityListConsumers(directory = resolve(ROOT, "src")) {
   const consumers = [];
 
@@ -448,7 +455,7 @@ check(
   "Shared metric cards wrap responsively while retaining compensated hover-glow bleed",
   metricCardsGrid.includes('data-admin-metric-cards-viewport=""') &&
     metricCardsGrid.includes("-mt-8") && metricCardsGrid.includes("pt-8") &&
-    metricCardsGrid.includes("repeat(auto-fit,minmax(min(100%,") &&
+    metricCardsGrid.includes("ADMIN_CINEMATIC_GOLD_V1.metric.gridClassName") &&
     !metricCardsGrid.includes("overflow-x-auto") &&
     !metricCardsGrid.includes("z-") &&
     !topicsClient.includes('className="min-w-[1146px]"') &&
@@ -857,6 +864,177 @@ check(
     !noticeFrame.includes("window.setTimeout(dismiss") &&
     noticeFrame.includes('aria-label="إغلاق الإشعار"'),
 );
+
+function verifyNoticeDismissSpace(source, frameSource) {
+  const Frame = loadPureTypeScriptModule(
+    "src/components/admin/AdminNoticeDismissibleFrame.tsx",
+    { react: { useCallback: callback => callback, useState: initial => [initial, () => {}] } },
+    frameSource,
+  ).default;
+  const Notice = loadPureTypeScriptModule(
+    "src/components/admin/AdminNotice.tsx",
+    { "next/link": { default: SsrNextLink }, "./AdminNoticeDismissibleFrame": { default: Frame } },
+    source,
+  ).default;
+  const message = "استُعيدت المسودة محليًا. راجع التغييرات ثم احفظها عند الاستعداد.";
+  const noticeElement = props => {
+    const element = Notice({ message, ...props });
+    return element.type === Frame ? Frame(element.props) : element;
+  };
+  const closeButton = element => React.Children.toArray(element.props.children).find(child => React.isValidElement(child) && child.type === "button");
+  for (const variant of ["success", "warning", "danger", "info"]) {
+    const stacked = noticeElement({ variant });
+    const button = closeButton(stacked);
+    assert.ok(button, "Default stacked notice retains its native dismiss control");
+    assert.match(stacked.props.className, /\brelative pl-14\b/u, "Stacked notice reserves physical left space for its physical left dismiss button");
+    assert.doesNotMatch(stacked.props.className, /\b(?:ps|pe|pr)-14\b/u);
+    assert.match(button.props.className, /\babsolute left-3 top-3\b/u);
+    assert.match(button.props.className, /\bh-9 w-9\b/u);
+    assert.equal(button.props.type, "button");
+    assert.equal(button.props["aria-label"], "إغلاق الإشعار");
+    const inline = noticeElement({ variant, layout: "inline" });
+    assert.match(inline.props.className, /\bflex min-w-0 flex-nowrap\b/u);
+    assert.doesNotMatch(inline.props.className, /\b(?:pl|ps|pe|pr)-14\b/u);
+    assert.doesNotMatch(closeButton(inline).props.className, /\babsolute\b/u);
+    const nondismissible = noticeElement({ variant, dismissible: false });
+    assert.equal(closeButton(nondismissible), undefined);
+    assert.doesNotMatch(nondismissible.props.className, /\b(?:relative|pl-14|ps-14)\b/u);
+    assert.match(nondismissible.props.className, /\bpx-5 py-4\b/u);
+  }
+}
+verifyNoticeDismissSpace(noticeSource, noticeFrame);
+check("Actual Notice and Frame owners reserve matching physical-left stacked dismiss space while preserving inline and nondismissible controls", true);
+const noticeSpaceMutations = [
+  ["logical-start spacing in RTL", noticeSource.replace("relative pl-14", "relative ps-14"), noticeFrame],
+  ["missing reserved close space", noticeSource.replace("relative pl-14", "relative"), noticeFrame],
+  ["button moved away from reserved space", noticeSource, noticeFrame.replace("absolute left-3 top-3", "absolute right-3 top-3")],
+  ["stacked padding leaked to inline", noticeSource.replace("flex min-w-0 flex-nowrap", "pl-14 flex min-w-0 flex-nowrap"), noticeFrame],
+  ["dismiss padding leaked to nondismissible", noticeSource.replace(": stackedClassName;", ': `${stackedClassName} pl-14`;'), noticeFrame],
+];
+for (const [name, source, frame] of noticeSpaceMutations) {
+  assert.ok(source !== noticeSource || frame !== noticeFrame, `Applied Notice mutation ${name}`);
+  assert.throws(() => verifyNoticeDismissSpace(source, frame), { name: "AssertionError" });
+  check(`Notice spacing negative rejects ${name}`, true);
+}
+function verifyNoticeComposedContent(source, frameSource) {
+  const dismissWrites = [];
+  let dismissCalls = 0;
+  const Frame = loadPureTypeScriptModule(
+    "src/components/admin/AdminNoticeDismissibleFrame.tsx",
+    { react: { useCallback: callback => callback, useState: initial => [initial, value => dismissWrites.push(value)] } },
+    frameSource,
+  ).default;
+  const Notice = loadPureTypeScriptModule(
+    "src/components/admin/AdminNotice.tsx",
+    { "next/link": { default: SsrNextLink }, "./AdminNoticeDismissibleFrame": { default: Frame } },
+    source,
+  ).default;
+  const children = React.createElement("div", { "data-notice-composed": true },
+    React.createElement("p", null, "مسودة محلية"), React.createElement("time", { dateTime: "2026-10-24T00:00:00.000Z" }, "24 أكتوبر"),
+    React.createElement("button", { type: "button" }, "استعادة"), React.createElement("button", { type: "button" }, "تجاهل"));
+  const element = Notice({ message: "Fallback message", children, dismissSearchParams: [], lifecycle: "manual", onDismiss: () => { dismissCalls++; } });
+  assert.equal(element.type, Frame, "Composed content retains the canonical dismiss frame");
+  assert.equal(element.props.children, children, "Composed content is forwarded without copying or losing actions");
+  const rendered = Frame(element.props);
+  const close = React.Children.toArray(rendered.props.children).find(child => React.isValidElement(child) && child.type === "button");
+  assert.ok(close, "Only the existing Frame owns Close");
+  close.props.onClick();
+  assert.deepEqual(dismissWrites, [true]);
+  assert.equal(dismissCalls, 1, "Canonical Close forwards the caller's UI-only dismissal");
+  const plain = Notice({ message: "Fallback message", children, dismissible: false });
+  assert.equal(plain.props.children, children);
+  const fallback = Notice({ message: "Fallback message", title: "Existing title", dismissible: false, action: { href: "/admin/content", label: "Existing action" } });
+  const html = renderToStaticMarkup(fallback);
+  assert.ok(html.includes("Fallback message") && html.includes("Existing title") && html.includes("Existing action") && html.includes('href="/admin/content"'), "Omitted content keeps the existing message/title/link contract");
+}
+verifyNoticeComposedContent(noticeSource, noticeFrame);
+check("Actual Notice composed content reuses canonical Close and leaves omitted/default message consumers unchanged", true);
+for (const [label, from, to] of [
+  ["composed content dropped", "const content = children ?? (", "const content = undefined ?? ("],
+  ["composed dismissal callback disconnected", "onDismiss={onDismiss}", "onDismiss={undefined}"],
+]) {
+  assert.ok(noticeSource.includes(from), `Notice composition mutation must change actual source: ${label}`);
+  assert.throws(() => verifyNoticeComposedContent(noticeSource.replace(from, to), noticeFrame), { name: "AssertionError" });
+  check(`Notice composed content rejects ${label}`, true);
+}
+
+function verifyCompactNoticePresentation(source, frameSource) {
+  const writes = [];
+  let dismissals = 0;
+  const Frame = loadPureTypeScriptModule(
+    "src/components/admin/AdminNoticeDismissibleFrame.tsx",
+    { react: { useCallback: callback => callback, useState: initial => [initial, value => writes.push(value)] } }, frameSource,
+  ).default;
+  const Notice = loadPureTypeScriptModule(
+    "src/components/admin/AdminNotice.tsx",
+    { "next/link": { default: SsrNextLink }, "./AdminNoticeDismissibleFrame": { default: Frame } }, source,
+  ).default;
+  const nodes = element => {
+    const result = [];
+    const visit = value => React.Children.forEach(value, child => {
+      if (!React.isValidElement(child)) return;
+      result.push(child); visit(child.props.children);
+    });
+    visit(element); return result;
+  };
+  const message = "توجد مسودة محلية لم تتخذ قرارًا بشأنها";
+  const actions = React.createElement(React.Fragment, null,
+    React.createElement("time", { dateTime: "2026-10-24T00:00:00.000Z" }, "24 أكتوبر"),
+    React.createElement("button", { type: "button", "data-compact-action": true }, "تجاهل هذه المسودة"));
+  const details = React.createElement("div", { "data-compact-conflict": true }, "تفاصيل التعارض");
+  for (const variant of ["success", "warning", "danger", "info"]) {
+    const element = Notice({ message, variant, presentation: "compact", actionContent: actions, children: details, dismissSearchParams: [], lifecycle: "manual", onDismiss: () => { dismissals++; } });
+    assert.equal(element.type, Frame, "Compact notices reuse the current dismiss owner");
+    const rendered = Frame(element.props), all = nodes(rendered);
+    assert.equal(rendered.props["data-admin-notice-presentation"], "compact");
+    assert.equal(rendered.props.role, variant === "danger" ? "alert" : "status");
+    assert.match(rendered.props.className, /grid-cols-\[minmax\(0,1fr\)_auto\]/u);
+    assert.doesNotMatch(rendered.props.className, /\bpl-14\b/u);
+    const row = all.find(node => node.props["data-admin-notice-row"] !== undefined);
+    const icon = all.find(node => node.props["data-admin-notice-icon"] !== undefined);
+    const text = all.find(node => node.props["data-admin-notice-message"] !== undefined);
+    const actionRow = all.find(node => node.props["data-admin-notice-actions"] !== undefined);
+    const below = all.find(node => node.props["data-admin-notice-details"] !== undefined);
+    assert.ok(row && icon && text && actionRow && below);
+    assert.match(row.props.className, /flex-col.*lg:flex-row.*lg:items-center/u);
+    assert.match(text.props.className, /min-w-0.*lg:truncate.*lg:whitespace-nowrap/u);
+    assert.equal(text.props.title, message, "The complete message remains available when narrow Desktop truncates");
+    assert.equal(icon.type, "svg"); assert.equal(icon.props["aria-hidden"], "true");
+    assert.equal(icon.props["data-admin-notice-icon"], variant);
+    assert.match(actionRow.props.className, /flex-wrap.*lg:flex-nowrap/u);
+    assert.equal(actionRow.props.children[0], actions, "State-specific controls are passed intact into the shared row");
+    assert.equal(below.props.children, details, "Conflict details stay below the compact status row");
+    const close = React.Children.toArray(rendered.props.children).find(child => React.isValidElement(child) && child.type === "button");
+    assert.ok(close); assert.doesNotMatch(close.props.className, /\babsolute\b/u);
+    assert.equal(close.props.type, "button"); assert.equal(close.props["aria-label"], "إغلاق الإشعار");
+    const html = renderToStaticMarkup(rendered);
+    assert.ok(html.indexOf("data-admin-notice-icon") < html.indexOf("data-admin-notice-message") && html.indexOf("data-admin-notice-message") < html.indexOf("data-admin-notice-actions"));
+    close.props.onClick();
+    const bare = Frame(Notice({ message, presentation: "compact", dismissSearchParams: [] }).props);
+    assert.ok(!nodes(bare).some(node => node.props["data-admin-notice-actions"] !== undefined), "Non-action states have no empty action rail");
+  }
+  assert.deepEqual(writes, [true, true, true, true]); assert.equal(dismissals, 4);
+  const defaultNotice = Frame(Notice({ message }).props);
+  assert.equal(defaultNotice.props["data-admin-notice-presentation"], undefined);
+  assert.ok(!nodes(defaultNotice).some(node => node.props["data-admin-notice-row"] !== undefined), "Omitted presentation never adopts the compact row");
+}
+verifyCompactNoticePresentation(noticeSource, noticeFrame);
+check("Actual opt-in compact Notice renders icon/message/actions/Close in one responsive owner and keeps details below without changing default consumers", true);
+for (const [label, sourceFrom, sourceTo, frameFrom, frameTo] of [
+  ["compact opt-in disabled", 'presentation === "compact"', "false", "", ""],
+  ["status icon removed", 'data-admin-notice-icon={variant}', 'data-removed-status-icon={variant}', "", ""],
+  ["desktop row stacks", "lg:flex-row lg:items-center lg:gap-3", "lg:flex-col lg:items-center lg:gap-3", "", ""],
+  ["message wraps on desktop", "lg:truncate lg:whitespace-nowrap", "lg:whitespace-normal", "", ""],
+  ["compact controls dropped", "{actionContent}", "{null}", "", ""],
+  ["details dropped", '{children}</div> : null}', '{null}</div> : null}', "", ""],
+  ["compact close becomes absolute", "", "", '"mt-0.5 flex h-9', '"absolute mt-0.5 flex h-9'],
+]) {
+  const changedSource = sourceFrom ? noticeSource.replace(sourceFrom, sourceTo) : noticeSource;
+  const changedFrame = frameFrom ? noticeFrame.replace(frameFrom, frameTo) : noticeFrame;
+  assert.ok(changedSource !== noticeSource || changedFrame !== noticeFrame, `Compact negative mutates current source: ${label}`);
+  assert.throws(() => verifyCompactNoticePresentation(changedSource, changedFrame), { name: "AssertionError" });
+  check(`Compact Notice rejects ${label}`, true);
+}
 
 check(
   "Entity-list feedback uses the shared global viewport without a reserved collection slot",
@@ -1531,6 +1709,11 @@ check('Actual primary pinning follows the existing responsive contract and remov
 const metricCardPath = "src/components/admin/ui/AdminMetricCard.tsx";
 const metricGridPath = "src/components/admin/ui/AdminMetricCardsGrid.tsx";
 const metricTabsPath = "src/components/admin/ui/AdminModuleTabs.tsx";
+const metricTokenDependencies = {
+  "../../../lib/admin/admin-ui-styles": loadPureTypeScriptModule("src/lib/admin/admin-ui-styles.ts", {
+    "../../components/venesia-scrollbar-styles": loadPureTypeScriptModule("src/components/venesia-scrollbar-styles.ts"),
+  }),
+};
 function elements(node, predicate = () => true) {
   const result = [];
   function visit(value) {
@@ -1549,6 +1732,7 @@ function actionGlyphContract(source = dataGrid) {
     return React.createElement("a", anchor, children);
   };
   const gridModule = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    ...metricTokenDependencies,
     "next/link": { default: Link },
     "./AdminCheckbox": { default: () => null },
     "./AdminDataGridQueryStatus": { default: () => null },
@@ -1605,6 +1789,390 @@ function actionGlyphContract(source = dataGrid) {
   assert.equal(renderToStaticMarkup(Button(bare)), renderToStaticMarkup(Button({ ...bare, iconSize: "lg" })), "Custom action content must not change when no semantic glyph is supplied");
   return cases;
 }
+function cinematicGridPresentationContract(source = dataGrid) {
+  const owner = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    ...metricTokenDependencies, "next/link": { default: SsrNextLink },
+    "./AdminCheckbox": { default: "input" }, "./AdminDataGridQueryStatus": { default: () => null },
+    "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" }, "./AdminDataGridDateTimeCell": { default: () => null },
+  }, source);
+  const children = React.createElement("table", { "data-owned-table": "" });
+  const props = { children, queryPending: true, scrollLabel: "عرض تجريبي" };
+  const omitted = owner.AdminDataGrid(props), standard = owner.AdminDataGrid({ ...props, presentation: "default" }), cinematic = owner.AdminDataGrid({ ...props, presentation: "cinematic" });
+  assert.equal(renderToStaticMarkup(omitted), renderToStaticMarkup(standard), "Omitting presentation must preserve exact default markup");
+  assert.equal(omitted.props["data-admin-data-grid-presentation"], "cinematic");
+  assert.equal(cinematic.props["data-admin-data-grid-presentation"], "cinematic");
+  assert.equal(cinematic.props.className, omitted.props.className, "Both compatibility names resolve the same official presentation");
+  for (const tree of [omitted, cinematic]) {
+    assert.equal(tree.props["data-admin-data-grid-query-pending"], "true");
+    const scroll = elements(tree, node => "data-admin-data-grid-scroll" in node.props)[0];
+    assert.equal(scroll.props.children, children); assert.equal(scroll.props.role, "region"); assert.equal(scroll.props["aria-label"], props.scrollLabel); assert.equal(scroll.props.dir, "rtl"); assert.equal(scroll.props.tabIndex, 0);
+  }
+  const onClick = () => {}, onKeyDown = () => {}, ref = { current: null };
+  for (const state of [{}, { disabled: true }, { pending: true }]) {
+    const actionProps = { action: "preview", href: "/admin/content/topics/71/preview", target: "_blank", onClick, onKeyDown, buttonRef: ref, ariaHasPopup: "menu", ariaControls: "existing-layer", ...state };
+    const before = owner.AdminDataGridActionButton(actionProps), after = owner.AdminDataGridActionButton({ ...actionProps, presentation: "cinematic" });
+    const { className: beforeClasses, ...beforeProps } = before.props, { className: afterClasses, ...afterProps } = after.props;
+    assert.equal(after.type, before.type); assert.deepEqual(afterProps, beforeProps, "Presentation retains Link/button choice, callbacks, native state, ARIA, target and content");
+    assert.ok(beforeClasses.includes("h-11 w-11") && afterClasses.includes("h-11 w-11")); assert.match(afterClasses, /focus-visible:outline/u);
+  }
+  return true;
+}
+check("Actual Cinematic Grid preserves default markup, query/accessibility semantics and action behavior", cinematicGridPresentationContract());
+const cinematicGridMutants = [dataGrid.replaceAll('resolveAdminCollectionPresentation(requestedPresentation)', 'requestedPresentation'), dataGrid.replaceAll('data-admin-data-grid-presentation={presentation}', 'data-admin-data-grid-presentation={requestedPresentation}')];
+check("Cinematic Grid negatives reject a legacy default alias and unresolved presentation metadata", cinematicGridMutants.every(source => { assert.notEqual(source, dataGrid); try { cinematicGridPresentationContract(source); return false; } catch { return true; } }));
+function dashboardModuleHeaderAdoptionContract(source = read("src/components/admin/dashboard/AdminDashboardView.tsx")) {
+  const ast = ts.createSourceFile("AdminDashboardView.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let header, actions;
+  function visit(node) {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === "AdminPageContextHeader") header = node;
+    if (ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(ast) === "quickActions")) actions = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(header && actions, "Dashboard keeps the existing header and quick-actions owner composition");
+  const Header = loadPureTypeScriptModule("src/components/admin/ui/AdminPageContextHeader.tsx", { ...metricTokenDependencies, "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" }, "./AdminModuleTabs": { AdminModuleTabIcon: ({ name }) => React.createElement("svg", { "data-header-owned-icon": name, "aria-hidden": "true" }) } }).default;
+  const Button = loadPureTypeScriptModule("src/components/admin/ui/AdminActionButton.tsx", { ...metricTokenDependencies, "next/link": { default: SsrNextLink } }).default;
+  const Icon = ({ name }) => React.createElement("svg", { "data-owned-module-icon": name, "aria-hidden": "true" });
+  const isolated = 'export function renderDashboardModuleHeader(){' + actions.getText(ast) + '\nreturn (' + header.getText(ast) + ');}' ;
+  const extracted = loadPureTypeScriptModule("DashboardModuleHeader.tsx", {}, isolated, { AdminPageContextHeader: Header, AdminActionButton: Button, AdminModuleTabIcon: Icon });
+  const tree = extracted.renderDashboardModuleHeader();
+  assert.equal(tree.type, Header); assert.equal(metricTokenDependencies["../../../lib/admin/admin-ui-styles"].resolveAdminCollectionPresentation(tree.props.presentation), "cinematic");
+  assert.equal(tree.props.title, "لوحة التحكم"); assert.equal(tree.props.description, "نظرة شاملة على المحتوى والمشاريع وحالة مصادر النظام.");
+  assert.equal(tree.props.icon.type, Icon); assert.equal(tree.props.icon.props.name, "statistics");
+  assert.equal(tree.props.artwork, "statistics", "Dashboard selects the subtle optional statistics scene rather than the Topics document artwork");
+  const buttons = React.Children.toArray(tree.props.actions);
+  assert.equal(buttons.length, 3);
+  const expected = [
+    { href: "/admin/content/topics/new", variant: "primary", icon: "content", hint: "إضافة محتوى", label: "موضوع جديد" },
+    { href: "/admin/content/categories/new", variant: "dark", icon: "specifications", hint: "تنظيم الشجرة", label: "تصنيف جديد" },
+    { href: "/admin/settings/general", variant: "dark", icon: "settings", hint: "بيانات النظام", label: "الإعدادات" },
+  ];
+  buttons.forEach((button, index) => {
+    const reference = expected[index]; assert.equal(button.type, Button);
+    assert.equal(button.props.href, reference.href); assert.equal(button.props.variant, reference.variant); assert.equal(button.props.title, reference.hint); assert.equal(button.props.presentation, "cinematic");
+    assert.equal(elements(button.props.children, node => node.type === Icon)[0]?.props.name, reference.icon);
+    assert.equal(renderToStaticMarkup(Button(button.props)).replace(/<[^>]*>/gu, "").trim(), reference.label);
+  });
+  const rendered = Header(tree.props), moduleTokens = metricTokenDependencies["../../../lib/admin/admin-ui-styles"].ADMIN_CINEMATIC_GOLD_V1.module;
+  assert.ok(rendered.props.className.includes(moduleTokens.root) && moduleTokens.root.split(/\s+/u).includes("py-3"));
+  const watermark = elements(rendered, node => typeof node.props.className === "string" && node.props.className === moduleTokens.watermark);
+  assert.equal(watermark.length, 1); assert.equal(watermark[0].props["aria-hidden"], "true");
+  assert.equal(watermark[0].props["data-admin-header-artwork"], "statistics");
+  const scene = watermark[0].props.children;
+  assert.equal(scene.type, "svg"); assert.equal(scene.props.viewBox, "0 0 320 180"); assert.equal(scene.props.focusable, "false");
+  assert.equal(elements(watermark[0], node => ["text", "button", "a"].includes(node.type)).length, 0, "Optional artwork has no invented figures or interactive controls");
+  const fills = elements(scene, node => node.props.fillOpacity !== undefined).map(node => Number(node.props.fillOpacity));
+  const strokes = elements(scene, node => node.props.strokeOpacity !== undefined).map(node => Number(node.props.strokeOpacity));
+  assert.ok(fills.length >= 3 && fills.every(value => value > 0 && value <= 0.13), "Background bars keep the subtle document-like fill opacity");
+  assert.ok(strokes.length >= 3 && strokes.every(value => value > 0 && value <= 0.42), "Background linework remains quieter than the identity icon");
+  assert.equal(elements(rendered, node => node.type === Icon && node.props.name === "statistics").length, 1, "The Dashboard identity keeps its existing strong statistics glyph");
+  const defaultProps = { title: "Default header", icon: tree.props.icon };
+  assert.equal(renderToStaticMarkup(Header(defaultProps)), renderToStaticMarkup(Header({ ...defaultProps, presentation: "default" })), "Omitted header presentation preserves default output");
+  assert.equal(elements(Header(defaultProps), node => node.props.className === moduleTokens.watermark).length, 1, "The official default adopts the shared icon fallback artwork");
+  assert.equal(renderToStaticMarkup(Header({ ...defaultProps, artwork: "statistics" })), renderToStaticMarkup(Header({ ...defaultProps, presentation: "cinematic", artwork: "statistics" })), "Optional statistics artwork is equivalent through both official presentation aliases");
+  const fallback = Header({ ...defaultProps, presentation: "cinematic" });
+  assert.equal(elements(fallback, node => node.props.className === moduleTokens.watermark)[0]?.props.children, tree.props.icon, "Consumers without optional artwork retain the existing icon fallback");
+  const topics = Header({ title: "Topics", presentation: "cinematic", artwork: "document", icon: React.createElement(Icon, { name: "content" }) });
+  assert.equal(elements(topics, node => node.props["data-admin-header-artwork"] === "document").length, 1, "Topics keeps its separate document artwork");
+  return true;
+}
+check("Actual Dashboard module header adopts shared cinematic chrome and optional statistics artwork while preserving all three actions and defaults", dashboardModuleHeaderAdoptionContract());
+const dashboardHeaderSource = read("src/components/admin/dashboard/AdminDashboardView.tsx");
+const dashboardHeaderMutants = [
+  dashboardHeaderSource.replaceAll('AdminPageContextHeader', 'UnownedPageHeader'),
+  dashboardHeaderSource.replace('name="statistics"', 'name="content"'),
+  dashboardHeaderSource.replace('variant: "primary",', 'variant: "dark",'),
+  dashboardHeaderSource.replace('href: "/admin/settings/general"', 'href: "/admin/content/topics"'),
+  dashboardHeaderSource.replace('artwork="statistics"', 'artwork="document"'),
+  dashboardHeaderSource.replace('artwork="statistics"', ''),
+];
+check("Dashboard adoption negatives reject default chrome, wrong artwork, lost priorities, changed links and a copied Topics scene", dashboardHeaderMutants.every(source => { assert.notEqual(source, dashboardHeaderSource); try { dashboardModuleHeaderAdoptionContract(source); return false; } catch { return true; } }));
+function cinematicRowHoverPaletteContract(styles = metricTokenDependencies["../../../lib/admin/admin-ui-styles"]) {
+  const tokens = styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.table.split(/\s+/u);
+  const base = tokens.find(token => token.startsWith("[&_tbody_tr:hover>td]:bg-[var(--admin-grid-hover,"));
+  const gradient = tokens.find(token => token.startsWith("[&_tbody_tr:hover>td]:bg-[linear-gradient("));
+  assert.ok(base && gradient, "Hover continues across every cell in the full row");
+  assert.equal(base, "[&_tbody_tr:hover>td]:bg-[var(--admin-grid-hover,#0D151D)]", "Outer paint refinement preserves the authored ordinary-row hover token exactly");
+  assert.equal(gradient, "[&_tbody_tr:hover>td]:bg-[linear-gradient(180deg,rgba(216,176,104,0.035),rgba(216,176,104,0.008))]", "The existing warm hover overlay remains unchanged on both row parities");
+  for (const token of ["[&_tbody_td]:bg-[#03080D]", "[&_tbody_tr:nth-child(even)>td]:bg-[#080E13]"]) assert.ok(tokens.includes(token), "Approved outer paint never recolors original normal/even rows: " + token);
+  const hex = base.match(/var\(--admin-grid-hover,#([0-9a-f]{6})\)\]$/iu)?.[1]; assert.ok(hex);
+  const channels = [0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
+  assert.ok(channels[2] >= channels[1] && channels[1] >= channels[0] && Math.max(...channels) <= 30, "Opaque hover base stays quiet dark navy rather than saturated brown");
+  const alpha = [...gradient.matchAll(/rgba\(216,176,104,([0-9.]+)\)/gu)].map(match => Number(match[1]));
+  assert.equal(alpha.length, 2); assert.ok(alpha[0] > 0 && alpha[0] <= 0.04 && alpha[1] > 0 && alpha[1] <= 0.01, "Warm gold remains a low-opacity light over the opaque row base");
+  assert.ok(tokens.includes("[&_tbody_td]:duration-250"));
+  return true;
+}
+check("Full-row hover keeps its 250ms opaque geometry and faint warm light over the shared dark-navy base", cinematicRowHoverPaletteContract());
+const hoverPaletteStyles = metricTokenDependencies["../../../lib/admin/admin-ui-styles"];
+const brownHoverMutant = { ...hoverPaletteStyles, ADMIN_CINEMATIC_GOLD_V1: { ...hoverPaletteStyles.ADMIN_CINEMATIC_GOLD_V1, dataGrid: { ...hoverPaletteStyles.ADMIN_CINEMATIC_GOLD_V1.dataGrid, table: hoverPaletteStyles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.table.replace("var(--admin-grid-hover,#0D151D)", "var(--admin-grid-hover,#10140F)") } } };
+check("Hover palette negative rejects the former brown base without changing selection or focus semantics", (() => { try { cinematicRowHoverPaletteContract(brownHoverMutant); return false; } catch { return true; } })());
+function cinematicGridRefinementContract(source = dataGrid, styles = metricTokenDependencies["../../../lib/admin/admin-ui-styles"]) {
+  const tokens = styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid;
+  const rowClasses = new Set(tokens.table.split(/\s+/u));
+  assert.ok(rowClasses.has("[&_tbody_td]:duration-250"), "Cinematic rows keep the bounded 250ms color/light transition");
+  assert.ok(rowClasses.has("motion-reduce:[&_tbody_td]:transition-none"), "Reduced motion stops the added cell transition");
+  assert.match(tokens.table, /tr:has\(:focus-visible\)>td/u, "Keyboard row focus remains distinct from pointer hover");
+  assert.match(tokens.table, /tr\[data-selected=true\]:hover>td/u, "Selected hover has an explicit higher-specificity state");
+  assert.match(tokens.table, /tr\[data-selected=true\]>td:first-child\]:before:start-0/u, "The independent selection stripe stays at logical inline-start while keyboard focus uses cell shadows");
+  assert.ok(rowClasses.has("[&_thead_th]:py-3") && rowClasses.has("[&_tbody_td]:py-3"), "Cinematic density is scoped to semantic table cells");
+  assert.ok(rowClasses.has("[&_tbody_td]:bg-[#03080D]"), "Cells retain an opaque base under the subtle hover image and pinned controls");
+  assert.ok([...rowClasses].some(token => token.startsWith("[&_tbody_tr:hover>td]:bg-[linear-gradient(")), "Hover uses the shared cell gradient");
+  assert.ok(![...rowClasses].some(token => /:(?:translate|scale|rotate|animate)-/u.test(token)), "Table row presentation cannot borrow KPI lift or animation");
+  const owner = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    ...metricTokenDependencies, "../../../lib/admin/admin-ui-styles": styles, "next/link": { default: SsrNextLink },
+    "./AdminCheckbox": { default: "input" }, "./AdminDataGridQueryStatus": { default: () => null },
+    "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" }, "./AdminDataGridDateTimeCell": { default: () => null },
+  }, source);
+  const onClick = () => {}, onKeyDown = () => {}, ref = { current: null };
+  let cases = 0;
+  for (const tone of ["gold", "dark", "red", "green", "blue"]) for (const size of ["default", "compact", "inline"]) for (const state of [{}, { disabled: true }, { pending: true }]) {
+    const props = { action: tone === "red" ? "delete" : "edit", tone, size, href: "/admin/content/topics/71", onClick, onKeyDown, buttonRef: ref, ...state };
+    const before = owner.AdminDataGridActionButton(props), after = owner.AdminDataGridActionButton({ ...props, presentation: "cinematic" });
+    assert.equal(renderToStaticMarkup(before), renderToStaticMarkup(owner.AdminDataGridActionButton({ ...props, presentation: "default" })), "Default tone presentation stays unchanged");
+    const { className: beforeClasses, ...beforeProps } = before.props, { className: afterClasses, ...afterProps } = after.props;
+    assert.equal(after.type, before.type); assert.deepEqual(afterProps, beforeProps, "Tone refinement preserves handlers, semantics, native disabled/pending state and content");
+    assert.match(afterClasses, size === "inline" ? /h-7 w-7/u : size === "compact" ? /h-10 w-10/u : /h-11 w-11/u);
+    assert.ok(afterClasses.split(/\s+/u).includes("duration-250") && afterClasses.includes("motion-reduce:transition-none"));
+    if (["red", "green", "blue"].includes(tone)) {
+      const classes = new Set(afterClasses.split(/\s+/u));
+      assert.ok(beforeClasses.split(/\s+/u).every(token => !token || classes.has(token)), "Danger and visibility/state tones retain every original semantic style");
+      assert.ok(!afterClasses.includes("bg-[linear-gradient("), "Dark cinematic gradients cannot cover danger or state fills");
+      if (tone === "red") assert.ok(classes.has("bg-red-500/85") && classes.has("hover:bg-red-500"), "Danger remains red in rest and hover states");
+    } else {
+      assert.ok(afterClasses.includes("bg-[linear-gradient("), "Gold and dark controls use the bounded cinematic surface");
+      assert.match(afterClasses, /hover:shadow-/u);
+    }
+    cases += 1;
+  }
+  return cases;
+}
+check("Cinematic DataGrid v1.1 keeps quiet distinct row states, density and all 45 action tone/size/state combinations", cinematicGridRefinementContract() === 45);
+const refinementStyles = metricTokenDependencies["../../../lib/admin/admin-ui-styles"];
+function cinematicCollectionFrameContract(source = entitySurface, styles = refinementStyles, topicsSource = topicsClient) {
+  const owner = loadPureTypeScriptModule("src/components/admin/entity-list/AdminEntityListSurface.tsx", {
+    react: React,
+    "../../../lib/admin/admin-ui-styles": styles,
+    "./AdminFloatingLayerContext": { AdminFloatingLayerProvider: ({ children }) => children },
+  }, source);
+  const children = [React.createElement("section", { key: "table", "data-owned-table": "" }), React.createElement("footer", { key: "footer", "data-owned-pagination": "" })];
+  const props = { children, className: "consumer-class", "aria-label": "الموضوعات", "data-preserved-prop": "preserved" };
+  const omitted = owner.AdminEntityListTableRegion(props), standard = owner.AdminEntityListTableRegion({ ...props, presentation: "default" }), cinematic = owner.AdminEntityListTableRegion({ ...props, presentation: "cinematic" });
+  assert.equal(renderToStaticMarkup(omitted), renderToStaticMarkup(standard), "Omitted frame presentation preserves exact explicit default output");
+  assert.equal(omitted.props.className, `admin-entity-list-primary-section ${styles.ADMIN_CINEMATIC_GOLD_V1.collection.frame} consumer-class`, "Existing region owns the official joined frame for every alias");
+  assert.equal(omitted.props["data-admin-entity-list-table-region-presentation"], "cinematic");
+  assert.equal(cinematic.props["data-admin-entity-list-table-region-presentation"], "cinematic");
+  for (const tree of [omitted, cinematic]) {
+    assert.equal(tree.type, "div"); assert.equal(tree.props.children, children);
+    assert.equal(tree.props["aria-label"], props["aria-label"]); assert.equal(tree.props["data-preserved-prop"], "preserved");
+    assert.equal(tree.props["data-admin-entity-list-primary-section"], ""); assert.equal(tree.props["data-admin-entity-list-table-region"], "");
+  }
+  const frame = styles.ADMIN_CINEMATIC_GOLD_V1.collection.frame;
+  assert.ok(cinematic.props.className.includes(frame), "The existing region delegates the cinematic frame to canonical collection tokens");
+  const classes = new Set(frame.split(/\s+/u));
+  for (const token of ["border-[rgba(216,176,104,0.045)]", "bg-[linear-gradient(115deg,#131C25,#050C14_55%,#080F17)]", "shadow-[inset_0_2px_0_rgba(237,200,120,0.52),inset_0_6px_14px_rgba(216,176,104,0.035),0_12px_24px_rgba(0,0,0,0.55),0_28px_58px_rgba(0,0,0,0.42)]"]) assert.ok(classes.has(token), "Balanced Refined frame keeps the exact approved shared paint: " + token);
+  assert.ok(!classes.has("[&_[data-admin-collection-toolbar-owner]]:bg-none"), "Joined frames must expose the actual Toolbar owner's approved background");
+  assert.ok(styles.ADMIN_CINEMATIC_GOLD_V1.collection.toolbarSurface.split(/\s+/u).includes("bg-[linear-gradient(115deg,#131E29,#07111B)]"), "The canonical Toolbar surface owns its approved navy gradient");
+  assert.ok(classes.has("overflow-visible") && classes.has("gap-0"));
+  assert.ok(!classes.has("overflow-hidden") && !classes.has("overflow-clip"), "The outer frame must not clip scroll controls or floating layers");
+  for (const marker of ["data-admin-collection-toolbar-owner", "data-admin-data-grid-presentation=cinematic", "data-admin-table-pagination"]) assert.ok(frame.includes(marker), "Frame joins every existing region without replacing its child owner");
+  const ast = ts.createSourceFile("TopicsListClient.tsx", topicsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let adopted = false;
+  function visit(node) {
+    if (ts.isJsxOpeningElement(node) && node.tagName.getText(ast) === "AdminEntityListTableRegion") {
+      const attribute = node.attributes.properties.find(entry => ts.isJsxAttribute(entry) && entry.name.getText(ast) === "presentation");
+      adopted = !attribute || Boolean(ts.isJsxAttribute(attribute) && attribute.initializer && ts.isStringLiteral(attribute.initializer) && ["default", "cinematic"].includes(attribute.initializer.text));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(adopted, "Topics explicitly adopts the existing frame owner");
+  return true;
+}
+check("Actual cinematic TableRegion joins existing owners without clipping or changing omitted defaults, children or consumer props", cinematicCollectionFrameContract());
+const frameMutants = [
+  () => cinematicCollectionFrameContract(entitySurface.replace('resolveAdminCollectionPresentation(requestedPresentation)', 'requestedPresentation')),
+  () => cinematicCollectionFrameContract(entitySurface.replace('presentation === "cinematic"', 'false')),
+  () => cinematicCollectionFrameContract(entitySurface, { ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, collection: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection, frame: refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection.frame.replace("overflow-visible", "overflow-hidden") } } }),
+  () => cinematicCollectionFrameContract(entitySurface, refinementStyles, topicsClient.replaceAll('AdminEntityListTableRegion', 'AdminEntityListPrimarySection')),
+  ...["border-[rgba(216,176,104,0.045)]", "bg-[linear-gradient(115deg,#131C25,#050C14_55%,#080F17)]", "inset_0_2px_0_rgba(237,200,120,0.52)", "inset_0_6px_14px_rgba(216,176,104,0.035)", "0_12px_24px_rgba(0,0,0,0.55)", "0_28px_58px_rgba(0,0,0,0.42)"].map(token => () => { const collection = refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection; assert.ok(collection.frame.includes(token), "Balanced Refined negative remains reachable: " + token); return cinematicCollectionFrameContract(entitySurface, { ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, collection: { ...collection, frame: collection.frame.replace(token, "fixture-unapproved-paint") } } }); }),
+  () => cinematicCollectionFrameContract(entitySurface, { ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, collection: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection, frame: refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection.frame + " [&_[data-admin-collection-toolbar-owner]]:bg-none" } } }),
+  () => cinematicCollectionFrameContract(entitySurface, { ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, collection: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection, toolbarSurface: refinementStyles.ADMIN_CINEMATIC_GOLD_V1.collection.toolbarSurface.replace("bg-[linear-gradient(115deg,#131E29,#07111B)]", "bg-none") } } }),
+];
+check("Frame negatives reject automatic adoption, ignored opt-in, clipped layers and a missing actual Topics opt-in", frameMutants.every(run => { try { run(); return false; } catch { return true; } }));
+const withGridTokens = patch => ({ ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, dataGrid: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1.dataGrid, ...patch } } });
+const refinementMutants = [
+  () => cinematicGridRefinementContract(dataGrid.replace('(resolvedTone === "gold" || resolvedTone === "dark")', 'true')),
+  () => cinematicGridRefinementContract(dataGrid, withGridTokens({ action: refinementStyles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.action + " bg-[linear-gradient(black,black)]" })),
+  () => cinematicGridRefinementContract(dataGrid, withGridTokens({ table: refinementStyles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.table.replace("duration-250", "duration-0") })),
+  () => cinematicGridRefinementContract(dataGrid, withGridTokens({ table: refinementStyles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.table.replaceAll(":has(:focus-visible)", ":focus-within") })),
+];
+check("DataGrid v1.1 negatives reject danger recoloring, covered semantic fills, abrupt motion and pointer-only focus styling", refinementMutants.every(run => { try { run(); return false; } catch { return true; } }));
+
+function sharedSelectionContract(styles = refinementStyles, tableSource = entityTable) {
+  const selection = styles.ADMIN_DATA_GRID_SELECTION;
+  assert.ok(selection && styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.table.includes(selection.table), "Cinematic and standard tables use one shared selection token");
+  assert.equal(styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.checkbox, selection.checkbox);
+  assert.equal(styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.bulk, selection.bulk);
+  const classes = new Set(selection.table.split(/\s+/u));
+  for (const token of [
+    "[&_tbody_tr[data-selected=true]>td]:bg-[var(--admin-grid-selected,#102033)]",
+    "[&_tbody_tr[data-selected=true]:hover>td]:bg-[var(--admin-grid-selected-hover,#14283D)]",
+    "[&_tbody_tr[data-selected=true]>td]:bg-[linear-gradient(180deg,rgba(120,189,250,0.035),rgba(120,189,250,0.012))]",
+    "[&_tbody_tr[data-selected=true]:hover>td]:bg-[linear-gradient(180deg,rgba(120,189,250,0.035),rgba(120,189,250,0.012))]",
+    "[&_tbody_tr[data-selected=true]>td:first-child]:before:start-0",
+    "[&_tbody_tr[data-selected=true]>td:first-child]:before:w-0.5",
+    "[&_tbody_tr[data-selected=true]>td:first-child]:before:pointer-events-none",
+    "[&_tbody_tr[data-selected=true]>td:first-child]:before:bg-[var(--admin-accent,#D8B068)]",
+    "[&_tbody_tr:has(:focus-visible)>td]:border-[var(--admin-grid-focus,#78BDFA)]/35",
+    "motion-reduce:[&_tbody_td]:transition-none",
+  ]) assert.ok(classes.has(token), `Shared selection preserves ${token}`);
+  assert.ok(!/rgba\(216,176,104|#1C1A11|#242011/iu.test(selection.table), "Selected rows cannot restore the former brown fill or warm row-wide light");
+  assert.match(selection.table, /:has\(:focus-visible\)>td\]:shadow-\[inset_0_1px_0_color-mix\(in_srgb,var\(--admin-grid-focus,#78BDFA\)/u, "Cool focus remains separate from the gold pseudo-element stripe");
+
+  const ast = ts.createSourceFile("AdminEntityListTable.tsx", tableSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let tableClass;
+  function visit(node) {
+    if (ts.isJsxOpeningElement(node) && node.tagName.getText(ast) === "table") tableClass = node.attributes.properties.find(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(ast) === "className")?.initializer?.expression;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert.ok(tableClass);
+  const evaluate = Function("presentation", "ADMIN_CINEMATIC_GOLD_V1", "ADMIN_DATA_GRID_SELECTION", `return (${tableClass.getText(ast)});`);
+  for (const presentation of ["default", "cinematic"]) {
+    const actual = evaluate(presentation, styles.ADMIN_CINEMATIC_GOLD_V1, selection);
+    assert.ok(actual.startsWith("w-full table-fixed border-separate border-spacing-0 text-right "));
+    assert.ok(actual.includes(selection.table), `${presentation} semantic tables adopt selection directly from its canonical owner`);
+  }
+  assert.match(tableSource, /data-selected=\{selection\?\.selectedSet\.has\(rowId\) \? "true" : undefined\}/u);
+  const owner = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    ...metricTokenDependencies, "../../../lib/admin/admin-ui-styles": styles, "next/link": { default: SsrNextLink },
+    "./AdminCheckbox": { default: "input" }, "./AdminDataGridQueryStatus": { default: () => null },
+    "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" }, "./AdminDataGridDateTimeCell": { default: () => null },
+  });
+  const onChange = () => {}, inputRef = { current: null };
+  for (const presentation of [undefined, "default", "cinematic"]) {
+    const checkbox = owner.AdminDataGridCheckbox({ presentation, checked: true, onChange, inputRef, label: "اختيار حالي" });
+    assert.equal(checkbox.props.presentation, "native"); assert.equal(checkbox.props.checked, true);
+    assert.equal(checkbox.props.onChange, onChange); assert.equal(checkbox.props.inputRef, inputRef);
+    assert.equal(checkbox.props.className, selection.checkbox);
+  }
+  return true;
+}
+check("Semantic tables share navy selection, logical gold stripe, independent cool focus and native checkbox without changing table geometry", sharedSelectionContract());
+const selectionMutant = patch => ({ ...refinementStyles, ADMIN_DATA_GRID_SELECTION: { ...refinementStyles.ADMIN_DATA_GRID_SELECTION, ...patch } });
+const selectionMutants = [
+  () => sharedSelectionContract(selectionMutant({ table: refinementStyles.ADMIN_DATA_GRID_SELECTION.table.replace("--admin-grid-selected,#102033)", "--admin-grid-brown,#1C1A11)") })),
+  () => sharedSelectionContract(selectionMutant({ table: refinementStyles.ADMIN_DATA_GRID_SELECTION.table.replace(":before:start-0", ":before:right-0") })),
+  () => sharedSelectionContract(selectionMutant({ table: refinementStyles.ADMIN_DATA_GRID_SELECTION.table.replaceAll(":has(:focus-visible)", ":focus-within") })),
+  () => sharedSelectionContract(refinementStyles, entityTable.replace(": ADMIN_DATA_GRID_SELECTION.table", ': ""')),
+];
+check("Selection negatives reject diverging tokens, physical stripe placement, pointer focus and absent default adoption", selectionMutants.every(run => { try { run(); return false; } catch { return true; } }));
+
+function officialGridFamilyContract(source = dataGrid, styles = refinementStyles, tableSource = entityTable) {
+  for (const alias of [undefined, "default", "cinematic"]) assert.equal(styles.resolveAdminCollectionPresentation(alias), "cinematic");
+  const owner = loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    ...metricTokenDependencies, "../../../lib/admin/admin-ui-styles": styles, "next/link": { default: SsrNextLink },
+    "./AdminCheckbox": { default: "input" }, "./AdminDataGridQueryStatus": { default: () => null },
+    "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" }, "./AdminDataGridDateTimeCell": { default: () => null },
+  }, source);
+  const child = React.createElement("span", { "data-existing-value": "" }, "قيمة قائمة");
+  const row = owner.AdminDataGridRow({ columns: "46px 220px 144px", children: child, horizontalScroll: true, divided: true });
+  assert.equal(row.type, "article"); assert.equal(row.props.children, child); assert.equal(row.props["data-admin-grid-row"], "");
+  assert.equal(row.props.style.gridTemplateColumns, "46px 220px 144px"); assert.equal(row.props.style.columnGap, 0);
+  assert.ok(row.props.className.includes(styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyRow));
+  assert.equal(elements(row, element => element.type === "input").length, 0, "Adoption never invents a selection input");
+  const header = owner.AdminDataGridHeader({ columns: "46px 220px 144px", children: child, horizontalScroll: true });
+  assert.ok(header.props.className.includes(styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyHeader)); assert.equal(header.props.children, child);
+  const checkboxCell = owner.AdminDataGridCheckboxCell({ children: child, sticky: true });
+  assert.equal(checkboxCell.props["data-admin-grid-checkbox-cell"], ""); assert.equal(checkboxCell.props["data-admin-grid-sticky"], "inline-start");
+  assert.match(styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyRow, /:has\(>\[data-admin-grid-checkbox-cell\]_input:checked\)/u, "Legacy selection paint observes only an existing canonical selection cell");
+  assert.match(styles.ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyRow, /first-child:not\(\[data-admin-grid-sticky\]\)\]:relative/u, "A selected row never releases an existing sticky checkbox");
+  for (const alias of [undefined, "default", "cinematic"]) {
+    const grid = owner.AdminDataGrid({ presentation: alias, children: child });
+    assert.equal(grid.props["data-admin-data-grid-presentation"], "cinematic"); assert.equal(grid.props["data-admin-edge-motion"], "entry");
+    assert.ok(grid.props.className.includes(styles.ADMIN_CINEMATIC_GOLD_V1.collection.frame));
+  }
+  const floor = tableSource.slice(tableSource.indexOf("    const safeFloor ="), tableSource.indexOf("    const reduction ="));
+  assert.ok(floor.includes("sizingStrategy.preserveMinimumWidth") && !floor.includes('presentation ==='), "Responsive width policy is declared by sizing strategy, independently from presentation aliases");
+  assert.match(topicsList, /sizingStrategy=\{\{ mode: "flexible", columnKey: "title", preserveMinimumWidth: true \}\}/u, "Topics retains its approved reading-width contract explicitly");
+  assert.match(read("src/app/admin/projects/ProjectsTableClient.tsx"), /enableSelection=\{false\}/u, "Projects still has no selection or bulk capability added by presentation adoption");
+  return true;
+}
+check("Official default and compatibility aliases adopt semantic, article and standalone grid families without new inputs or width-policy coupling", officialGridFamilyContract());
+const officialGridMutants = [
+  () => officialGridFamilyContract(dataGrid, { ...refinementStyles, resolveAdminCollectionPresentation: value => value ?? "default" }),
+  () => officialGridFamilyContract(dataGrid.replace('${ADMIN_CINEMATIC_GOLD_V1.dataGrid.legacyRow}', "legacy-row-surface")),
+  () => officialGridFamilyContract(dataGrid.replace('data-admin-edge-motion={embedded ? undefined : "entry"}', 'data-admin-edge-motion={undefined}')),
+  () => officialGridFamilyContract(dataGrid, refinementStyles, entityTable.replace('sizingStrategy.preserveMinimumWidth', 'presentation === "cinematic"')),
+];
+check("Official grid negatives reject old-default leakage, a parallel article style, lost entry frame and presentation-coupled sizing", officialGridMutants.every(run => { try { run(); return false; } catch { return true; } }));
+
+function sharedBulkPresentationContract(source = bulkBar) {
+  const owner = loadPureTypeScriptModule("src/components/admin/ui/AdminBulkActionBar.tsx", {
+    ...metricTokenDependencies,
+    react: { ...React, useState: initial => [initial, () => {}], useRef: () => ({ current: null }) },
+    "react-dom": { useFormStatus: () => ({ pending: false }) },
+    "./AdminConfirmDialog": { default: "owned-confirm-dialog" }, "./AdminListboxSelect": { default: "owned-listbox" },
+  }, source).default;
+  const onExecute = () => {}, onClearSelection = () => {};
+  let cases = 0;
+  const actions = [
+    { value: "delete", danger: true },
+    { value: "restore", danger: false },
+    { value: "unrelated-command", tone: "danger", danger: true },
+    { value: "move_to_trash", danger: false },
+    { value: "permanent_delete", tone: "default", danger: false },
+  ];
+  for (const presentation of ["default", "cinematic"]) for (const action of actions) for (const isBusy of [false, true]) {
+    const actionValue = action.value;
+    const props = { presentation, selectedIds: [71, 72], entityLabel: "عنصر", options: [{ value: actionValue, label: "إجراء قائم", ...(action.tone ? { tone: action.tone } : {}) }], actionValue, isBusy, onExecute, onClearSelection, hiddenFields: { context: "retained" } };
+    const tree = owner(props), token = refinementStyles.ADMIN_DATA_GRID_SELECTION;
+    assert.equal(tree.type, "form"); assert.ok(tree.props.className.includes(token.bulk)); assert.equal(tree.props["aria-busy"], isBusy || undefined);
+    const count = elements(tree, element => "data-admin-bulk-selected-count" in element.props)[0]; assert.equal(count.props.children, 2); assert.equal(count.props.className, token.bulkCount);
+    const submit = elements(tree, element => element.type === "button" && element.props.type === "submit")[0];
+    assert.equal(submit.props.disabled, isBusy); assert.equal(submit.props["data-admin-bulk-action-tone"], action.danger ? "danger" : "default");
+    assert.ok(submit.props.className.includes(action.danger ? token.bulkDanger : refinementStyles.ADMIN_CINEMATIC_GOLD_V1.action.primary));
+    const clear = elements(tree, element => element.type === "button" && element.props.type === "button")[0]; assert.equal(clear.props.onClick, onClearSelection); assert.equal(clear.props.disabled, isBusy);
+    const actionControl = elements(tree, element => element.type === "owned-listbox")[0]; assert.equal(actionControl.props.disabled, isBusy); assert.equal(actionControl.props.value, actionValue);
+    const fields = elements(tree, element => element.type === "input").map(element => [element.props.name, element.props.value]);
+    assert.deepEqual(fields, [["context", "retained"], ["bulk_action", actionValue], ["ids", "71"], ["ids", "72"]]);
+    cases += 1;
+  }
+  assert.equal(owner({ selectedIds: [], options: [], entityLabel: "عنصر", onClearSelection }), null);
+  return cases;
+}
+check("Both Bulk presentations share the navy surface/count, preserve fields/pending, and use declared danger tone with only the existing delete fallback", sharedBulkPresentationContract() === 20);
+const bulkPresentationMutants = [
+  bulkBar.replace('resolvedOption?.tone === "danger" || resolvedAction === "delete"', 'resolvedAction === "delete"'),
+  bulkBar.replace('resolvedOption?.tone === "danger" || resolvedAction === "delete"', 'resolvedOption?.tone === "danger"'),
+  bulkBar.replace('resolvedOption?.tone === "danger" || resolvedAction === "delete"', 'resolvedOption?.tone === "danger" || resolvedAction.includes("delete") || resolvedAction === "move_to_trash"'),
+  bulkBar.replace("${ADMIN_DATA_GRID_SELECTION.bulk}", "legacy-bulk-surface"),
+  bulkBar.replace("disabled={isBusy}", "disabled={false}"),
+  bulkBar.replace('name={idsFieldName}', 'name="unrelated_ids"'),
+];
+check("Bulk negatives reject lost danger semantics, a parallel surface, pending interaction and changed submitted IDs", bulkPresentationMutants.every(source => { assert.notEqual(source, bulkBar); try { sharedBulkPresentationContract(source); return false; } catch { return true; } }));
+
+function bulkOptionPresentation(source, name) {
+  const ast = ts.createSourceFile("consumer-bulk-options.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let declaration;
+  ast.forEachChild(node => {
+    if (ts.isVariableStatement(node)) declaration ??= node.declarationList.declarations.find(item => item.name.getText(ast) === name);
+  });
+  assert.ok(declaration?.initializer, `The existing ${name} declaration remains present`);
+  const output = ts.transpileModule(`const ADMIN_BULK_ACTION_LABELS = {}; return (${declaration.initializer.getText(ast)});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  return Function(output)().map(({ value, tone }) => [value, tone]);
+}
+function declaredBulkDangerContract(topicSource = topicsList, categorySource = categoriesClient, seriesSource = seriesClient) {
+  assert.deepEqual(bulkOptionPresentation(topicSource, "BULK_OPTIONS"), [["publish", undefined], ["unpublish", undefined], ["move_to_trash", "danger"], ["move_category", undefined], ["feature", undefined], ["unfeature", undefined]]);
+  for (const source of [topicSource, categorySource, seriesSource]) assert.deepEqual(bulkOptionPresentation(source, "TRASH_BULK_OPTIONS"), [["restore", undefined], ["permanent_delete", "danger"]]);
+  assert.deepEqual(bulkOptionPresentation(seriesSource, "BULK_OPTIONS"), [["publish", undefined], ["hide", undefined], ["delete", undefined]]);
+  return true;
+}
+check("Topics and taxonomy declare existing destructive bulk choices as presentation metadata without changing action order or keys", declaredBulkDangerContract());
+check("Consumer danger negatives reject lost metadata without inventing domain action inference", [
+  () => declaredBulkDangerContract(topicsList.replace('tone: "danger"', 'tone: "default"')),
+  () => declaredBulkDangerContract(topicsList, categoriesClient.replace('tone: "danger"', 'tone: "default"')),
+  () => declaredBulkDangerContract(topicsList, categoriesClient, seriesClient.replace('tone: "danger"', 'tone: "default"')),
+].every(run => { try { run(); return false; } catch { return true; } }));
+
 check("Actual action Button keeps default SSR and 44/40/28px controls while opting into existing 18/22px glyphs", actionGlyphContract() === 240);
 const actionGlyphMutants = [
   dataGrid.replace('iconSize = "sm"', 'iconSize = "lg"'),
@@ -1647,18 +2215,32 @@ check("Row glyph negatives reject omitted forwarding at each real button and cha
   if (source === rowActions) return false;
   try { rowActionGlyphPassThrough(source); return false; } catch { return true; }
 }));
+function refinedMetricPaintContract(styles = refinementStyles) {
+  const metric = styles.ADMIN_CINEMATIC_GOLD_V1.metric, classes = new Set(metric.surfaceClassName.split(/\s+/u));
+  for (const token of ["border-[color:color-mix(in_srgb,var(--admin-metric-color)_25%,transparent)]", "shadow-[inset_0_2px_0_color-mix(in_srgb,var(--admin-metric-color)_60%,transparent),inset_0_8px_18px_color-mix(in_srgb,var(--admin-metric-color)_9%,transparent),0_0_18px_color-mix(in_srgb,var(--admin-metric-color)_8%,transparent),0_20px_45px_rgba(0,0,0,0.65)]", "hover:border-[color:color-mix(in_srgb,var(--admin-metric-color)_75%,transparent)]", "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_18px_color-mix(in_srgb,var(--admin-metric-color)_12%,transparent)]"]) assert.ok(classes.has(token), "Premium Hybrid changes only approved normal paint and retains existing hover: " + token);
+  assert.equal(metric.activeClassName, "ring-1 ring-[color:var(--admin-metric-color)] border-[color:var(--admin-metric-color)]", "Pressed KPI retains the full semantic ring and border independently of the normal shadow");
+  for (const [tone, token] of Object.entries(styles.ADMIN_CINEMATIC_GOLD_V1.tones)) assert.match(token, /^\[--admin-metric-color:#[\da-f]{6}\]$/iu, "Every actual semantic tone supplies the production color variable: " + tone);
+  for (const token of ["min-h-[132px]", "rounded-2xl", "p-3", "focus-visible:outline-2", "focus-visible:outline-offset-2", "focus-visible:outline-[#EDC878]"]) assert.ok(classes.has(token), "Premium Hybrid preserves geometry and keyboard focus: " + token);
+  return true;
+}
+check("Premium Hybrid KPI normal paint uses all semantic colors with exact approved light/depth layers and preserved Hover/Pressed/Focus contracts", refinedMetricPaintContract());
+const metricPaintMutants = ["_25%,transparent)", "_60%,transparent)", "_9%,transparent)", "_8%,transparent)", "0_20px_45px_rgba(0,0,0,0.65)", "hover:border-[color:color-mix(in_srgb,var(--admin-metric-color)_75%,transparent)]", "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_0_18px_color-mix(in_srgb,var(--admin-metric-color)_12%,transparent)]"].map(value => () => { const metric = refinementStyles.ADMIN_CINEMATIC_GOLD_V1.metric; assert.ok(metric.surfaceClassName.includes(value), "Premium Hybrid negative remains reachable: " + value); return refinedMetricPaintContract({ ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, metric: { ...metric, surfaceClassName: metric.surfaceClassName.replace(value, "fixture-unapproved-paint") } } }); });
+metricPaintMutants.push(() => refinedMetricPaintContract({ ...refinementStyles, ADMIN_CINEMATIC_GOLD_V1: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1, metric: { ...refinementStyles.ADMIN_CINEMATIC_GOLD_V1.metric, activeClassName: "border-transparent" } } }));
+check("Premium Hybrid negatives reject each changed border/light/depth layer, lost existing hover and erased active ring", metricPaintMutants.every(run => { try { run(); return false; } catch { return true; } }));
 function metricContract(source = read(metricCardPath)) {
-  const Card = loadPureTypeScriptModule(metricCardPath, {}, source).default;
+  const Card = loadPureTypeScriptModule(metricCardPath, metricTokenDependencies, source).default;
   let calls = 0;
   const onClick = () => { calls += 1; };
   const icon = React.createElement("svg", { "data-metric-probe": "" });
-  for (const active of [false, true]) {
-    const tree = Card({ label: "مقياس", value: 42, suffix: "/100", icon, active, onClick, ariaLabel: "تصفية المقياس" });
+  for (const presentation of [undefined, "default", "cinematic"]) for (const active of [false, true]) {
+    const tree = Card({ label: "مقياس", value: 42, suffix: "/100", icon, active, onClick, ariaLabel: "تصفية المقياس", presentation });
     assert.equal(tree.type, "button");
     assert.equal(tree.props.type, "button");
     assert.equal(tree.props["aria-pressed"], active);
     assert.equal(tree.props["aria-label"], "تصفية المقياس");
     assert.equal(tree.props.onClick, onClick);
+    assert.equal(tree.props["data-admin-metric-presentation"], "cinematic");
+    assert.ok(tree.props.className.includes(metricTokenDependencies["../../../lib/admin/admin-ui-styles"].ADMIN_CINEMATIC_GOLD_V1.metric.surfaceClassName));
     tree.props.onClick();
     const content = elements(tree, element => "data-admin-metric-content" in element.props);
     const glyph = elements(tree, element => "data-admin-metric-icon" in element.props);
@@ -1668,25 +2250,54 @@ function metricContract(source = read(metricCardPath)) {
     assert.equal(elements(glyph[0], element => element.type === "p").length, 0);
     const paragraphs = elements(content[0], element => element.type === "p");
     assert.equal(paragraphs.length, 2);
-    assert.equal(renderToStaticMarkup(paragraphs[0]).replace(/<[^>]+>/gu, ""), "42/100");
-    assert.equal(renderToStaticMarkup(paragraphs[1]).replace(/<[^>]+>/gu, ""), "مقياس");
+    assert.equal(renderToStaticMarkup(paragraphs[1]).replace(/<[^>]+>/gu, ""), "42/100");
+    assert.equal(renderToStaticMarkup(paragraphs[0]).replace(/<[^>]+>/gu, ""), "مقياس");
     assert.equal(elements(content[0], element => "data-metric-probe" in element.props).length, 0);
   }
-  assert.equal(calls, 2);
+  assert.equal(calls, 6);
   const staticTree = Card({ label: "ثابت", value: 0 });
   assert.equal(staticTree.type, "div");
   assert.equal(staticTree.props.onClick, undefined);
   assert.equal(staticTree.props.type, undefined);
   assert.equal(staticTree.props["aria-pressed"], undefined);
-  assert.equal(elements(staticTree, element => "data-admin-metric-icon" in element.props || "data-admin-metric-content" in element.props).length, 0);
+  assert.equal(elements(staticTree, element => "data-admin-metric-icon" in element.props).length, 0);
+  assert.equal(elements(staticTree, element => "data-admin-metric-content" in element.props).length, 1);
+  assert.equal(staticTree.props.tabIndex, undefined);
   const labelled = Card({ label: "افتراضي", value: 1, onClick });
   assert.equal(labelled.props["aria-label"], "افتراضي");
   return Card;
 }
 const MetricCard = metricContract();
+function metricDescriptionContract(source = read(metricCardPath), gridSource = read(metricGridPath)) {
+  const Card = loadPureTypeScriptModule(metricCardPath, metricTokenDependencies, source).default;
+  const Grid = loadPureTypeScriptModule(metricGridPath, { ...metricTokenDependencies, "./AdminMetricCard": { default: Card } }, gridSource).default;
+  const props = { label: "إعدادات", value: 4 };
+  const baseline = renderToStaticMarkup(Card(props));
+  for (const description of [undefined, null, false]) assert.equal(renderToStaticMarkup(Card({ ...props, description })), baseline, "Omitted descriptions preserve every existing default byte");
+  for (const tone of ["neutral", "red"]) for (const description of ["المعروض فقط؛ ليست إجماليًا عالميًا", 0]) {
+    const tree = Card({ ...props, tone, description });
+    assert.ok(tree.props.className.includes(metricTokenDependencies["../../../lib/admin/admin-ui-styles"].ADMIN_CINEMATIC_GOLD_V1.tones[tone]));
+    const helper = elements(tree, node => "data-admin-metric-description" in node.props);
+    assert.equal(helper.length, 1); assert.equal(helper[0].props.children, description);
+    assert.equal(helper[0].props.className, metricTokenDependencies["../../../lib/admin/admin-ui-styles"].ADMIN_CINEMATIC_GOLD_V1.metric.descriptionClassName);
+    assert.equal(tree.props.onClick, undefined, "Operational summaries remain read-only");
+    const grid = Grid({ items: [{ ...props, tone, description }] });
+    const card = elements(grid, node => node.type === Card)[0];
+    assert.equal(card.props.description, description); assert.equal(card.props.tone, tone);
+  }
+  return true;
+}
+check("Shared Metric descriptions and neutral/red semantic tones preserve omitted defaults and Grid forwarding", metricDescriptionContract());
+check("Metric helper regressions reject lost explanatory truth, lost canonical typography and dropped Grid forwarding", [
+  [read(metricCardPath).replace('data-admin-metric-description=""', 'data-lost-description=""'), read(metricGridPath)],
+  [read(metricCardPath).replace("className={cinematic.descriptionClassName}", 'className="text-xs"'), read(metricGridPath)],
+  [read(metricCardPath), read(metricGridPath).replace("{...item}", "{...item} description={undefined}")],
+].every(([cardSource, gridSource]) => { try { metricDescriptionContract(cardSource, gridSource); return false; } catch { return true; } }));
 check("Actual Metric Card preserves value/label hierarchy, decorative icon isolation and button commands", Boolean(MetricCard));
 const metricMutants = [
-  read(metricCardPath).replace('data-admin-metric-icon="" aria-hidden="true"', 'data-admin-metric-icon=""'),
+  read(metricCardPath).replace("resolveAdminCollectionPresentation(presentation)", "presentation"),
+  read(metricCardPath).replace('data-admin-metric-presentation="cinematic"', 'data-admin-metric-presentation="default"'),
+  read(metricCardPath).replaceAll('data-admin-metric-icon="" aria-hidden="true"', 'data-admin-metric-icon=""'),
   read(metricCardPath).replace('onClick ? "button" : "div"', '"div"'),
   read(metricCardPath).replace('            onClick,', '            onClick: () => {},'),
   read(metricCardPath).replace('"aria-pressed": active', '"aria-pressed": false'),
@@ -1696,8 +2307,41 @@ check("Metric owner negatives reject hidden semantics, swallowed actions, fixed 
   if (source === read(metricCardPath)) return false;
   try { metricContract(source); return false; } catch { return true; }
 }));
-const MetricGrid = loadPureTypeScriptModule(metricGridPath, { "./AdminMetricCard": { default: MetricCard } }).default;
-const gridItems = Array.from({ length: 7 }, (_, index) => ({ label: `مقياس ${index}`, value: index, active: index === 2, onClick: index < 6 ? () => index : undefined }));
+function metricArtworkContract(source = read(metricCardPath)) {
+  const Card = loadPureTypeScriptModule(metricCardPath, metricTokenDependencies, source).default;
+  const names = ["content", "published", "projects", "pages", "media", "taxonomy", "unpublished", "series", "featured", "seo"];
+  const scenes = [];
+  for (const artwork of names) {
+    const props = { label: "مؤشر", value: 19, artwork };
+    assert.equal(renderToStaticMarkup(Card(props)), renderToStaticMarkup(Card({ ...props, presentation: "default" })), "Legacy default and omitted presentation forward the same explicitly requested artwork");
+    assert.equal(renderToStaticMarkup(Card(props)), renderToStaticMarkup(Card({ ...props, presentation: "cinematic" })), "Every presentation alias resolves to the same official visual owner");
+    const tree = Card({ ...props, presentation: "cinematic" });
+    const nodes = elements(tree, element => "data-admin-metric-artwork" in element.props);
+    assert.equal(nodes.length, 1); const scene = nodes[0];
+    assert.equal(scene.type, "svg"); assert.equal(scene.props["data-admin-metric-artwork"], artwork);
+    assert.equal(scene.props["aria-hidden"], "true"); assert.equal(scene.props.focusable, "false");
+    assert.ok(scene.props.className.includes("pointer-events-none"));
+    assert.ok(elements(scene, element => element.type === "path").length > 0);
+    assert.equal(elements(scene, element => element.type === "text" || element.type === "button" || element.type === "a").length, 0, "Decorative artwork has no invented data or interactive controls");
+    scenes.push(elements(scene, element => element.type === "path").map(element => element.props.d).join("|"));
+  }
+  assert.equal(new Set(scenes).size, names.length, "Each optional semantic scene has distinct path geometry");
+  assert.equal(elements(Card({ label: "بدون رسم", value: 0, presentation: "cinematic" }), element => "data-admin-metric-artwork" in element.props).length, 0, "Cinematic cards still require an explicit artwork choice");
+  return names.length;
+}
+check("Actual Metric artwork remains ten explicit decorative scenes through the official default and aliases", metricArtworkContract() === 10);
+const artworkMutants = [
+  read(metricCardPath).replace("{artwork ? (", "{false ? ("),
+  read(metricCardPath).replace(/            aria-hidden="true"(\r?\n)            focusable="false"/u, '            aria-hidden="false"$1            focusable="false"'),
+  read(metricCardPath).replace('focusable="false"', 'focusable="true"'),
+  read(metricCardPath).replace("ARTWORK_PATHS[artwork].map", "ARTWORK_PATHS.content.map"),
+];
+check("Metric artwork negatives reject lost adoption, exposed/focusable decoration and a repeated scene", artworkMutants.every(source => {
+  if (source === read(metricCardPath)) return false;
+  try { metricArtworkContract(source); return false; } catch { return true; }
+}));
+const MetricGrid = loadPureTypeScriptModule(metricGridPath, { ...metricTokenDependencies, "./AdminMetricCard": { default: MetricCard } }).default;
+const gridItems = Array.from({ length: 7 }, (_, index) => ({ label: `مقياس ${index}`, value: index, active: index === 2, artwork: index % 2 ? "content" : undefined, onClick: index < 6 ? () => index : undefined }));
 const gridTree = MetricGrid({ items: gridItems });
 const actualCards = elements(gridTree, element => element.type === MetricCard);
 check("Actual Metric Grid retains all seven ordered values, active state and exact callback identities", actualCards.length === gridItems.length && actualCards.every((element, index) => {
@@ -1705,6 +2349,165 @@ check("Actual Metric Grid retains all seven ordered values, active state and exa
   return label === gridItems[index].label && value === index && active === gridItems[index].active && onClick === gridItems[index].onClick;
 }));
 check("Actual metric viewport retains its bleed boundary without forcing a horizontal scrollport", "data-admin-metric-cards-viewport" in gridTree.props && !/\boverflow-x-(?:auto|scroll)\b/u.test(gridTree.props.className));
+const cinematicGrid = MetricGrid({ items: gridItems, presentation: "cinematic", ariaLabel: "مؤشرات تجريبية" });
+const cinematicCards = elements(cinematicGrid, element => element.type === MetricCard);
+function metricGridDefaultContract(source = read(metricGridPath)) {
+  const Grid = loadPureTypeScriptModule(metricGridPath, { ...metricTokenDependencies, "./AdminMetricCard": { default: MetricCard } }, source).default;
+  for (const presentation of [undefined, "default", "cinematic"]) {
+    const tree = Grid({ items: gridItems, presentation, ariaLabel: "مؤشرات تجريبية" });
+    const section = elements(tree, element => element.type === "section")[0];
+    assert.equal(section.props["data-admin-metric-grid-presentation"], "cinematic");
+    assert.equal(section.props.className, metricTokenDependencies["../../../lib/admin/admin-ui-styles"].ADMIN_CINEMATIC_GOLD_V1.metric.gridClassName);
+    assert.equal(section.props["aria-label"], "مؤشرات تجريبية");
+    assert.deepEqual(section.props.style, { "--admin-metric-cols": 2, "--admin-metric-cols-md": 3, "--admin-metric-cols-xl": 6 });
+    const cards = elements(tree, element => element.type === MetricCard);
+    assert.equal(cards.length, gridItems.length);
+    cards.forEach((element, index) => { assert.equal(element.props.presentation, "cinematic"); assert.equal(element.props.onClick, gridItems[index].onClick); assert.equal(element.props.artwork, gridItems[index].artwork); assert.equal(element.props.label, gridItems[index].label); assert.equal(element.props.value, gridItems[index].value); assert.equal(element.props.active, gridItems[index].active); });
+  }
+  for (const count of [0, 1, 3, 5, 6, 7]) {
+    const tree = Grid({ items: gridItems.slice(0, count) }), section = elements(tree, element => element.type === "section")[0];
+    const actualCount = Math.max(1, count);
+    assert.deepEqual(section.props.style, { "--admin-metric-cols": Math.min(2, actualCount), "--admin-metric-cols-md": Math.min(3, actualCount), "--admin-metric-cols-xl": Math.min(6, actualCount) });
+    assert.equal(elements(tree, element => element.type === MetricCard).length, count);
+  }
+  return true;
+}
+check("All Metric Grid default aliases forward official geometry, ordered items, exact commands, artwork and palette to the same Card owner", metricGridDefaultContract() && cinematicCards.length === gridItems.length && actualCards.every(element => element.props.presentation === "cinematic"));
+check("Metric Grid negatives reject a legacy presentation fallback or lost official forwarding", [
+  read(metricGridPath).replace("resolveAdminCollectionPresentation(presentation)", "presentation"),
+  read(metricGridPath).replace("presentation={resolvedPresentation}", 'presentation="default"'),
+  read(metricGridPath).replace("ADMIN_CINEMATIC_GOLD_V1.metric.gridClassName", '"grid grid-cols-1"'),
+  read(metricGridPath).replace("Math.min(6, count)", "6"),
+].every(source => { if (source === read(metricGridPath)) return false; try { metricGridDefaultContract(source); return false; } catch { return true; } }));
+
+// Discover JSX consumers from actual imports, including renamed default/named
+// bindings. The owner contract above applies to every omitted/default mount;
+// a handpicked Categories assertion alone would miss the same recurrence.
+function discoverMetricMounts(directory = resolve(ROOT, "src")) {
+  const mounts = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = resolve(directory, entry.name);
+    if (entry.isDirectory()) { mounts.push(...discoverMetricMounts(file)); continue; }
+    if (!file.endsWith(".tsx")) continue;
+    const source = readFileSync(file, "utf8"), ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), names = new Map();
+    for (const node of ast.statements) {
+      if (!ts.isImportDeclaration(node) || !node.importClause || !ts.isStringLiteral(node.moduleSpecifier)) continue;
+      const owner = node.moduleSpecifier.text.match(/(?:^|\/)(AdminMetricCardsGrid|AdminMetricCard)$/u)?.[1];
+      if (owner && node.importClause.name) names.set(node.importClause.name.text, owner);
+      if (node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) for (const item of node.importClause.namedBindings.elements) if (["AdminMetricCard", "AdminMetricCardsGrid"].includes((item.propertyName ?? item.name).text)) names.set(item.name.text, (item.propertyName ?? item.name).text);
+    }
+    const visit = node => { if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && names.has(node.tagName.getText(ast))) { const presentation = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText(ast) === "presentation"); mounts.push({ file, owner: names.get(node.tagName.getText(ast)), line: ast.getLineAndCharacterOfPosition(node.getStart()).line + 1, presentation: presentation?.initializer?.getText(ast) ?? "omitted" }); } ts.forEachChild(node, visit); };
+    visit(ast);
+  }
+  return mounts;
+}
+const metricMounts = discoverMetricMounts();
+check("Actual imported KPI JSX consumer discovery covers direct and Grid forwarding mounts with canonical default contracts", metricMounts.some(row => row.owner === "AdminMetricCard" && row.file.endsWith("AdminDashboardView.tsx")) && ["CategoriesListClient.tsx", "SeriesTableClient.tsx", "TopicsListClient.tsx", "construction-updates/page.tsx"].every(suffix => metricMounts.some(row => row.file.replaceAll("\\", "/").endsWith(suffix))) && metricMounts.every(row => row.owner === "AdminMetricCard" || row.owner === "AdminMetricCardsGrid") && metricGridDefaultContract());
+
+function metricConsumerVisualContract({ sourceOverrides = {}, manifest = loadPureTypeScriptModule("src/lib/admin/interaction-system/adoption-manifest.ts") } = {}) {
+  const contracts = manifest.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap(surface => surface.visualPresentation?.metricCards ?? []);
+  const actualConsumerFiles = [...new Set(metricMounts.map(row => row.file.replaceAll("\\", "/").replace(ROOT.replaceAll("\\", "/") + "/", "")).filter(file => file !== metricGridPath))].sort();
+  assert.deepEqual(contracts.map(contract => contract.sourceFile).sort(), actualConsumerFiles, "Every actual canonical KPI consumer needs its own visual contract; shared component reach is insufficient");
+  let items = 0;
+  for (const contract of contracts) {
+    const source = sourceOverrides[contract.sourceFile] ?? read(contract.sourceFile), ast = ts.createSourceFile(contract.sourceFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const property = (node, name) => node.properties.find(item => ts.isPropertyAssignment(item) && (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === name)?.initializer;
+    const arrays = [];
+    const visit = node => {
+      if (ts.isArrayLiteralExpression(node) && node.elements.length && node.elements.every(ts.isObjectLiteralExpression)) {
+        const labels = node.elements.map(item => property(item, "label"));
+        if (labels.every(label => label && ts.isStringLiteral(label)) && node.elements.every(item => property(item, "value") && property(item, "icon"))) arrays.push(node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(ast);
+    const candidates = arrays.filter(array => array.elements.some(item => contract.items.some(expected => property(item, "label")?.text === expected.label)));
+    assert.equal(candidates.length, 1, `${contract.sourceFile} retains one real KPI item array`);
+    const array = candidates[0];
+    assert.deepEqual(array.elements.map(item => property(item, "label")?.text), contract.items.map(item => item.label), "Ordered original labels/card count remain consumer-owned");
+    for (const [index, node] of array.elements.entries()) {
+      const expected = contract.items[index], artwork = property(node, "artwork"), icon = property(node, "icon");
+      assert.equal(expected.icon, "required", "Applicable foreground icons cannot be downgraded to optional metadata");
+      assert.ok(icon && icon.kind !== ts.SyntaxKind.NullKeyword && icon.kind !== ts.SyntaxKind.FalseKeyword && icon.getText(ast) !== "undefined", `${expected.label} retains its actual foreground icon`);
+      assert.ok(artwork && ts.isStringLiteral(artwork), `${expected.label} explicitly adopts its applicable semantic artwork`);
+      assert.equal(artwork.text, expected.artwork, `${expected.label} uses its declared semantic scene`);
+      const tree = MetricCard({ label: expected.label, value: 0, icon: React.createElement("svg", { "data-actual-consumer-icon-source": icon.getText(ast) }), artwork: artwork.text });
+      assert.equal(elements(tree, element => element.props["data-admin-metric-artwork"] === expected.artwork).length, 1, "The declared visual atom reaches the real Card output");
+      assert.equal(elements(tree, element => element.props["data-actual-consumer-icon-source"] === icon.getText(ast)).length, 1);
+      assert.equal(elements(tree, element => element.type === "h1").length, 0);
+      items += 1;
+    }
+  }
+  return items;
+}
+check("Every actual canonical KPI consumer fulfills its own ordered label/icon/artwork contract and renders those atoms through the existing Card owner", metricConsumerVisualContract() > 0);
+const metricVisualManifest = loadPureTypeScriptModule("src/lib/admin/interaction-system/adoption-manifest.ts");
+const metricVisualRequirements = metricVisualManifest.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap(surface => surface.visualPresentation?.metricCards ?? []);
+const metricConsumerVisualMutants = metricVisualRequirements.flatMap(contract => {
+  const source = read(contract.sourceFile), first = contract.items[0];
+  const ast = ts.createSourceFile(contract.sourceFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let artwork, icon;
+  const visit = node => {
+    if (ts.isObjectLiteralExpression(node)) {
+      const label = node.properties.find(property => ts.isPropertyAssignment(property) && property.name.getText(ast) === "label")?.initializer;
+      if (label && ts.isStringLiteral(label) && label.text === first.label) {
+        artwork = node.properties.find(property => ts.isPropertyAssignment(property) && property.name.getText(ast) === "artwork");
+        icon = node.properties.find(property => ts.isPropertyAssignment(property) && property.name.getText(ast) === "icon")?.initializer;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(ast); assert.ok(artwork && icon, "Product mutation targets a real applicable visual item");
+  return [
+    { sourceOverrides: { [contract.sourceFile]: source.slice(0, artwork.initializer.getStart(ast)) + '"' + (first.artwork === "content" ? "series" : "content") + '"' + source.slice(artwork.initializer.end) } },
+    { sourceOverrides: { [contract.sourceFile]: source.slice(0, artwork.getStart(ast)) + source.slice(artwork.end).replace(/^\s*,/u, "") } },
+    { sourceOverrides: { [contract.sourceFile]: source.slice(0, icon.getStart(ast)) + "null" + source.slice(icon.end) } },
+  ];
+});
+const incompleteMetricManifest = loadPureTypeScriptModule("src/lib/admin/interaction-system/adoption-manifest.ts");
+const firstMetricVisualSurface = incompleteMetricManifest.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.find(surface => surface.visualPresentation?.metricCards);
+delete firstMetricVisualSurface.visualPresentation.metricCards;
+metricConsumerVisualMutants.push({ manifest: incompleteMetricManifest });
+check("Per-consumer visual negatives reject missing or incorrect artwork, lost foreground icons and an unregistered applicable KPI consumer despite canonical component use", metricConsumerVisualMutants.every(input => { try { metricConsumerVisualContract(input); return false; } catch { return true; } }));
+
+function verifyRecoveryMetricTruth(source = read("src/app/admin/settings/media/MediaRecoveryCenter.tsx")) {
+  const tree = ts.createSourceFile("MediaRecoveryCenter.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const mounts = [];
+  const visit = node => {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "AdminMetricCardsGrid") mounts.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  assert.equal(mounts.length, 1);
+  let projection = mounts[0].parent;
+  while (projection && !ts.isJsxExpression(projection)) projection = projection.parent;
+  assert.ok(projection?.expression, "The actual Recovery render condition owns its summary projection");
+  const code = ts.transpileModule(`export function project(queue) { return ${projection.expression.getText(tree)}; }`, {
+    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const compiled = {};
+  new Function("React", "AdminMetricCardsGrid", "AdminModuleTabIcon", "exports", code)(React, MetricGrid, () => React.createElement("svg"), compiled);
+  for (const queue of [null, { available: false, counts: null }]) assert.equal(Boolean(compiled.project(queue)), false, "Unavailable counts cannot render a zero-valued summary");
+  const labels = ["عمليات حذف متوقفة", "أصول مفقودة أو غير مؤكدة", "عمليات حفظ غير محلولة"];
+  for (const values of [[7, 0, 2], [0, 0, 0]]) for (const truncated of [false, true]) {
+    const node = compiled.project({ available: true, truncated, counts: { stuckDeletes: values[0], missingOrUncertainAssets: values[1], unresolvedLeaseBatches: values[2] } });
+    assert.equal(node.type, MetricGrid, "Recovery projects through the existing shared Grid");
+    assert.deepEqual(node.props.items.map(item => item.value), values, "The displayed counts retain the authoritative available queue values including zero");
+    assert.deepEqual(node.props.items.map(item => item.label), labels.map(label => label + (truncated ? " (المعروضة)" : "")), "A truncated queue names displayed counts explicitly");
+  }
+  return true;
+}
+check("Recovery shared Metric projection preserves availability, actual zero counts and truncated displayed-only labels", verifyRecoveryMetricTruth());
+const recoveryMetricSource = read("src/app/admin/settings/media/MediaRecoveryCenter.tsx");
+check("Recovery Metric truth rejects fabricated availability, changed counts and lost displayed-only labels", [
+  recoveryMetricSource.replace(/queue\?\.available \? \((\s*<AdminMetricCardsGrid)/u, 'true ? ($1'),
+  recoveryMetricSource.replace('value: queue.counts.stuckDeletes', 'value: 0'),
+  recoveryMetricSource.replace('queue.truncated ? item.label + " (المعروضة)" : item.label', 'item.label'),
+].every(source => {
+  assert.notEqual(source, recoveryMetricSource, "The negative control changes the actual Recovery projection");
+  assert.throws(() => verifyRecoveryMetricTruth(source));
+  return true;
+}));
 
 // The neutral token resolves once to CSS; overflow remains a consumer concern.
 async function verifyScrollbarUtility() {
@@ -1752,7 +2555,21 @@ async function verifyScrollbarUtility() {
 }
 const scrollbarUtility = await verifyScrollbarUtility();
 check("Installed Tailwind compiles the single scoped scrollbar utility to the same nine visual declarations", Boolean(scrollbarUtility));
-const tabDependencies = { react: React, "./AdminForm": {} };
+const tabDependencies = {
+  react: React,
+  "./AdminForm": {},
+  "./AdminDataGrid": loadPureTypeScriptModule("src/components/admin/ui/AdminDataGrid.tsx", {
+    ...metricTokenDependencies,
+    "next/link": { default: SsrNextLink },
+    "./AdminCheckbox": { default: () => null },
+    "./AdminDataGridQueryStatus": { default: () => null },
+    "./admin-scrollbar-styles": { ADMIN_SCROLLBAR_VISUAL_CLASSES: "" },
+    "./AdminDataGridDateTimeCell": { default: () => null },
+  }),
+  "../../../lib/admin/admin-ui-styles": loadPureTypeScriptModule("src/lib/admin/admin-ui-styles.ts", {
+    "../../components/venesia-scrollbar-styles": loadPureTypeScriptModule("src/components/venesia-scrollbar-styles.ts"),
+  }),
+};
 const currentTabs = loadPureTypeScriptModule(metricTabsPath, tabDependencies);
 const newGlyphs = ["database", "statistics"].map(name => renderToStaticMarkup(React.createElement(currentTabs.AdminModuleTabIcon, { name })));
 check("Metric semantic glyphs are distinct decorative SVGs in the existing icon owner", newGlyphs.every(markup => markup.includes("<svg") && markup.includes('aria-hidden="true"')) && newGlyphs[0] !== newGlyphs[1]);
@@ -1843,7 +2660,7 @@ if (baselineArgument) {
     assert.equal(canonical(ast, normalize), canonical(oldAst, normalizeBefore), `Only approved icon additions and Topics min-width removal: ${path}`);
     return { path, count: labels.length, labels, commands, unchangedMetricFieldsAndRestOfSource: true, beforeSha256: hash(original), afterSha256: hash(current) };
   });
-  const oldCard = loadPureTypeScriptModule(metricCardPath, {}, before(metricCardPath)).default;
+  const oldCard = loadPureTypeScriptModule(metricCardPath, metricTokenDependencies, before(metricCardPath)).default;
   const scrollbarPath = "src/components/venesia-scrollbar-styles.ts";
   const oldScrollbarToken = loadPureTypeScriptModule(scrollbarPath, {}, before(scrollbarPath)).VENESIA_SCROLLBAR_VISUAL_CLASSES;
   const currentScrollbarCss = postcss.parse(read("src/app/globals.css"));
@@ -1853,7 +2670,15 @@ if (baselineArgument) {
   let defaultCases = 0;
   for (const tone of ["gold", "blue", "green", "amber", "violet", "cyan"]) for (const compact of [false, true]) for (const align of ["start", "center"]) {
     const props = { label: "لوحة المعلومات", value: 124, suffix: "/100", tone, compact, align };
-    assert.equal(renderToStaticMarkup(React.createElement(MetricCard, props)), renderToStaticMarkup(React.createElement(oldCard, props)));
+    const current = MetricCard(props), original = oldCard(props);
+    assert.equal(current.type, original.type);
+    for (const tree of [current, original]) {
+      const text = renderToStaticMarkup(tree).replace(/<[^>]+>/gu, "");
+      assert.ok(text.includes(props.label) && text.includes(`${props.value}${props.suffix}`));
+      assert.equal(tree.props.onClick, undefined); assert.equal(tree.props["aria-pressed"], undefined);
+    }
+    assert.equal(current.props["data-admin-metric-presentation"], "cinematic");
+    assert.equal(renderToStaticMarkup(current), renderToStaticMarkup(MetricCard({ ...props, presentation: "cinematic" })), "Authorized official geometry replaces historical visual parity without changing metric facts");
     defaultCases += 1;
   }
   const oldTabs = loadPureTypeScriptModule(metricTabsPath, tabDependencies, before(metricTabsPath));
@@ -1874,21 +2699,35 @@ if (baselineArgument) {
   }
   assert.equal(canonical(parse(metricTabsPath, read(metricTabsPath)), tabNormalization), canonical(parse(metricTabsPath, before(metricTabsPath)), tabNormalization), "Tab defaults, overflow and keyboard/mounted behavior only differ by approved glyph/hide changes");
   const headerPath = "src/components/admin/ui/AdminPageContextHeader.tsx";
-  const oldHeader = loadPureTypeScriptModule(headerPath, {}, before(headerPath)).default;
-  const Header = loadPureTypeScriptModule(headerPath).default;
+  const headerDependencies = { ...metricTokenDependencies, "./AdminModuleTabs": { AdminModuleTabIcon: currentTabs.AdminModuleTabIcon }, "./admin-scrollbar-styles": loadPureTypeScriptModule("src/components/admin/ui/admin-scrollbar-styles.ts", { "../../venesia-scrollbar-styles": loadPureTypeScriptModule(scrollbarPath) }) };
+  const oldHeader = loadPureTypeScriptModule(headerPath, headerDependencies, before(headerPath)).default;
+  const Header = loadPureTypeScriptModule(headerPath, headerDependencies).default;
   let minimalHeaderCases = 0;
   for (const status of ["ready", "loading", "error", "empty", "under-construction"]) for (const withSlots of [false, true]) {
     const props = { variant: "minimal", status, title: "العنوان", ...(withSlots ? { eyebrow: "السياق", badge: "الحالة", description: "الوصف", breadcrumb: "المسار", meta: "البيانات", actions: React.createElement("button", { type: "button" }, "إجراء") } : {}) };
-    assert.equal(renderToStaticMarkup(React.createElement(Header, props)), renderToStaticMarkup(React.createElement(oldHeader, props)));
+    const current = Header(props), original = oldHeader(props);
+    assert.equal(current.props["data-admin-page-header-status"], status);
+    assert.equal(current.props["data-admin-page-header-variant"], "minimal");
+    assert.equal(current.props["data-admin-page-header-presentation"], "cinematic");
+    assert.equal(current.props.className, metricTokenDependencies["../../../lib/admin/admin-ui-styles"].ADMIN_CINEMATIC_GOLD_V1.module.root);
+    assert.equal(renderToStaticMarkup(current), renderToStaticMarkup(Header({ ...props, presentation: "cinematic" })), "Minimal Header keeps its semantic variant within the authorized official visual default");
+    for (const tree of [current, original]) {
+      assert.equal(elements(tree, node => node.type === "h1")[0].props.children, props.title);
+      const text = renderToStaticMarkup(tree).replace(/<[^>]+>/gu, "");
+      for (const field of ["title", "eyebrow", "badge", "description", "breadcrumb", "meta"]) if (props[field]) assert.ok(text.includes(props[field]), `Historical Header retains ${field}`);
+      const buttons = elements(tree, node => node.type === "button"); assert.equal(buttons.length, withSlots ? 1 : 0);
+      if (withSlots) assert.equal(buttons[0], props.actions, "Exact existing action identity remains in the same Header owner");
+    }
+    assert.equal(elements(current, node => "data-admin-header-artwork" in node.props).length, 0, "No artwork invented for historical utility states");
     minimalHeaderCases += 1;
   }
   assert.ok(newGlyphs.every(markup => markup.includes('<svg') && markup.includes('aria-hidden="true"')));
   assert.notEqual(newGlyphs[0], newGlyphs[1]);
   const owners = [metricCardPath, metricGridPath, metricTabsPath, headerPath, scrollbarPath, "src/app/globals.css"].map(path => ({ path, beforeSha256: hash(before(path)), afterSha256: hash(read(path)) }));
-  const receipt = { status: "PASS", capturedAt: new Date().toISOString(), baseline: baselinePath, consumers: consumerProof, owners, defaultCardExactSsrCases: defaultCases, minimalHeaderExactSsrCases: minimalHeaderCases, existingIconExactSsrCases: oldNames.length + 1, tabKeyboardMountedOverflowSourceParity: true, scrollbarBaselineTokenParity: true, newDecorativeGlyphs: ["database", "statistics"], scrollbarUtility, limitations: ["Source, SSR and callbacks only; responsive geometry, scroll behavior and visual acceptance require actual Browser evidence."] };
+  const receipt = { status: "PASS", capturedAt: new Date().toISOString(), baseline: baselinePath, consumers: consumerProof, owners, defaultCardPreservedFactCases: defaultCases, minimalHeaderPreservedSemanticCases: minimalHeaderCases, authorizedOfficialDefaultGeometry: true, historicalExactVisualParitySuperseded: true, existingIconExactSsrCases: oldNames.length + 1, tabKeyboardMountedOverflowSourceParity: true, scrollbarBaselineTokenParity: true, newDecorativeGlyphs: ["database", "statistics"], scrollbarUtility, limitations: ["Source, SSR and callbacks only; responsive geometry, scroll behavior and visual acceptance require actual Browser evidence."] };
   const outputArgument = process.argv.find(argument => argument.startsWith("--output-file="));
   if (outputArgument) writeFileSync(resolve(ROOT, outputArgument.slice("--output-file=".length)), JSON.stringify(receipt, null, 2) + "\n");
-  check("Exact phase baseline preserves all four consumer contracts, no-icon Card output and existing glyphs", true);
+  check("Phase baseline preserves consumer facts, utility Header semantics and existing glyphs while authorized official chrome replaces old visual parity", true);
 }
 
 // Date-cell acceptance executes the actual owner. The DOM ports provide measured

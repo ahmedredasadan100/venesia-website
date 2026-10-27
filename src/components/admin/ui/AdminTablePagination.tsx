@@ -5,6 +5,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import {
+  ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation,
+  type AdminCollectionPresentation,
+} from "../../../lib/admin/admin-ui-styles";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import {
   ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
@@ -48,6 +52,8 @@ export type AdminTablePaginationProps = {
   onPageIntent?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
   className?: string;
+  /** Opt-in appearance only; page and page-size ownership are unchanged. */
+  presentation?: AdminCollectionPresentation;
 };
 
 function ChevronDownIcon() {
@@ -111,7 +117,12 @@ export default function AdminTablePagination({
   onPageIntent,
   onPageSizeChange,
   className = "",
+  presentation: requestedPresentation = "default",
 }: AdminTablePaginationProps) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
+  const cinematic = presentation === "cinematic";
+  const pageControlClassName = `inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border px-2 text-sm transition ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.page : "border-[#D8B87A]/14 bg-black/20 text-[#F4E7C5]/72 hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"}`;
+  const disabledPageControlClassName = `inline-flex h-9 w-[76px] flex-none cursor-not-allowed items-center justify-center rounded-[10px] border px-2 text-sm ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.pageDisabled : "border-white/[0.06] bg-black/10 text-white/28"}`;
   const router = useRouter();
   const searchParams = useSearchParams();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -271,11 +282,12 @@ export default function AdminTablePagination({
         {...{ [PAGINATION_MENU_ATTR]: "" }}
         id={`${limitTriggerId}-menu`}
         role="listbox"
+        data-admin-pagination-presentation={presentation}
         aria-labelledby={limitTriggerId}
         dir="rtl"
         data-placement={menuPosition.placement}
         style={menuPosition.style}
-        className={`${MENU_SCROLLBAR_CLASSES} rounded-[12px] border border-[#D8B87A]/22 bg-[#080B10]/96 p-1 shadow-[0_-14px_45px_rgba(0,0,0,0.38),0_18px_55px_rgba(0,0,0,0.42)] backdrop-blur-xl`}
+        className={`${MENU_SCROLLBAR_CLASSES} rounded-[12px] border p-1 backdrop-blur-xl ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.menu : "border-[#D8B87A]/22 bg-[#080B10]/96 shadow-[0_-14px_45px_rgba(0,0,0,0.38),0_18px_55px_rgba(0,0,0,0.42)]"}`}
       >
         {pageSizeOptions.map((option) => {
           const selected = pageSize === option;
@@ -290,7 +302,9 @@ export default function AdminTablePagination({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyLimit(option)}
               className={`flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2 text-right text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
-                selected
+                cinematic
+                  ? selected || active ? ADMIN_CINEMATIC_GOLD_V1.collection.optionActive : ADMIN_CINEMATIC_GOLD_V1.collection.option
+                  : selected
                   ? "bg-[#D8B87A]/14 font-semibold text-[#F4E7C5]"
                   : active
                     ? "bg-white/[0.07] text-[#F4E7C5]"
@@ -323,13 +337,14 @@ export default function AdminTablePagination({
 
   return (
     <div
-      className={`rounded-[14px] px-4 py-3.5 ${FOOTER_SURFACE_CLASSES} ${className}`.trim()}
+      className={`rounded-[14px] ${cinematic ? `px-3 py-2.5 border ${ADMIN_CINEMATIC_GOLD_V1.collection.footer}` : `px-4 py-3.5 ${FOOTER_SURFACE_CLASSES}`} ${className}`.trim()}
       data-admin-table-pagination=""
+      data-admin-pagination-presentation={presentation}
       data-admin-table-pagination-busy="false"
     >
       <div
         dir="ltr"
-        className="grid grid-cols-1 items-center gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-3"
+        className={`grid grid-cols-1 items-center md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] ${cinematic ? "gap-2.5" : "gap-4 md:gap-3"}`}
       >
         {shouldShowPageSizeSelector ? (
           <div dir="rtl" className="flex items-center justify-center gap-2 md:justify-self-start">
@@ -348,13 +363,15 @@ export default function AdminTablePagination({
                 }}
                 onKeyDown={handleLimitKeyDown}
                 className={`flex h-9 min-w-[72px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  isLimitOpen
+                  cinematic
+                    ? isLimitOpen ? ADMIN_CINEMATIC_GOLD_V1.collection.controlOpen : ADMIN_CINEMATIC_GOLD_V1.collection.control
+                    : isLimitOpen
                     ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"
                     : "border-[#D8B87A]/16 bg-black/22 text-[#F4E7C5]/90 hover:border-[#D8B87A]/28 hover:bg-black/28"
                 }`}
               >
                 <span>{pageSize}</span>
-                <span className={`text-[#F4E7C5]/45 transition ${isLimitOpen ? "" : "rotate-180"}`}>
+                <span className={`text-[#F4E7C5]/45 transition ${cinematic ? "motion-reduce:transition-none" : ""} ${isLimitOpen ? "" : "rotate-180"}`}>
                   <ChevronDownIcon />
                 </span>
               </button>
@@ -377,7 +394,7 @@ export default function AdminTablePagination({
                 onClick={() => onPageChange(currentPage - 1)}
                 onMouseEnter={() => signalPageIntent(currentPage - 1)}
                 onFocus={() => signalPageIntent(currentPage - 1)}
-                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
+                className={`${pageControlClassName} disabled:cursor-not-allowed disabled:opacity-45`}
               >
                 السابق
               </button>
@@ -385,12 +402,12 @@ export default function AdminTablePagination({
               <Link
                 href={prevHref}
                 scroll={false}
-                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className={pageControlClassName}
               >
                 السابق
               </Link>
             ) : (
-              <span className="inline-flex h-9 w-[76px] flex-none cursor-not-allowed items-center justify-center rounded-[10px] border border-white/[0.06] bg-black/10 px-2 text-sm text-white/28">
+              <span className={disabledPageControlClassName}>
                 السابق
               </span>
             )}
@@ -424,8 +441,10 @@ export default function AdminTablePagination({
                   aria-current={isActive ? "page" : undefined}
                   disabled={isActive}
                   data-admin-pagination-slot="page"
-                  className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-default disabled:opacity-70 ${
-                    isActive
+                  className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-default ${cinematic ? "disabled:opacity-100" : "disabled:opacity-70"} ${
+                    cinematic
+                      ? isActive ? ADMIN_CINEMATIC_GOLD_V1.collection.pageActive : ADMIN_CINEMATIC_GOLD_V1.collection.page
+                      : isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"
                   }`}
@@ -439,7 +458,9 @@ export default function AdminTablePagination({
                   aria-disabled="true"
                   data-admin-pagination-slot="page"
                   className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums ${
-                    isActive
+                    cinematic
+                      ? isActive ? ADMIN_CINEMATIC_GOLD_V1.collection.pageActive : ADMIN_CINEMATIC_GOLD_V1.collection.pageDisabled
+                      : isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/38"
                   }`}
@@ -454,7 +475,9 @@ export default function AdminTablePagination({
                   aria-current={isActive ? "page" : undefined}
                   data-admin-pagination-slot="page"
                   className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${
-                    isActive
+                    cinematic
+                      ? isActive ? ADMIN_CINEMATIC_GOLD_V1.collection.pageActive : ADMIN_CINEMATIC_GOLD_V1.collection.page
+                      : isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"
                   }`}
@@ -470,7 +493,7 @@ export default function AdminTablePagination({
                 onClick={() => onPageChange(currentPage + 1)}
                 onMouseEnter={() => signalPageIntent(currentPage + 1)}
                 onFocus={() => signalPageIntent(currentPage + 1)}
-                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
+                className={`${pageControlClassName} disabled:cursor-not-allowed disabled:opacity-45`}
               >
                 التالي
               </button>
@@ -478,12 +501,12 @@ export default function AdminTablePagination({
               <Link
                 href={nextHref}
                 scroll={false}
-                className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+                className={pageControlClassName}
               >
                 التالي
               </Link>
             ) : (
-              <span className="inline-flex h-9 w-[76px] flex-none cursor-not-allowed items-center justify-center rounded-[10px] border border-white/[0.06] bg-black/10 px-2 text-sm text-white/28">
+              <span className={disabledPageControlClassName}>
                 التالي
               </span>
             )}

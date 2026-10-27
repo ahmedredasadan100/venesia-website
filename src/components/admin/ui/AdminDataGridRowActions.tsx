@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation, type AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
+
 import {
   useCallback,
   useEffect,
@@ -61,6 +63,7 @@ export type {
 } from "../../../lib/admin/interaction-system/admin-row-actions-capability";
 
 export type AdminDataGridRowActionsProps = {
+  presentation?: AdminCollectionPresentation;
   capability: AdminRowActionsCapability;
   size?: "default" | "compact";
   /** Opt-in primary/status glyph scale; existing consumers retain 16px icons. */
@@ -242,21 +245,24 @@ function isAllowedLink(
 }
 
 function AdminDataGridRowActionMenuItem({
+  presentation: requestedPresentation = "default",
   item,
   onCommand,
   onNavigate,
 }: {
+  presentation?: AdminCollectionPresentation;
   item: ResolvedMenuItem;
   onCommand: (item: ResolvedMenuItem) => void;
   onNavigate: () => void;
 }) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const { target } = item;
   const enabled = target.access === "allowed" && !target.pending;
   const title = target.disabledReason ?? item.label;
   const ariaLabel = target.disabledReason
     ? `${item.label}: ${target.disabledReason}`
     : item.label;
-  const classes = `flex min-h-10 w-full items-center gap-3 rounded-[9px] border border-transparent px-3 py-2 text-right text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${MENU_TONE_CLASSES[item.tone].base}`;
+  const classes = `flex min-h-10 w-full items-center gap-3 rounded-[9px] border border-transparent px-3 py-2 text-right text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 ${MENU_TONE_CLASSES[item.tone].base} ${presentation === "cinematic" ? "motion-reduce:transition-none" : ""}`;
   const content = (
     <>
       <span className="flex h-5 w-5 shrink-0 items-center justify-center">
@@ -407,6 +413,7 @@ function restoreResolvedFocus(
 }
 
 export default function AdminDataGridRowActions({
+  presentation: requestedPresentation = "default",
   capability,
   size = "default",
   iconSize = "sm",
@@ -414,6 +421,7 @@ export default function AdminDataGridRowActions({
   sticky = false,
   moreButtonRef,
 }: AdminDataGridRowActionsProps) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const informationBackRef = useRef<HTMLButtonElement>(null);
@@ -772,6 +780,7 @@ export default function AdminDataGridRowActions({
         data-admin-row-action-state={actionState(target)}
       >
         <AdminDataGridActionButton
+          presentation={presentation}
           action={kind}
           href={enabled ? target.href : undefined}
           target={
@@ -849,6 +858,7 @@ export default function AdminDataGridRowActions({
         data-admin-row-action-state={actionState(target)}
       >
         <AdminDataGridActionButton
+          presentation={presentation}
           action={isVisibility ? "visibility" : "feature"}
           buttonRef={setTriggerNode}
           size="inline"
@@ -892,7 +902,8 @@ export default function AdminDataGridRowActions({
             data-placement={position.placement}
             style={position.style}
             onKeyDown={handleMenuKeyDown}
-            className={`flex max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-[16px] border border-[#D8B87A]/20 bg-[#080B10]/98 p-2 text-right shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
+            data-admin-row-actions-presentation={presentation}
+            className={`flex max-w-[calc(100vw-24px)] flex-col gap-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-[16px] border p-2 text-right backdrop-blur-xl ${presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.collection.menu : "border-[#D8B87A]/20 bg-[#080B10]/98 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"} ${ADMIN_SCROLLBAR_VISUAL_CLASSES}`}
           >
             {panelView === "information" &&
             information.access !== "hidden" ? (
@@ -928,6 +939,7 @@ export default function AdminDataGridRowActions({
             ) : (
               menuItems.map((item) => (
                 <AdminDataGridRowActionMenuItem
+                  presentation={presentation}
                   key={item.kind}
                   item={item}
                   onNavigate={() => {
@@ -1017,6 +1029,7 @@ export default function AdminDataGridRowActions({
           }
         >
           <AdminDataGridActionButton
+            presentation={presentation}
             action="more"
             buttonRef={setTriggerNode}
             size={size}

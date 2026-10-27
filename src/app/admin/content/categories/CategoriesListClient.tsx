@@ -69,6 +69,7 @@ const TRASH_BULK_OPTIONS = [
   {
     value: "permanent_delete",
     label: ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+    tone: "danger",
   },
 ] as const;
 
@@ -517,11 +518,11 @@ export default function CategoriesListClient({
       <AdminEntityListPrimarySection>
         <AdminMetricCardsGrid
           items={[
-            { label: "إجمالي التصنيفات", value: controller.result.metrics?.total ?? 0, tone: "gold", icon: <AdminModuleTabIcon name="database" />, compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" },
-            { label: "إجمالي الموضوعات", value: controller.result.metrics?.topics ?? 0, tone: "cyan", icon: <AdminModuleTabIcon name="content" />, compact: true },
-            { label: "إجمالي السلاسل", value: controller.result.metrics?.series ?? 0, tone: "blue", icon: <AdminDataGridActionIcon action="copy-link" size="lg" />, compact: true },
-            { label: "منشور", value: controller.result.metrics?.published ?? 0, tone: "green", icon: <AdminDataGridActionIcon action="visibility" size="lg" />, compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
-            { label: "غير منشور", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", icon: <AdminDataGridActionIcon action="visibility" isCurrentlyHidden size="lg" />, compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
+            { label: "إجمالي التصنيفات", artwork: "taxonomy", value: controller.result.metrics?.total ?? 0, tone: "gold", icon: <AdminModuleTabIcon name="database" />, compact: true, onClick: controller.resetFilters, active: !isTrashView && !controller.query.search && controller.query.filters.status === "all" },
+            { label: "إجمالي الموضوعات", artwork: "content", value: controller.result.metrics?.topics ?? 0, tone: "cyan", icon: <AdminModuleTabIcon name="content" />, compact: true },
+            { label: "إجمالي السلاسل", artwork: "series", value: controller.result.metrics?.series ?? 0, tone: "blue", icon: <AdminDataGridActionIcon action="copy-link" size="lg" />, compact: true },
+            { label: "منشور", artwork: "published", value: controller.result.metrics?.published ?? 0, tone: "green", icon: <AdminDataGridActionIcon action="visibility" size="lg" />, compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
+            { label: "غير منشور", artwork: "unpublished", value: controller.result.metrics?.unpublished ?? 0, tone: "violet", icon: <AdminDataGridActionIcon action="visibility" isCurrentlyHidden size="lg" />, compact: true, onClick: () => controller.setFilter("status", "unpublished"), active: !isTrashView && controller.query.filters.status === "unpublished" },
           ]}
         />
       </AdminEntityListPrimarySection>

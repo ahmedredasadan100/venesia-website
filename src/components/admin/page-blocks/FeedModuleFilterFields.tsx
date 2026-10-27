@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 
-import { AdminCard, AdminCheckbox, AdminFormControlHeader, AdminFormGrid, AdminFormSwitch } from "../ui";
-import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminCheckbox, AdminFormGrid, AdminFormSwitch } from "../ui";
+import { AdminModuleSectionHeader } from "../ui/AdminModuleTabs";
+import { ModuleEditorSection } from "./ModuleEditorPresentation";
 import { adminChoiceButtonClassName } from "../../../lib/admin/admin-ui-styles";
 import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
@@ -80,10 +81,10 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
   }
 
   return (
-    <div data-feed-content-scope="" className="space-y-4">
+    <div data-feed-content-scope="" className={ADMIN_FORM_STACK_CLASS_NAME}>
 
-      <AdminCard presentation="premium" className="space-y-4 p-4">
-        <AdminFormControlHeader title={<span role="heading" aria-level={3}>التصنيفات</span>} icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+      <ModuleEditorSection header={<AdminModuleSectionHeader id="feed-filter-categories" sectionHeading="التصنيفات" icon="section" standalone={false} />}>
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
         <AdminFormGrid columns={4}>
           {filterOptions.categories.map((category) => (
             <AdminFormSwitch
@@ -100,10 +101,10 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
         {!filterOptions.categories.length ? (
           <p className="text-xs text-white/45">لا توجد تصنيفات منشورة متاحة.</p>
         ) : null}
-      </AdminCard>
+        </div>
+      </ModuleEditorSection>
 
-      <AdminCard presentation="premium" className="space-y-4 p-4">
-        <AdminFormControlHeader title={<span role="heading" aria-level={3}>السلاسل</span>} icon={<AdminModuleTabIcon name="section" />} presentation="leading-icon" />
+      <ModuleEditorSection header={<AdminModuleSectionHeader id="feed-filter-series" sectionHeading="السلاسل" icon="section" standalone={false} />}>
         <AdminFormGrid columns={4}>
           <label
             className={adminChoiceButtonClassName(seriesSlugs.length === 0, "gap-2 focus-within:ring-2 focus-within:ring-[#D8B87A]/70")}
@@ -144,7 +145,7 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
             );
           })}
         </AdminFormGrid>
-      </AdminCard>
+      </ModuleEditorSection>
     </div>
   );
 }

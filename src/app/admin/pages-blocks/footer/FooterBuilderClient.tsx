@@ -7,9 +7,11 @@ import { shouldAcceptAdminFormSource } from "../../../../lib/admin/form-runtime"
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
+import { ADMIN_FORM_STACK_CLASS_NAME } from "../../../../components/admin/ui/AdminForm";
 import {
   AdminActionButton,
   AdminCard,
+  AdminFormSection,
   AdminPageExperience,
   AdminPageHeader,
   AdminStatusPill,
@@ -169,12 +171,12 @@ export default function FooterBuilderClient({
           "راجع ترتيب الأعمدة وحالتها قبل فتح العمود الذي تريد تعديله.",
         icon: "overview" as const,
         content: (
-          <AdminCard className="p-5 md:p-6">
+          <AdminFormSection>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {summary.map((item, position) => (
-                <div
+                <AdminCard
                   key={item.index}
-                  className="rounded-[22px] border border-white/10 bg-white/[0.02] px-4 py-4"
+                  className="px-4 py-4"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-xs font-semibold text-[#D8B87A]/75">
@@ -218,10 +220,10 @@ export default function FooterBuilderClient({
                     </AdminStatusPill>
                     <AdminStatusPill tone="gold">{FOOTER_BLOCK_TYPE_LABELS[item.type]}</AdminStatusPill>
                   </div>
-                </div>
+                </AdminCard>
               ))}
             </div>
-          </AdminCard>
+          </AdminFormSection>
         ),
       },
       ...sortedSlots.map((slot) => {
@@ -252,13 +254,13 @@ export default function FooterBuilderClient({
         sectionDescription: "أدر عناصر التواصل التي تستخدمها أعمدة الفوتر المرتبطة بالمجموعة العامة.",
         icon: "location" as const,
         content: (
-          <AdminCard className="p-5 md:p-6">
+          <AdminFormSection>
             <ContactItemsField
               items={contactItems}
               onChange={setContactItems}
               hint="أضف أو عدّل عناصر التواصل ورتّبها. التغييرات تُحفظ مع زر «حفظ الفوتر»."
             />
-          </AdminCard>
+          </AdminFormSection>
         ),
       },
       {
@@ -268,12 +270,12 @@ export default function FooterBuilderClient({
         sectionDescription: "أدر روابط الشبكات الاجتماعية والنصوص القانونية الظاهرة أسفل أعمدة الفوتر.",
         icon: "content" as const,
         content: (
-          <AdminCard className="p-5 md:p-6">
-            <div className="space-y-6">
+          <AdminFormSection>
+            <div className={ADMIN_FORM_STACK_CLASS_NAME}>
               <SocialLinksField links={socialLinks} onChange={setSocialLinks} />
               <LegalFields legal={legal} onChange={setLegal} />
             </div>
-          </AdminCard>
+          </AdminFormSection>
         ),
       },
     ],
@@ -283,6 +285,7 @@ export default function FooterBuilderClient({
   return (
     <AdminPageExperience dir="rtl">
       <AdminPageHeader
+        visualPreset="footer"
         eyebrow="Footer Builder"
         title="منشئ الفوتر"
         description="أدر الأعمدة الأربعة للفوتر العام بحرية: غيّر نوع أي عمود، أعد ترتيب الأعمدة، واضبط المحتوى — مع الحفاظ على نفس تصميم الفوتر العام."

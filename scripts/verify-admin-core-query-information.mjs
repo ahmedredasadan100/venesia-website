@@ -91,7 +91,8 @@ export async function verifyCoreQueryInformation(source,nativeSource=readFileSyn
   const menuSource=readFileSync('src/components/admin/ui/AdminDataGridRowActions.tsx','utf8'),menuAst=ts.createSourceFile('menu.tsx',menuSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
   const toneDeclaration=menuAst.statements.find(node=>ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>row.name.getText(menuAst)==='MENU_TONE_CLASSES'));assert.ok(toneDeclaration);
   const menuCode=ts.transpileModule(toneDeclaration.getText(menuAst)+'\n'+['actionState','isAllowedLink','AdminDataGridRowActionMenuItem'].map(name=>declaration(menuSource,name,ts.ScriptKind.TSX)).join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
-  const MenuItem=new Function('React','Link','AdminDataGridActionIcon',menuCode+';return AdminDataGridRowActionMenuItem;')(React,()=>null,()=>null);
+  const {resolveAdminCollectionPresentation}=await jiti.import(resolve('src/lib/admin/admin-ui-styles.ts'));
+  const MenuItem=new Function('React','Link','AdminDataGridActionIcon','resolveAdminCollectionPresentation',menuCode+';return AdminDataGridRowActionMenuItem;')(React,()=>null,()=>null,resolveAdminCollectionPresentation);
   const copyBody=(raw,{id=raw.id,target=descriptor(raw)}={})=>'<section data-admin-entity-id="'+id+'">'+renderToStaticMarkup(React.createElement(MenuItem,{item:{kind:'copyPublicLink',label:'نسخ الرابط العام',tone:'neutral',target},onCommand(){},onNavigate(){}}))+'</section>';
   const stateCode=declaration(source,'assertCoreQueryCopyPublicLinkState'),actualCopyState=new Function('assert','expect',stateCode+';return assertCoreQueryCopyPublicLinkState;')(assert,bounded);
   const selectCopyRows=new Function('assert',declaration(source,'coreQueryCopyPublicLinkRows')+';return coreQueryCopyPublicLinkRows;')(assert);

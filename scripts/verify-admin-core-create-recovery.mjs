@@ -6,6 +6,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import vm from "node:vm";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
+import { createJiti } from "jiti";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
@@ -165,19 +166,23 @@ try {
 async function runReopenedCategoryIdentityControls() {
 const root=process.cwd();
 const require=createRequire(import.meta.url),checks=[];
+const loadOwner=createJiti(import.meta.url,{jsx:{runtime:'automatic'},fsCache:false}),stylesOwner=await loadOwner.import(resolve(root,'src/lib/admin/admin-ui-styles.ts'));
+const tabsOwner=await loadOwner.import(resolve(root,'src/components/admin/ui/AdminModuleTabs.tsx'));
 const compile=(file,ports)=>{
  const compiledModule={exports:{}};const source=readFileSync(resolve(root,file),'utf8');
  const output=ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  vm.runInNewContext('(function(require,module,exports){'+output+'\n})',{console})((name)=>name in ports?ports[name]:require(name),compiledModule,compiledModule.exports);return compiledModule.exports.default;
 };
-const box=({children})=>React.createElement('div',null,children);
+const box=({children,header})=>React.createElement('div',null,header,children);
 const slug=compile('src/components/admin/ui/AdminSlugField.tsx',{
  '../../../lib/admin/slug':{normalizeSlugInput:v=>v,slugifyFromTitle:v=>v},
- '../VenesiaModal':{adminFormFieldClassName:()=>'',adminFormHintClassName:()=>'',adminFormLabelClassName:()=>''},
+ '../VenesiaModal':stylesOwner,
 });
 const category=compile('src/app/admin/content/categories/CategoryForm.tsx',{
  '../../../../components/admin/content/CategoryColorPicker':{default:()=>null,__esModule:true},
- '../../../../components/admin/ui':{AdminFormField:box,AdminFormSection:box,AdminSlugField:slug,ADMIN_FORM_STACK_CLASS_NAME:'',adminFormFieldClassName:()=>''},
+ '../../../../components/admin/ui':{AdminFormField:box,AdminFormSection:box,AdminSlugField:slug,ADMIN_FORM_STACK_CLASS_NAME:stylesOwner.ADMIN_FORM_STACK_CLASS_NAME,adminFormFieldClassName:stylesOwner.adminFormFieldClassName},
+ '../../../../components/admin/ui/AdminModuleTabs':tabsOwner,
+ '../../../../lib/admin/admin-ui-styles':stylesOwner,
  '../../../../components/admin/ui/AdminFormListboxSelect':{default:()=>null,__esModule:true},
  '../../../../components/admin/ui/AdminFormRuntime':{__esModule:true,default:({children,formId,mode})=>React.createElement('form',{id:formId,'data-admin-form-runtime':'','data-admin-form-mode':mode},children({fieldErrors:{},pending:false})),AdminFormActions:()=>null,AdminFormError:()=>null,AdminFormGrid:box,AdminFormGridItem:box},
  '../../../../components/admin/ui/AdminFormSwitch':{__esModule:true,default:()=>null},

@@ -4,9 +4,11 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import {
   appendFileSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -16,9 +18,104 @@ import ts from "typescript";
 // Actual source-derived callbacks run through mounted Data/Feedback owners.
 // Domain transport is isolated; this is not authenticated database parity.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const require = createRequire(path.join(root, "package.json")),
-  out = path.join(root, ".tmp-qa", "admin-settled-result-adoption");
-mkdirSync(out, { recursive: true });
+const require = createRequire(path.join(root, "package.json"));
+
+function settledResultOutputOption(args) {
+  const option = "--settled-result-output-dir";
+  const selected = args.filter(arg => arg.startsWith(option));
+  if (selected.length === 0) return undefined;
+  assert.equal(selected.length, 1, "Settled-result evidence output must be unambiguous");
+  assert.ok(selected[0].startsWith(`${option}=`), "Settled-result output uses one literal =value selector");
+  return selected[0].slice(option.length + 1);
+}
+
+function settledResultOutput(sourceRoot, requested) {
+  if (requested === undefined) return path.join(sourceRoot, ".tmp-qa", "admin-settled-result-adoption");
+  assert.ok(typeof requested === "string" && /^\.tmp-qa\/[A-Za-z0-9._/-]+$/u.test(requested), "Fresh output must be a literal repository .tmp-qa descendant");
+  const parts = requested.split("/");
+  assert.ok(parts.every(part => part && part !== "." && part !== ".."), "Fresh output cannot contain empty or traversal segments");
+  const resolvedRoot = path.resolve(sourceRoot), state = lstatSync(resolvedRoot);
+  assert.ok(state.isDirectory() && !state.isSymbolicLink(), "Fresh output requires a real repository directory");
+  assert.equal(realpathSync(resolvedRoot), resolvedRoot, "Fresh output requires a canonical root without linked ancestors");
+  let ancestor = resolvedRoot;
+  for (const part of parts.slice(0, -1)) {
+    ancestor = path.join(ancestor, part);
+    const parent = lstatSync(ancestor);
+    assert.ok(parent.isDirectory() && !parent.isSymbolicLink(), "Fresh output parents must exist without symlinks or junctions");
+  }
+  const output = path.resolve(resolvedRoot, requested);
+  try { lstatSync(output); assert.fail("Fresh output already exists"); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  mkdirSync(output); // Exclusive creation also rejects a target created after validation.
+  return output;
+}
+
+async function settledBulkPageBlockTransport(execute, formData) {
+  const result = await execute(formData);
+  if (!result.ok) throw Object.assign(new Error(result.message), result);
+  return result;
+}
+
+function verifySettledOutputContract() {
+  const requested = ".tmp-qa/settled-output-contract/fresh", target = path.resolve(root, requested);
+  let calls = 0, allocations = 0;
+  const state = { isDirectory: () => true, isSymbolicLink: () => false };
+  const missing = () => { throw Object.assign(new Error("absent"), { code: "ENOENT" }); };
+  const load = (stat = file => file === target ? missing() : state, canonical = file => file, allocate = (file, options) => {
+    assert.equal(file, target); assert.equal(options, undefined); allocations += 1;
+  }) => new Function("path", "assert", "lstatSync", "realpathSync", "mkdirSync", `return (${settledResultOutput.toString()});`)(path, assert, file => { calls += 1; return stat(file); }, canonical, allocate);
+  const output = load();
+  assert.equal(output(root), path.join(root, ".tmp-qa", "admin-settled-result-adoption"));
+  assert.equal(calls, 0, "Default output performs no new filesystem validation or allocation");
+  assert.equal(settledResultOutputOption([]), undefined);
+  assert.equal(settledResultOutputOption(["--unrelated"]), undefined);
+  assert.equal(settledResultOutputOption(["--settled-result-output-dir=" + requested]), requested);
+  assert.equal(output(root, requested), target);
+  assert.equal(allocations, 1, "Fresh output uses exactly one exclusive allocation");
+  let rejected = 0;
+  for (const invalid of ["", ".tmp-qa", ".tmp-qa/../escape", ".tmp-qa/./proof", ".tmp-qa//proof", "../.tmp-qa/proof", ".tmp-qa\\proof", path.resolve(root, ".tmp-qa/proof"), ".tmp-qa/proof/"]) {
+    assert.throws(() => output(root, invalid)); rejected += 1;
+  }
+  for (const args of [["--settled-result-output-dir"], ["--settled-result-output-dir=a", "--settled-result-output-dir=b"], ["--settled-result-output-dir:wrong"], ["--settled-result-output-dirX"], ["--settled-result-output-dir=" + requested, "--settled-result-output-dirX"]]) {
+    assert.throws(() => settledResultOutputOption(args)); rejected += 1;
+  }
+  for (const [linked, directory] of [[true, true], [false, false]]) {
+    assert.throws(() => load(file => file === root ? { isDirectory: () => directory, isSymbolicLink: () => linked } : file === target ? missing() : state)(root, requested)); rejected += 1;
+    assert.throws(() => load(file => file === target ? missing() : file === root ? state : { isDirectory: () => directory, isSymbolicLink: () => linked })(root, requested)); rejected += 1;
+  }
+  assert.throws(() => load(() => state)(root, requested)); rejected += 1;
+  assert.throws(() => load(undefined, () => path.join(root, "different-root"))(root, requested)); rejected += 1;
+  assert.throws(() => load(undefined, undefined, () => { throw Object.assign(new Error("race"), { code: "EEXIST" }); })(root, requested), { code: "EEXIST" }); rejected += 1;
+  return { rejectionControls: rejected, defaultPreserved: true, exclusiveAllocation: true };
+}
+
+async function verifySettledBulkTransportContract() {
+  const rejected = { ok: false, message: "No commit", code: "unauthorized_actor" };
+  const committed = { ok: true, message: "Committed", feedbackStatus: "warning" };
+  const form = new FormData(); form.set("page_id", "1"); form.set("bulk_action", "detach"); form.append("ids", "content:1");
+  let seen;
+  assert.equal(await settledBulkPageBlockTransport(async data => { seen = data; return committed; }, form), committed);
+  assert.equal(seen, form);
+  await assert.rejects(settledBulkPageBlockTransport(async () => rejected, form), error => error instanceof Error && error.message === rejected.message && error.code === rejected.code);
+  const source = settledBulkPageBlockTransport.toString(), withoutRejection = source.replace("if (!result.ok) throw Object.assign(new Error(result.message), result);", "");
+  assert.notEqual(withoutRejection, source, "The resolved-failure transport mutation changes actual source");
+  const parsed = ts.createSourceFile("TransportMutation.mjs", withoutRejection, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  assert.equal(parsed.parseDiagnostics.length, 0, "The ineffective transport mutation independently parses");
+  const mutant = new Function(`return (${withoutRejection});`)();
+  await assert.rejects(async () => {
+    await assert.rejects(mutant(async () => rejected, form));
+  }, { name: "AssertionError" });
+  return { transportCases: 2, effectiveSourceMutations: 1 };
+}
+
+const contractProof = { output: verifySettledOutputContract(), bulk: await verifySettledBulkTransportContract() };
+if (process.argv.includes("--settled-result-contract-only")) {
+  console.log(JSON.stringify({ proof: "settled-result fixture contracts", ...contractProof }));
+  process.exit(0);
+}
+const requestedOutput = settledResultOutputOption(process.argv.slice(2));
+const out = settledResultOutput(root, requestedOutput);
+if (requestedOutput === undefined) mkdirSync(out, { recursive: true });
 const isFunction = (n) =>
   ts.isArrowFunction(n) ||
   ts.isFunctionExpression(n) ||
@@ -317,20 +414,31 @@ function findFeedback(n) {
 findFeedback(compositionAst);
 assert.ok(feedbackExpression);
 const boundedFactories = composition.map(
-  (item, index) =>
+  (item, index) => {
+    const args = item.names.at(-1) === "handleBulkExecute"
+      ? "'detach',[assignmentRowId(row)]"
+      : item.action === "display-position"
+        ? "row,'body'"
+        : item.action === "delete"
+          ? "row"
+          : "row,1";
+    return (
     "function boundedAdapter" +
     index +
-    "(instant:any,execute:any,row:any,domainWarning:boolean){let actionFeedback:any;const setActionFeedback=(value:any)=>{actionFeedback=value;};const page={id:1},regionKeys=['hero','body'],manualReorderEnabled=true;const normalizeLayoutSlot=(slot:any)=>slot,normalizeBoolean=(value:any)=>Boolean(value),assignmentRowId=(value:any)=>String(value.id),getDisplayPositionOptions=()=>regionKeys,comparePageAssignmentOrder=(a:any,b:any)=>a.sortOrder-b.sortOrder,getAssignmentSiblings=()=>instant.rows;const updatePageBlockAssignment=execute,reorderPageComposition=async()=>({...await execute(),warning:domainWarning?'Committed domain warning':null});const run=" +
+    "(instant:any,execute:any,row:any,domainWarning:boolean){let actionFeedback:any,selectionCleared=0,callbackRejected=false;const setActionFeedback=(value:any)=>{actionFeedback=value;};const page={id:1},regionKeys=['hero','body'],manualReorderEnabled=true;const normalizeLayoutSlot=(slot:any)=>slot,normalizeBoolean=(value:any)=>Boolean(value),assignmentRowId=(value:any)=>value.module_kind+':'+value.id,isManageableAssignment=(value:any)=>value.manages_assignment_on_page,getDisplayPositionOptions=()=>regionKeys,comparePageAssignmentOrder=(a:any,b:any)=>a.sortOrder-b.sortOrder,getAssignmentSiblings=()=>instant.rows;const updatePageBlockAssignment=execute,detachPageBlockAssignment=execute,bulkPageBlockAssignments=(formData:any)=>settledBulkPageBlockTransport(execute,formData),selection={clearSelection:()=>{selectionCleared++;}},reorderPageComposition=async()=>({...await execute(),warning:domainWarning?'Committed domain warning':null});const run=" +
     item.text.replace(/^async function\s+\w+/, "async function") +
-    ";return async()=>{await run(row," +
-    (item.action === "display-position" ? "'body'" : "1") +
-    ");return{result:actionFeedback,feedback:(" +
+    ";return async()=>{try{await run(" +
+    args +
+    ");}catch(error){callbackRejected=true;if(!actionFeedback)throw error;}return{result:actionFeedback,selectionCleared,callbackRejected,feedback:(" +
     feedbackExpression +
-    ")};};}",
+    ")};};}"
+    );
+  },
 );
 appendFileSync(
   path.join(out, "adapters.ts"),
   "\n" +
+    settledBulkPageBlockTransport.toString() + "\n" +
     boundedFactories.join("\n") +
     "\nexport const boundedFactories=[" +
     composition.map((_, index) => "boundedAdapter" + index).join(",") +
@@ -347,7 +455,7 @@ let entry = readFileSync(path.join(out, "entry.tsx"), "utf8")
   );
 entry = entry.replace(
   "const initial={rows:[row]",
-  "const boundedRows=[{...row,slot:'hero',module_kind:'content',sort_order:10},{...row,id:2,slot:'hero',module_kind:'content',sort_order:20}];\nconst initial={rows:[row]",
+  "const boundedRows=[{...row,slot:'hero',module_kind:'content',sort_order:10,manages_assignment_on_page:true},{...row,id:2,slot:'hero',module_kind:'content',sort_order:20,manages_assignment_on_page:true}];\nconst initial={rows:[row]",
 );
 entry = entry.replace(
   "const instant=useAdminEntityInstantMutation('settled-adoption',query);",
@@ -357,9 +465,9 @@ entry = entry.replace(
   "window.retryRead=",
   String.raw`
 window.runBounded=async(index:number,fault:boolean,domainWarning:boolean)=>{
- const base=boundedInstant;const controlled={...base,mutateAsync:(request:any)=>base.mutateAsync({...request,reconcileSuccess:request.reconcileSuccess?(result:any,tools:any)=>request.reconcileSuccess(result,fault?{...tools,cache:{...tools.cache,patchRows:()=>{throw Error('Injected local reconciliation failure');}}}:tools):undefined})};
+ const base=boundedInstant;const controlled={...base,mutateAsync:(request:any)=>base.mutateAsync({...request,reconcileSuccess:request.reconcileSuccess?(result:any,tools:any)=>request.reconcileSuccess(result,fault?{...tools,cache:{...tools.cache,patchRows:()=>{throw Error('Injected local reconciliation failure');},transformActiveRows:()=>{throw Error('Injected local reconciliation failure');}}}:tools):undefined})};
  const item=domainWarning?{...boundedRows[0],slot:'body'}:boundedRows[0];
- const run=boundedFactories[index](controlled,execute,item,domainWarning);return run();
+ const run=boundedFactories[index](controlled,execute,item,domainWarning);const observed=await run();return{...observed,snapshot:client.getQueryData(adminEntityListQueryKeys.query('bounded-settled',base.scopeQuery))};
 };
 window.retryRead=`,
 );
@@ -626,6 +734,11 @@ try {
       );
       assert.equal(writes, mode === "error" ? 0 : 1, label);
       assert.equal(reads, 0, label + " bounded queries remain disabled");
+      if (adapter.names.at(-1) === "handleBulkExecute") {
+        assert.equal(observed.callbackRejected, mode === "error", label + " detach rejection retains the confirmation boundary");
+        assert.equal(observed.selectionCleared, mode === "error" ? 0 : 1, label + " selection clears only after committed settlement");
+        assert.deepEqual(observed.snapshot.rows.map(row => row.id), mode === "success" ? [2] : [1, 2], label + " detach reconciliation preserves failed and unresolved local rows");
+      }
       if (mode === "reconciliation-warning")
         assert.match(observed.result.message, /تعذر تحديث العرض المحلي/, label);
       results.push({
@@ -635,6 +748,7 @@ try {
         reads,
         result: observed.result,
         feedback: observed.feedback.variant,
+        ...(adapter.names.at(-1) === "handleBulkExecute" ? { callbackRejected: observed.callbackRejected, selectionCleared: observed.selectionCleared, remainingIds: observed.snapshot.rows.map(row => row.id) } : {}),
       });
     }
   }
@@ -693,6 +807,7 @@ try {
       {
         scope:
           "Mounted real Data/Feedback and source-derived callbacks; isolated domain transport, not authenticated DB parity",
+        fixtureContractProof: contractProof,
         inventory: inventory.map((item) =>
           Object.fromEntries(
             Object.entries(item).filter(

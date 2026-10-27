@@ -606,6 +606,7 @@ export default function PagesTableClient({
   return (
     <AdminEntityListPageLayout className="pb-10" dir="rtl">
       <AdminPageContextHeader
+        visualPreset="pages"
         eyebrow="إدارة الصفحات والموديولات"
         title="إدارة الصفحات"
         description="إدارة صفحات الموقع ومكوناتها، مع التحكم في الترتيب، الربط، وحالة النشر."

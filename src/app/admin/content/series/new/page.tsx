@@ -20,6 +20,7 @@ export default async function NewSeriesPage() {
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
+        visualPreset="series"
         eyebrow="SERIES CONTROL"
         title="إضافة سلسلة جديدة"
         description="أنشئ سلسلة مرتبطة بتصنيف واضح لتصبح متاحة داخل نظام الموضوعات."

@@ -72,7 +72,7 @@ export default async function CommercialProjectsPage({
   if (listResult.error) {
     return (
       <AdminEntityListPageLayout>
-        <AdminPageHeader eyebrow="PROJECTS CONTROL" title="المشاريع التجارية" description="مدير المشاريع التجارية." />
+        <AdminPageHeader visualPreset="projects" eyebrow="PROJECTS CONTROL" title="المشاريع التجارية" description="مدير المشاريع التجارية." />
         <AdminNotice
           variant="danger"
           title="تعذر تحميل قائمة المشاريع"
@@ -88,16 +88,17 @@ export default async function CommercialProjectsPage({
   return (
     <AdminEntityListPageLayout>
       <AdminPageHeader
+        visualPreset="projects"
         eyebrow="PROJECTS CONTROL"
         title="المشاريع التجارية"
         description="قائمة منفصلة للمشاريع التجارية بنفس أنماط الإدارة."
         actions={
-          <div className="flex flex-wrap items-center gap-3">
+          <>
             <AddProjectPanelClient type="commercial" />
             <AdminActionButton href="/admin/projects" variant="dark">
               رجوع للمشاريع
             </AdminActionButton>
-          </div>
+          </>
         }
       />
 

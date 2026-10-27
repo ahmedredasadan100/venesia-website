@@ -507,11 +507,12 @@ export default function ProjectLocationsManagementClient({
     <>
       <AdminEntityListPageLayout className="pb-10" dir="rtl">
         <AdminPageContextHeader
+          visualPreset="locations"
           eyebrow="PROJECT LOCATION DOMAIN"
           title={config.label}
           description={`إدارة ${config.label} والعلاقات والحالة والترتيب من مصدر مواقع المشاريع المعتمد.`}
           actions={
-            <div className="flex flex-wrap gap-2">
+            <>
               {PROJECT_LOCATION_LEVELS.map((targetLevel) => (
                 <AdminActionButton
                   key={targetLevel}
@@ -527,7 +528,7 @@ export default function ProjectLocationsManagementClient({
               >
                 إضافة {config.singularLabel}
               </AdminActionButton>
-            </div>
+            </>
           }
         />
 

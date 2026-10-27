@@ -1,17 +1,16 @@
 "use client";
 
+import { adminFormFieldClassName, adminFormTextareaClassName } from "../../../../lib/admin/admin-ui-styles";
 import HeroVisibilityAlignRow from "../../../../app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow";
-import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   PROJECTS_HUB_HERO_PROJECT_TYPES,
   type ProjectsHubHeroModuleConfig,
 } from "../../../../lib/page-blocks/projects-hub-config";
-import { AdminFormGrid, AdminFormListboxSelect } from "../../ui";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminFormField, AdminFormGrid, AdminFormListboxSelect } from "../../ui";
 import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
 } from "../ModuleEditorPresentation";
 
 export default function ProjectsHubHeroModuleEditor({
@@ -20,19 +19,19 @@ export default function ProjectsHubHeroModuleEditor({
   config: ProjectsHubHeroModuleConfig;
 }) {
   return (
-    <div className="space-y-6">
-      <ModuleEditorSection>
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+      <ModuleEditorSection presentation="panel" title="مصدر الشرائح">
         <input type="hidden" name="selection_mode" value="domain_projects" />
-        <ModuleEditorSectionHeading intent="domain">
-          مصدر الشرائح
-        </ModuleEditorSectionHeading>
 
-        <ModuleEditorFieldGrid className="mt-4">
-          <ModuleEditorField nature="standard" span={3}>
+
+        <ModuleEditorFieldGrid>
+          <ModuleEditorField nature="standard" span={4}>
             <AdminFormListboxSelect
+              presentation="panel"
               name="project_type"
               label="نوع المشروعات"
               defaultValue={config.projectType}
+              sizing="full"
               options={PROJECTS_HUB_HERO_PROJECT_TYPES.map((type) => ({
                 value: type,
                 label:
@@ -47,13 +46,9 @@ export default function ProjectsHubHeroModuleEditor({
 
           <ModuleEditorField
             nature="technical"
-            span={3}
-            className="xl:col-span-2!"
+            span={4}
           >
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">
-                الحد الأقصى للشرائح
-              </span>
+            <AdminFormField label="الحد الأقصى للشرائح">
               <input
                 name="limit"
                 type="number"
@@ -61,20 +56,16 @@ export default function ProjectsHubHeroModuleEditor({
                 max={12}
                 defaultValue={config.limit}
                 dir="ltr"
-                className={fieldClassName()}
+                className={adminFormFieldClassName()}
               />
-            </label>
+            </AdminFormField>
           </ModuleEditorField>
 
           <ModuleEditorField
             nature="technical"
-            span={3}
-            className="xl:col-span-2!"
+            span={4}
           >
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">
-                التشغيل التلقائي (مللي ثانية)
-              </span>
+            <AdminFormField label="التشغيل التلقائي (مللي ثانية)">
               <input
                 name="autoplay_ms"
                 type="number"
@@ -83,35 +74,27 @@ export default function ProjectsHubHeroModuleEditor({
                 step={500}
                 defaultValue={config.autoplayMs}
                 dir="ltr"
-                className={fieldClassName()}
+                className={adminFormFieldClassName()}
               />
-            </label>
+            </AdminFormField>
           </ModuleEditorField>
-        </ModuleEditorFieldGrid>
-
-        <ModuleEditorFieldGrid className="mt-5">
           <ModuleEditorField nature="short-description" span={12}>
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">
-                رسالة عدم وجود مشروعات
-              </span>
+            <AdminFormField label="رسالة عدم وجود مشروعات">
               <textarea
                 name="empty_state"
                 defaultValue={config.emptyState ?? ""}
                 rows={3}
                 placeholder="اتركه فارغًا لعدم عرض رسالة"
-                className={fieldClassName("resize-y leading-7")}
+                className={adminFormTextareaClassName("resize-y leading-7")}
               />
-            </label>
+            </AdminFormField>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
-      <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="settings">
-          ظهور محتوى الهيرو
-        </ModuleEditorSectionHeading>
-        <AdminFormGrid columns={2} className="mt-4">
+      <ModuleEditorSection presentation="panel" title="ظهور محتوى الهيرو">
+
+        <AdminFormGrid columns={2}>
           <HeroVisibilityAlignRow
             label="موقع المشروع"
             alignmentName="eyebrow_alignment"

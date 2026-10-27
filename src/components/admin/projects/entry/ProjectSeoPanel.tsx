@@ -30,6 +30,7 @@ const PROJECT_SEO_FIELD_IDS = {
 export default function ProjectSeoPanel({ project, seoSettings }: { project: ProjectEntryRoot; seoSettings?: GlobalSeoSettings }) {
   return (
     <AdminEntitySeoPanel
+      presentation="panel"
       seoSettings={seoSettings}
       previewDescription={{ fieldName: "short_description", value: project.short_description }}
       id="project-seo-panel"

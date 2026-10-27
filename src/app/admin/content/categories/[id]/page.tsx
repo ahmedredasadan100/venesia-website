@@ -43,6 +43,7 @@ export default async function EditTopicCategoryPage({
   return (
     <AdminPageExperience>
       <AdminPageContextHeader
+        visualPreset="categories"
         eyebrow="CATEGORIES CONTROL"
         title={truncateWords(category.name || "بدون اسم")}
         description="تعديل تصنيف — حدّث بيانات التصنيف مع الحفاظ على Slug الثابت وروابط المحتوى الحالية."

@@ -34,6 +34,7 @@ export default async function TopicsWithoutImageReportPage({
   return (
     <AdminPageExperience className="pb-10">
       <AdminPageContextHeader
+        visualPreset="reports"
         eyebrow="MEDIA QUALITY REPORT"
         title="الموضوعات بلا صورة"
         description="تقرير قابل للتصفية للموضوعات النشطة وغير المحذوفة التي لا ترتبط بصورة. هذا تقرير جودة، وليس دليلًا على أمان حذف أي أصل."

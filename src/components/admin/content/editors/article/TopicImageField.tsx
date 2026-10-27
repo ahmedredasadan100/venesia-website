@@ -1,56 +1,51 @@
 "use client";
 import { mediaContentSlot } from "../../../../../lib/media-center/detail-page-config";
 
-import { useState } from "react";
 import AdminMediaImageField from "../../../media/AdminMediaImageField";
 import AdminMediaAltWarning from "../../../media-intelligence/AdminMediaAltWarning";
-import { adminFormTextareaClassName } from "../../../../../lib/admin/admin-ui-styles";
-import TopicFieldCounter from "./TopicFieldCounter";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type TopicImageFieldProps = {
   defaultImage?: string | null;
+  onValueChange?: (value: string) => void;
   defaultAlt?: string | null;
   formId?: string;
+  /** Optional shared classes for the Alt field label/stack and design-size hint. */
+  labelClassName?: string;
+  guidanceClassName?: string;
+  /** Alignment-only classes appended by the original-dimensions owner. */
+  originalDimensionsClassName?: string;
 };
 
-export default function TopicImageField({ defaultImage = "", defaultAlt = "", formId }: TopicImageFieldProps) {
-  const [altLength, setAltLength] = useState((defaultAlt ?? "").length);
-
+export default function TopicImageField({ defaultImage = "", onValueChange, defaultAlt = "", formId, labelClassName, guidanceClassName, originalDimensionsClassName }: TopicImageFieldProps) {
   return (
     <div className="space-y-3">
       <AdminMediaImageField
         mediaSlot={mediaContentSlot("image")}
-name="image"
+        name="image"
         label="الصورة الرئيسية"
         defaultValue={defaultImage ?? ""}
+        onValueChange={onValueChange}
         browseFolder="images/topics"
-        variant="compact"
+        variant="card"
         showLabel={false}
-        compactAspectClassName="aspect-video"
+        guidanceClassName={guidanceClassName}
+        originalDimensionsClassName={originalDimensionsClassName}
+        dimensionsPresentation="disclosure"
+        altName="image_alt"
+        defaultAlt={defaultAlt ?? ""}
+        altLabel="النص البديل للصورة (Alt Text)"
+        altId="topic-image-alt"
+        altRows={2}
+        altPlaceholder="اكتب نصًا يصف الصورة للمستخدمين ومحركات البحث"
+        metadataPresentation="panel"
+        metadataLabelClassName={labelClassName}
+        showAltCounter
+        clearAltOnRemove={false}
+        altError={<AdminFormError name="image_alt" />}
+        altWarning={formId ? <AdminMediaAltWarning formId={formId} requiredForPublish /> : null}
       />
       <AdminFormError name="image" />
-
-      <label className="block">
-        <span className="inline-flex items-center gap-2 text-xs font-medium text-white/58">
-          <span>النص البديل للصورة (Alt Text)</span>
-          <TopicFieldCounter count={altLength} />
-        </span>
-        <div className="mt-1.5 min-w-0">
-          <textarea
-            id="topic-image-alt"
-            name="image_alt"
-            rows={2}
-            defaultValue={defaultAlt ?? ""}
-            placeholder="اكتب نصًا يصف الصورة للمستخدمين ومحركات البحث"
-            onInput={(event) => setAltLength(event.currentTarget.value.length)}
-            className={adminFormTextareaClassName("h-auto min-h-16 scroll-mt-24 resize-y rounded-xl px-3 py-2.5 leading-6")}
-          />
-        </div>
-      </label>
-      <AdminFormError name="image_alt" />
-
-      {formId ? <AdminMediaAltWarning formId={formId} requiredForPublish /> : null}
     </div>
   );
 }

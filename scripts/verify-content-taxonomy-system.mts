@@ -3,6 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { createJiti } from "jiti";
+import { Fragment, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
+import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, type AdminFormAdoptionEntry, type AdminFormPresentationRequirement } from "../src/lib/admin/form-system/adoption-manifest.ts";
 
 import {
   slugifyFromTitle,
@@ -10,6 +13,13 @@ import {
 } from "../src/lib/admin/slug.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME, adminFormFieldClassName, adminFormHintClassName, adminFormLabelClassName } =
+  await createJiti(import.meta.url).import<typeof import("../src/lib/admin/admin-ui-styles.ts")>("../src/lib/admin/admin-ui-styles.ts");
+const formPresentationOwner = ts.createSourceFile("AdminForm.tsx", read("src/components/admin/ui/AdminForm.tsx"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const stackTokenDeclaration = formPresentationOwner.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
+  .find(node => ts.isIdentifier(node.name) && node.name.text === "ADMIN_FORM_STACK_CLASS_NAME");
+assert.ok(stackTokenDeclaration?.initializer && ts.isStringLiteral(stackTokenDeclaration.initializer), "The canonical stack token remains an explicit shared owner value");
+const ADMIN_FORM_STACK_CLASS_NAME = stackTokenDeclaration.initializer.text;
 
 type Check = {
   section: string;
@@ -130,6 +140,253 @@ function categoryPublicationUsesSharedDateCell(source: string): boolean {
   return columns === 1 && valid;
 }
 
+// The existing manifest owns applicability. Execute the actual consumer function
+// for every declared surface, then verify each required role against its owner.
+// Import markers are controlled boundaries only; no Action or hook is executed.
+type TaxonomyPresentationContract = NonNullable<AdminFormAdoptionEntry["presentationContract"]>;
+type TaxonomyElement = ReactElement<Record<string, unknown>>;
+function taxonomyFormUsesCompletePanel(source: string, entity: "category" | "series", contract: TaxonomyPresentationContract, surfaces: readonly string[], failures?: string[]): boolean {
+  try {
+    const file = ts.createSourceFile(`${entity}Form.tsx`, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const consumer = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) &&
+      node.name?.text === (entity === "category" ? "CategoryForm" : "SeriesForm"));
+    assert.ok(consumer && contract.requirements.length > 0);
+    const modules: Record<string, readonly string[]> = {
+      "../../../../components/admin/ui": ["AdminFormSection", "AdminFormField", "AdminSlugField", "ADMIN_FORM_STACK_CLASS_NAME", "adminFormFieldClassName"],
+      "../../../../components/admin/ui/AdminFormRuntime": ["AdminFormRuntime", "AdminFormActions", "AdminFormError", "AdminFormGrid"],
+      "../../../../components/admin/ui/AdminModuleTabs": ["AdminModuleSectionHeader", "AdminModuleTabIcon"],
+      "../../../../components/admin/ui/AdminFormSwitch": ["AdminFormSwitch"],
+      "../../../../components/admin/ui/AdminFormListboxSelect": ["AdminFormListboxSelect"],
+      "../../../../components/admin/content/CategoryColorPicker": ["CategoryColorPicker"],
+      "../../../../lib/admin/admin-ui-styles": ["ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME", "adminFormHintClassName", "adminFormLabelClassName"],
+      "../TaxonomyExpectedRevisionInput": ["TaxonomyExpectedRevisionInput"],
+      "../taxonomy-form-actions": ["createCategoryForm", "updateCategoryForm", "createSeriesForm", "updateSeriesForm"],
+    };
+    const helpers: Record<string, unknown> = { ADMIN_FORM_STACK_CLASS_NAME, ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME,
+      adminFormFieldClassName, adminFormHintClassName, adminFormLabelClassName };
+    const markers: Record<string, (props: Record<string, unknown>) => null> = {};
+    const locals: Record<string, unknown> = {};
+    const imported = new Set<string>();
+    let stackClassBinding: string | undefined;
+    for (const statement of file.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.importClause?.isTypeOnly) continue;
+      const ownerModule = statement.moduleSpecifier.text, clause = statement.importClause;
+      const imports: Array<[string, string]> = [];
+      if (clause?.name) imports.push([clause.name.text, ownerModule.split("/").at(-1)!]);
+      if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) for (const binding of clause.namedBindings.elements) {
+        if (!binding.isTypeOnly) imports.push([binding.name.text, (binding.propertyName ?? binding.name).text]);
+      }
+      for (const [local, exported] of imports) {
+        assert.ok(modules[ownerModule]?.includes(exported), `${exported} must resolve to its canonical owner`);
+        assert.equal(imported.has(exported), false, "A shared owner has one imported binding");
+        imported.add(exported);
+        if (exported === "ADMIN_FORM_STACK_CLASS_NAME") stackClassBinding = local;
+        locals[local] = Object.hasOwn(helpers, exported) ? helpers[exported] : (markers[exported] ??= () => null);
+      }
+    }
+    const compiled: { default?: (props: Record<string, unknown>) => ReactNode } = {};
+    new Function("React", "exports", ...Object.keys(locals), ts.transpileModule(consumer.getText(file), {
+      compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText)({ createElement, Fragment }, compiled, ...Object.values(locals));
+    assert.ok(compiled.default);
+    const element = (node: unknown): TaxonomyElement => { assert.ok(isValidElement<Record<string, unknown>>(node)); return node; };
+    const walk = (node: unknown): TaxonomyElement[] => {
+      if (Array.isArray(node)) return node.flatMap(walk);
+      if (!isValidElement<Record<string, unknown>>(node)) return [];
+      return [node, ...walk(node.props.children), ...walk(node.props.header), ...walk(node.props.icon)];
+    };
+    const owned = (node: unknown, name: string) => walk(node).filter(child => child.type === markers[name]);
+    const only = (node: unknown, name: string) => { const found = owned(node, name); assert.equal(found.length, 1, name); return found[0]; };
+    const directChildren = (node: unknown): TaxonomyElement[] => Array.isArray(node) ? node.flatMap(directChildren) :
+      isValidElement<Record<string, unknown>>(node) ? node.type === Fragment ? directChildren(node.props.children) : [node] : [];
+    const sourceStacks: ts.JsxElement[] = [];
+    const findSourceStacks = (node: ts.Node) => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(file) === "div" &&
+          node.openingElement.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(file) === "className" &&
+            attribute.initializer && ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression &&
+            ts.isIdentifier(attribute.initializer.expression) && attribute.initializer.expression.text === stackClassBinding)) sourceStacks.push(node);
+      ts.forEachChild(node, findSourceStacks);
+    };
+    findSourceStacks(consumer);
+    const text = (node: unknown): string => Array.isArray(node) ? node.map(text).join("") :
+      isValidElement<Record<string, unknown>>(node) ? text(node.props.children) : typeof node === "string" || typeof node === "number" ? String(node) : "";
+    const record = { id: entity === "category" ? 17 : 187, name: "Original taxonomy", slug: "original-taxonomy", parent_id: 18,
+      category_id: 18, status: "published", color_token: "gold", updated_at: "2026-10-25T00:00:01.123456+00:00" };
+    for (const mode of surfaces) {
+      assert.ok(mode === "create" || mode === "edit", `Unverified taxonomy surface: ${mode}`);
+      for (const pending of [false, true]) for (const hasErrors of [false, true]) for (const optionCount of [2, 8]) {
+        const relation = entity === "category" ? "parent_id" : "category_id";
+        const options = Array.from({ length: optionCount }, (_, index) => ({ value: String(index + 18), label: `Option ${index}` }));
+        const root = element(compiled.default({ mode, [entity]: mode === "edit" ? record : undefined,
+          [entity === "category" ? "parentOptions" : "categoryOptions"]: options }));
+        assert.equal(root.type, markers.AdminFormRuntime);
+        assert.equal(root.props.mode, mode); assert.equal(root.props.entityKey, entity);
+        assert.equal(root.props.action, markers[`${mode === "edit" ? "update" : "create"}${entity === "category" ? "Category" : "Series"}Form`]);
+        assert.equal(root.props.formId, `${entity}-taxonomy-form`);
+        assert.equal(root.props.closeHref, `/admin/content/${entity === "category" ? "categories" : "series"}`);
+        assert.deepEqual(root.props.invalidateEntities, entity === "category" ? ["categories", "topics", "series"] : ["series", "topics", "categories"]);
+        const fieldErrors: Record<string, string[]> = hasErrors ? { name: ["name error"], [relation]: ["relation error"], slug: ["slug error"], is_published: ["state error"], color_token: ["color error"] } : {};
+        assert.equal(typeof root.props.children, "function");
+        const body = (root.props.children as (context: { pending: boolean; fieldErrors: Record<string, string[]> }) => ReactNode)({ pending, fieldErrors });
+        const nodes = walk(body), sections = owned(body, "AdminFormSection"), grids = owned(body, "AdminFormGrid");
+        const required: readonly AdminFormPresentationRequirement[] = contract.requirements.filter((requirement: AdminFormPresentationRequirement) => requirement.requirement === "required" &&
+          (!requirement.conditions?.surfaces || requirement.conditions.surfaces.includes(mode)));
+        assert.ok(required.length > 0, "Applicability must retain required presentation roles");
+        assert.equal(new Set(required.map(requirement => requirement.target)).size, required.length, "Required presentation targets are unique");
+        const requiredSections = required.filter(requirement => requirement.owner?.exportName === "AdminFormSection");
+        assert.equal(sections.length, requiredSections.length, "Every applicable Section is rendered once; a main header alone is insufficient");
+        const headers = owned(body, "AdminModuleSectionHeader");
+        assert.equal(headers.length, sections.length);
+        const ids = headers.map(header => header.props.id); assert.equal(new Set(ids).size, ids.length);
+        const basic = sections.find(section => isValidElement<Record<string, unknown>>(section.props.header) && section.props.header.props.id === `${entity}-basic-data`);
+        assert.ok(basic); const basicHeader = element(basic.props.header);
+        const nameField = only(basic, "AdminFormField"), listbox = only(basic, "AdminFormListboxSelect"), toggle = only(basic, "AdminFormSwitch");
+        const slug = owned(body, "AdminSlugField"), actions = only(body, "AdminFormActions");
+        const stacks = nodes.filter(node => node.type === "div" && node.props.className === ADMIN_FORM_STACK_CLASS_NAME);
+        const color = sections.find(section => isValidElement<Record<string, unknown>>(section.props.header) && section.props.header.props.id === "category-color");
+        const inputs = nodes.filter(node => node.type === "input");
+        const nameInput = inputs.filter(node => node.props.name === "name"); assert.equal(nameInput.length, 1);
+        assert.equal(nameInput[0].props.defaultValue, mode === "edit" ? record.name : "");
+        assert.equal(nameInput[0].props.required, true); assert.equal(nameInput[0].props.disabled, pending);
+        assert.equal(nameInput[0].props["aria-invalid"], hasErrors);
+        assert.equal(nameInput[0].props["aria-describedby"], hasErrors ? "name-error" : undefined);
+        assert.equal(nameInput[0].props.className, adminFormFieldClassName(hasErrors ? "border-red-400/40" : ""));
+        assert.equal(inputs.filter(node => node.props.name === "id").length, Number(mode === "edit"));
+        const revisions = owned(body, "TaxonomyExpectedRevisionInput"); assert.equal(revisions.length, Number(mode === "edit"));
+        if (mode === "edit") assert.equal(revisions[0].props.initialRevision, record.updated_at);
+        assert.equal(grids.length, 1); assert.equal(only(basic, "AdminFormGrid"), grids[0]);
+        assert.equal(basic.props.children, grids[0], "The primary fields remain the direct shared Grid content");
+        assert.equal(grids[0].props.columns, mode === "edit" ? 3 : 4); assert.equal(grids[0].props.presentation, "aligned-fields");
+        assert.equal(Boolean(grids[0].props.fieldContainers), false);
+        assert.equal(slug.length, Number(mode === "create"));
+        assert.equal(owned(basic, "AdminFormError").filter(node => node.props.name === "name").length, 1);
+        assert.equal(owned(basic, "AdminFormError").filter(node => node.props.name === "is_published").length, 1);
+        const panelHeader = (section: TaxonomyElement, heading: string, icon: string) => {
+          assert.equal(section.props.presentation, "panel");
+          const header = element(section.props.header); assert.equal(header.type, markers.AdminModuleSectionHeader);
+          assert.equal(header.props.sectionHeading, heading); assert.equal(header.props.icon, icon);
+          assert.equal(header.props.sectionHeaderPresentation, "premium");
+          assert.equal(header.props.sectionHeaderClassName, ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME);
+          assert.equal(header.props.standalone, undefined, "Embedded Panel headers retain their approved card margins");
+          assert.equal(section.props.title, undefined); assert.equal(section.props.eyebrow, undefined);
+          assert.equal(section.props.className, undefined, "Shared Section owns surface and spacing without local patch classes");
+        };
+        const checks: Record<string, () => void> = {
+          sectionActionSpacing: () => {
+            assert.ok(stackClassBinding, "The canonical stack token must be imported from the shared UI owner");
+            assert.equal(sourceStacks.length, 1, "The visible DOM stack must use the imported canonical token, not a copied class literal");
+            assert.equal(stacks.length, 1, "A single visible inner DOM stack must space the real Sections and Actions");
+            assert.equal(root.props.className, undefined, "Spacing on the Runtime form cannot reach through its display:contents fieldset");
+            const stack = stacks[0];
+            assert.ok(directChildren(body).includes(stack), "The visible stack remains directly inside the Runtime fields");
+            assert.equal(stack.props.style, undefined, "The shared stack token owns spacing without inline patches");
+            assert.equal(stack.props.hidden, undefined, "The spacing stack must remain visible");
+            assert.deepEqual(directChildren(stack.props.children), [...sections, actions], "All applicable Sections and final Actions must be direct siblings in one shared stack");
+            assert.equal(walk(stack).filter(node => node.type === "input" && node.props.name === "id").length, 0, "Native identity remains outside the visible stack");
+            assert.equal(owned(stack, "TaxonomyExpectedRevisionInput").length, 0, "Native revision remains outside the visible stack");
+          },
+          basicSection: () => {
+            panelHeader(basic, entity === "category" ? "بيانات التصنيف" : "بيانات السلسلة", entity === "category" ? "categories" : "link");
+            assert.equal(basicHeader.props.sectionDescription, entity === "category"
+              ? "الاسم والرابط الودّي والعلاقة الهرمية هي مصدر بيانات التصنيف داخل نظام المحتوى."
+              : "أنشئ علاقة واضحة بين السلسلة وتصنيفها، مع الحفاظ على رابط ثابت بعد أول حفظ.");
+          },
+          categoryColorSection: () => {
+            assert.equal(entity, "category"); assert.ok(color); panelHeader(color, "لون التصنيف", "settings");
+            assert.ok(sections.indexOf(color) > sections.indexOf(basic), "Color has its own following Section");
+            assert.equal(owned(basic, "CategoryColorPicker").length, 0);
+            const picker = only(color, "CategoryColorPicker"); assert.equal(picker.props.presentation, "panel");
+            assert.equal(picker.props.defaultToken, mode === "edit" ? record.color_token : undefined);
+            assert.equal(picker.props.previewName, mode === "edit" ? record.name : "معاينة التصنيف");
+            assert.equal(owned(color, "AdminFormError").filter(node => node.props.name === "color_token").length, 1);
+          },
+          fieldLabels: () => {
+            assert.equal(nameField.props.presentation, "panel"); assert.equal(nameField.props.required, true);
+            assert.equal(nameField.props.label, entity === "category" ? "اسم التصنيف" : "اسم السلسلة");
+            const publication = nodes.filter(node => node.type === "span" && text(node.props.children) === "حالة النشر" &&
+              node.props.className === adminFormLabelClassName({ textInset: true }));
+            assert.equal(publication.length, 1);
+            assert.equal(walk(publication[0]).filter(node => Object.hasOwn(node.props, "data-admin-form-label-text")).length, 1);
+            assert.equal(listbox.props.presentation, "panel");
+            if (mode === "create") assert.equal(slug[0].props.labelClassName, adminFormLabelClassName({ textInset: true }));
+          },
+          fieldHints: () => {
+            assert.equal(listbox.props.presentation, "panel"); assert.ok(typeof listbox.props.hint === "string" && listbox.props.hint.length > 0);
+            if (mode === "create") assert.equal(slug[0].props.hintClassName, adminFormHintClassName({ textInset: true }));
+          },
+          createSlug: () => {
+            assert.equal(mode, "create"); assert.equal(slug.length, 1);
+            assert.equal(slug[0].props.sourceInputName, "name"); assert.equal(slug[0].props.error, hasErrors ? "slug error" : null);
+          },
+          relationSelect: () => {
+            assert.equal(listbox.props.name, relation); assert.equal(listbox.props.focusTargetId, relation);
+            assert.equal(listbox.props.presentation, "panel"); assert.equal(listbox.props.disabled, pending);
+            assert.equal(listbox.props.required === true, entity === "series"); assert.equal(listbox.props.sizing, "full");
+            assert.equal(listbox.props.defaultValue, mode === "edit" ? "18" : "");
+            assert.equal(listbox.props.searchable, optionCount > 7); assert.equal(listbox.props.error, hasErrors ? "relation error" : null);
+            assert.deepEqual(listbox.props.options, entity === "category" ? [{ value: "", label: "بدون تصنيف أب" }, ...options] : options);
+          },
+          publishSwitch: () => {
+            assert.equal(toggle.props.name, "is_published"); assert.equal(toggle.props.label, "منشور");
+            assert.equal(toggle.props.surface, true); assert.equal(toggle.props.disabled, pending);
+            assert.equal(toggle.props.defaultChecked, mode === "edit");
+            assert.equal(toggle.props.presentation, undefined); assert.equal(toggle.props.embedded, undefined);
+          },
+          formActions: () => {
+            assert.equal(actions.props.description, null); const icon = element(actions.props.icon);
+            assert.equal(icon.type, markers.AdminModuleTabIcon); assert.equal(icon.props.name, "content");
+            assert.equal(actions.props.className, undefined, "The shared sticky owner retains its approved surface");
+            for (const section of sections) assert.equal(owned(section, "AdminFormActions").length, 0, "Actions remain outside field Sections");
+            assert.ok(nodes.indexOf(actions) > Math.max(...sections.map(section => nodes.indexOf(section))), "The shared Actions follow all Sections");
+            assert.equal(nodes.filter(node => node.type === "button" || node.type === "form").length, 0, "No parallel local save or form owner");
+          },
+          feedbackStates: () => {
+            assert.equal(nameInput[0].props.disabled, pending); assert.equal(nameInput[0].props["aria-invalid"], hasErrors);
+            assert.equal(listbox.props.error, hasErrors ? "relation error" : null);
+          },
+        };
+        const views: Record<string, { sourceFile: string; exportName: string; ports: Record<string, unknown> }> = {
+          sectionActionSpacing: { sourceFile: "src/components/admin/ui/AdminForm.tsx", exportName: "ADMIN_FORM_STACK_CLASS_NAME", ports: {
+            className: stacks.length === 1 && sourceStacks.length === 1 ? "ADMIN_FORM_STACK_CLASS_NAME" : undefined,
+          } },
+          basicSection: { sourceFile: "src/components/admin/ui/AdminForm.tsx", exportName: "AdminFormSection", ports: { presentation: basic.props.presentation } },
+          categoryColorSection: { sourceFile: "src/components/admin/ui/AdminForm.tsx", exportName: "AdminFormSection", ports: { presentation: color?.props.presentation } },
+          fieldLabels: { sourceFile: "src/lib/admin/admin-ui-styles.ts", exportName: "adminFormLabelClassName", ports: {
+            textInset: String(nameField.props.presentation === "panel" && listbox.props.presentation === "panel" &&
+              (mode === "edit" || slug[0].props.labelClassName === adminFormLabelClassName({ textInset: true }))),
+          } },
+          fieldHints: { sourceFile: "src/lib/admin/admin-ui-styles.ts", exportName: "adminFormHintClassName", ports: {
+            textInset: String(listbox.props.presentation === "panel" &&
+              (mode === "edit" || slug[0].props.hintClassName === adminFormHintClassName({ textInset: true }))),
+          } },
+          createSlug: { sourceFile: "src/components/admin/ui/AdminSlugField.tsx", exportName: "default", ports: {
+            labelClassName: slug[0]?.props.labelClassName === adminFormLabelClassName({ textInset: true }) ? "adminFormLabelClassName({ textInset: true })" : undefined,
+          } },
+          relationSelect: { sourceFile: "src/components/admin/ui/AdminFormListboxSelect.tsx", exportName: "default", ports: { presentation: listbox.props.presentation } },
+          publishSwitch: { sourceFile: "src/components/admin/ui/AdminFormSwitch.tsx", exportName: "default", ports: { surface: String(toggle.props.surface) } },
+          formActions: { sourceFile: "src/components/admin/ui/AdminFormRuntime.tsx", exportName: "AdminFormActions", ports: {
+            icon: isValidElement<Record<string, unknown>>(actions.props.icon) && actions.props.icon.type === markers.AdminModuleTabIcon &&
+              actions.props.icon.props.name === "content" ? "AdminModuleTabIcon(content)" : undefined,
+          } },
+          feedbackStates: { sourceFile: "src/components/admin/ui/AdminFormRuntime.tsx", exportName: "default", ports: {} },
+        };
+        for (const requirement of required) {
+          assert.ok(checks[requirement.target], `Unverified required role: ${requirement.target}`);
+          checks[requirement.target]();
+          const view = views[requirement.target]; assert.ok(view);
+          if (requirement.owner) assert.deepEqual({ sourceFile: view.sourceFile, exportName: view.exportName }, requirement.owner,
+            `${requirement.target} retains the contract's canonical owner`);
+          if (requirement.presentation) assert.equal(view.ports[requirement.presentation.port], requirement.presentation.value,
+            `${requirement.target} renders its currently declared presentation`);
+        }
+      }
+    }
+    return true;
+  } catch (error) {
+    failures?.push(error instanceof Error ? error.message : String(error));
+    return false;
+  }
+}
 const paths = {
   runtimeCore: "src/lib/admin/form-runtime.ts",
   runtime: "src/components/admin/ui/AdminFormRuntime.tsx",
@@ -438,6 +695,99 @@ check(
     migration.includes("sort_order"),
 );
 
+// Complete presentation requirements come from the current consumer entries,
+// independently of the dynamic shared capability axes and their audit count.
+for (const [entity, source, manifestId] of [
+  ["category", categoryForm, "topic-category-create-edit"],
+  ["series", seriesForm, "topic-series-create-edit"],
+] as const) {
+  const entry: AdminFormAdoptionEntry | undefined = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.find(entry => entry.id === manifestId);
+  assert.ok(entry?.presentationContract, `${manifestId} declares its current complete applicable presentation`);
+  const contract = entry.presentationContract;
+  const conformanceErrors: string[] = [];
+  check("taxonomy-panel", `${entity} renders every currently required applicable presentation role across its declared surfaces and states`,
+    taxonomyFormUsesCompletePanel(source, entity, contract, entry.surfaces, conformanceErrors), conformanceErrors.join("; "));
+  check("taxonomy-panel", `${entity} preserves the existing action, revision, cache, field, and save-bar owners`,
+    source.includes(`const action = isEdit ? update${entity === "category" ? "Category" : "Series"}Form : create${entity === "category" ? "Category" : "Series"}Form;`) &&
+      source.includes("action={action}") && source.includes("mode={mode}") && source.includes(`entityKey="${entity}"`) &&
+      source.includes("closeHref={closeHref}") && source.includes(`formId="${entity}-taxonomy-form"`) &&
+      source.includes(`invalidateEntities={[${entity === "category" ? '"categories", "topics", "series"' : '"series", "topics", "categories"'}]}`) &&
+      occurrenceCount(source, /<TaxonomyExpectedRevisionInput\b/g) === 1 && source.includes(`initialRevision={${entity}?.updated_at}`) &&
+      source.includes(`defaultValue={${entity}?.name ?? ""}`) && source.includes('name="is_published"') &&
+      source.includes(entity === "category" ? 'defaultChecked={category?.status === "published"}' : 'isEdit ? series?.status === "published" : false') &&
+      (entity === "series" || (source.includes("<CategoryColorPicker") && source.includes("defaultToken={category?.color_token}") &&
+        source.includes('previewName={category?.name || "معاينة التصنيف"}'))) &&
+      occurrenceCount(source, /<AdminFormActions\b/g) === 1 && /<AdminFormSwitch\b[^>]*\bsurface\s*\/>/.test(source));
+  const file = ts.createSourceFile("TaxonomyMutations.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const elements: Array<ts.JsxElement | ts.JsxSelfClosingElement> = [];
+  const visit = (node: ts.Node) => { if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) elements.push(node); ts.forEachChild(node, visit); };
+  visit(file);
+  const color = elements.find(node => ts.isJsxElement(node) && node.openingElement.tagName.getText(file) === "AdminFormSection" &&
+    node.openingElement.getText(file).includes('id="category-color"'))?.getText(file);
+  const header = elements.find(node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(file) === "AdminModuleSectionHeader" &&
+    node.getText(file).includes(`id="${entity}-basic-data"`))?.getText(file);
+  assert.ok(header);
+  const stack = elements.find((node): node is ts.JsxElement => ts.isJsxElement(node) && node.openingElement.tagName.getText(file) === "div" &&
+    node.openingElement.getText(file).includes("className={ADMIN_FORM_STACK_CLASS_NAME}"));
+  assert.ok(stack, `${entity} needs the visible canonical stack before mutation coverage can prove its placement`);
+  const stackSource = stack.getText(file), stackBody = source.slice(stack.openingElement.end, stack.closingElement.getStart(file));
+  const actionSource = elements.find(node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(file) === "AdminFormActions")?.getText(file);
+  assert.ok(actionSource);
+  const withoutStackToken = stackSource.replace("className={ADMIN_FORM_STACK_CLASS_NAME}", "");
+  const changes: Array<readonly [string, string]> = [
+    ["lost visible stack token", source.replace(stackSource, withoutStackToken)],
+    ["spacing token on Runtime only", source.replace(stackSource, withoutStackToken).replace("<AdminFormRuntime", "<AdminFormRuntime className={ADMIN_FORM_STACK_CLASS_NAME}")],
+    ["fragment instead of visible stack", source.replace(stackSource, `<>${stackBody}</>`)],
+    ["copied stack class without canonical token", source.replace(stackSource, stackSource.replace("className={ADMIN_FORM_STACK_CLASS_NAME}", `className=${JSON.stringify(ADMIN_FORM_STACK_CLASS_NAME)}`))],
+    ["Actions outside visible stack", source.replace(stackSource, stackSource.replace(actionSource, "") + actionSource)],
+    ["nested wrapper preventing direct sibling spacing", source.replace(stackSource, stackSource.replace(stackBody, `<div>${stackBody}</div>`))],
+    ["hidden visible stack", source.replace(stackSource, stackSource.replace("<div ", "<div hidden "))],
+    ["default section surface", source.replace(/(<AdminFormSection\s+)presentation="panel"/, '$1presentation="default"')],
+    ["local section styling", source.replace(/(<AdminFormSection\s+)presentation="panel"/, '$1presentation="panel" className="p-9"')],
+    ["lost canonical header slot", source.replace(`header={${header}}`, 'header={null}')],
+    ["duplicate section header", source.replace(`header={${header}}`, `header={<>{${header}}{${header}}</>}`)],
+    ["default section header", source.replace('sectionHeaderPresentation="premium"', 'sectionHeaderPresentation="default"')],
+    ["lost charcoal surface", source.replace("sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME}", "")],
+    ["lost name label adoption", source.replace(/(<AdminFormField\b[^>]*presentation=)"panel"/, '$1"default"')],
+    ["lost relation label and hint adoption", source.replace(/(<AdminFormListboxSelect\s+)presentation="panel"/, '$1presentation="default"')],
+    ["lost create Slug label", source.replace('labelClassName={adminFormLabelClassName({ textInset: true })}', 'labelClassName={undefined}')],
+    ["lost create Slug hint", source.replace('hintClassName={adminFormHintClassName({ textInset: true })}', 'hintClassName={undefined}')],
+    ["lost publication label", source.replace('<span className={adminFormLabelClassName({ textInset: true })}>', '<span className="text-sm text-white/70">')],
+    ["bare default Actions", source.replace(/<AdminFormActions\b[^\n]*\/>/, '<AdminFormActions />')],
+    ["lost Actions icon", source.replace('icon={<AdminModuleTabIcon name="content" />}', '')],
+    ["lost Actions reference description", source.replace('description={null}', '')],
+    ["changed columns", source.replace("columns={isEdit ? 3 : 4}", "columns={2}")],
+    ["double grid surface", source.replace('presentation="aligned-fields"', 'presentation="control-cards"')],
+    ["lost pending lock", source.replaceAll("disabled={pending}", "disabled={false}")],
+    ["lost name error target", source.replace('<AdminFormError name="name"', '<AdminFormError name="other"')],
+    ["lost revision binding", source.replace(`initialRevision={${entity}?.updated_at}`, 'initialRevision={undefined}')],
+    ["changed create/edit Slug applicability", source.replace('{!isEdit ? (', '{isEdit ? (')],
+    ["parallel Section owner", source.replace('  AdminFormSection,', '  ParallelFormSection as AdminFormSection,')],
+    ["parallel header owner", source.replace('components/admin/ui/AdminModuleTabs"', 'components/admin/ui/ParallelModuleTabs"')],
+    ["comment-only composition", `/* ${source} */`],
+  ];
+  if (entity === "category") {
+    assert.ok(color);
+    changes.push(["missing independent color Section", source.replace(color, "")]);
+    changes.push(["default color legend presentation", source.replace(/(<CategoryColorPicker\s+)presentation="panel"/, '$1presentation="default"')]);
+    changes.push(["default color Section header", source.replace(color, color.replace('sectionHeaderPresentation="premium"', 'sectionHeaderPresentation="default"'))]);
+    changes.push(["lost color value binding", source.replace('defaultToken={category?.color_token}', 'defaultToken={undefined}')]);
+    changes.push(["lost color preview binding", source.replace('previewName={category?.name || "معاينة التصنيف"}', 'previewName="Lost preview"')]);
+    changes.push(["lost color error association", source.replace('<AdminFormError name="color_token" />', '')]);
+  }
+  for (const [label, changed] of changes) {
+    check("taxonomy-panel", `${entity} rejects ${label} as complete applicable adoption`, changed !== source &&
+      !taxonomyFormUsesCompletePanel(changed, entity, contract, entry.surfaces));
+  }
+  check("taxonomy-panel", `${entity} rejects an unimplemented required presentation role added to the current contract`,
+    !taxonomyFormUsesCompletePanel(source, entity, { ...contract, requirements: [...contract.requirements,
+      { target: "unverified_future_required_role", requirement: "required", rationale: "Negative fixture: new required roles need executable conformance." }] }, entry.surfaces));
+  const firstRequired = contract.requirements.findIndex(requirement => requirement.requirement === "required");
+  assert.ok(firstRequired >= 0);
+  check("taxonomy-panel", `${entity} rejects a required role whose declared owner no longer matches the rendered owner`,
+    !taxonomyFormUsesCompletePanel(source, entity, { ...contract, requirements: contract.requirements.map((requirement, index) => index === firstRequired
+      ? { ...requirement, owner: { sourceFile: "src/components/admin/ui/ParallelForm.tsx", exportName: "ParallelSection" } } : requirement) }, entry.surfaces));
+}
 // 4. Shared Select single-source Form contract.
 check(
   "select-single-source",

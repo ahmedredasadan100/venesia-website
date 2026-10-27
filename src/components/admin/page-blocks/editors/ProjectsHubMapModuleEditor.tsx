@@ -1,4 +1,5 @@
 "use client";
+import { adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
 import { contentModuleMediaSlot } from "../../../../lib/page-blocks/configs";
 
 import {
@@ -13,8 +14,10 @@ import {
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminActionButton, AdminCard, AdminFormControlHeader, AdminFormGrid } from "../../ui";
-import { AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
+import { TrashIcon } from "../../AdminRowActions";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminActionButton, AdminCard, AdminFormControlHeader, AdminFormGrid } from "../../ui";
+import { ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME } from "../../../../lib/admin/admin-ui-styles";
+import { AdminModuleSectionHeader, AdminModuleTabIcon } from "../../ui/AdminModuleTabs";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
 import {
@@ -59,19 +62,18 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
   };
 
   return (
-    <div className="space-y-6">
+    <div className={ADMIN_FORM_STACK_CLASS_NAME}>
       <input type="hidden" name="config_schema" value="projects-hub-map" />
       <input type="hidden" name="pin_count" value={String(pins.length)} />
 
-      <ModuleEditorSection>
-        <AdminFormControlHeader title="خريطة المشروعات" icon={<AdminModuleTabIcon name="location" />} />
+      <ModuleEditorSection presentation="panel" header={<AdminModuleSectionHeader id="projects-map" sectionHeading="خريطة المشروعات" icon="location" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} />}>
 
         <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="short-text" span={6}><ModuleEditorVisibilityAlignRow label="العنوان" presentation="premium" icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+        <ModuleEditorField nature="short-text" span={6}><ModuleEditorVisibilityAlignRow label="العنوان" icon={<AdminModuleTabIcon name="content" />} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
           <input name="title" aria-label="العنوان" defaultValue={config.title} className={fieldClassName()} />
         </ModuleEditorVisibilityAlignRow></ModuleEditorField>
 
-        <ModuleEditorField nature="short-text" span={6}><AdminCard presentation="premium" className="self-start space-y-3 p-3"><label className="block space-y-3">
+        <ModuleEditorField nature="short-text" span={6}><AdminCard presentation="premium" className="self-start space-y-3 p-3"><label className={adminFormLabelClassName({ textInset: true })}>
           <AdminFormControlHeader presentation="compact-inline" title="نص زر الاستكشاف" icon={<AdminModuleTabIcon name="section" />} />
           <input name="explore_button_label" defaultValue={config.exploreButtonLabel} className={fieldClassName()} />
         </label></AdminCard></ModuleEditorField>
@@ -94,9 +96,7 @@ name="map_image"
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
-      <ModuleEditorSection>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <AdminFormControlHeader title="دبابيس الخريطة" icon={<AdminModuleTabIcon name="location" />} />
+      <ModuleEditorSection presentation="panel" header={<AdminModuleSectionHeader id="projects-map-pins" sectionHeading="دبابيس الخريطة" icon="location" sectionHeaderPresentation="premium" sectionHeaderClassName={ADMIN_PREMIUM_HEADER_CHARCOAL_SURFACE_CLASS_NAME} sectionSummary={
           <AdminActionButton
             type="button"
             onClick={addPin}
@@ -105,13 +105,12 @@ name="map_image"
           >
             إضافة دبوس
           </AdminActionButton>
-        </div>
+        } />}>
 
-        <ModuleEditorRepeaterGrid presentation="premium">
+        <ModuleEditorRepeaterGrid>
           {pins.map((pin, index) => (
             <ModuleEditorRepeaterCard
               key={index}
-              presentation="premium"
               title={`دبوس ${index + 1}`}
               actions={(
                 <>
@@ -136,16 +135,19 @@ name="map_image"
                     onClick={() => removePin(index)}
                     disabled={pins.length <= 1}
                     variant="danger"
+                    size="icon"
+                    title={`حذف الدبوس ${index + 1}`}
+                    aria-label={`حذف الدبوس ${index + 1}`}
                   >
-                    حذف
+                    <TrashIcon className="size-5" />
                   </AdminActionButton>
                 </>
               )}
             >
 
               <AdminFormGrid columns={2}>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">كود المشروع</span>
+                <label className={adminFormLabelClassName({ textInset: true })}>
+                  <span data-admin-form-label-text>كود المشروع</span>
                   <input
                     name={`pin_${index}_code`}
                     value={pin.code}
@@ -154,8 +156,8 @@ name="map_image"
                     className={fieldClassName()}
                   />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">المنطقة / الحي</span>
+                <label className={adminFormLabelClassName({ textInset: true })}>
+                  <span data-admin-form-label-text>المنطقة / الحي</span>
                   <input
                     name={`pin_${index}_district`}
                     value={pin.district}
@@ -163,8 +165,8 @@ name="map_image"
                     className={fieldClassName()}
                   />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Right %</span>
+                <label className={adminFormLabelClassName({ textInset: true })}>
+                  <span data-admin-form-label-text>Right %</span>
                   <input
                     name={`pin_${index}_right`}
                     value={pin.right}
@@ -174,8 +176,8 @@ name="map_image"
                     className={fieldClassName()}
                   />
                 </label>
-                <label className="block space-y-2">
-                  <span className="text-xs font-semibold text-white/55">Top %</span>
+                <label className={adminFormLabelClassName({ textInset: true })}>
+                  <span data-admin-form-label-text>Top %</span>
                   <input
                     name={`pin_${index}_top`}
                     value={pin.top}

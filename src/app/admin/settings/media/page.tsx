@@ -31,8 +31,9 @@ export default async function MediaSettingsPage() {
   );
 
   return (
-    <AdminPageExperience className="pb-10">
+    <AdminPageExperience as="div" className="pb-10">
       <AdminPageContextHeader
+        visualPreset="media"
         eyebrow="إعدادات رفع الملفات"
         title="إعدادات الميديا"
         description="تحكم في أنواع الملفات وأحجامها المسموح بها عند الرفع من لوحة الإدارة."

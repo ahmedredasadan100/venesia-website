@@ -1,5 +1,6 @@
 "use client";
 
+import type { AdminCollectionPresentation } from "../../../lib/admin/admin-ui-styles";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -33,7 +34,7 @@ import { ADMIN_BULK_ACTION_LABELS } from "../../../lib/admin/entity-list/bulk-ac
 const BULK_OPTIONS = [
   { value: "publish", label: ADMIN_BULK_ACTION_LABELS.showSelected },
   { value: "unpublish", label: ADMIN_BULK_ACTION_LABELS.hideSelected },
-  { value: "move_to_trash", label: ADMIN_BULK_ACTION_LABELS.deleteSelected },
+  { value: "move_to_trash", label: ADMIN_BULK_ACTION_LABELS.deleteSelected, tone: "danger" },
   { value: "move_category", label: "نقل لتصنيف" },
   { value: "feature", label: "تعيين كمميز" },
   { value: "unfeature", label: "إلغاء التمييز" },
@@ -44,6 +45,7 @@ const TRASH_BULK_OPTIONS = [
   {
     value: "permanent_delete",
     label: ADMIN_BULK_ACTION_LABELS.permanentlyDeleteSelected,
+    tone: "danger",
   },
 ] as const;
 
@@ -82,6 +84,7 @@ function defaultSortPath(currentListPath: string) {
 
 export default function UnifiedContentList({
   rows,
+  presentation = "default",
   queryPending,
   queryError,
   onQueryRetry,
@@ -98,6 +101,7 @@ export default function UnifiedContentList({
   toolbar,
   trashView,
 }: {
+  presentation?: AdminCollectionPresentation;
   rows: UnifiedContentRow[];
   queryPending?: boolean;
   queryError?: string | null;
@@ -130,8 +134,8 @@ export default function UnifiedContentList({
   const router = useRouter();
   const [bulkCategoryId, setBulkCategoryId] = useState("");
   const columns = useMemo(
-    () => createUnifiedContentColumns(currentListPath, rowActionHandlers),
-    [currentListPath, rowActionHandlers],
+    () => createUnifiedContentColumns(currentListPath, rowActionHandlers, presentation),
+    [currentListPath, rowActionHandlers, presentation],
   );
   const parsedSort = parseSort(sort);
   const categoryOptions = useMemo(
@@ -150,10 +154,11 @@ export default function UnifiedContentList({
       number
     >
       listId={UNIFIED_CONTENT_LIST_ID}
+      presentation={presentation}
       queryPending={queryPending}
       queryError={queryError}
       onQueryRetry={onQueryRetry}
-      sizingStrategy={{ mode: "flexible", columnKey: "title" }}
+      sizingStrategy={{ mode: "flexible", columnKey: "title", preserveMinimumWidth: true }}
       rows={rows}
       columns={columns}
       getRowId={(row) => row.id}
@@ -241,6 +246,7 @@ export default function UnifiedContentList({
       }) =>
         bulkAction === "move_category" ? (
           <AdminListboxSelect
+            presentation={presentation}
             id="content-topics-bulk-category"
             layerId="content-topics-bulk-category"
             openLayerId={openLayerId}

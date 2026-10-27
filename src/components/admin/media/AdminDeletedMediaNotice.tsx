@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
+import { ADMIN_MEDIA_DIMENSION_DISCLOSURE } from "../../../lib/admin/admin-ui-styles";
 
 /** Shared field feedback; deletion truth comes from Catalog, not image loading. */
 export function useAdminMediaReferenceState(values: readonly string[]) {
@@ -43,10 +44,17 @@ export function useAdminMediaReferenceState(values: readonly string[]) {
 
 type ReferenceState = ReturnType<typeof useAdminMediaReferenceState>;
 
-export function AdminMediaOriginalDimensions({ value, state }: { value: string; state: ReferenceState }) {
+export function AdminMediaOriginalDimensions({ value, state, className, presentation = "default" }: { value: string; state: ReferenceState; className?: string; presentation?: "default" | "disclosure" }) {
+  if (presentation === "disclosure") {
+    const original = state?.originals.find(item => item.value === value);
+    return <details data-admin-media-dimension="original" data-media-original={value} className={ADMIN_MEDIA_DIMENSION_DISCLOSURE.root}>
+      <summary className={ADMIN_MEDIA_DIMENSION_DISCLOSURE.summary}>الأبعاد الأصلية</summary>
+      <p className={original?.width && original.height ? ADMIN_MEDIA_DIMENSION_DISCLOSURE.value : "px-2 pb-2 text-white/65"} title={original?.width && original.height ? "الأبعاد بوحدة البكسل (px)" : undefined} aria-label={original?.width && original.height ? `${original.width} × ${original.height} px` : undefined}>{original?.width && original.height ? <bdi>{original.width}×{original.height}<span className="hidden @min-[7rem]/media-dimension:inline"> px</span></bdi> : value && !state ? "جارٍ قراءة أبعاد الأصل…" : "غير متاحة"}</p>
+    </details>;
+  }
   if (!value) return null;
   const original = state?.originals.find(item => item.value === value);
-  return <p data-media-original={value} className="text-xs leading-6 text-slate-500">
+  return <p data-media-original={value} className={`text-xs leading-6 text-slate-500${className ? ` ${className}` : ""}`}>
     الأبعاد الأصلية: {original?.width && original.height ? <bdi>{original.width} × {original.height} px</bdi> : state ? "غير متاحة" : "جارٍ قراءة أبعاد الأصل…"}
   </p>;
 }

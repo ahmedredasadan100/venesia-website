@@ -2,6 +2,10 @@
 
 import { forwardRef } from "react";
 import type { KeyboardEventHandler } from "react";
+import {
+  ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation,
+  type AdminCollectionPresentation,
+} from "../../../lib/admin/admin-ui-styles";
 
 export type AdminSearchInputProps = {
   name?: string;
@@ -23,6 +27,8 @@ export type AdminSearchInputProps = {
   activeDescendant?: string;
   inputLabel?: string;
   disabled?: boolean;
+  /** Explicit collection presentation; existing consumers retain their default. */
+  presentation?: AdminCollectionPresentation;
 };
 
 const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(function AdminSearchInput(
@@ -46,12 +52,15 @@ const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(funct
     activeDescendant,
     inputLabel,
     disabled = false,
+    presentation: requestedPresentation = "default",
   },
   ref,
 ) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
   return (
     <div
       ref={ref}
+      data-admin-search-presentation={presentation}
       className={`relative w-full min-w-[180px] overflow-visible sm:w-[220px] lg:w-[240px] lg:shrink-0 ${className}`}
     >
       <input
@@ -80,7 +89,7 @@ const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(funct
         aria-activedescendant={activeDescendant}
         aria-busy={pending || undefined}
         disabled={disabled}
-        className={`h-11 w-full appearance-none rounded-[11px] border border-white/10 bg-black/28 pe-10 ps-16 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:ring-2 focus:ring-[#D8B87A]/10 ${inputClassName}`}
+        className={`h-11 w-full appearance-none ${presentation === "cinematic" ? "rounded-[10px]" : "rounded-[11px]"} border pe-10 ps-16 text-sm outline-none transition ${presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.collection.searchInput : "border-white/10 bg-black/28 text-white placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:ring-2 focus:ring-[#D8B87A]/10"} ${inputClassName}`}
         autoComplete={autoComplete}
       />
 
@@ -100,7 +109,7 @@ const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(funct
         <button
           type="button"
           onClick={onClear}
-          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 py-0.5 text-[11px] text-white/45 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+          className={`absolute left-2 top-1/2 -translate-y-1/2 rounded-full px-1.5 py-0.5 text-[11px] transition ${presentation === "cinematic" ? ADMIN_CINEMATIC_GOLD_V1.collection.subtleAction : "text-white/45 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"}`}
         >
           {clearLabel}
         </button>
@@ -110,7 +119,7 @@ const AdminSearchInput = forwardRef<HTMLDivElement, AdminSearchInputProps>(funct
         <span
           role="status"
           aria-label="جاري تحديث النتائج"
-          className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin rounded-full border border-[#D8B87A]/25 border-t-[#D8B87A] ${value ? "left-12" : "left-3"}`}
+          className={`absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin rounded-full border border-[#D8B87A]/25 border-t-[#D8B87A] ${presentation === "cinematic" ? "motion-reduce:animate-none" : ""} ${value ? "left-12" : "left-3"}`}
         />
       ) : null}
     </div>

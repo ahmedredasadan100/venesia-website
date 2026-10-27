@@ -287,6 +287,7 @@ export default function ActivityLogClient({
   return (
     <AdminEntityListPageLayout className="pb-10" dir="rtl">
       <AdminPageHeader
+        visualPreset="activity"
         eyebrow="ACTIVITY LOG"
         title="سجل النشاط"
         description="سجل تدقيق للعمليات الإدارية الحساسة: المصادقة وإدارة المستخدمين. لا يتم تخزين كلمات المرور أو الرموز أو ملفات تعريف الارتباط."

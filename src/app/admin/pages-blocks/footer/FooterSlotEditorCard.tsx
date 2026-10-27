@@ -1,17 +1,17 @@
 "use client";
 
+import { ADMIN_FORM_STACK_CLASS_NAME } from "../../../../components/admin/ui/AdminForm";
 import {
   AdminActionButton,
-  AdminCard,
+  AdminFormField,
+  AdminFormGrid,
+  AdminFormSection,
   AdminFormSwitch,
   AdminStatusPill,
 } from "../../../../components/admin/ui";
 import FooterBlockHeader from "../../../../components/footer/FooterBlockHeader";
 import {
-  ADMIN_FORM,
   adminFormFieldClassName,
-  adminFormHintClassName,
-  adminFormLabelClassName,
 } from "../../../../lib/admin/admin-ui-styles";
 import type {
   FooterBlockType,
@@ -83,7 +83,7 @@ export default function FooterSlotEditorCard({
   const duplicateOptions = FOOTER_SLOT_INDICES.filter((item) => item !== index);
 
   return (
-    <AdminCard className="p-5 md:p-6">
+    <AdminFormSection>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#D8B87A]/70">
@@ -111,11 +111,8 @@ export default function FooterSlotEditorCard({
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
-          <p className={adminFormHintClassName()}>
-            معاينة رأس العمود (النص التمهيدي + العنوان)
-          </p>
+      <div className={ADMIN_FORM_STACK_CLASS_NAME}>
+        <AdminFormSection title="معاينة رأس العمود" description="النص التمهيدي والعنوان وفق إعدادات العمود الحالية.">
           <FooterBlockHeader
             variant="admin"
             eyebrow={slot.heading}
@@ -128,12 +125,11 @@ export default function FooterSlotEditorCard({
               لا يوجد عنوان معروض — أضف تسمية قسم أو عنوان رئيسي حسب نوع البلوك.
             </p>
           ) : null}
-        </div>
+        </AdminFormSection>
 
-        <div className={ADMIN_FORM.gridTwoCol}>
+        <AdminFormGrid columns={2} presentation="aligned-fields">
           <BlockTypeSelect value={slot.type} onChange={handleTypeChange} />
-          <label className={adminFormLabelClassName()}>
-            <span>النص التمهيدي — اختياري</span>
+          <AdminFormField label="النص التمهيدي — اختياري">
             <input
               value={slot.heading ?? ""}
               onChange={(event) => updateHeading(event.target.value)}
@@ -141,8 +137,8 @@ export default function FooterSlotEditorCard({
               dir="rtl"
               placeholder="يُترك فارغًا لإخفاء التسمية الذهبية"
             />
-          </label>
-        </div>
+          </AdminFormField>
+        </AdminFormGrid>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-white/8 pt-4">
           <span className="text-xs text-white/45">نسخ إعدادات من:</span>
@@ -195,6 +191,6 @@ export default function FooterSlotEditorCard({
           </p>
         )}
       </div>
-    </AdminCard>
+    </AdminFormSection>
   );
 }

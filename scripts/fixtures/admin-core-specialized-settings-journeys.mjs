@@ -23,7 +23,7 @@ export function buildCoreSpecializedSettingsPlan({ manifest, definitions, surfac
     assert.ok(["specialized_exception", "explicit_exception"].includes(matches[0].classification));
     return { consumer: id, classification: matches[0].classification, surfaces: [...matches[0].surfaces] };
   });
-  assert.deepEqual(consumers[0].surfaces, ["password", "session", "security-policy"]);
+  assert.deepEqual(consumers[0].surfaces, ["password", "account", "session", "security-policy"]);
   assert.deepEqual(consumers[1].surfaces, ["provider-app-credentials", "vault-replacement", "configuration-test"]);
   assert.deepEqual(consumers[2].surfaces, ["immediate-toggle"]);
   assert.equal(new Set(definitions.map(row => row.key)).size, definitions.length);

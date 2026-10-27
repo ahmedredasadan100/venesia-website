@@ -56,6 +56,7 @@ export default async function ProjectLocationManagementPage({
     return (
       <AdminEntityListPageLayout>
         <AdminPageHeader
+          visualPreset="locations"
           eyebrow="PROJECT LOCATION DOMAIN"
           title={PROJECT_LOCATION_LEVEL_CONFIG[level].label}
           description="إدارة التسلسل المعتمد لمواقع المشاريع."

@@ -3,7 +3,7 @@
 import AdminNotice from "../AdminNotice";
 import AdminFormRuntime from "../ui/AdminFormRuntime";
 import { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
-import { AdminActionButton, AdminFormGrid } from "../ui";
+import { ADMIN_FORM_STACK_CLASS_NAME, AdminActionButton, AdminCard, AdminFormGrid } from "../ui";
 import HeroCtaFields from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields";
 import HeroElementOrderEditor from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor";
 import {
@@ -13,9 +13,7 @@ import {
   ModuleEditorIdentitySection,
   ModuleEditorSaveArea,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
   ModuleEditorTabs,
-  MODULE_EDITOR_CONTROL_CARD_CLASS_NAME,
 } from "./ModuleEditorPresentation";
 import AboutIntroModuleEditor from "./editors/AboutIntroModuleEditor";
 import AboutIntroSingleImageModuleEditor from "./editors/AboutIntroSingleImageModuleEditor";
@@ -96,27 +94,21 @@ function ProjectDetailHeroEditorLinks({
   links: ContentModuleEditClientProps["projectDetailHeroEditorLinks"];
 }) {
   return (
-    <ModuleEditorSection>
+    <ModuleEditorSection
+      presentation="panel"
+      title={links ? "الإجراءات الثلاثة" : undefined}
+      actions={links ? <AdminActionButton href={links.root} variant="dark">فتح محرر Hero التفاصيل</AdminActionButton> : undefined}
+    >
       {links ? (
         <>
-          <ModuleEditorSectionHeading
-            intent="cta"
-            actions={
-              <AdminActionButton href={links.root} variant="dark">
-                فتح محرر Hero التفاصيل
-              </AdminActionButton>
-            }
-          >
-            الإجراءات الثلاثة
-          </ModuleEditorSectionHeading>
           <AdminFormGrid columns={3} className="mt-4">
             {PROJECT_HERO_ACTION_KEYS.map((key, index) => {
               const label = PROJECT_HERO_ACTION_LABELS_AR[key];
               return (
-                <article
+                <AdminCard
                   key={key}
                   data-related-project-hero-action-card={key}
-                  className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} flex min-w-0 flex-col gap-4`}
+                  className="flex min-w-0 flex-col gap-4 p-3"
                 >
                   <header className="flex min-w-0 items-center gap-3">
                     <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.045] font-en text-[10px] font-semibold text-[#D8B87A]/70">
@@ -133,7 +125,7 @@ function ProjectDetailHeroEditorLinks({
                   >
                     تعديل {label}
                   </AdminActionButton>
-                </article>
+                </AdminCard>
               );
             })}
           </AdminFormGrid>
@@ -213,7 +205,7 @@ export default function ContentModuleEditClient({
   const pagesTab = {
     id: "pages",
     ...(usesPremiumContentComposition ? { sectionHeaderPresentation: "control" as const } : {}),
-    content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation={usesPremiumContentComposition ? "premium" : "default"} />,
+    content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
   };
 
   const singleImageTabs = isAboutIntroSingleImage
@@ -264,12 +256,13 @@ export default function ContentModuleEditClient({
     ? [
         {
           id: "content",
+          contentSurface: "neutral" as const,
           content: <ProjectsHubHeroModuleEditor config={config as ReturnType<typeof asProjectsHubHeroConfig>} />,
         },
         {
           id: "buttons",
           content: (
-            <ModuleEditorSection>
+            <ModuleEditorSection surface="neutral">
               <HeroCtaFields
                 primaryLabel={(config as ReturnType<typeof asProjectsHubHeroConfig>).primaryCtaLabel}
                 linkSource="project-domain"
@@ -283,7 +276,7 @@ export default function ContentModuleEditClient({
         {
           id: "order",
           content: (
-            <ModuleEditorSection>
+            <ModuleEditorSection surface="neutral">
               <HeroElementOrderEditor
                 defaultOrder={(config as ReturnType<typeof asProjectsHubHeroConfig>).heroElementOrder}
                 allowedKeys={PROJECTS_HUB_HERO_ELEMENT_KEYS}
@@ -327,7 +320,7 @@ export default function ContentModuleEditClient({
         {
           id: "pages",
           sectionHeaderPresentation: "control" as const,
-          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
         },
       ]
     : [];
@@ -337,12 +330,12 @@ export default function ContentModuleEditClient({
         ...(["text", "images", "cards"] as const).map((section) => ({
           id: section,
           sectionHeaderPresentation: "control" as const,
-          content: <AboutIntroModuleEditor config={config as ReturnType<typeof asAboutIntroConfig>} editorMode="about-intro" section={section} presentation="premium" descriptionToolbar="full" />,
+          content: <AboutIntroModuleEditor config={config as ReturnType<typeof asAboutIntroConfig>} editorMode="about-intro" section={section} descriptionToolbar="full" />,
         })),
         {
           id: "pages",
           sectionHeaderPresentation: "control" as const,
-          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
         },
       ]
     : [];
@@ -360,7 +353,7 @@ export default function ContentModuleEditClient({
         {
           id: "pages",
           sectionHeaderPresentation: "control" as const,
-          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
         },
       ]
     : [];
@@ -388,7 +381,7 @@ export default function ContentModuleEditClient({
         {
           id: "pages",
           sectionHeaderPresentation: "control" as const,
-          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
         },
       ]
     : [];
@@ -430,7 +423,7 @@ export default function ContentModuleEditClient({
         {
           id: "pages",
           sectionHeaderPresentation: "control" as const,
-          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} presentation="premium" />,
+          content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
         },
       ]
     : [];
@@ -730,6 +723,7 @@ export default function ContentModuleEditClient({
         {editorKey === "search-platform" ? (
           <input type="hidden" name="config_schema" value="search-platform" />
         ) : null}
+        <div className={ADMIN_FORM_STACK_CLASS_NAME}>
         <ModuleEditorIdentitySection
           name={block.name}
           status={block.status}
@@ -771,6 +765,7 @@ export default function ContentModuleEditClient({
             tabs={[
               {
                 id: "content",
+                contentSurface: editorKey === "projects-hub-featured" || editorKey === "projects-hub-listing" || editorKey === "projects-hub-map" ? "neutral" : "panel",
                 content:
                   editorKey === "about-principles" ? (
                     <AboutPrinciplesModuleEditor
@@ -793,7 +788,6 @@ export default function ContentModuleEditClient({
                     <GenericContentModuleEditor
                       config={config as ReturnType<typeof asContentConfig>}
                       introPresentation={isGenericIntro}
-                      presentation="premium"
                     />
                   ),
               },
@@ -804,33 +798,12 @@ export default function ContentModuleEditClient({
 
         {isAboutIntro || isAboutIntroSingleImage || isVisionGoals || isAboutCta || isAboutPrinciples || isAboutApproach ? (
           <ModuleEditorSaveArea
-            title="حفظ التعديلات"
-            description="يُحدَّث العرض العام بعد اكتمال الحفظ."
             saveLabel="حفظ التعديلات"
-          />
-        ) : isHomeStory ? (
-          <ModuleEditorSaveArea
-            title="حفظ موديول القصة"
-            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
-          />
-        ) : isHomeContact ? (
-          <ModuleEditorSaveArea
-            title="حفظ موديول التواصل"
-            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
-          />
-        ) : isHomeProjects ? (
-          <ModuleEditorSaveArea
-            title="حفظ موديول المشروعات"
-            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
-          />
-        ) : isHomeTrust ? (
-          <ModuleEditorSaveArea
-            title="حفظ موديول الثقة"
-            description="يُحدَّث العرض العام للصفحة الرئيسية بعد اكتمال الحفظ."
           />
         ) : (
           <ModuleEditorSaveArea />
         )}
+        </div>
       </AdminFormRuntime>
     </div>
   );

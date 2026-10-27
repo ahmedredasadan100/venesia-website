@@ -2,6 +2,7 @@ import type { PageBlockStatus, PageBlockType } from "./types";
 import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
 import { resolveModuleProductKind } from "./module-edit-registry";
 import { adminFormEditHref } from "../admin/form-runtime";
+import { adminFormFieldClassName } from "../admin/admin-ui-styles";
 
 export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
@@ -150,10 +151,7 @@ export function statusMeta(status?: string | null) {
 }
 
 export function fieldClassName(extra = "") {
-  return [
-    "w-full rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white outline-none focus:border-[#D8B87A]/45",
-    extra,
-  ].join(" ");
+  return adminFormFieldClassName(extra);
 }
 
 export function splitLines(value: FormDataEntryValue | null) {

@@ -1462,11 +1462,15 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     }
     res.writeHead(404); res.end();
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true });
-  let navigationCompleted = false;
+  let browser = null;
+  let navigationCompleted = false, primaryFailed = false;
   try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => { server.off("error", reject); resolve(); });
+    });
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
     await context.route("**/*", (route) => {
       if (new URL(route.request().url()).origin !== origin) { blocked.push(route.request().url()); return route.abort(); }
@@ -1549,13 +1553,30 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     }
     navigationCompleted = Boolean(navigation);
   } catch (error) {
+    primaryFailed = true;
     if (navigation) observations.push({label:"navigation fixture interrupted",error:error.message});
     throw error;
   } finally {
-    await browser.close();
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
+    let cleanupFailure, cleanupFailed = false;
+    const recordCleanupFailure = (stage, error) => {
+      if (!cleanupFailed) cleanupFailure = error;
+      cleanupFailed = true;
+      observations.push({ label: "controller fixture cleanup failed", stage });
+    };
+    try { await browser?.close(); } catch (error) { recordCleanupFailure("browser-close", error); }
+    try {
+      server.closeAllConnections();
+      await new Promise((resolve, reject) => server.close(error => {
+        if (error && error.code !== "ERR_SERVER_NOT_RUNNING") reject(error); else resolve();
+      }));
+    } catch (error) { recordCleanupFailure("server-close", error); }
+    try {
     await writeFile(path.join(output, "evidence.json"), JSON.stringify({ passed, failed, observations, requests, blocked, errors, ...(navigation?{navigationCompleted,navigationCoverage:navigation.coverage,sourceHashes:navigation.sourceHashes}:{}), scope: "Mounted shared controller/EntityList/Pagination with synthetic GET transport; Next navigation isolated, no Auth/DB or live-screen claim" }, null, 2));
+    } catch (error) {
+      recordCleanupFailure("evidence-write", error);
+      console.error("Controller fixture cleanup failed while writing evidence.");
+    }
+    if (!primaryFailed && cleanupFailed) throw cleanupFailure;
   }
   console.log(`qa-admin-data-engine-controller isolated: ${passed}/${passed + failed} passed`);
   if (failed) process.exitCode = 1;

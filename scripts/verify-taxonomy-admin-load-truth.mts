@@ -1026,7 +1026,13 @@ function topicDependencies(
         value === "article" ? "article" : value === "gallery" ? "media" : null,
     },
     "../../../../../lib/admin/auth/require-admin-session": {
-      requireAdminSession: async () => undefined,
+      requireAdminSession: async () => ({ id: 71, session_version: 2 }),
+    },
+    "../../../../../lib/admin/content/topic-draft-session": {
+      resolveTopicDraftSession: async (actor: { id: number; session_version: number }) => {
+        assert.deepEqual(actor, { id: 71, session_version: 2 });
+        return { actorId: actor.id, sessionVersion: actor.session_version, expiresAt: Date.parse("2028-01-01T00:00:00Z") };
+      },
     },
     "../../../../../lib/admin/media-topic-payload": {
       parseMediaTopicPayload: () => null,
@@ -1364,14 +1370,21 @@ async function runTopicPreviewRouteChecks() {
         "../../../../../../components/admin/content/AdminCategoryBadge":
           defaultModule(marker("AdminCategoryBadge")),
         "../../../../../../components/admin/ui": {
+          AdminActionButton: ui.AdminActionButton,
           AdminPageHeader: marker("AdminPageHeader"),
           AdminStatusPill: marker("AdminStatusPill"),
         },
         "../../../../../../components/content/RichTextContent":
           defaultModule(marker("RichTextContent")),
+        "../../../../../../components/media-center/MediaDetailArticle": {
+          MediaVideoPlayback: marker("MediaVideoPlayback"),
+        },
         "../../../../../../lib/admin/media-topic-payload": {
           parseMediaTopicPayload: () => null,
-          resolveYouTubeEmbedUrl: () => null,
+          resolveMetaVideoEmbedRequest: () => null,
+        },
+        "../../../../../../lib/content/public-content-read/owner": {
+          readMetaVideoEmbed: async () => { throw new Error("Unexpected Meta read outside the Article Preview fixture"); },
         },
         "../../../../../../lib/admin/auth/require-admin-session": {
           requireAdminSession: async () => { authCalls += 1; },
@@ -1452,6 +1465,9 @@ async function runAdminErrorBoundaryCheck() {
         "../../components/admin/ui/AdminPageContextHeader": defaultModule(
           ui.AdminPageContextHeader,
         ),
+        "../../components/admin/ui/AdminActionButton": defaultModule(
+          ui.AdminActionButton,
+        ),
         "../../components/admin/ui/AdminPageExperience": defaultModule(
           ui.AdminPageExperience,
         ),
@@ -1467,8 +1483,9 @@ async function runAdminErrorBoundaryCheck() {
       },
     });
     const retryButton = recorder.renders.find(
-      (render) => render.type === "button",
+      (render) => render.type === ui.AdminActionButton,
     );
+    assert.equal(retryButton?.props.type, "button");
     assert.equal(typeof retryButton?.props.onClick, "function");
     (retryButton?.props.onClick as () => void)();
     assert.equal(retryCalls, 1);

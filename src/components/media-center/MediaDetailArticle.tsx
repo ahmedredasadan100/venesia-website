@@ -4,16 +4,20 @@ import { resolvePublicContentBasePath } from "../../lib/content/public-content-p
 import type { MediaDetailPageConfig } from "../../lib/media-center/detail-page-config";
 import type { MediaContentItem } from "../../lib/media-center/types";
 import { getMediaHref } from "../../lib/media-center/types";
-import { resolveYouTubeEmbedUrl } from "../../lib/admin/media-topic-payload";
+import type { MetaVideoEmbedResult } from "../../lib/admin/media-topic-payload";
 import RichTextContent from "../content/RichTextContent";
 import PublicMediaImage from "../public/PublicMediaImage";
 import RelatedMediaRail from "./RelatedMediaRail";
+import { MediaVideoPlayback } from "./MediaVideoPlayback";
+
+export { MediaVideoPlayback } from "./MediaVideoPlayback";
 
 type MediaDetailArticleProps = {
   item: MediaContentItem;
   content: string;
   config: MediaDetailPageConfig;
   relatedItems: MediaContentItem[];
+  metaEmbed?: MetaVideoEmbedResult;
 };
 
 export default function MediaDetailArticle({
@@ -21,6 +25,7 @@ export default function MediaDetailArticle({
   content,
   config,
   relatedItems,
+  metaEmbed,
 }: MediaDetailArticleProps) {
   const hasIntroMetadata = Boolean(
     (item.showCategoryOnPage && item.category) ||
@@ -66,7 +71,7 @@ export default function MediaDetailArticle({
         </div>
       ) : null}
 
-      {item.type === "video" ? <MediaVideoPlayback item={item} /> : null}
+      {item.type === "video" ? <MediaVideoPlayback item={item} metaEmbed={metaEmbed} /> : null}
 
       {item.type === "gallery" && item.galleryImages?.length ? (
         <div
@@ -136,33 +141,5 @@ export default function MediaDetailArticle({
         actionLabel={config.related.actionLabel}
       />
     </article>
-  );
-}
-
-function MediaVideoPlayback({ item }: { item: MediaContentItem }) {
-  const embedUrl = resolveYouTubeEmbedUrl(item.videoUrl ?? "");
-
-  if (!embedUrl) {
-    return (
-      <div
-        role="status"
-        data-public-media-video-unavailable
-        className="rounded-[1.5rem] border border-amber-300/20 bg-amber-300/[0.06] px-6 py-5 text-sm leading-7 text-amber-100/80"
-      >
-        الفيديو غير متاح للتشغيل حاليًا. تظل تفاصيل الخبر والصورة المنشورة متاحة دون تحويلك إلى رابط بديل غير موثوق.
-      </div>
-    );
-  }
-
-  return (
-    <div className="aspect-video overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/30">
-      <iframe
-        src={embedUrl}
-        title={`تشغيل ${item.title}`}
-        className="h-full w-full"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-      />
-    </div>
   );
 }

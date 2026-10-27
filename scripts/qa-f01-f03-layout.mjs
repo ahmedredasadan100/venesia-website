@@ -1,14 +1,34 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
-const out = path.join(root, ".tmp-qa/f01-f03-layout");
-await mkdir(out, { recursive: true });
+const requestedOutput = process.env.F01_F03_LAYOUT_OUTPUT;
+const qaRoot = path.join(root, ".tmp-qa");
+const out = requestedOutput === undefined ? path.join(qaRoot, "f01-f03-layout") : path.resolve(root, requestedOutput);
+if (requestedOutput !== undefined) {
+  const relative = path.relative(qaRoot, out);
+  assert.ok(requestedOutput.trim() && relative && !path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(".." + path.sep),
+    "Fresh Layout QA output must remain strictly inside the repository .tmp-qa tree.");
+  let ancestor = qaRoot;
+  for (const part of ["", ...relative.split(path.sep).slice(0, -1)]) {
+    ancestor = path.join(ancestor, part);
+    try {
+      const state = await lstat(ancestor);
+      assert.ok(state.isDirectory() && !state.isSymbolicLink(), "Fresh Layout QA output cannot traverse symlinks or junctions.");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  await mkdir(path.dirname(out), { recursive: true });
+  await mkdir(out); // Exclusive target creation preserves every previous receipt.
+} else {
+  await mkdir(out, { recursive: true });
+}
 
 const entry = String.raw`import React,{useLayoutEffect} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -27,8 +47,10 @@ function AdminFixture({done}){return <AdminFeedbackProvider><Commit done={done}/
 window.mount=kind=>new Promise(resolve=>root.render(kind==='admin'?<AdminFixture done={resolve}/>:<PublicFixture kind={kind} done={resolve}/>));
 window.mount('legacy');`;
 await writeFile(path.join(out, "entry.tsx"), entry);
-await writeFile(path.join(out, "navigation.ts"), `const router={refresh(){window.refreshes+=1;},push(){},replace(){}};export const useRouter=()=>router;`);
+await writeFile(path.join(out, "navigation.ts"), `export{unstable_rethrow}from'next/dist/client/components/unstable-rethrow.browser';const router={refresh(){window.refreshes+=1;},push(){},replace(){}};export const useRouter=()=>router;export const useSearchParams=()=>new URLSearchParams();export const usePathname=()=>'/admin/pages-blocks/pages/77';`);
 await writeFile(path.join(out, "actions.ts"), `export const savePageLayout=input=>window.__layoutAction('save',input);export const selectPageLayout=(pageId,layoutId)=>window.__layoutAction('select',{pageId,layoutId});`);
+// Shared presentation imports the link owner; this Layout fixture never invokes its server ports.
+await writeFile(path.join(out, "link-actions.ts"), `const unexpected=async()=>{throw new Error('Unexpected Link server action in Page Layout fixture');};export const browseAdminLinksAjax=unexpected,browseMenuItemsPickerAjax=unexpected,browseMenusPickerAjax=unexpected,browseTopicCategoriesPickerAjax=unexpected,resolveAdminLinkAjax=unexpected;`);
 await writeFile(path.join(out, "plan.ts"), `export function buildSlotRenderPlan(){return []}`);
 await writeFile(path.join(out, "theme.ts"), `import {resolveVenesiaThemeLayout} from '@src/components/page-composition/venisia-theme-regions';export const VENISIA_THEME_CONTRACT={resolveLayout:resolveVenesiaThemeLayout,modulePresentation:{}};`);
 await writeFile(path.join(out, "renderers.tsx"), `import React from 'react';export default function Empty(){return null}export const MediaSidebarWidget=Empty;export const renderMediaHubSections=()=>[];export const renderVenesiaThemeMediaHubNodes=nodes=>nodes;`);
@@ -44,6 +66,7 @@ const compiler = webpack({
     new webpack.NormalModuleReplacementPlugin(/.*/, (resource) => {
       const full = path.resolve(resource.context, resource.request).replaceAll("\\", "/");
       if (full.endsWith("/src/app/admin/pages-blocks/pages/actions")) resource.request = path.join(out, "actions.ts");
+      if (full.endsWith("/src/lib/admin/links/actions")) resource.request = path.join(out, "link-actions.ts");
       if (full.endsWith("/src/components/page-composition/build-slot-render-plan")) resource.request = path.join(out, "plan.ts");
       if (full.endsWith("/src/components/page-composition/venisia-theme-contract")) resource.request = path.join(out, "theme.ts");
       if ([

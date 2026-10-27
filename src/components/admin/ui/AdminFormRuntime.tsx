@@ -1,7 +1,7 @@
 "use client";
 
 import { unstable_rethrow, useRouter } from "next/navigation";
-import { useFormStatus } from "react-dom";
+import { flushSync, useFormStatus } from "react-dom";
 import { QueryClientContext } from "@tanstack/react-query";
 import {
   createContext,
@@ -43,6 +43,7 @@ import { resolveSafeInternalPath } from "../../../lib/security/safe-internal-pat
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminConfirmDialog from "./AdminConfirmDialog";
 import { AdminStickyFormBar } from "./AdminForm";
+import { AdminModuleTabIcon } from "./AdminModuleTabs";
 
 const LEAVE_WARNING = "لديك تعديلات غير محفوظة. هل تريد الإغلاق دون حفظها؟";
 
@@ -374,6 +375,7 @@ export type AdminFormRuntimeContextValue<TResult = unknown> = {
   fieldErrors: Record<string, string[]>;
   isDirty: boolean;
   notifyProjectionChange: () => void;
+  clearFieldErrors: (names: readonly string[]) => void;
   requestInternalNavigation: (href: string) => void;
   requestClose: () => void;
 };
@@ -405,6 +407,8 @@ export type AdminFormRuntimeProps<TResult = unknown> = {
   entityKey: string;
   /** Persisted revision for redirecting editors; the owner accepts it when safe. */
   savedRevision?: string;
+  /** Opt-in field finalization before submitted values and controls are captured. */
+  finalizeFieldsOnSubmit?: boolean;
   closeHref?: string;
   onClose?: () => void;
   onSuccess?: (state: AdminFormActionState<TResult>) => void;
@@ -544,6 +548,7 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   initialState,
   mode,
   entityKey,
+  finalizeFieldsOnSubmit = false,
   closeHref,
   onClose,
   onSuccess,
@@ -633,7 +638,10 @@ function AdminFormRuntimeInstance<TResult = unknown>({
     Boolean(state.editHref);
   const pending = actionPending || handoffPending;
   const formRef = useRef<HTMLFormElement>(null);
-  const [projectionRevision, setProjectionRevision] = useState(0);
+  const [projection, setProjection] = useState<{
+    revision: number;
+    dismissedErrors?: { state: AdminFormActionState<TResult>; fields: readonly string[] };
+  }>({ revision: 0 });
   const submittedBaselineRef = useRef<string | null>(null);
   const submittedControlsRef = useRef<AdminFormControlSnapshot[] | null>(null);
   const handledResultRef = useRef<AdminFormActionState<TResult>>(
@@ -645,12 +653,26 @@ function AdminFormRuntimeInstance<TResult = unknown>({
       pending,
       // The instance follows accepted source revisions; only confirmed success
       // below marks the submitted baseline clean. A later failure must not reset it.
-      projectionRevision,
+      projectionRevision: projection.revision,
       onNavigate: clearFormFeedback,
     });
   const notifyProjectionChange = useCallback(() => {
-    setProjectionRevision((current) => current + 1);
+    setProjection((current) => ({ ...current, revision: current.revision + 1 }));
   }, []);
+  const clearFieldErrors = useCallback((names: readonly string[]) => {
+    if (pending || names.length === 0) return;
+    setProjection((current) => ({
+      revision: current.revision + 1,
+      // A new action result restores its own errors, even for the same field.
+      dismissedErrors: {
+        state,
+        fields: [...new Set([
+          ...(current.dismissedErrors?.state === state ? current.dismissedErrors.fields : []),
+          ...names.filter((name) => Boolean(state.fieldErrors?.[name]?.length)),
+        ])],
+      },
+    }));
+  }, [pending, state]);
   const requestInternalNavigation = useCallback(
     (href: string) => {
       const safeHref = resolveSafeInternalPath(href, "");
@@ -763,21 +785,32 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   ]);
 
   const context = useMemo<AdminFormRuntimeContextValue<TResult>>(
-    () => ({
-      state,
-      mode,
-      pending,
-      fieldErrors: state.fieldErrors ?? {},
-      isDirty,
-      notifyProjectionChange,
-      requestInternalNavigation,
-      requestClose,
-    }),
+    () => {
+      const dismissedFields = projection.dismissedErrors?.state === state
+        ? projection.dismissedErrors.fields
+        : [];
+      const fieldErrors = state.fieldErrors ?? {};
+      return {
+        state,
+        mode,
+        pending,
+        fieldErrors: dismissedFields.length
+          ? Object.fromEntries(Object.entries(fieldErrors).filter(([name]) => !dismissedFields.includes(name)))
+          : fieldErrors,
+        isDirty,
+        notifyProjectionChange,
+        clearFieldErrors,
+        requestInternalNavigation,
+        requestClose,
+      };
+    },
     [
+      clearFieldErrors,
       isDirty,
       mode,
       notifyProjectionChange,
       pending,
+      projection,
       requestClose,
       requestInternalNavigation,
       state,
@@ -792,6 +825,13 @@ function AdminFormRuntimeInstance<TResult = unknown>({
         action={formAction}
         onSubmitCapture={(event) => {
           const form = event.currentTarget;
+          if (finalizeFieldsOnSubmit) {
+            // Field owners finish their drafts before native payload, baseline
+            // and restoration snapshots are read, regardless of current focus.
+            flushSync(() => {
+              form.dispatchEvent(new Event("admin-form-before-submit"));
+            });
+          }
           submittedBaselineRef.current = serializeAdminForm(form);
           submittedControlsRef.current = captureAdminFormControls(form);
           clearFeedback(feedbackChannel);
@@ -820,16 +860,30 @@ function AdminFormRuntimeInstance<TResult = unknown>({
 export function AdminFormGrid({
   children,
   columns = 2,
+  columnRatio,
   presentation = "plain",
+  fieldContainers = false,
+  density = "default",
   className = "",
 }: {
   children: ReactNode;
   columns?: 1 | 2 | 3 | 4 | 5 | 6 | 12;
-  presentation?: "plain" | "control-cards" | "aligned-fields";
+  /** Two-column layouts may opt into a 60/40 split from md; DOM order stays mobile-first. */
+  columnRatio?: "3:2";
+  /** Equal-height columns stretch only the outer grid items; their content keeps normal flow. */
+  presentation?: "plain" | "control-cards" | "aligned-fields" | "equal-height-columns";
+  /** Reuse the existing control-card surface without replacing the selected grid layout. */
+  fieldContainers?: boolean;
+  /** Sections retain the shared 20px rhythm; compact controls retain their existing row gaps. */
+  density?: "default" | "compact" | "sections";
   className?: string;
 }) {
   const columnsClassName =
-    columns === 3 && presentation === "aligned-fields"
+    columns === 2 && columnRatio === "3:2"
+      ? presentation === "equal-height-columns"
+        ? "grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+        : "grid-cols-1 items-start md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+      : columns === 3 && presentation === "aligned-fields"
       ? "grid-cols-1 md:grid-cols-3"
       : columns === 1
       ? "grid-cols-1"
@@ -844,22 +898,32 @@ export function AdminFormGrid({
               : columns === 3
                 ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
                 : "grid-cols-1 md:grid-cols-2";
-  // Opt-in rows align labels, controls and supporting copy without changing typography.
+  const controlCardFrameClassName = "[&>*]:rounded-2xl [&>*]:border [&>*]:border-white/10";
+  const controlCardPaddingClassName = "[&>*]:p-3";
+  const controlCardSurfaceClassName = `${controlCardFrameClassName} [&>*]:bg-[#05070B] ${controlCardPaddingClassName}`;
+  // Field rows align labels, controls and supporting copy; structural grids keep normal flow.
   const presentationClassName = presentation === "control-cards"
-    ? "items-stretch [&>*]:rounded-2xl [&>*]:border [&>*]:border-white/10 [&>*]:bg-[#05070B] [&>*]:p-3"
+    ? `items-stretch ${controlCardSurfaceClassName}`
     : presentation === "aligned-fields"
-      ? "items-start [&>*]:row-span-3 [&>*]:grid [&>*]:grid-rows-subgrid [&>*]:items-start [&>*]:gap-2 [&>*]:space-y-0 [&>*>*]:mt-0"
-      : "";
+      ? fieldContainers
+        ? "items-stretch"
+        : "items-start [&>*]:row-span-3 [&>*]:grid [&>*]:grid-rows-subgrid [&>*]:items-start [&>*]:gap-2 [&>*]:space-y-0 [&>*>*]:mt-0 [&>[data-admin-form-grid-item]_[data-admin-form-field]]:contents [&>[data-admin-form-grid-item]_[data-admin-form-field]>[data-admin-form-field-control]]:min-w-0 [&>[data-admin-form-grid-item]_[data-admin-form-switch-surface]]:row-start-2 [&>[data-admin-form-grid-item]_[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:contents [&>[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:grid-cols-1"
+      : presentation === "equal-height-columns"
+        ? "items-stretch [&>*]:self-stretch"
+        : "";
+  const spacingClassName = density === "compact" ? "gap-x-3 gap-y-2" : density === "sections" ? "gap-5" : "gap-4";
+  const fieldContainerClassName = fieldContainers && presentation !== "control-cards" ? ` ${controlCardFrameClassName} ${controlCardPaddingClassName}` : "";
   return (
-    <div data-admin-form-grid={presentation} className={`grid min-w-0 gap-4 [&>*]:min-w-0 ${columnsClassName} ${presentationClassName} ${className}`.trim()}>
+    <div data-admin-form-grid={presentation} className={`grid min-w-0 ${spacingClassName} [&>*]:min-w-0 ${columnsClassName} ${presentationClassName}${fieldContainerClassName} ${className}`.trim()}>
       {children}
     </div>
   );
 }
 
-export type AdminFormGridSpan = 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
+export type AdminFormGridSpan = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12;
 
 const ADMIN_FORM_GRID_SPAN_CLASSES: Record<AdminFormGridSpan, string> = {
+  2: "xl:col-span-2",
   3: "xl:col-span-3",
   4: "xl:col-span-4",
   5: "xl:col-span-5",
@@ -881,6 +945,7 @@ export function AdminFormGridItem({
 }) {
   return (
     <div
+      data-admin-form-grid-item=""
       className={`${ADMIN_FORM_GRID_SPAN_CLASSES[span]} ${className}`.trim()}
     >
       {children}
@@ -924,22 +989,36 @@ export function AdminFormActions({
   submitLabel = "حفظ",
   pendingLabel = "جارٍ الحفظ…",
   closeLabel = "إغلاق",
+  showClose = true,
+  pending: externalPending,
   title = "إجراءات النموذج",
-  description = "احفظ التغييرات أو أغلق النموذج.",
+  description = null,
+  icon = <AdminModuleTabIcon name="content" />,
   className = "",
 }: {
   submitLabel?: string;
   pendingLabel?: string;
   closeLabel?: string;
+  /** Save-only settings retain their existing contract without a new Close action. */
+  showClose?: boolean;
+  /** Specialized native forms provide pending state while retaining their own save owner. */
+  pending?: boolean;
   title?: ReactNode;
   description?: ReactNode;
+  icon?: ReactNode;
   className?: string;
 }) {
-  const { pending, requestClose } = useAdminFormRuntime();
+  const runtime = useOptionalAdminFormRuntime();
+  if (!runtime && (externalPending === undefined || showClose)) {
+    throw new Error("Native domain forms must provide pending state and retain their save-only contract.");
+  }
+  const pending = runtime?.pending ?? externalPending ?? false;
+  const requestClose = runtime?.requestClose;
   return (
     <AdminStickyFormBar
       title={title}
       description={description}
+      icon={icon}
       className={className}
     >
       <button
@@ -950,15 +1029,17 @@ export function AdminFormActions({
       >
         {pending ? pendingLabel : submitLabel}
       </button>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={requestClose}
-        data-admin-form-action="close"
-        className={`${actionButtonClassName} flex-1 border border-white/15 text-white/65 hover:border-white/30 hover:text-white sm:flex-none`}
-      >
-        {closeLabel}
-      </button>
+      {showClose ? (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={requestClose}
+          data-admin-form-action="close"
+          className={`${actionButtonClassName} flex-1 border border-white/15 text-white/65 hover:border-white/30 hover:text-white sm:flex-none`}
+        >
+          {closeLabel}
+        </button>
+      ) : null}
       <span className="sr-only" role="status" aria-live="polite">
         {pending ? pendingLabel : ""}
       </span>

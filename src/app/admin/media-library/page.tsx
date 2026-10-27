@@ -7,6 +7,7 @@ export default function AdminMediaLibraryPage() {
   return (
     <main className="space-y-7">
       <AdminPageContextHeader
+        visualPreset="media"
         eyebrow="إدارة الملفات"
         title="مكتبة الوسائط"
         description="استعرض الملفات ونظّمها واعرف مواضع استخدامها من مكان واحد."

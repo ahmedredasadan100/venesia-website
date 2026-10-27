@@ -4,6 +4,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
 import { settleAdminColumnPreferenceSave } from "../../../lib/admin/entity-list/column-preferences";
+import {
+  ADMIN_CINEMATIC_GOLD_V1, resolveAdminCollectionPresentation,
+  type AdminCollectionPresentation,
+} from "../../../lib/admin/admin-ui-styles";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import AdminCheckbox from "./AdminCheckbox";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
@@ -28,6 +32,7 @@ type AdminColumnVisibilityMenuProps<Key extends string> = {
   onRestore?: () => Promise<PersistResult>;
   label?: string;
   scrollAreaClassName?: string;
+  presentation?: AdminCollectionPresentation;
 };
 
 export default function AdminColumnVisibilityMenu<Key extends string>({
@@ -39,7 +44,10 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   onRestore,
   label = "الأعمدة",
   scrollAreaClassName = "",
+  presentation: requestedPresentation = "default",
 }: AdminColumnVisibilityMenuProps<Key>) {
+  const presentation = resolveAdminCollectionPresentation(requestedPresentation);
+  const cinematic = presentation === "cinematic";
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -131,7 +139,12 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     persistOverride?: () => Promise<PersistResult>,
   ) {
     latestColumnsRef.current = next;
-    flushSync(() => onChange(next));
+    // Mark the save pending in the same commit as the optimistic columns.
+    // Otherwise the idle effect can mistake that render for persisted state.
+    flushSync(() => {
+      setPendingSaves((count) => count + 1);
+      onChange(next);
+    });
     setError("");
     // Promise.resolve() wrapping keeps a synchronous throw from the handler
     // inside the promise lifecycle, so pendingSaves always unwinds and the
@@ -147,7 +160,6 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     // Writes therefore commit in user-action order.
     const resultPromise = saveQueueRef.current.then(invokePersist);
     saveQueueRef.current = resultPromise;
-    setPendingSaves((count) => count + 1);
     void resultPromise.then((result) => {
       setPendingSaves((count) => count - 1);
       const settlement = settleAdminColumnPreferenceSave({
@@ -189,10 +201,11 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         role="menu"
         dir="rtl"
         data-admin-column-menu=""
+        data-admin-column-presentation={presentation}
         onMouseDown={(event) => event.stopPropagation()}
         data-placement={menuPosition.placement}
         style={menuPosition.style}
-        className="flex flex-col overflow-hidden rounded-[16px] border border-[#D8B87A]/20 bg-[#080B10]/98 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+        className={`flex flex-col overflow-hidden rounded-[16px] border p-2 backdrop-blur-xl ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.menu : "border-[#D8B87A]/20 bg-[#080B10]/98 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"}`}
       >
         <p className="shrink-0 px-2 py-2 text-xs font-semibold text-white/45">
           الأعمدة الظاهرة
@@ -208,7 +221,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
                 key={column.key}
                 className={`flex items-center justify-between gap-3 rounded-[9px] border border-transparent px-2.5 py-2 text-sm transition focus-within:border-[#D8B87A]/35 focus-within:bg-[#D8B87A]/8 ${
                   column.hideable
-                    ? `cursor-pointer hover:bg-white/[0.05] ${
+                    ? cinematic ? `cursor-pointer ${checked ? ADMIN_CINEMATIC_GOLD_V1.collection.optionActive : ADMIN_CINEMATIC_GOLD_V1.collection.option}` : `cursor-pointer hover:bg-white/[0.05] ${
                         checked ? "text-[#F4E7C5]" : "text-white/76"
                       }`
                     : "cursor-not-allowed text-white/38"
@@ -234,7 +247,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
             setIsOpen(false);
             window.requestAnimationFrame(() => triggerRef.current?.focus());
           }}
-          className="mt-2 w-full shrink-0 cursor-pointer rounded-[9px] border border-white/10 px-3 py-2.5 text-sm font-semibold text-[#D8B87A] transition hover:border-[#D8B87A]/30 hover:bg-[#D8B87A]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+          className={`mt-2 w-full shrink-0 cursor-pointer rounded-[9px] border px-3 py-2.5 text-sm font-semibold transition ${cinematic ? ADMIN_CINEMATIC_GOLD_V1.collection.control : "border-white/10 text-[#D8B87A] hover:border-[#D8B87A]/30 hover:bg-[#D8B87A]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"}`}
         >
           استعادة الأعمدة الافتراضية
         </button>
@@ -248,7 +261,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
     );
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative" data-admin-column-presentation={presentation}>
       <button
         ref={triggerRef}
         type="button"
@@ -264,12 +277,12 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
           focusMenuOnOpenRef.current = true;
           setIsOpen(true);
         }}
-        className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-white/10 bg-black/25 px-4 text-sm font-semibold text-white/72 transition hover:border-[#D8B87A]/30 hover:bg-white/[0.04] hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+        className={`inline-flex ${cinematic ? "h-11" : "h-10"} cursor-pointer items-center gap-2 rounded-[10px] border px-4 text-sm font-semibold transition ${cinematic ? isOpen ? ADMIN_CINEMATIC_GOLD_V1.collection.controlOpen : ADMIN_CINEMATIC_GOLD_V1.collection.control : "border-white/10 bg-black/25 text-white/72 hover:border-[#D8B87A]/30 hover:bg-white/[0.04] hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"}`}
       >
         <span aria-hidden="true">▥</span>
         {label}
         {isPending ? (
-          <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+          <span className={`h-3 w-3 animate-spin rounded-full border border-current border-t-transparent ${cinematic ? "motion-reduce:animate-none" : ""}`} />
         ) : null}
       </button>
 

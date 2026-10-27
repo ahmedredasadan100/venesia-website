@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { AdminCard, AdminCheckbox, AdminFormControlHeader, AdminFormGrid, AdminFormSection, AdminToneBadge } from "../ui";
+import { AdminCard, AdminCheckbox, AdminFormControlHeader, AdminFormGrid, AdminToneBadge } from "../ui";
 import { AdminModuleTabIcon } from "../ui/AdminModuleTabs";
 
 type ModulePageOption = {
@@ -15,7 +15,6 @@ type ModulePageOption = {
 type ModulePageAssignmentsFieldProps = {
   pages: ModulePageOption[];
   assignedPageIds: number[];
-  presentation?: "default" | "premium";
 };
 
 function pagePathSegments(path: string) {
@@ -59,9 +58,7 @@ function groupPages(pages: ModulePageOption[]) {
 export default function ModulePageAssignmentsField({
   pages,
   assignedPageIds,
-  presentation = "default",
 }: ModulePageAssignmentsFieldProps) {
-  const premium = presentation === "premium";
   const containerRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{ baseline: string; ids: Set<number> } | null>(null);
   const assignedSet = new Set(assignedPageIds);
@@ -70,12 +67,12 @@ export default function ModulePageAssignmentsField({
   // own position-management links until the existing save completes.
   const selectedSet = selection?.baseline === baseline ? selection.ids : assignedSet;
   useEffect(() => {
-    if (!premium) return;
+
     const form = containerRef.current?.closest("form");
     const reset = () => setSelection(null);
     form?.addEventListener("reset", reset);
     return () => form?.removeEventListener("reset", reset);
-  }, [premium]);
+  }, []);
   const { primaryPages, familyPages } = groupPages(pages);
   const pageGroups = [
     {
@@ -103,14 +100,13 @@ export default function ModulePageAssignmentsField({
             <AdminCheckbox
               name="page_ids"
               value={page.id}
-              defaultChecked={premium ? undefined : assignedSet.has(page.id)}
-              checked={premium ? selectedSet.has(page.id) : undefined}
-              onChange={premium ? (event) => {
+              checked={selectedSet.has(page.id)}
+              onChange={(event) => {
                 const ids = new Set(selectedSet);
                 if (event.currentTarget.checked) ids.add(page.id);
                 else ids.delete(page.id);
                 setSelection({ baseline, ids });
-              } : undefined}
+              }}
               label={"ربط " + page.title}
               presentation="premium"
             />
@@ -119,29 +115,27 @@ export default function ModulePageAssignmentsField({
             <div
               key={page.id}
               data-module-page-row={page.id}
-              className={premium
-                ? "group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm transition hover:border-white/25 hover:bg-white/[0.04] focus-within:ring-2 focus-within:ring-[#D8B87A]/60 has-[input:checked]:border-[#D8B87A]/65 has-[input:checked]:bg-[#D8B87A]/[0.075]"
-                : "group flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.025] px-3.5 py-2.5 text-sm text-white/72 transition hover:border-white/16 hover:bg-white/[0.04] has-[input:checked]:border-[#D8B87A]/38 has-[input:checked]:bg-[#D8B87A]/[0.055]"}
+              className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm transition hover:border-white/25 hover:bg-white/[0.04] focus-within:ring-2 focus-within:ring-[#D8B87A]/60 has-[input:checked]:border-[#D8B87A]/65 has-[input:checked]:bg-[#D8B87A]/[0.075]"
             >
-              <span className={premium ? "flex min-w-0 items-center gap-3" : "min-w-0"}>
-                {premium ? <span aria-hidden="true" className="size-5 shrink-0 text-white/55 group-has-[input:checked]:text-[#E6C98D]"><AdminModuleTabIcon name="content" /></span> : null}
+              <span className="flex min-w-0 items-center gap-3">
+                <span aria-hidden="true" className="size-5 shrink-0 text-white/55 group-has-[input:checked]:text-[#E6C98D]"><AdminModuleTabIcon name="content" /></span>
                 <span className="min-w-0">
                   <span className="block truncate font-medium text-white/78">{page.title}</span>
-                  <span dir="ltr" className={premium ? "mt-0.5 block truncate text-right font-mono text-xs text-white/55" : "mt-0.5 block truncate text-left font-mono text-[11px] text-white/35"}>
+                  <span dir="ltr" className="mt-0.5 block truncate text-right font-mono text-xs text-white/55">
                     {page.path}
                   </span>
                 </span>
               </span>
-              <span className={premium ? "flex shrink-0 flex-wrap items-center justify-end gap-1" : "flex shrink-0 items-center gap-3"}>
+              <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                 {assignedSet.has(page.id) ? (
                   <Link
                     href={"/admin/pages-blocks/pages/" + page.id}
-                    className={premium ? "inline-flex min-h-11 items-center rounded-lg px-1 text-xs font-semibold text-[#D8B87A] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]" : "text-xs font-semibold text-[#D8B87A] underline-offset-4 hover:underline"}
+                    className="inline-flex min-h-11 items-center rounded-lg px-1 text-xs font-semibold text-[#D8B87A] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]"
                   >
                     إدارة الموضع
                   </Link>
                 ) : null}
-                {premium ? <label className="inline-flex size-11 cursor-pointer items-center justify-center">{checkbox}</label> : checkbox}
+                <label className="inline-flex size-11 cursor-pointer items-center justify-center">{checkbox}</label>
               </span>
             </div>
           );
@@ -149,7 +143,7 @@ export default function ModulePageAssignmentsField({
         {!group.pages.length ? <p className="text-sm text-white/45">{group.emptyLabel}</p> : null}
       </div>
     );
-    return premium ? (
+    return (
       <AdminCard key={group.title} presentation="premium" className="min-w-0 space-y-4 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -171,16 +165,12 @@ export default function ModulePageAssignmentsField({
         </div>
         {rows}
       </AdminCard>
-    ) : (
-      <AdminFormSection key={group.title} variant="module" compactHeader title={group.title} className="min-w-0">
-        {rows}
-      </AdminFormSection>
     );
   });
 
   return (
     <div ref={containerRef} data-module-page-groups="">
-      {premium ? <AdminFormGrid columns={2}>{groups}</AdminFormGrid> : <div className="grid items-start gap-4 lg:grid-cols-2">{groups}</div>}
+      <AdminFormGrid columns={2}>{groups}</AdminFormGrid>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { verifyFeedCardEmptyMedia } from "./fixtures/feed-card-empty-media.mjs";
+import { resolveFeedCardEmptyMediaOutput, verifyFeedCardEmptyMedia } from "./fixtures/feed-card-empty-media.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -8,7 +8,7 @@ import vm from "node:vm";
 import { PGlite } from "@electric-sql/pglite";
 import { createJiti } from "jiti";
 import ts from "typescript";
-import { createElement, type ComponentType, type ReactNode } from "react";
+import { createElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type {
@@ -26,6 +26,47 @@ type CommonJsFactory = (
 ) => void;
 
 const nativeRequire = createRequire(import.meta.url);
+function feedEmptyMediaOutputOption(args: readonly string[]) {
+  const option = "--feed-empty-media-output-dir", selected = args.filter(arg => arg.startsWith(option));
+  if (selected.length === 0) return undefined;
+  assert.equal(selected.length, 1, "Feed evidence output selector must be unambiguous");
+  assert.ok(selected[0].startsWith(`${option}=`), "Feed evidence output uses one literal =value selector");
+  return selected[0].slice(option.length + 1);
+}
+function verifyFeedEmptyMediaOutputContract() {
+  const source = readFileSync("scripts/fixtures/feed-card-empty-media.mjs", "utf8"), tree = ts.createSourceFile("feed-card-empty-media.mjs", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "resolveFeedCardEmptyMediaOutput"); assert.ok(owner);
+  const load = (stat: (file: string) => unknown, canonical: (file: string) => string = file => file) => new Function("path", "assert", "lstatSync", "realpathSync", ts.transpileModule(owner.getText(tree).replace(/^export\s+/u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText + ";return resolveFeedCardEmptyMediaOutput;")(path, assert, stat, canonical) as typeof resolveFeedCardEmptyMediaOutput;
+  const root = process.cwd(), fresh = ".tmp-qa/feed-output-contract/fresh", target = path.resolve(root, fresh);
+  const controlled = load(file => { if (file === target) throw Object.assign(new Error("absent"), { code: "ENOENT" }); return { isDirectory: () => true, isSymbolicLink: () => false }; });
+  assert.equal(feedEmptyMediaOutputOption([]), undefined); assert.equal(resolveFeedCardEmptyMediaOutput(root), path.join(root, ".tmp-qa/feed-card-empty-media"));
+  assert.equal(controlled(root, fresh), target);
+  assert.equal(feedEmptyMediaOutputOption([`--feed-empty-media-output-dir=${fresh}`]), fresh);
+  const requested = feedEmptyMediaOutputOption(process.argv.slice(2));
+  if (requested !== undefined) assert.equal(resolveFeedCardEmptyMediaOutput(root, requested), path.resolve(root, requested), "Actual optional output validates the native canonical root without allocating it");
+  let rejected = 0;
+  for (const requested of ["", ".tmp-qa", ".tmp-qa/../escape", ".tmp-qa/./proof", ".tmp-qa//proof", "../.tmp-qa/proof", ".tmp-qa\\proof", path.resolve(root, ".tmp-qa/proof"), ".tmp-qa/proof/"]) { assert.throws(() => controlled(root, requested)); rejected++; }
+  for (const args of [["--feed-empty-media-output-dir"], ["--feed-empty-media-output-dir=one", "--feed-empty-media-output-dir=two"], ["--feed-empty-media-output-dir:wrong"], ["--feed-empty-media-output-dirX"], [`--feed-empty-media-output-dir=${fresh}`, "--feed-empty-media-output-dirX"]]) { assert.throws(() => feedEmptyMediaOutputOption(args)); rejected++; }
+  for (const [linked, directory, existing] of [[true, true, false], [false, false, false], [false, true, true]]) {
+    const resolve = load(file => { if (file === target && !existing) throw Object.assign(new Error("absent"), { code: "ENOENT" }); return { isDirectory: () => file === root || directory, isSymbolicLink: () => file !== root && linked }; });
+    assert.throws(() => resolve(root, fresh)); rejected++;
+  }
+  for (const [linked, directory] of [[true, true], [false, false]]) {
+    const resolve = load(file => { if (file === target) throw Object.assign(new Error("absent"), { code: "ENOENT" }); return { isDirectory: () => file !== root || directory, isSymbolicLink: () => file === root && linked }; });
+    assert.throws(() => resolve(root, fresh)); rejected++;
+  }
+  const redirectedRoot = load(file => { if (file === target) throw Object.assign(new Error("absent"), { code: "ENOENT" }); return { isDirectory: () => true, isSymbolicLink: () => false }; }, file => path.join(file, "different-canonical-root"));
+  assert.throws(() => redirectedRoot(root, fresh)); rejected++;
+  if (process.platform === "win32") {
+    const caseOnlyRoot = load(file => { if (file === target) throw Object.assign(new Error("absent"), { code: "ENOENT" }); return { isDirectory: () => true, isSymbolicLink: () => false }; }, file => file.toLowerCase());
+    assert.equal(caseOnlyRoot(root, fresh), target, "Canonical root comparisons preserve ordinary Windows path casing");
+  }
+  assert.ok(source.includes("await mkdir(output,{recursive:outputDirectory===undefined});"), "Opt-in output creation is exclusive while no-argument behavior remains unchanged");
+  console.log(`PASS Feed fresh output contract: default/literal selection and ${rejected} malformed, existing, symlink/junction and non-directory rejections; no output allocated`);
+}
+if (process.argv.includes("--feed-output-contract")) { verifyFeedEmptyMediaOutputContract(); process.exit(0); }
+const feedEmptyMediaOutput = feedEmptyMediaOutputOption(process.argv.slice(2));
+if (feedEmptyMediaOutput !== undefined) resolveFeedCardEmptyMediaOutput(process.cwd(), feedEmptyMediaOutput);
 
 function loadTranspiledModule(
   filename: string,
@@ -76,11 +117,15 @@ const categoryHierarchy = await jiti.import<Record<string, unknown>>(
 const adminFormRuntime = await jiti.import<Record<string, unknown>>(
   "../src/lib/admin/form-runtime.ts",
 );
+const adminUiStyles = await jiti.import<Record<string, unknown>>(
+  "../src/lib/admin/admin-ui-styles.ts",
+);
 const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
     getContentStatusMetadata: () => ({}),
   },
   "../admin/form-runtime": adminFormRuntime,
+  "../admin/admin-ui-styles": adminUiStyles,
   "./module-edit-registry": moduleEditRegistry,
 });
 const feedTypes = loadTranspiledModule("src/lib/feed-modules/types.ts");
@@ -1482,7 +1527,7 @@ const feedFormatRows = feedEditorJsx.tagged("ModuleEditorVisibilityAlignRow");
 assert.equal(feedFormatRows.length, 11);
 assert.deepEqual(feedFormatRows.map(row => feedEditorJsx.value(row, "showName")), ["show_title", "show_eyebrow", "show_image", "show_article_title", "show_article_excerpt", "show_article_date", "show_category", "show_count", "show_series", "show_description", "show_details"].map(name => '"' + name + '"'));
 for (const row of feedFormatRows) {
-  assert.equal(feedEditorJsx.value(row, "presentation"), '"premium"');
+  assert.equal(feedEditorJsx.value(row, "presentation"), undefined, "Visibility rows use the canonical unified presentation");
   assert.ok(feedEditorJsx.attr(row, "icon"));
 }
 const feedImageRow = feedFormatRows.find(row => feedEditorJsx.value(row, "showName") === '"show_image"')!;
@@ -1502,12 +1547,88 @@ assert.equal(feedEditorJsx.value(feedEditorJsx.tagged("form")[0], "action"), "{u
 assert.equal(feedEditorJsx.value(feedEditorJsx.tagged("ModuleEditorHeader")[0], "entityName"), "{block.name}");
 assert.equal(feedEditorJsx.attr(feedEditorJsx.tagged("ModuleEditorHeader")[0], "moduleSlug"), undefined);
 const feedPages = feedEditorJsx.tagged("ModuleEditorPagesTab")[0];
-assert.equal(feedEditorJsx.value(feedPages, "presentation"), '"premium"');
 assert.equal(feedEditorJsx.value(feedPages, "assignmentContext"), "{assignmentContext}");
 assert.equal(feedEditorJsx.attr(feedPages, "showUsageBanner"), undefined, "Feed must retain multi-page warning and position details");
 const feedSharedPresentation = readFileSync("src/components/admin/page-blocks/ModuleEditorPresentation.tsx", "utf8");
 const feedSharedTabs = readFileSync("src/components/admin/ui/AdminModuleTabs.tsx", "utf8");
 assert.ok(feedSharedPresentation.includes("showUsageBanner = true") && feedSharedPresentation.includes("assignments={assignmentContext.assignments}"));
+function assertFeedNamedOwner(source: string, name: string, module: string, exported = false) {
+  const tree = feedJsxSurface(source).tree;
+  assert.ok(tree.statements.some(node => exported
+    ? ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module && node.exportClause && ts.isNamedExports(node.exportClause) && node.exportClause.elements.some(binding => binding.name.text === name && !binding.propertyName && !binding.isTypeOnly)
+    : ts.isImportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module && node.importClause && !node.importClause.isTypeOnly && node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings) && node.importClause.namedBindings.elements.some(binding => binding.name.text === name && !binding.propertyName && !binding.isTypeOnly)), `Canonical ${name} ${exported ? "reexport" : "import"}`);
+}
+function loadFeedPresentationFunction(source: string, name: string, bindings: Record<string, unknown>) {
+  const tree = feedJsxSurface(source).tree, declarations = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.equal(declarations.length, 1); assert.ok(declarations[0].modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword));
+  const exports: Record<string, unknown> = {};
+  new Function("React", "exports", ...Object.keys(bindings), ts.transpileModule(declarations[0].getText(tree), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText)({ createElement }, exports, ...Object.values(bindings));
+  assert.equal(typeof exports[name], "function"); return exports[name] as (props: Record<string, unknown>) => ReactElement<Record<string, unknown>>;
+}
+function assertFeedVisibilityRowDefault(consumer: string, owner: string) {
+  assertFeedNamedOwner(consumer, "ModuleEditorVisibilityAlignRow", "./ModuleEditorPresentation");
+  for (const name of ["AdminCard", "AdminFormControlHeader"]) assertFeedNamedOwner(owner, name, "../ui");
+  const rows = feedJsxSurface(consumer); assert.equal(rows.tagged("ModuleEditorVisibilityAlignRow").length, 11);
+  for (const row of rows.tagged("ModuleEditorVisibilityAlignRow")) assert.equal(rows.value(row, "presentation"), undefined);
+  const tree = feedJsxSurface(owner).tree, declarations = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ModuleEditorVisibilityAlignRow"); assert.equal(declarations.length, 1);
+  const declaration = declarations[0], bindings = declaration.parameters[0]?.name; assert.ok(bindings && ts.isObjectBindingPattern(bindings));
+  assert.equal(bindings.elements.some(binding => binding.name.getText(tree) === "presentation"), false);
+  const returns = declaration.body!.statements.filter(ts.isReturnStatement); assert.equal(returns.length, 1);
+  let root = returns[0].expression; while (root && ts.isParenthesizedExpression(root)) root = root.expression;
+  assert.ok(root && ts.isJsxElement(root) && root.openingElement.tagName.getText(tree) === "AdminCard");
+  const active = feedJsxSurface(root.getText(tree)), cards = active.tagged("AdminCard"), headers = active.tagged("AdminFormControlHeader"); assert.equal(cards.length, 1); assert.equal(headers.length, 1);
+  assert.equal(active.value(cards[0], "presentation"), '"premium"');
+  for (let ancestor = headers[0].parent; ancestor; ancestor = ancestor.parent) assert.equal(ts.isJsxExpression(ancestor), false, "Canonical control Header remains active in the returned Card");
+  for (const [name, value] of Object.entries({ title: "{label}", description: "{description}", icon: "{icon}", presentation: '"compact-inline"' })) assert.equal(active.value(headers[0], name), value);
+  assert.ok(root.getText(tree).includes("{submittedValues}"), "Returned Card keeps its actual native payload");
+  const surface = feedJsxSurface(declaration.getText(tree));
+  const native = surface.tagged("input"); assert.deepEqual(native.map(node => surface.value(node, "name")), ["{showName}", "{alignmentName}", "{boldName}"]);
+  assert.deepEqual(native.map(node => surface.value(node, "value")), ["{String(enableVisibility ? show : showDefault)}", "{hasAlignmentControl ? alignment : alignmentDefault}", "{String(submittedBold)}"]);
+  for (const node of native) assert.equal(surface.value(node, "type"), '"hidden"');
+  return declaration.getText(tree);
+}
+const feedVisibilityRowOwner = assertFeedVisibilityRowDefault(editor, feedSharedPresentation);
+for (const [consumer, owner] of [
+  [editor.replace("<ModuleEditorVisibilityAlignRow", '<ModuleEditorVisibilityAlignRow presentation="premium"'), feedSharedPresentation],
+  ...[['presentation="premium"', 'presentation="default"'], ['presentation="compact-inline"', 'presentation="default"'], ['name={showName}', 'name="lost_show"'], ['value={String(enableVisibility ? show : showDefault)}', 'value="false"'], ['    <AdminCard', '    false && <AdminCard'], ["{submittedValues}", "{null}"]].map(([from, to]) => [editor, feedSharedPresentation.replace(feedVisibilityRowOwner, feedVisibilityRowOwner.replace(from, to))]),
+]) {
+  assert.ok(consumer !== editor || owner !== feedSharedPresentation);
+  for (const source of [consumer, owner]) assert.equal((feedJsxSurface(source).tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+  assert.throws(() => assertFeedVisibilityRowDefault(consumer, owner));
+}
+function assertFeedPagesDefault(consumer: string, owner: string) {
+  assertFeedNamedOwner(consumer, "ModuleEditorPagesTab", "./ModuleEditorPresentation");
+  const surface = feedJsxSurface(consumer), pages = surface.tagged("ModuleEditorPagesTab"); assert.equal(pages.length, 1);
+  assert.equal(surface.attr(pages[0], "presentation") === undefined, true, "Feed uses the canonical Pages owner default");
+  assert.equal(surface.value(pages[0], "moduleName"), "{block.name}"); assert.equal(surface.value(pages[0], "assignmentContext"), "{assignmentContext}"); assert.equal(surface.attr(pages[0], "showUsageBanner") === undefined, true);
+  const ownerTree = feedJsxSurface(owner).tree;
+  for (const [name, module] of [["ModuleCrossPageUsageBanner", "./ModuleCrossPageUsageBanner"], ["ModulePageAssignmentsField", "./ModulePageAssignmentsField"]]) assert.ok(ownerTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module && node.importClause?.name?.text === name));
+  const Usage = () => null, Assignments = () => null, Pages = loadFeedPresentationFunction(owner, "ModuleEditorPagesTab", { ModuleCrossPageUsageBanner: Usage, ModulePageAssignmentsField: Assignments });
+  const assignmentContext = { pages: [{ id: 3 }], assignments: [{ page_id: 3 }, { page_id: 7 }] }, child = createElement("input", { name: "original-extra", defaultValue: "same", required: true, disabled: true });
+  for (const children of [undefined, child]) for (const showUsageBanner of [undefined, false, true]) {
+    const result = Pages({ moduleName: "Original module", assignmentContext, children, ...(showUsageBanner === undefined ? {} : { showUsageBanner }) });
+    assert.equal(result.type, "div"); assert.equal(result.props["data-module-editor-pages"], ""); assert.equal(result.props.className, "space-y-5");
+    const [usage, body] = result.props.children as (ReactElement<Record<string, unknown>> | null)[];
+    if (showUsageBanner !== false) { assert.ok(usage); assert.equal(usage.type, Usage); assert.equal(usage.props.moduleName, "Original module"); assert.equal(usage.props.assignments, assignmentContext.assignments); } else assert.equal(usage, null);
+    assert.ok(body); const assignment = children ? (body.props.children as ReactElement<Record<string, unknown>>[])[1] : body;
+    if (children) { assert.equal(body.type, "div"); assert.equal((body.props.children as ReactElement[])[0], child); }
+    assert.equal(assignment.type, Assignments); assert.equal(assignment.props.pages, assignmentContext.pages); assert.deepEqual(assignment.props.assignedPageIds, [3, 7]);
+  }
+}
+assertFeedPagesDefault(editor, feedSharedPresentation);
+const feedPagesNegatives = [
+  [editor.replace("<ModuleEditorPagesTab", '<ModuleEditorPagesTab presentation="premium"'), feedSharedPresentation],
+  [editor.replace('moduleName={block.name}', 'moduleName={block.slug}'), feedSharedPresentation],
+  [editor.replace('from "./ModuleEditorPresentation"', 'from "./ParallelPresentation"'), feedSharedPresentation],
+  [editor, feedSharedPresentation.replace("showUsageBanner = true", "showUsageBanner = false")],
+  [editor, feedSharedPresentation.replaceAll("assignments={assignmentContext.assignments}", "assignments={[]}")],
+  [editor, feedSharedPresentation.replaceAll("(row) => row.page_id", "(row) => row.other_page_id")],
+];
+for (const [consumer, owner] of feedPagesNegatives) {
+  assert.ok(consumer !== editor || owner !== feedSharedPresentation);
+  for (const source of [consumer, owner]) assert.equal((feedJsxSurface(source).tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+  assert.throws(() => assertFeedPagesDefault(consumer, owner));
+}
 assert.ok(feedSharedTabs.includes("hidden={tab.id !== activeId}") && feedSharedTabs.includes("{tab.content}"));
 assert.equal(/block\.(?:id|slug)\s*={2,3}|\.module\.css|AdminRichTextEditor|AdminMediaImageField|AdminLinkField/.test(editor), false);
 assert.equal(editor.includes("<ModuleEditorSectionHeading"), false, "Metadata owns the source, presentation and item-formatting headers once");
@@ -1515,16 +1636,45 @@ assert.equal(presentationEditor.includes("ModuleEditorSectionHeading"), false, "
 assert.equal(filters.includes('id="feed-content-scope-title"'), false, "The source tab replaces the duplicated local scope heading");
 
 const filterJsx = feedJsxSurface(filters);
-assert.equal(filterJsx.tagged("AdminCard").length, 2);
-assert.equal(filterJsx.tagged("AdminFormControlHeader").length, 2);
-assert.equal(filterJsx.tagged("AdminFormGrid").length, 2);
-for (const card of filterJsx.tagged("AdminCard")) assert.equal(filterJsx.value(card, "presentation"), '"premium"');
-for (const grid of filterJsx.tagged("AdminFormGrid")) assert.equal(filterJsx.value(grid, "columns"), "{4}");
-assert.deepEqual(filterJsx.tagged("AdminFormControlHeader").map(header => filterJsx.value(header, "title")), ['{<span role="heading" aria-level={3}>التصنيفات</span>}', '{<span role="heading" aria-level={3}>السلاسل</span>}']);
-for (const header of filterJsx.tagged("AdminFormControlHeader")) {
-  assert.equal(filterJsx.value(header, "presentation"), '"leading-icon"');
-  assert.ok(filterJsx.attr(header, "icon"));
+function assertFeedFilterSections(source: string, owner: string) {
+  assertFeedNamedOwner(source, "ModuleEditorSection", "./ModuleEditorPresentation"); assertFeedNamedOwner(source, "AdminModuleSectionHeader", "../ui/AdminModuleTabs");
+  const surface = feedJsxSurface(source), sections = surface.tagged("ModuleEditorSection"), headers = surface.tagged("AdminModuleSectionHeader");
+  assert.equal(sections.length, 2); assert.equal(headers.length, 2); assert.equal(surface.tagged("AdminCard").length, 0); assert.equal(surface.tagged("AdminFormControlHeader").length, 0);
+  assert.deepEqual(headers.map(node => surface.value(node, "id")), ['"feed-filter-categories"', '"feed-filter-series"']);
+  assert.deepEqual(headers.map(node => surface.value(node, "sectionHeading")), ['"التصنيفات"', '"السلاسل"']);
+  for (const [index, section] of sections.entries()) {
+    const slot = surface.attr(section, "header")?.initializer; assert.ok(slot && ts.isJsxExpression(slot) && slot.expression === headers[index]);
+    assert.equal(surface.value(headers[index], "icon"), '"section"'); assert.equal(surface.value(headers[index], "standalone"), "{false}");
+    const grids = feedJsxSurface(section.parent.getText(surface.tree)).tagged("AdminFormGrid"); assert.equal(grids.length, 1); assert.equal(grids[0].attributes.properties.length, 1); assert.equal(grids[0].attributes.properties[0].getText(), "columns={4}");
+  }
+  const categories = surface.tagged("AdminFormSwitch"), series = surface.tagged("AdminCheckbox"); assert.equal(categories.length, 1); assert.equal(series.length, 2);
+  for (const [name, value] of Object.entries({ name: '"category_slugs"', label: "{category.name}", value: "{category.slug}", checked: "{categorySlugs.includes(category.slug)}", onChange: "{(event) => toggleCategory(category.slug, event.currentTarget.checked)}" })) assert.equal(surface.value(categories[0], name), value);
+  assert.equal(surface.value(series[0], "checked"), "{seriesSlugs.length === 0}"); assert.equal(surface.attr(series[0], "name") === undefined, true);
+  assert.equal(surface.value(series[0], "onChange"), "{() => setFilters((current) => ({ ...current, seriesSlugs: [] }))}");
+  for (const [name, value] of Object.entries({ name: '"series_slugs"', label: "{series.name}", value: "{series.slug}", checked: "{selected}", onChange: "{(event) => toggleSeries(event.currentTarget.value)}" })) assert.equal(surface.value(series[1], name), value);
+  assertFeedNamedOwner(owner, "AdminFormSection", "../ui");
+  const Section = () => null, Delegate = loadFeedPresentationFunction(owner, "ModuleEditorSection", { AdminFormSection: Section }), child = createElement("input", { name: "original-filter", defaultValue: "same" }), header = createElement("span", null, "Original filter heading");
+  const result = Delegate({ header, children: child, id: "original-filter-section" }); assert.equal(result.type, Section); assert.equal(result.props.header, header); assert.equal(result.props.children, child); assert.equal(result.props.id, "original-filter-section"); assert.equal(result.props.variant, "module");
 }
+assertFeedFilterSections(filters, feedSharedPresentation);
+for (const [source, owner] of [
+  [filters.replace('from "./ModuleEditorPresentation"', 'from "./ParallelPresentation"'), feedSharedPresentation],
+  [filters.replace('from "../ui/AdminModuleTabs"', 'from "../ui/ParallelTabs"'), feedSharedPresentation],
+  [filters.replace('header={<AdminModuleSectionHeader', 'title={<AdminModuleSectionHeader'), feedSharedPresentation],
+  [filters.replace('sectionHeading="التصنيفات"', 'sectionHeading="السلاسل"'), feedSharedPresentation],
+  [filters.replace('standalone={false}', 'standalone'), feedSharedPresentation],
+  [filters.replace('columns={4}', 'columns={2}'), feedSharedPresentation],
+  [filters.replace('name="category_slugs"', 'name="series_slugs"'), feedSharedPresentation],
+  [filters.replace('value={series.slug}', 'value={series.name}'), feedSharedPresentation],
+  [filters.replace('toggleCategory(category.slug, event.currentTarget.checked)', 'toggleCategory(category.slug, true)'), feedSharedPresentation],
+  [filters, feedSharedPresentation.replace('<AdminFormSection {...props} variant="module">', '<AdminFormSection variant="module">')],
+]) {
+  assert.ok(source !== filters || owner !== feedSharedPresentation);
+  for (const value of [source, owner]) assert.equal((feedJsxSurface(value).tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+  assert.throws(() => assertFeedFilterSections(source, owner));
+}
+assert.equal(filterJsx.tagged("AdminFormGrid").length, 2);
+for (const grid of filterJsx.tagged("AdminFormGrid")) assert.equal(filterJsx.value(grid, "columns"), "{4}");
 assert.equal(filterJsx.tagged("AdminFormSwitch").length, 1);
 assert.equal(filterJsx.tagged("AdminCheckbox").length, 2);
 assert.ok(filters.includes('adminChoiceButtonClassName(seriesSlugs.length === 0, "gap-2 focus-within:ring-2') && filters.includes('adminChoiceButtonClassName(selected, "gap-2 focus-within:ring-2'));
@@ -1598,10 +1748,39 @@ for (const [templateName, controlTag] of Object.entries(settingTemplateControls)
   }
 }
 const headerPresentationOwner = readFileSync("src/components/admin/ui/AdminForm.tsx", "utf8");
-const headerPresentationTree = feedJsxSurface(headerPresentationOwner).tree;
-const sharedHeaderDeclaration = headerPresentationTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormControlHeader");
-assert.ok(sharedHeaderDeclaration);
-assert.equal(feedJsxSurface(sharedHeaderDeclaration.getText(headerPresentationTree)).tagged("label").length, 0, "Shared header stays label-safe when used by native or shared controls");
+const headerPresentationBarrel = readFileSync("src/components/admin/ui/index.ts", "utf8");
+function assertFeedControlHeaderOwner(form: string, tabs: string, barrel: string, consumer: string) {
+  assertFeedNamedOwner(form, "AdminFormControlHeader", "./AdminModuleTabs", true); assertFeedNamedOwner(barrel, "AdminFormControlHeader", "./AdminForm", true); assertFeedNamedOwner(consumer, "AdminFormControlHeader", "../ui");
+  const formTree = feedJsxSurface(form).tree, tabsTree = feedJsxSurface(tabs).tree;
+  assert.equal(formTree.statements.some(node => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormControlHeader"), false, "Form retains a reexport of the canonical Header");
+  assert.equal(tabsTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "./AdminForm"), false, "Tabs has no reverse Form import");
+  const declaration = tabsTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "AdminFormControlHeader"); assert.ok(declaration);
+  assert.equal(feedJsxSurface(declaration.getText(tabsTree)).tagged("label").length, 0, "Shared header stays label-safe when used by native or shared controls");
+  const Header = loadFeedPresentationFunction(tabs, "AdminFormControlHeader", {});
+  for (const presentation of [undefined, "default", "leading-icon", "compact-inline"]) {
+    const result = Header({ title: "Original label", description: "Original description", icon: createElement("svg", { "data-original-icon": "" }), ...(presentation === undefined ? {} : { presentation }) });
+    const markup = renderToStaticMarkup(result); assert.ok(markup.includes("Original label") && markup.includes("Original description") && markup.includes("data-original-icon")); assert.equal(markup.includes("<label"), false);
+    const wrapped = renderToStaticMarkup(createElement("label", null, result, createElement("input", { name: "original-field", defaultValue: "same", required: true, disabled: true })));
+    assert.equal((wrapped.match(/<label/gu) ?? []).length, 1); assert.equal((wrapped.match(/name="original-field"/gu) ?? []).length, 1); assert.ok(wrapped.includes('value="same"') && wrapped.includes('required=""') && wrapped.includes('disabled=""'));
+    if (presentation === undefined) assert.equal(markup, renderToStaticMarkup(Header({ title: "Original label", description: "Original description", icon: createElement("svg", { "data-original-icon": "" }), presentation: "default" })));
+  }
+}
+assertFeedControlHeaderOwner(headerPresentationOwner, feedSharedTabs, headerPresentationBarrel, presentationEditor);
+const sharedHeaderSurface = feedJsxSurface(feedSharedTabs), sharedHeaderRoot = sharedHeaderSurface.tagged("span").find(node => sharedHeaderSurface.attr(node, "data-admin-form-control-header")); assert.ok(sharedHeaderRoot && ts.isJsxElement(sharedHeaderRoot.parent));
+let nestedLabelHeader = feedSharedTabs;
+for (const tag of [sharedHeaderRoot.parent.closingElement.tagName, sharedHeaderRoot.tagName]) nestedLabelHeader = nestedLabelHeader.slice(0, tag.getStart(sharedHeaderSurface.tree)) + "label" + nestedLabelHeader.slice(tag.end);
+for (const [form, tabs, barrel, consumer] of [
+  [headerPresentationOwner.replace('export { AdminFormControlHeader } from "./AdminModuleTabs"', 'export { AdminFormControlHeader } from "./ParallelTabs"'), feedSharedTabs, headerPresentationBarrel, presentationEditor],
+  [headerPresentationOwner, feedSharedTabs.replace("export function AdminFormControlHeader", "export function ParallelControlHeader"), headerPresentationBarrel, presentationEditor],
+  [headerPresentationOwner, feedSharedTabs.replace("{title}</span>", "{null}</span>"), headerPresentationBarrel, presentationEditor],
+  [headerPresentationOwner, nestedLabelHeader, headerPresentationBarrel, presentationEditor],
+  [headerPresentationOwner, feedSharedTabs, headerPresentationBarrel.replace('} from "./AdminForm"', '} from "./ParallelForm"'), presentationEditor],
+  [headerPresentationOwner, feedSharedTabs, headerPresentationBarrel, presentationEditor.replace('from "../ui"', 'from "../ParallelUI"')],
+]) {
+  assert.ok(form !== headerPresentationOwner || tabs !== feedSharedTabs || barrel !== headerPresentationBarrel || consumer !== presentationEditor);
+  for (const source of [form, tabs, barrel, consumer]) assert.equal((feedJsxSurface(source).tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+  assert.throws(() => assertFeedControlHeaderOwner(form, tabs, barrel, consumer));
+}
 assert.equal(variantJsx.tagged("AdminFormGrid").length, 1, "All currently applicable controls share one responsive layout owner");
 const presentationMasterGrid = variantJsx.tagged("AdminFormGrid")[0];
 assert.equal(variantJsx.value(presentationMasterGrid, "columns"), "{3}");
@@ -2004,4 +2183,5 @@ console.log(
   "Feed Module contract integrity proof passed (schema, editor serialization, save/readback, failure paths, and public consumers).",
 );
 
-await verifyFeedCardEmptyMedia();
+verifyFeedEmptyMediaOutputContract();
+await verifyFeedCardEmptyMedia(feedEmptyMediaOutput === undefined ? undefined : { outputDirectory: feedEmptyMediaOutput });

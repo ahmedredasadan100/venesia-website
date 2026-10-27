@@ -8,6 +8,7 @@ import { adminLinkHiddenInputNames } from "../../../lib/admin/links/form-fields"
 import { emptyAdminLink, serializeAdminLink } from "../../../lib/admin/links/serialize";
 import type { AdminLinkDisplay, AdminLinkValue } from "../../../lib/admin/links/types";
 import { adminFormFieldClassName, adminFormLabelClassName } from "../VenesiaModal";
+import { adminFormHintClassName } from "../../../lib/admin/admin-ui-styles";
 import AdminActionButton from "./AdminActionButton";
 import AdminLinkPicker from "./AdminLinkPicker";
 import { AdminDataGridActionIcon } from "./AdminDataGrid";
@@ -169,8 +170,8 @@ export default function AdminLinkField({
   return (
     <div data-admin-link-field={presentation} className={`min-w-0 w-full space-y-3 ${presentation === "card" ? "rounded-2xl border border-white/10 bg-[#05070B] p-3" : ""} ${className}`.trim()}>
       <div className="min-w-0 space-y-2">
-        <p className="text-xs font-semibold text-white/55">{label}</p>
-        {helperText ? <p className="text-xs text-white/40">{helperText}</p> : null}
+        <p className={adminFormLabelClassName({ textInset: true })}><span data-admin-form-label-text>{label}</span></p>
+        {helperText ? <p className={adminFormHintClassName({ textInset: true })}>{helperText}</p> : null}
         <div data-admin-link-controls="" className="flex min-w-0 items-center gap-2">
           <div aria-live="polite" data-admin-link-destination="" className="min-w-0 flex-1 space-y-1 rounded-xl border border-white/8 bg-[#080B10]/80 px-3 py-2">
             {value.link_kind !== "none" ? <>
@@ -186,8 +187,8 @@ export default function AdminLinkField({
         </div>
       </div>
       {canEditAnchor ? (
-        <label className={adminFormLabelClassName()}>
-          <span className="block">Anchor (اختياري)</span>
+        <label className={adminFormLabelClassName({ textInset: true })}>
+          <span data-admin-form-label-text>Anchor (اختياري)</span>
           <input
             value={value.anchor ?? ""}
             onChange={(event) => updateAnchor(event.target.value)}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import type {
   AdminNavigationItem,
@@ -13,17 +13,26 @@ import { isAdminNavigationItemActive } from "../../lib/admin/shell/navigation";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
 import AdminPageContextHeader from "./ui/AdminPageContextHeader";
 import AdminPageExperience from "./ui/AdminPageExperience";
+import { cleanupTopicDraftStorage } from "../../lib/admin/content/topic-revision";
+import { ADMIN_CINEMATIC_GOLD_V1, ADMIN_SIDEBAR } from "../../lib/admin/admin-ui-styles";
+import { useAdminFloatingMenuPosition } from "./ui/useAdminFloatingMenuPosition";
 
 type AdminShellProps = {
   children: ReactNode;
   company: ResolvedAdminCompanyConfig;
   navigation: AdminNavigationItem[];
+  /** System header presentation is independent of the shared Sidebar default. */
+  headerPresentation?: "default" | "cinematic";
 };
 
 type AdminNavLinkProps = {
   href: string;
   className: string;
   title?: string;
+  ariaLabel?: string;
+  active?: boolean;
+  itemId?: string;
+  child?: boolean;
   children: ReactNode;
   onNavigateStart: (href: string) => void;
 };
@@ -50,6 +59,10 @@ function AdminNavLink({
   href,
   className,
   title,
+  ariaLabel,
+  active = false,
+  itemId,
+  child = false,
   children,
   onNavigateStart,
 }: AdminNavLinkProps) {
@@ -61,6 +74,11 @@ function AdminNavLink({
       href={href}
       prefetch={null}
       title={title}
+      aria-label={ariaLabel}
+      aria-current={active ? "page" : undefined}
+      data-admin-nav-item={child ? undefined : itemId}
+      data-admin-nav-child={child ? itemId : undefined}
+      data-admin-nav-active={active ? "true" : "false"}
       className={className}
       onMouseEnter={prefetch}
       onFocus={prefetch}
@@ -75,9 +93,11 @@ function AdminNavLink({
 function CompanyMark({
   company,
   compact,
+  cinematic = false,
 }: {
   company: ResolvedAdminCompanyConfig;
   compact: boolean;
+  cinematic?: boolean;
 }) {
   const source = compact
     ? company.compactLogoUrl || company.logoUrl
@@ -86,8 +106,8 @@ function CompanyMark({
 
   return (
     <span
-      className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-2xl border text-xs font-bold"
-      style={{
+      className={cinematic ? ADMIN_CINEMATIC_GOLD_V1.system.logo : "grid size-10 shrink-0 place-items-center overflow-hidden rounded-2xl border text-xs font-bold"}
+      style={cinematic ? undefined : {
         borderColor: "color-mix(in srgb, var(--admin-accent) 30%, transparent)",
         color: "var(--admin-accent-strong)",
         background: "color-mix(in srgb, var(--admin-accent) 10%, transparent)",
@@ -110,8 +130,11 @@ export default function AdminShell({
   children,
   company,
   navigation,
+  headerPresentation = "default",
 }: AdminShellProps) {
   const pathname = usePathname();
+  const cinematicHeader = headerPresentation === "cinematic";
+  const headerStyles = ADMIN_CINEMATIC_GOLD_V1.system;
   const collapseKey = `admin-shell:${company.key}:collapsed`;
   const collapsed = usePersistedCollapsed(collapseKey);
   const [mobileState, setMobileState] = useState({ pathname, open: false });
@@ -123,7 +146,32 @@ export default function AdminShell({
     pathname: string;
     href: string;
   } | null>(null);
+  const [compactGroupState, setCompactGroupState] = useState<{
+    pathname: string;
+    id: string | null;
+  } | null>(null);
+  const mobileDialogRef = useRef<HTMLDivElement | null>(null);
+  const mobileTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const compactTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const compactPanelRef = useRef<HTMLDivElement | null>(null);
   const mobileOpen = mobileState.pathname === pathname && mobileState.open;
+  const compactGroupId = collapsed && compactGroupState?.pathname === pathname
+    ? compactGroupState.id
+    : null;
+  const compactMenuPosition = useAdminFloatingMenuPosition(
+    compactGroupId !== null,
+    compactTriggerRef,
+    {
+      minWidth: 240,
+      preferredWidth: 240,
+      align: "right",
+      offset: 8,
+      collisionPadding: 12,
+      estimatedHeight: 420,
+      floatingRef: compactPanelRef,
+      zIndex: 60,
+    },
+  );
   const pendingHref =
     pendingNavigation?.pathname === pathname ? pendingNavigation.href : null;
 
@@ -137,12 +185,13 @@ export default function AdminShell({
     [navigation, pathname],
   );
   const activeRouteItem = useMemo(() => {
+    // A child sharing its parent's landing URL owns the current-page marker.
     const candidates = navigation.flatMap((item) => [
-      item,
       ...(item.children ?? []),
+      item,
     ]);
     return candidates
-      .filter((item) => isAdminNavigationItemActive(pathname, item))
+      .filter((item) => isAdminNavigationItemActive(pathname, { ...item, children: undefined }))
       .sort((left, right) => right.href.length - left.href.length)[0];
   }, [navigation, pathname]);
   const activeGroup = useMemo(
@@ -159,110 +208,175 @@ export default function AdminShell({
       : (activeGroup?.id ?? null);
 
   function toggleCollapsed() {
+    setCompactGroupState(null);
     window.localStorage.setItem(collapseKey, String(!collapsed));
     window.dispatchEvent(new Event(ADMIN_SHELL_COLLAPSE_EVENT));
   }
 
   const onNavigateStart = useCallback((href: string) => {
     setPendingNavigation({ pathname, href });
+    setMobileState({ pathname, open: false });
+    setCompactGroupState(null);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!compactGroupId) return;
+    const trigger = compactTriggerRef.current;
+    const group = trigger?.closest("[data-admin-nav-group]");
+    function closeOnOutside(event: Event) {
+      if (event.target instanceof Node && !group?.contains(event.target)) {
+        setCompactGroupState(null);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setCompactGroupState(null);
+      trigger?.focus({ preventScroll: true });
+    }
+    const frame = window.requestAnimationFrame(() => {
+      compactPanelRef.current?.querySelector<HTMLElement>('[aria-current="page"], a[href]')?.focus({ preventScroll: true });
+    });
+    document.addEventListener("pointerdown", closeOnOutside);
+    document.addEventListener("focusin", closeOnOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", closeOnOutside);
+      document.removeEventListener("focusin", closeOnOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [compactGroupId]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const dialog = mobileDialogRef.current;
+    const returnTarget = mobileTriggerRef.current;
+    const root = document.documentElement;
+    const previousRootOverflow = root.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+    function closeAtDesktop(event: MediaQueryListEvent) {
+      if (event.matches) setMobileState({ pathname, open: false });
+    }
+    root.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      dialog?.querySelector<HTMLElement>("[data-admin-drawer-close]")?.focus({ preventScroll: true });
+    });
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileState({ pathname, open: false });
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex="0"]'))
+        .filter((element) => element.tabIndex >= 0 && !element.closest("[inert], [hidden]") && element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        dialog.focus({ preventScroll: true });
+      } else if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    desktopQuery.addEventListener("change", closeAtDesktop);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      desktopQuery.removeEventListener("change", closeAtDesktop);
+      root.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      window.requestAnimationFrame(() => {
+        if (returnTarget?.isConnected && returnTarget.getClientRects().length > 0) {
+          returnTarget.focus({ preventScroll: true });
+        } else {
+          document.querySelector<HTMLElement>('[data-admin-sidebar-mode]:not([data-admin-sidebar-mode="drawer"]) [data-admin-nav-active="true"], [data-admin-sidebar-mode]:not([data-admin-sidebar-mode="drawer"]) button')?.focus({ preventScroll: true });
+        }
+      });
+    };
+  }, [mobileOpen, pathname]);
 
   function renderSidebar(forceExpanded = false) {
     const compact = forceExpanded ? false : collapsed;
+    const styles = ADMIN_SIDEBAR;
+    const scope = forceExpanded ? "mobile" : "desktop";
     return (
       <aside
         className={[
-          "admin-sidebar-shell relative flex flex-col bg-transparent transition-[width] duration-300 ease-out",
+          styles.shell,
           forceExpanded ? "h-full" : "min-h-screen",
           compact ? "w-[92px]" : "w-[304px]",
         ].join(" ")}
         data-admin-navigation
+        data-admin-sidebar-presentation="default-v2"
+        data-admin-sidebar-mode={forceExpanded ? "drawer" : compact ? "collapsed" : "expanded"}
       >
-        <div className="relative p-4">
-          <div
-            className={[
-              "flex min-h-12 items-center gap-3",
-              compact ? "justify-center" : "justify-start",
-            ].join(" ")}
-          >
-            <CompanyMark company={company} compact={compact} />
-            {!compact ? (
-              <div className="min-w-0">
-                <p
-                  className="truncate font-en text-[10px] tracking-[0.25em]"
-                  style={{ color: "var(--admin-accent)" }}
-                >
-                  {company.cmsLabel}
-                </p>
-                <p className="mt-1 truncate text-sm font-semibold text-white/70">
-                  {company.name}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
+        <div className={[styles.identity, compact ? "flex-col justify-center" : "pl-12"].join(" ")}>
+          <CompanyMark company={company} compact={compact} />
+          {!compact ? (
+            <div className="min-w-0 flex-1">
+              <p className={styles.brand}>{company.cmsLabel}</p>
+              <p className={styles.company}>{company.name}</p>
+            </div>
+          ) : null}
           {!forceExpanded ? (
             <button
               type="button"
               onClick={toggleCollapsed}
-              className="absolute left-2 top-1/2 z-20 grid size-9 -translate-y-1/2 place-items-center rounded-full border bg-[#05070B]/80 text-2xl font-bold leading-none shadow-[0_10px_28px_rgba(0,0,0,0.35)] transition hover:scale-105"
-              style={{
-                borderColor:
-                  "color-mix(in srgb, var(--admin-accent) 30%, transparent)",
-                color: "var(--admin-accent)",
-              }}
+              className={styles.toggle}
+              style={compact ? { position: "static", transform: "none" } : undefined}
               aria-label={compact ? "فتح القائمة" : "طي القائمة"}
               aria-expanded={!compact}
             >
               {compact ? "‹" : "›"}
             </button>
-          ) : null}
+          ) : (
+            <button type="button" data-admin-drawer-close onClick={() => setMobileState({ pathname, open: false })} className={styles.toggle} aria-label="إغلاق قائمة الإدارة">×</button>
+          )}
         </div>
 
-        <nav className={`flex-1 px-3 py-3 ${forceExpanded ? "overflow-y-auto " : ""}${VENESIA_SCROLLBAR_VISUAL_CLASSES}`} aria-label="الإدارة">
-          <div className="space-y-1">
+        <nav className={`${styles.nav} ${forceExpanded ? "min-h-0 overflow-y-auto " : ""}${VENESIA_SCROLLBAR_VISUAL_CLASSES}`} aria-label="الإدارة">
+          <div className={styles.items}>
             {navigation.map((item) => {
               const active = activeGroupIds.has(item.id);
               const hasChildren = Boolean(item.children?.length);
-              const open = openGroupId === item.id || active;
-              const itemBase =
-                "group relative flex items-center gap-3 rounded-[20px] border px-3 py-2.5 text-sm transition duration-200";
-              const itemState = active
-                ? "border-white/15 bg-white/[0.075] text-white shadow-[0_12px_34px_rgba(0,0,0,0.22)]"
-                : "border-transparent text-white/56 hover:border-white/10 hover:bg-white/[0.045] hover:text-white";
+              const open = compact ? compactGroupId === item.id : openGroupId === item.id;
+              const panelId = `admin-nav-${scope}-${item.id}`;
+              const itemState = active ? styles.itemActive : styles.itemInactive;
+              const iconState = active ? styles.iconActive : styles.iconInactive;
 
-              if (!hasChildren || compact) {
+              if (!hasChildren) {
                 return (
                   <AdminNavLink
                     key={item.id}
                     href={item.href}
                     title={compact ? item.label : undefined}
+                    ariaLabel={compact ? item.label : undefined}
+                    active={activeRouteItem?.id === item.id}
+                    itemId={item.id}
                     onNavigateStart={onNavigateStart}
                     className={[
-                      itemBase,
+                      styles.item,
                       compact ? "justify-center" : "justify-start",
                       itemState,
                     ].join(" ")}
                   >
-                    {active && !compact ? (
-                      <span
-                        className="absolute right-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-l-full"
-                        style={{ backgroundColor: "var(--admin-accent)" }}
-                      />
-                    ) : null}
-                    <span
-                      className="grid size-9 shrink-0 place-items-center rounded-2xl border bg-white/[0.035] font-en text-[28px] leading-none"
-                      style={{
-                        borderColor:
-                          "color-mix(in srgb, var(--admin-accent) 18%, transparent)",
-                        color: "var(--admin-accent)",
-                      }}
-                    >
+                    {active ? <span className={styles.indicator} aria-hidden="true" /> : null}
+                    <span className={[styles.icon, iconState].join(" ")} aria-hidden="true">
                       {item.icon}
                     </span>
-                    {!compact ? <span className="truncate">{item.label}</span> : null}
+                    {!compact ? <span className={styles.label}>{item.label}</span> : <span className={styles.tooltip} aria-hidden="true">{item.label}</span>}
                     {!compact && item.badge ? (
-                      <span className="mr-auto rounded-full bg-white/10 px-2 py-0.5 text-[10px]">
+                      <span className={styles.badge}>
                         {item.badge}
                       </span>
                     ) : null}
@@ -271,87 +385,85 @@ export default function AdminShell({
               }
 
               return (
-                <div key={item.id}>
+                <div key={item.id} className="relative" data-admin-nav-group={item.id} data-admin-nav-open={open ? "true" : "false"}>
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={(event) => {
+                      if (compact) {
+                        compactTriggerRef.current = event.currentTarget;
+                        setCompactGroupState({ pathname, id: open ? null : item.id });
+                        return;
+                      }
                       setGroupOverride({
                         pathname,
                         id: open ? null : item.id,
-                      })
-                    }
-                    className={[itemBase, "w-full justify-between", itemState].join(" ")}
+                      });
+                    }}
+                    className={[styles.item, "w-full", compact ? "justify-center" : "justify-between", itemState].join(" ")}
+                    data-admin-nav-item={item.id}
+                    data-admin-nav-active={active ? "true" : "false"}
+                    aria-label={compact ? item.label : undefined}
+                    title={compact ? item.label : undefined}
                     aria-expanded={open}
+                    aria-controls={panelId}
                   >
-                    {active ? (
-                      <span
-                        className="absolute right-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-l-full"
-                        style={{ backgroundColor: "var(--admin-accent)" }}
-                      />
-                    ) : null}
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="grid size-9 shrink-0 place-items-center rounded-2xl border bg-white/[0.035] font-en text-[28px] leading-none"
-                        style={{
-                          borderColor:
-                            "color-mix(in srgb, var(--admin-accent) 18%, transparent)",
-                          color: "var(--admin-accent)",
-                        }}
-                      >
-                        {item.icon}
-                      </span>
-                      <span className="truncate">{item.label}</span>
+                    {active ? <span className={styles.indicator} aria-hidden="true" /> : null}
+                    <span className={[styles.icon, iconState].join(" ")} aria-hidden="true">
+                      {item.icon}
                     </span>
-                    <span className={["text-base leading-none transition", open ? "rotate-180" : "text-white/30"].join(" ")}>⌄</span>
+                    {!compact ? <><span className={styles.label}>{item.label}</span><span className={[styles.chevron, open ? "rotate-180" : ""].join(" ")} aria-hidden="true">⌄</span></> : <span className={styles.tooltip} aria-hidden="true">{item.label}</span>}
                   </button>
 
-                  <div
-                    className={[
-                      "grid overflow-hidden transition-all duration-300",
-                      open ? "mt-2 grid-rows-[1fr]" : "grid-rows-[0fr]",
-                    ].join(" ")}
+                  {(!compact || open) ? <div
+                    id={panelId}
+                    ref={compact ? compactPanelRef : undefined}
+                    data-admin-nav-submenu={item.id}
+                    hidden={!open}
+                    className={[compact ? styles.compactSubmenu : styles.submenu, compact ? `overflow-y-auto ${!compactMenuPosition ? "invisible" : ""}` : ""].join(" ")}
+                    style={compact ? compactMenuPosition?.style : undefined}
                   >
-                    <div className="min-h-0 space-y-1 pr-11">
+                    {compact ? <p className="px-3 pb-2 pt-1 text-xs font-semibold text-slate-300">{item.label}</p> : null}
                       {item.children?.map((child) => {
-                        const childActive = isAdminNavigationItemActive(
-                          pathname,
-                          child,
-                        );
+                        const childActive = activeRouteItem?.id === child.id;
                         return (
                           <AdminNavLink
                             key={child.id}
                             href={child.href}
+                            active={childActive}
+                            itemId={child.id}
+                            child
                             onNavigateStart={onNavigateStart}
                             className={[
-                              "block rounded-2xl border px-3 py-2.5 text-sm transition duration-200",
-                              childActive
-                                ? "border-white/15 bg-white/[0.08] text-white"
-                                : "border-transparent text-white/40 hover:border-white/10 hover:bg-white/[0.035] hover:text-white/75",
+                              styles.child,
+                              childActive ? styles.childActive : styles.childInactive,
                             ].join(" ")}
                           >
-                            {child.label}
+                            {childActive ? <span className={styles.indicator} aria-hidden="true" /> : null}
+                            <span className={[styles.publicIcon, "size-7 border-slate-600/20 text-base"].join(" ")} aria-hidden="true">{child.icon}</span>
+                            <span className="min-w-0 flex-1 truncate">{child.label}</span>
                           </AdminNavLink>
                         );
                       })}
-                    </div>
-                  </div>
+                  </div> : null}
                 </div>
               );
             })}
           </div>
         </nav>
 
-        <div className="p-3">
+        <div className={styles.footer}>
           <Link
             href={company.publicWebsiteUrl}
             className={[
-              "flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.035] px-3 py-3 text-sm text-white/56 transition hover:bg-white/[0.06] hover:text-white",
+              styles.publicLink,
+              "relative",
               compact ? "justify-center" : "justify-start",
             ].join(" ")}
             title="الانتقال للموقع"
+            aria-label={compact ? "الانتقال للموقع" : undefined}
           >
-            <span className="grid size-8 place-items-center rounded-2xl border border-white/10 text-xl leading-none">↗</span>
-            {!compact ? <span>الانتقال للموقع</span> : null}
+            <span className={styles.publicIcon} aria-hidden="true">↗</span>
+            {!compact ? <span>الانتقال للموقع</span> : <span className={styles.tooltip} aria-hidden="true">الانتقال للموقع</span>}
           </Link>
         </div>
       </aside>
@@ -380,27 +492,28 @@ export default function AdminShell({
       </div>
 
       <div className="relative flex min-h-screen flex-row items-start bg-transparent">
-        {/* Desktop navigation grows with the document; the mobile drawer stays bounded. */}
-        <div className="hidden shrink-0 bg-transparent lg:block">
+        {/* Desktop navigation stretches with the document; the mobile drawer stays bounded. */}
+        <div className="hidden shrink-0 self-stretch bg-transparent lg:flex">
           {renderSidebar()}
         </div>
 
         {mobileOpen ? (
-          <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="قائمة الإدارة">
-            <button className="absolute inset-0 bg-black/76" onClick={() => setMobileState({ pathname, open: false })} aria-label="إغلاق القائمة" />
+          <div ref={mobileDialogRef} className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="قائمة الإدارة" tabIndex={-1}>
+            <button type="button" tabIndex={-1} className="absolute inset-0 bg-black/76" onClick={() => setMobileState({ pathname, open: false })} aria-label="إغلاق القائمة" />
             <div className="absolute right-0 top-0 h-full bg-[var(--admin-surface)]">{renderSidebar(true)}</div>
           </div>
         ) : null}
 
-        <main className="flex min-h-screen min-w-0 flex-1 flex-col gap-6 px-4 py-4 sm:px-6 lg:px-7">
-          <header className="admin-premium-card rounded-[28px] px-4 py-3" data-admin-shell-header>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setMobileState({ pathname, open: true })} className="grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.045] text-2xl leading-none text-white/70 lg:hidden" aria-label="فتح القائمة">☰</button>
-                <CompanyMark company={company} compact={false} />
+        <main className="flex min-h-screen min-w-0 flex-1 flex-col gap-6 px-4 py-4 sm:px-6 lg:px-7" inert={mobileOpen}>
+          <header className={cinematicHeader ? headerStyles.root : "admin-premium-card rounded-[28px] px-4 py-3"} data-admin-shell-header data-admin-shell-header-presentation={headerPresentation}>
+            {cinematicHeader ? <><div className={headerStyles.light} aria-hidden="true" /><svg className={headerStyles.ribbon} viewBox="0 0 1200 80" preserveAspectRatio="none" fill="none" aria-hidden="true" focusable="false"><path d="M-40 103C190 120 260 44 475 59S820 123 1030-20" stroke="currentColor" strokeWidth=".85" /><path d="M200 110C420-5 810 115 1040-12" stroke="currentColor" strokeWidth=".6" opacity=".4" /><path d="M-40 104C190 122 260 45 475 60S820 124 1030-20" stroke="currentColor" strokeWidth="4" opacity=".05" /></svg></> : null}
+            <div className={cinematicHeader ? headerStyles.layout : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"}>
+              <div className={cinematicHeader ? headerStyles.identity : "flex items-center gap-3"}>
+                <button ref={mobileTriggerRef} type="button" onClick={() => setMobileState({ pathname, open: true })} className={cinematicHeader ? headerStyles.menu : "grid size-11 place-items-center rounded-2xl border border-white/10 bg-white/[0.045] text-2xl leading-none text-white/70 lg:hidden"} aria-label="فتح القائمة" aria-expanded={mobileOpen}>☰</button>
+                <CompanyMark company={company} compact={false} cinematic={cinematicHeader} />
                 <div>
-                  <p className="font-en text-[10px] tracking-[0.3em]" style={{ color: "var(--admin-accent)" }}>{company.cmsLabel}</p>
-                  <p className="mt-1 text-2xl font-semibold text-white">{company.adminLabel}</p>
+                  <p className={cinematicHeader ? headerStyles.eyebrow : "font-en text-[10px] tracking-[0.3em]"} style={cinematicHeader ? undefined : { color: "var(--admin-accent)" }}>{company.cmsLabel}</p>
+                  <p className={cinematicHeader ? headerStyles.title : "mt-1 text-2xl font-semibold text-white"}>{company.adminLabel}</p>
                 </div>
               </div>
 
@@ -409,11 +522,15 @@ export default function AdminShell({
                 <button
                   type="button"
                   onClick={async () => {
-                    await fetch("/api/admin/auth/logout", { method: "POST", credentials: "same-origin" });
+                    const response = await fetch("/api/admin/auth/logout", { method: "POST", credentials: "same-origin" });
+                    if (response.ok) {
+                      try { cleanupTopicDraftStorage(window.localStorage); } catch { /* Storage may be unavailable in private or restricted sessions. */ }
+                    }
                     window.location.assign(company.publicWebsiteUrl);
                   }}
-                  className="rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-white/55 transition hover:border-white/25 hover:text-white"
+                  className={cinematicHeader ? headerStyles.logout : "rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-white/55 transition hover:border-white/25 hover:text-white"}
                 >
+                  {cinematicHeader ? <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M14 8l4 4-4 4M8 12h10" /></svg> : null}
                   خروج
                 </button>
               </div>
