@@ -1550,7 +1550,8 @@ function verifyFinalQualityGatePlan() {
 
 /** Execute source discovery and admission with in-memory source bytes, never Browser/DB transports. */
 function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated-public-verification.mts"),
-  "deriveLocalVerificationSourceImpact" | "localVerificationSemanticSource" | "planLocalVerification" | "assertLocalVerificationRequest" | "localVerificationCommandSteps">,
+  "deriveLocalVerificationSourceImpact" | "localVerificationSemanticSource" | "planLocalVerification" | "assertLocalVerificationRequest" | "localVerificationCommandSteps"
+  | "deriveLocalVerificationSourceCoherence" | "resolveLocalVerificationCiBaseline">,
   repositoryScripts: Record<string, string>) {
   const authority = "src/lib/admin/interaction-system/adoption-manifest.ts", formAuthority = "src/lib/admin/form-system/adoption-manifest.ts";
   const owner = "src/components/admin/ui/Phase03Owner.tsx", consumer = "src/app/admin/phase03/Consumer.tsx";
@@ -1767,6 +1768,66 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     value.current.set(owner, 'export function Phase03Owner() { return "unreviewed"; }');
     assert.throws(() => reader(context, value.impact, manifest, [], {}, first), /omits or differs/u);
   });
+  const automatic = (value: ReturnType<typeof scenario>) => api.deriveLocalVerificationSourceCoherence(scripts,
+    { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+  check("automatic Fast source checks isolate literal spacing and radius presentation without executing unrelated Browser or database candidates", () => {
+    const baseline = new Map(originals), jsx = 'export function Phase03Owner() { return <section className="p-4 rounded-lg">Content</section>; }';
+    baseline.set(owner, jsx);
+    const value = scenario([[owner, jsx.replace("p-4 rounded-lg", "p-6 rounded-xl")]], baseline), result = automatic(value);
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.fullRequired, false);
+    assert.equal(result.fast.candidateCommandsExecuted, 0); assert.equal(result.fast.databaseCalls, 0); assert.equal(result.fast.browserExecuted, false);
+    assert.deepEqual(result.functionalEvidenceRequired, []); assert.equal(result.releaseEvidence, false); assert.equal(result.ownerReviewSatisfied, false);
+    const stateChange = automatic(scenario([[owner, jsx.replace("p-4", "hover:p-6")]], baseline));
+    assert.equal(stateChange.fullRequired, true, "Changing a governed visual state cannot be masked as the same spacing port.");
+  });
+  check("automatic shared contract coherence reports owner and all registered consumers and rejects missing protection", () => {
+    const second = "src/app/admin/phase03/Indirect.tsx", baseline = new Map(originals);
+    baseline.set(authority, authoritySource.replace('sourceFiles: ["' + owner + '"]', 'sourceFiles: ["' + owner + '","' + contract + '"]'));
+    baseline.set(second, 'import {Consumer} from "./Consumer"; export function Indirect() { return Consumer(); }');
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"second-consumer",sourceFiles:["' + second + '"],capabilityAudit:{}}];');
+    const next = "export type RecordContract = { value: string; revision: number };";
+    const missing = automatic(scenario([[contract, next]], baseline));
+    assert.equal(missing.status, "DRIFT"); assert.equal(missing.exitCode, 2);
+    assert.ok(missing.diagnostics.some(message => message.includes(contract) && message.includes("Phase03Owner") && message.includes("second-consumer")));
+    const protectedResult = automatic(scenario([[contract, next], [entry, guardSource.replace('"value: string"', '"revision: number"')]], baseline));
+    assert.equal(protectedResult.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(protectedResult.behavioralPass, false);
+    assert.equal(JSON.stringify(protectedResult).includes("reviewedBy"), false, "Automatic source correspondence cannot manufacture approval metadata.");
+  });
+  check("save delete and duplicate body changes retain functional and native readback obligations despite unchanged signatures", () => {
+    for (const action of ["save", "delete", "duplicate"]) {
+      const baseline = new Map(originals); baseline.set(owner, `export async function ${action}Record() { return "before"; }`);
+      const result = automatic(scenario([[owner, `export async function ${action}Record() { return "after"; }`]], baseline));
+      assert.equal(result.fullRequired, true); assert.equal(result.functionalEvidenceRequired.length, 1);
+      assert.equal(result.functionalEvidenceRequired[0].sourceChecksAdequate, false);
+      assert.ok(result.functionalEvidenceRequired[0].required.includes("affected_native_integration_or_readback"));
+      assert.ok(result.targeted.every(target => target.executionAllowed === false && target.proofLevel === "unexecuted_source_candidate"));
+    }
+  });
+  check("automatic source selectors reject absent stale and partial actual input bindings", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    const actual = { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 };
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changeImpact: undefined }), /complete actual source/u);
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, sourceSha256: "f".repeat(64) }), /stale source snapshot/u);
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changes: actual.changes.slice(0, 1) }), /stale or partial/u);
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changeImpact: { ...actual.changeImpact!, changes: actual.changeImpact!.changes.slice(0, 1) } }), /omits actual/u);
+  });
+  check("immutable CI event resolution distinguishes PR merge checkout from PR head and validates push before history", () => {
+    const base = "a".repeat(40), head = "b".repeat(40), merge = "c".repeat(40), known = new Set([base, head, merge]);
+    const history = { exists: (sha: string) => known.has(sha), isAncestor: (left: string, right: string) => left === right || left === base || left === head && right === merge };
+    const event = { pull_request: { base: { sha: base }, head: { sha: head }, merge_commit_sha: merge, title: "untrusted $(title) is never a command" } };
+    assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event, githubSha: merge, checkoutHead: merge }, history), { baselineHead: base, finalHead: merge, eventName: "pull_request" });
+    assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, history).baselineHead, base);
+    for (const [label, input, facts] of [
+      ["missing base", { eventName: "pull_request", event: { pull_request: { head: { sha: head } } }, githubSha: head, checkoutHead: head }, history],
+      ["zero before", { eventName: "push", event: { before: "0".repeat(40), after: head }, githubSha: head, checkoutHead: head }, history],
+      ["checkout mismatch", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: merge }, history],
+      ["missing history", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, { ...history, exists: () => false }],
+      ["nonancestor", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, { ...history, isAncestor: () => false }],
+      ["unsupported event", { eventName: "workflow_dispatch", event: {}, githubSha: head, checkoutHead: head }, history],
+    ] as const) assert.throws(() => api.resolveLocalVerificationCiBaseline(input, facts), Error, label);
+    const phase04OwnerContractSource = readSource("scripts/lib/isolated-public-verification.mts");
+    assert.ok(phase04OwnerContractSource.includes("export function resolveLocalVerificationCiBaseline") && phase04OwnerContractSource.includes("export function deriveLocalVerificationSourceCoherence"));
+  });
 }
 
 /** Execute the canonical local-risk planner without starting its owned lifecycle. */
@@ -1779,7 +1840,7 @@ function verifyLocalRiskVerificationPlan() {
     assert.ok(found, `Missing canonical local verification declaration: ${name}`);
     return found.getText(file).replace(/^export /u, "");
   };
-  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "deriveLocalVerificationSourceImpact", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
+  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
   const code = ts.transpileModule(adminAdoptionControlSource(file) + "\n" + declarations.map(statement).join("\n"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -1790,7 +1851,7 @@ function verifyLocalRiskVerificationPlan() {
     changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
   type Plan = ReturnType<typeof import("./lib/isolated-public-verification.mts").planLocalVerification>;
   type Request = import("./lib/isolated-public-verification.mts").PublicGateRequest;
-  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,localVerificationSemanticSource,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,deriveLocalVerificationSourceCoherence,resolveLocalVerificationCiBaseline,localVerificationSemanticSource,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
     planLocalVerification: typeof import("./lib/isolated-public-verification.mts").planLocalVerification;
     assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
     registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[];
@@ -1799,6 +1860,8 @@ function verifyLocalRiskVerificationPlan() {
     deriveLocalVerificationSourceImpact: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceImpact;
     localVerificationSemanticSource: typeof import("./lib/isolated-public-verification.mts").localVerificationSemanticSource;
     localVerificationCommandSteps: typeof import("./lib/isolated-public-verification.mts").localVerificationCommandSteps;
+    deriveLocalVerificationSourceCoherence: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceCoherence;
+    resolveLocalVerificationCiBaseline: typeof import("./lib/isolated-public-verification.mts").resolveLocalVerificationCiBaseline;
   };
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
   verifyLocalSourceImpactControls(api, scripts);
@@ -2308,8 +2371,9 @@ async function localRiskVerificationOnly() {
 async function changeImpactOnly() {
   try {
     const args = process.argv.slice(2);
-    assert.equal(args.filter(argument => argument === "--change-impact-only").length, 1);
-    assert.ok(args.every(argument => argument === "--change-impact-only" || /^--(?:impact-baseline|impact-record|additional-source)=.+$/u.test(argument)),
+    const ciMode = args.includes("--ci-change-impact");
+    assert.equal(args.filter(argument => argument === "--change-impact-only" || argument === "--ci-change-impact").length, 1);
+    assert.ok(ciMode ? args.length === 1 : args.every(argument => argument === "--change-impact-only" || /^--(?:impact-baseline|impact-record|additional-source)=.+$/u.test(argument)),
       "Change-impact inspection accepts only explicit baseline, review record and additional source arguments.");
     const one = (prefix: string) => {
       const values = args.filter(argument => argument.startsWith(prefix)); assert.ok(values.length <= 1, "Duplicate impact argument: " + prefix);
@@ -2327,9 +2391,19 @@ async function changeImpactOnly() {
       assert.ok(impact && typeof impact === "object" && !Array.isArray(impact), "Impact review JSON must contain an explicit reviewed record object.");
     }
     const baselineHead = one("--impact-baseline=") ?? impact?.baselineHead;
-    assert.ok(baselineHead, "Supply --impact-baseline=<40sha> or an explicit --impact-record=<path>; no baseline is inferred.");
+    assert.ok(ciMode || baselineHead, "Supply --impact-baseline=<40sha> or an explicit --impact-record=<path>; no baseline is inferred.");
+    let ci: { eventName: string; event: unknown; githubSha: string } | undefined;
+    if (ciMode) {
+      const eventPath = process.env.GITHUB_EVENT_PATH, eventName = process.env.GITHUB_EVENT_NAME, githubSha = process.env.GITHUB_SHA;
+      assert.ok(eventPath && eventName && githubSha, "CI source selection requires immutable GITHUB_EVENT_PATH, GITHUB_EVENT_NAME and GITHUB_SHA.");
+      const eventFile = path.resolve(eventPath);
+      assert.ok(lstatSync(eventFile).isFile() && realpathSync(eventFile) === eventFile, "CI event must be a regular immutable event file.");
+      let event: unknown;
+      try { event = JSON.parse(readFileSync(eventFile, "utf8")); } catch { throw Error("Invalid immutable CI event JSON; values are not echoed."); }
+      ci = { eventName, event, githubSha };
+    }
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "deriveLocalVerificationSourceImpact", "assertLocalVerificationProtectionMaintenance",
+    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath"];
     const declarations = names.map(name => {
       const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
@@ -2340,7 +2414,8 @@ async function changeImpactOnly() {
     const inspect = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph", code + ";return inspectLocalVerificationChangeImpact;")(
       assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph) as
       typeof import("./lib/isolated-public-verification.mts").inspectLocalVerificationChangeImpact;
-    const report = inspect({ baselineHead, impact, additionalSourceFiles: args.filter(argument => argument.startsWith("--additional-source=")).map(argument => argument.slice("--additional-source=".length)) });
+    const report = inspect({ baselineHead, impact, automatic: ciMode, ci,
+      additionalSourceFiles: args.filter(argument => argument.startsWith("--additional-source=")).map(argument => argument.slice("--additional-source=".length)) });
     console.log(JSON.stringify(report, null, 2)); process.exitCode = report.exitCode;
   } catch (error) {
     console.log(JSON.stringify({ status: "BLOCKED_SOURCE_CONSISTENCY", releaseEvidence: false, checksExecuted: 0, browserExecuted: false,
@@ -3282,5 +3357,5 @@ async function retainedFinalQualityOnly() {
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
 }
 
-const verification = process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+const verification = process.argv.includes("--ci-change-impact") || process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });

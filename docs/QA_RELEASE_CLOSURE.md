@@ -291,10 +291,55 @@ with exit 2, not PASS. Supply `--impact-record=.tmp-qa/<reviewed-record>.json` t
 check the existing typed batch record against current bytes. A valid record can
 return `PASS_SOURCE_CONSISTENCY` (exit 0) only with positive affected-verification
 bindings and maintained obligations; malformed/unsafe input is blocked (exit 1),
-and drift remains exit 2. Every result has `checksExecuted=0` and
-`releaseEvidence=false`. This opt-in command adds no automatic pre-push/CI hook;
-run it as part of the existing reviewed impact workflow before an authorized
-push. It cannot authorize a gate, mutate a contract or substitute for execution.
+and drift remains exit 2. This manual mode has `checksExecuted=0` and
+`releaseEvidence=false`. Run it as part of the existing reviewed impact workflow
+before an authorized push. It cannot authorize a gate, mutate a contract or
+substitute for execution. No mandatory local pre-push hook is installed.
+
+The existing `quality-gate` job also invokes the same owner with
+`npm run --silent verify:isolated-supabase -- --ci-change-impact` immediately
+after `npm ci`, before Browser installation. This automatic mode checks actual
+snapshot/delta bindings, current contract projection and applicable changed
+assertion/vector correspondence. It reads immutable event Git objects from
+`GITHUB_EVENT_PATH`: PR base/head and the actual head or merge checkout, or push
+before/after. The checkout must equal `GITHUB_SHA`, history must exist locally,
+and the baseline must be an ancestor. Missing/zero/foreign/non-ancestor objects,
+unsupported events and changed tracked checkout bytes fail closed; there is no
+fetch, guessed baseline, shell interpolation of event values, or borrowed local
+approval record. Use the existing full-history checkout without persisted Git
+credentials. The source step blanks all three existing Supabase environment
+values before Node starts, executes no candidate command and has no Browser,
+database or fixture lifecycle. Its sanitized JSON report alone is retained as
+an attempt-specific artifact after success or failure; missing evidence fails.
+
+Automatic `PASS_AUTOMATIC_SOURCE_PROTECTION` means syntactic source protection
+correspondence only. `ownerReviewSatisfied=false`, `behavioralPass=false` and
+`releaseEvidence=false` remain explicit. Missing correspondence is `DRIFT`
+(exit 2) with file, owner, contract and registered consumer diagnostics; unsafe
+provenance is blocked (exit 1). A changed assertion linked to a changed contract
+does not prove its relevance, equivalent coverage or Owner approval. Human
+contract review and applicable runtime/failure proofs remain mandatory, and
+expectations are never generated or rewritten from implementation changes.
+
+The JSON separates executed Fast source checks from explainable Targeted
+candidate commands. Each candidate retains the current named command, exact
+literal command steps and changed-file/owner/contract/consumer reasons. It has
+`executionAllowed=false`, unknown effects and an unexecuted proof level until
+its real harness, environment, cleanup and behavioral evidence are qualified.
+Functional code changes retain functional and native integration/readback
+obligations and a conservative `ci:check` requirement; unmapped inputs also
+retain Full. A narrowly recognized literal JSX padding/radius-only change can
+avoid that functional classification only when every other AST/class token is
+unchanged. This is a selection fact, never visual approval. Declared geometry,
+presentation/adoption obligations and applicable visual guards remain binding;
+opaque CSS or unproved mappings cannot authorize bounded release.
+
+This early source check does not prune or condition the existing eight CI jobs,
+their isolated services, Browser setup or complete `npm run ci:check`. Fast
+failure propagates to the same required job; a report is not a replacement gate.
+Full Regression remains mandatory under release/risk policy. Local targeted
+verification of this integration is separate from actual GitHub execution and
+does not establish remote CI timings or Release Readiness.
 
 Changed semantic obligations require reviewed protection maintenance in this
 same batch record: the changed file/contract, selected existing check, protection

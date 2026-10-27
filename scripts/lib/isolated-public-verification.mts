@@ -94,8 +94,10 @@ export type LocalVerificationInputs = {
 };
 export type LocalVerificationSourceImpact = {
   proofBoundary: "source_discovery_only";
+  sourceSha256: string; deltaSha256: string;
   changes: readonly { file: string; owners: readonly string[]; capabilities: readonly string[]; consumers: readonly string[];
-    contracts: readonly string[]; candidateChecks: readonly string[]; unresolved: readonly string[] }[];
+    contracts: readonly string[]; candidateChecks: readonly string[]; unresolved: readonly string[];
+    semanticChange: boolean; presentationOnly: boolean }[];
   obligations: readonly { file: string; owner: string; contract: string; before: string | null; after: string | null; addedCapabilityAxis: boolean }[];
   protections: readonly { file: string; check: string; beforeSha256: string | null; afterSha256: string;
     semanticChange: boolean; assertionChanges: readonly { sha256: string; references: readonly string[] }[];
@@ -127,6 +129,30 @@ export function localVerificationSemanticSource(file: string, source: string) {
       if (narrativeMetadata && ts.isPropertyAssignment(node) && node.name.getText(tree).replace(/^["']|["']$/gu, "") === "rationale"
         && ts.isStringLiteralLike(node.initializer)) return context.factory.updatePropertyAssignment(node, node.name,
           context.factory.createStringLiteral(node.initializer.text.trim() ? "nonempty narrative" : ""));
+      return ts.visitEachChild(node, visit, context);
+    };
+    return node => ts.visitNode(node, visit) as ts.SourceFile;
+  }]);
+  try { return ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(transformed.transformed[0]); }
+  finally { transformed.dispose(); }
+}
+
+/** Literal spacing/radius presentation only; all other AST nodes and class tokens remain binding. */
+export function localVerificationPresentationSource(file: string, source: string) {
+  const tree = ts.createSourceFile(file, localVerificationSemanticSource(file, source), ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : file.endsWith(".jsx") ? ts.ScriptKind.JSX : ts.ScriptKind.TS);
+  const transformed = ts.transform(tree, [context => {
+    const visit: ts.Visitor = node => {
+      if (ts.isJsxAttribute(node) && node.name.getText(tree) === "className") {
+        const literal = node.initializer && (ts.isStringLiteralLike(node.initializer) ? node.initializer
+          : ts.isJsxExpression(node.initializer) && node.initializer.expression && ts.isStringLiteralLike(node.initializer.expression) ? node.initializer.expression : undefined);
+        if (literal) {
+          const tokens = literal.text.split(/\s+/u).map(token => token
+            .replace(/^((?:[a-z0-9-]+:)*)(p[trblxyse]?)-(?:\d+(?:\.\d+)?|px)$/u, "$1$2-PRESENTATION")
+            .replace(/^((?:[a-z0-9-]+:)*)(rounded(?:-[trblse]{1,2})?)(?:-(?:none|sm|md|lg|xl|[23]xl|full))?$/u, "$1$2-PRESENTATION"));
+          return context.factory.updateJsxAttribute(node, node.name, context.factory.createStringLiteral(tokens.join(" ")));
+        }
+      }
       return ts.visitEachChild(node, visit, context);
     };
     return node => ts.visitNode(node, visit) as ts.SourceFile;
@@ -365,12 +391,83 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
     const covering = checks.filter(check => check.references.has(change.file));
     const unresolved = unique([...(matched.length ? unresolvedAuthorities : []), ...(covering.length ? [] : ["no_positive_source_protection_relationship"]),
       ...registered.flatMap(consumer => consumer.files.flatMap(entry => graphProblems.has(entry) ? [graphProblems.get(entry)!] : []))]);
+    const previous = text(before, change.file), next = text(current, change.file), code = /\.[cm]?[jt]sx?$/u.test(change.file);
+    const semanticChange = previous === undefined || next === undefined || !code || localVerificationSemanticSource(change.file, previous) !== localVerificationSemanticSource(change.file, next);
+    const presentationOnly = Boolean(semanticChange && previous !== undefined && next !== undefined && /\.[jt]sx$/u.test(change.file)
+      && localVerificationPresentationSource(change.file, previous) === localVerificationPresentationSource(change.file, next));
     return { file: change.file, owners: matched.length ? unique(matched.map(owner => owner.owner)) : [change.file], capabilities: unique(matched.flatMap(owner => owner.capability ? [owner.capability] : [])),
       consumers: unique(registered.map(consumer => consumer.manifest + "#" + consumer.id)),
       contracts: unique([...obligations.filter(row => row.file === change.file).map(row => row.contract), ...registered.map(consumer => consumer.manifest)]),
-      candidateChecks: unique(covering.map(check => check.check)), unresolved };
+      candidateChecks: unique(covering.map(check => check.check)), unresolved, semanticChange, presentationOnly };
   });
-  return { proofBoundary: "source_discovery_only", changes: rows, obligations, protections };
+  const sorted = <T extends { file: string }>(rows: readonly T[]) => [...rows].sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
+  return { proofBoundary: "source_discovery_only", sourceSha256: digest(JSON.stringify(sorted([...current].map(([file, source]) => ({ file, sha256: digest(source) }))))),
+    deltaSha256: digest(JSON.stringify(sorted(changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))))), changes: rows, obligations, protections };
+}
+
+/** Trusted event data identifies Git objects; no ref strings, network lookup or missing-history fallback is accepted. */
+export function resolveLocalVerificationCiBaseline(input: { eventName: string; event: unknown; githubSha: string; checkoutHead: string },
+  history: { exists(sha: string): boolean; isAncestor(ancestor: string, descendant: string): boolean }) {
+  const sha = (value: unknown, label: string) => {
+    assert.ok(typeof value === "string" && /^[a-f0-9]{40}$/u.test(value) && value !== "0".repeat(40), "Invalid or missing immutable CI " + label);
+    assert.ok(history.exists(value), "Missing local Git history for CI " + label); return value;
+  };
+  const current = sha(input.checkoutHead, "checkout HEAD"), expected = sha(input.githubSha, "GITHUB_SHA");
+  assert.equal(current, expected, "CI checkout HEAD differs from GITHUB_SHA.");
+  assert.ok(input.event && typeof input.event === "object" && !Array.isArray(input.event), "Invalid immutable CI event payload.");
+  const event = input.event as Record<string, unknown>; let baseline: string;
+  if (input.eventName === "pull_request") {
+    const request = event.pull_request as { base?: { sha?: unknown }; head?: { sha?: unknown }; merge_commit_sha?: unknown } | undefined;
+    baseline = sha(request?.base?.sha, "pull request base"); const head = sha(request?.head?.sha, "pull request head");
+    if (current !== head) assert.equal(sha(request?.merge_commit_sha, "pull request merge commit"), current, "CI merge checkout differs from its immutable event.");
+    assert.ok(history.isAncestor(head, current), "Pull request head is not an ancestor of the actual CI checkout.");
+  } else {
+    assert.equal(input.eventName, "push", "Unsupported CI event for source impact.");
+    baseline = sha(event.before, "push before"); assert.equal(sha(event.after, "push after"), current, "Push event differs from the actual CI checkout.");
+  }
+  assert.ok(history.isAncestor(baseline, current), "CI baseline is not an ancestor of the actual checkout; no fallback or fetch was attempted.");
+  return { baselineHead: baseline, finalHead: current, eventName: input.eventName };
+}
+
+/** Automatic source correspondence is distinct from reviewed local admission and from behavioral/runtime proof. */
+export function deriveLocalVerificationSourceCoherence(scripts: Readonly<Record<string, string>>, actual: LocalVerificationInputs) {
+  const analysis = actual.changeImpact; assert.ok(analysis, "Automatic coherence requires complete actual source discovery.");
+  assert.equal(analysis.sourceSha256, actual.sourceSha256, "Automatic selector has stale source snapshot bytes.");
+  const changes = actual.changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))
+    .sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
+  assert.equal(new Set(changes.map(change => change.file)).size, changes.length, "Automatic source delta contains duplicate selectors.");
+  assert.equal(analysis.deltaSha256, digest(JSON.stringify(changes)), "Automatic selector has stale or partial changed-file bindings.");
+  assert.deepEqual(analysis.changes.map(change => change.file).sort(), changes.map(change => change.file).sort(), "Automatic selector omits actual changed inputs.");
+  const correspondence = analysis.obligations.map(obligation => {
+    const protections = analysis.protections.filter(protection => protection.references.includes(obligation.file)
+      && (protection.semanticChange && protection.beforeSha256 !== protection.afterSha256
+        && actual.changes.some(change => change.file === protection.file && change.beforeSha256 === protection.beforeSha256 && change.afterSha256 === protection.afterSha256)
+        && protection.assertionChanges.some(assertion => assertion.references.includes(obligation.file))
+        || obligation.addedCapabilityAxis && protection.dynamicCapabilityAxes && !protection.semanticChange && protection.beforeSha256 === protection.afterSha256));
+    const consumers = analysis.changes.find(change => change.file === obligation.file)?.consumers ?? [];
+    return { file: obligation.file, owner: obligation.owner, contract: obligation.contract, consumers, protected: protections.length > 0,
+      protections: protections.map(protection => ({ file: protection.file, check: protection.check, afterSha256: protection.afterSha256 })),
+      reason: protections.length ? "bound_changed_assertion_or_existing_dynamic_axis" : "missing_applicable_source_protection" };
+  });
+  const functional = analysis.changes.filter(change => /\.[cm]?[jt]sx?$/u.test(change.file) && change.semanticChange && !change.presentationOnly);
+  const unknowns = analysis.changes.flatMap(change => change.unresolved.map(reason => ({ file: change.file, reason })));
+  const names = [...new Set(analysis.changes.flatMap(change => change.candidateChecks))].sort();
+  const targeted = names.map(check => {
+    assert.ok(Object.hasOwn(scripts, check), "Automatic candidate is not a current canonical command.");
+    const reasons = analysis.changes.filter(change => change.candidateChecks.includes(check)).map(change => ({ file: change.file,
+      owners: change.owners, contracts: change.contracts, consumers: change.consumers }));
+    return { check, command: scripts[check], steps: localVerificationCommandSteps(scripts, check) ?? [], reasons,
+      proofLevel: "unexecuted_source_candidate" as const, effects: ["unknown"], executionAllowed: false };
+  });
+  const failures = correspondence.filter(row => !row.protected);
+  return { status: failures.length ? "DRIFT" : "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: failures.length ? 2 : 0,
+    sourceSha256: actual.sourceSha256, automatic: true, ownerReviewSatisfied: false, behavioralPass: false, releaseEvidence: false,
+    fast: { profile: "fast_source", checksExecuted: 4 + correspondence.length, candidateCommandsExecuted: 0, browserExecuted: false, databaseCalls: 0,
+      checks: ["actual_snapshot_binding", "complete_changed_file_binding", "current_contract_projection", "applicable_source_protection_correspondence"], correspondence },
+    targeted, functionalEvidenceRequired: functional.map(change => ({ file: change.file, owners: change.owners, consumers: change.consumers,
+      required: ["functional_behavior", "affected_native_integration_or_readback"], sourceChecksAdequate: false })),
+    fullRequired: functional.length > 0 || unknowns.length > 0, fullCommand: "ci:check", unknowns,
+    diagnostics: failures.map(row => `file=${row.file}; owner=${row.owner}; contract=${row.contract}; consumers=${row.consumers.join(",") || "unresolved"}; missing applicable assertion/vector protection.`) };
 }
 
 /** A changed obligation cannot be silently blessed by changed Product bytes or a free-form waiver. */
@@ -575,14 +672,26 @@ function readLocalVerificationInputs(context: Pick<PrivatePublicVerificationCont
 }
 
 /** Read-only source consistency entry: no owned lifecycle, fixture, Browser, database or verification check starts. */
-export function inspectLocalVerificationChangeImpact(options: { baselineHead: string; additionalSourceFiles?: readonly string[]; impact?: LocalVerificationImpact }) {
-  assert.match(options.baselineHead, /^[a-f0-9]{40}$/u, "An explicit immutable impact baseline is required.");
+export function inspectLocalVerificationChangeImpact(options: { baselineHead?: string; additionalSourceFiles?: readonly string[]; impact?: LocalVerificationImpact;
+  automatic?: boolean; ci?: { eventName: string; event: unknown; githubSha: string } }) {
   const environment: NodeJS.ProcessEnv = { GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
   const context = { cleanEnvironment: () => ({ ...environment }) };
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(), windowsHide: true,
     timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
+  const checkoutHead = git("rev-parse", "HEAD").trim();
+  let baselineHead = options.baselineHead;
+  if (options.ci) {
+    assert.equal(options.automatic, true, "CI source selection requires automatic source coherence.");
+    assert.equal(options.impact, undefined, "CI source coherence cannot fabricate or borrow local approval records.");
+    assert.deepEqual(options.additionalSourceFiles ?? [], [], "CI source selection accepts committed source only.");
+    const history = { exists: (sha: string) => { try { return git("rev-parse", "--verify", sha + "^{commit}").trim() === sha; } catch { return false; } },
+      isAncestor: (ancestor: string, descendant: string) => { try { git("merge-base", "--is-ancestor", ancestor, descendant); return true; } catch { return false; } } };
+    baselineHead = resolveLocalVerificationCiBaseline({ ...options.ci, checkoutHead }, history).baselineHead;
+    git("diff", "--no-ext-diff", "--no-textconv", "--quiet", "HEAD", "--");
+  }
+  assert.ok(baselineHead && /^[a-f0-9]{40}$/u.test(baselineHead), "An explicit immutable impact baseline is required.");
   const tracked = git("ls-files", "-z").split("\0").filter(Boolean), additional = [...(options.additionalSourceFiles ?? [])];
   const files = selectSourceInventory(tracked, additional);
   for (const file of additional) assert.ok(existsSync(safeSourcePath(file)), "Explicit additional source is missing: " + file);
@@ -592,12 +701,19 @@ export function inspectLocalVerificationChangeImpact(options: { baselineHead: st
     return [{ file, sha256: digest(readFileSync(path)) }];
   });
   const sourceSha256 = digest(JSON.stringify(manifest)), finalHead = git("rev-parse", "HEAD").trim();
-  const impact = options.impact ?? { baselineHead: options.baselineHead, finalHead, sourceSha256, changes: [] };
-  assert.equal(impact.baselineHead, options.baselineHead, "The reviewed impact baseline differs from the explicitly requested baseline.");
+  const impact = options.impact ?? { baselineHead, finalHead, sourceSha256, changes: [] };
+  assert.equal(impact.baselineHead, baselineHead, "The reviewed impact baseline differs from the explicitly requested baseline.");
   const actual = readLocalVerificationInputs(context, impact, manifest, additional, { additionalSourceFiles: additional });
   const base = { baselineHead: actual.baselineHead, finalHead: actual.finalHead, sourceSha256: actual.sourceSha256,
     actualDelta: actual.changes, changeImpact: actual.changeImpact, releaseEvidence: false as const,
     proofBoundary: "source_discovery_only" as const, checksExecuted: 0, browserExecuted: false, databaseCalls: 0, networkRequests: 0 };
+  if (options.automatic) {
+    assert.equal(options.impact, undefined, "Automatic source coherence cannot replace reviewed local admission.");
+    const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+    const coherence = deriveLocalVerificationSourceCoherence(scripts, actual);
+    return { ...base, ...coherence, checksExecuted: coherence.fast.checksExecuted, candidateCommandsExecuted: 0,
+      ciBinding: options.ci ? { eventName: options.ci.eventName, checkoutHead } : null };
+  }
   if (!options.impact) return { ...base, status: actual.changeImpact!.obligations.length ? "DRIFT" : "REVIEW_REQUIRED", exitCode: 2,
     diagnostics: actual.changeImpact!.obligations.map(obligation => `file=${obligation.file}; owner=${obligation.owner}; contract=${obligation.contract}; reviewed protection maintenance is required.`) };
   try {

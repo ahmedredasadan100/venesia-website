@@ -23,6 +23,7 @@ jobs:
         with:
           # Migration provenance compares immutable historical and current Git trees.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -32,6 +33,22 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Inspect QA change impact and protection consistency
+        id: qa-change-impact
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ""
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npm run --silent verify:isolated-supabase -- --ci-change-impact > "$RUNNER_TEMP/qa-change-impact.json"
+
+      - name: Preserve QA change-impact source report
+        if: ${{ always() && steps.qa-change-impact.outcome != 'skipped' && steps.qa-change-impact.outcome != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-change-impact-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qa-change-impact.json
+          if-no-files-found: error
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
