@@ -78,6 +78,28 @@ Examples:
 
 Required only when Production behavior is part of the closure claim and a safe trusted session exists.
 
+### 2.1 Responsibilities within the existing layers
+
+These responsibilities classify the existing owners; they do not introduce a
+second test registry or change any command, blocking rule or proof boundary.
+One entry can protect several responsibilities. Select its actual supported
+mode and arguments, rather than treating its filename as an execution identity.
+
+| Responsibility | Protection and existing examples | Evidence boundary |
+| --- | --- | --- |
+| Engine | Form, Entity List and Data Engine owners; `verify-admin-form-system.mts`, `verify-admin-entity-list.mjs`, `verify-admin-data-engine-contracts.mts` | Execute the actual owner through its existing ports; source/import checks alone do not establish behavior. |
+| Capability | Form Section/Field composition and Page Block presentation; the two existing Form/Page Block entries share `fixtures/admin-form-section-contract.mts` vectors | Preserve positive, negative and boundary states, native children/callbacks, and approved standalone geometry. Caller binding and consumer checks remain local. |
+| Contract | Save/cache failure, taxonomy and media RPC contracts; `verify:admin-query-save-failure-contracts`, `verify:content-taxonomy`, `verify:media-coordination-rpc-acl` | Data shape, rejection, rollback and permissions remain owned by their current contracts and guards. |
+| Adoption | Current Shared Capability Set and Collection/Form manifests; `verify:consumer-capability-adoption`, existing content-editor and Page Block adoption checks | Applicability, Source Proof, observed behavior, presentation and Owner approval remain distinct. Generated or unresolved consumers remain explicit gaps. |
+| Functional | Existing save/edit/delete/duplicate/failure/read-back journeys and their domain owners | A controlled owner test proves its tested ports; Browser or persisted round-trip claims require that actual runtime. |
+| Integration | Existing isolated Supabase/Public owner, `*-postgres` entries, PGlite fixtures and Public/Admin Browser journeys | Keep PG17, PGlite and Browser environments separate. Do not run a writable entry with Production data or real credentials. |
+
+Shared vectors remove duplicated assertion maintenance, not ownership or the
+independent execution of each consumer entry. Retain consumer-specific checks,
+failure propagation and source-provenance inputs when extracting a fixture.
+Consolidation requires an explicit before/after obligation map and rejection
+controls; name, age, size, or an import edge alone never justifies retirement.
+
 ## 3. Development and release verification
 
 Constitution Section 25.4 and ADR-028 define the Owner-approved sequence:
@@ -251,6 +273,54 @@ expand verification or block the unsupported claim, never prove exclusion.
 The existing focused contract guard is
 `node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
 
+The same reader derives an ephemeral source-impact report from the exact current
+snapshot and baseline Git bytes. It consults the existing Collection/Form and
+Current Shared Capability Set declarations, executable graph and literal source
+inputs to report owners, capabilities, consumers, contracts, candidate checks
+and unresolved relationships. These are discovery results, never Behavioral
+PASS. Candidates do not automatically execute Browser, database or other
+expensive commands. Review actual effects, mode/arguments, non-import inputs and
+cleanup before selecting the existing commands. Unknown mappings cannot justify
+a bounded release.
+
+For an actual read-only Git inspection, use the same existing verifier:
+`npm run verify:isolated-supabase -- --change-impact-only --impact-baseline=<40sha>`.
+Add `--additional-source=<file>` for each explicit new source input; private and
+generated inputs are rejected. Discovery returns `REVIEW_REQUIRED` or `DRIFT`
+with exit 2, not PASS. Supply `--impact-record=.tmp-qa/<reviewed-record>.json` to
+check the existing typed batch record against current bytes. A valid record can
+return `PASS_SOURCE_CONSISTENCY` (exit 0) only with positive affected-verification
+bindings and maintained obligations; malformed/unsafe input is blocked (exit 1),
+and drift remains exit 2. Every result has `checksExecuted=0` and
+`releaseEvidence=false`. This opt-in command adds no automatic pre-push/CI hook;
+run it as part of the existing reviewed impact workflow before an authorized
+push. It cannot authorize a gate, mutate a contract or substitute for execution.
+
+Changed semantic obligations require reviewed protection maintenance in this
+same batch record: the changed file/contract, selected existing check, protection
+source, exact before/current bytes and applicable assertion/vector binding.
+Missing or stale maintenance fails with file, owner and contract diagnostics.
+Existing dynamic capability-axis protection can be retained only when its actual
+source proves that bounded expansion; a free-form claim or changed Product code
+cannot update the expected contract. Contract types/signatures and explicit
+contract declarations, plus the existing manifest obligations, remain the
+authority. This bounded consistency check does not prove arbitrary behavioral
+equivalence or replace the review and runtime tests.
+
+Comments, formatting and reviewed narrative rationale are not presentation
+requirements. Contract data and enforced adoption evidence remain obligations.
+Ordinary CSS edits do not acquire historical numeric assertions merely by being
+changed; approved geometry and presentation requirements remain protected by
+their declared contracts and applicable behavioral/visual checks.
+
+`planLocalVerification` also reports `fast` targeted development commands with
+`releaseEvidence=false`; that report cannot authorize release execution. Its
+cost depends on the reviewed existing command/mode and is not inferred from an
+import edge. Release retains the current bounded A/B prefix and four Public
+gates; Full retains the canonical package prefix and high-risk admission.
+Full regression remains a separate release/high-risk obligation, not an
+automatic rerun after each small development edit.
+
 Positive command coverage may follow literal `npm run <registered-name>` chains
 joined by `&&` in the bound `package.json`, retaining the selected parent check
 as the execution boundary. Cycles, unknown names, dynamic commands and unsupported
@@ -258,6 +328,13 @@ shell syntax cannot establish coverage. Resolving a child entry must not append
 another child execution to the canonical Full Local Gate. Likewise, a dynamic
 cache query can preserve a proven fixed local module pathname; a dynamic pathname,
 URL base or shadowed constructor cannot establish an executable graph edge.
+
+An additional selected check can be omitted from the Full prefix only when the
+same named check is already positively invoked through a canonical prefix's
+literal npm chain, preserving its exact ordered commands, arguments and
+multiplicity. Keep the canonical prefix itself unchanged. Distinct named aliases
+remain distinct even with equal Node argv, since npm lifecycle context/hooks can
+differ; unsupported command syntax cannot justify pruning.
 
 The already-owned Admin adoption tail may supply positive coverage through the
 same fixed gate descriptor used by execution, bound to the complete fresh,

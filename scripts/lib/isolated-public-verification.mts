@@ -89,12 +89,339 @@ export type LocalVerificationInputs = {
   changes: readonly Pick<LocalVerificationChange, "file" | "beforeSha256" | "afterSha256">[];
   verificationCoverage?: readonly { file: string; checks: readonly string[] }[];
   verificationNativeGate?: NonNullable<ReturnType<typeof adminAdoptionGate>>;
+  /** Derived from the actual before/current sources. Discovery never confers behavioral PASS. */
+  changeImpact?: LocalVerificationSourceImpact;
+};
+export type LocalVerificationSourceImpact = {
+  proofBoundary: "source_discovery_only";
+  changes: readonly { file: string; owners: readonly string[]; capabilities: readonly string[]; consumers: readonly string[];
+    contracts: readonly string[]; candidateChecks: readonly string[]; unresolved: readonly string[] }[];
+  obligations: readonly { file: string; owner: string; contract: string; before: string | null; after: string | null; addedCapabilityAxis: boolean }[];
+  protections: readonly { file: string; check: string; beforeSha256: string | null; afterSha256: string;
+    semanticChange: boolean; assertionChanges: readonly { sha256: string; references: readonly string[] }[];
+    references: readonly string[]; dynamicCapabilityAxes: boolean }[];
+};
+export type LocalVerificationProtectionMaintenance = {
+  file: string; contract: string; protectionFile: string; check: string;
+  beforeSha256: string | null; afterSha256: string;
+  mode: "updated" | "existing_dynamic_axes"; reviewedBy: string; rationale: string;
+  /** Exact changed assertion/vector dependency fingerprint reviewed for this obligation. */
+  assertionSha256?: string;
 };
 /** A reviewed batch evidence record, not an owner/dependency/test registry. */
-export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage"> & {
+export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact"> & {
   changes: readonly LocalVerificationChange[];
   verificationEntries?: readonly { check: string; entry: string }[];
+  protectionMaintenance?: readonly LocalVerificationProtectionMaintenance[];
 };
+
+/** AST projection only: contract bodies remain authoritative; narrative evidence is not a contract edit. */
+export function localVerificationSemanticSource(file: string, source: string) {
+  const narrativeMetadata = file === "src/lib/admin/interaction-system/adoption-manifest.ts" || file === "src/lib/admin/form-system/adoption-manifest.ts";
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : file.endsWith(".jsx") ? ts.ScriptKind.JSX : /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  assert.deepEqual((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, [],
+    "Cannot classify malformed verification impact source: " + file);
+  const transformed = ts.transform(tree, [context => {
+    const visit: ts.Visitor = node => {
+      if (narrativeMetadata && ts.isPropertyAssignment(node) && node.name.getText(tree).replace(/^["']|["']$/gu, "") === "rationale"
+        && ts.isStringLiteralLike(node.initializer)) return context.factory.updatePropertyAssignment(node, node.name,
+          context.factory.createStringLiteral(node.initializer.text.trim() ? "nonempty narrative" : ""));
+      return ts.visitEachChild(node, visit, context);
+    };
+    return node => ts.visitNode(node, visit) as ts.SourceFile;
+  }]);
+  try { return ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(transformed.transformed[0]); }
+  finally { transformed.dispose(); }
+}
+
+/** Source-derived candidates, not a second registry and not proof that an assertion executed. */
+export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<string, string>>,
+  changes: LocalVerificationInputs["changes"], current: ReadonlyMap<string, string | Buffer>, before: ReadonlyMap<string, string | Buffer>): LocalVerificationSourceImpact {
+  const authorities = ["src/lib/admin/interaction-system/adoption-manifest.ts", "src/lib/admin/form-system/adoption-manifest.ts"];
+  const parse = (file: string, source: string) => ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : file.endsWith(".jsx") ? ts.ScriptKind.JSX : /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  const name = (node: ts.PropertyName) => ts.isIdentifier(node) || ts.isStringLiteralLike(node) ? node.text : "";
+  const unique = (values: Iterable<string>) => [...new Set(values)].sort();
+  const text = (sources: ReadonlyMap<string, string | Buffer>, file: string) => sources.get(file)?.toString();
+  const codeSources = new Proxy(new Map([...current].filter(([file]) => /\.[cm]?[jt]sx?$/u.test(file)).map(([file, source]) => [file, source.toString()])), {
+    get(target, property) {
+      if (property === "get") return (file: string) => { assert.ok(target.has(file), "Graph dependency is outside the bound source snapshot: " + file); return target.get(file); };
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const sourcePaths = (node: ts.Node) => {
+    const paths = new Set<string>();
+    const visit = (part: ts.Node) => {
+      if (ts.isStringLiteralLike(part) && /^(?:src|scripts|tests)\/[a-zA-Z0-9_./()[\]@+-]+\.(?:[cm]?[jt]sx?|css|sql)$/u.test(part.text)) paths.add(part.text);
+      ts.forEachChild(part, visit);
+    };
+    visit(node); return paths;
+  };
+  type Owner = { owner: string; capability?: string; files: string[] };
+  type Consumer = { id: string; manifest: string; files: string[] };
+  const owners: Owner[] = [], consumers: Consumer[] = [], unresolvedAuthorities = new Set<string>();
+  for (const sources of [before, current]) for (const file of authorities) {
+    const source = text(sources, file);
+    if (source === undefined) { unresolvedAuthorities.add(file + ":missing_authority"); continue; }
+    const tree = parse(file, source);
+    const visit = (node: ts.Node) => {
+      if (ts.isObjectLiteralExpression(node)) {
+        const fields = new Map(node.properties.filter(ts.isPropertyAssignment).map(property => [name(property.name), property.initializer]));
+        const paths = (keys: string[]) => unique(keys.flatMap(key => fields.has(key) ? [...sourcePaths(fields.get(key)!)] : []));
+        const string = (key: string) => { const value = fields.get(key); return value && ts.isStringLiteralLike(value) ? value.text : undefined; };
+        if (fields.has("executableBindings") && string("owner")) owners.push({ owner: string("owner")!,
+          capability: ts.isPropertyAssignment(node.parent) ? name(node.parent.name) : undefined, files: paths(["sourceFiles"]) });
+        if (string("classification") === "independent_runtime" && string("id")) owners.push({ owner: string("id")!, files: paths(["sourceFiles"]) });
+        if (fields.has("capabilityAudit")) {
+          const files = paths(["sourceFiles", "pageSourceFiles", "presentationSourceFiles"]);
+          if (string("id") && files.length) consumers.push({ id: string("id")!, manifest: file, files });
+          else unresolvedAuthorities.add(file + ":generated_or_dynamic_consumer");
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+  }
+  const graphCache = new Map<string, Set<string>>(), graphProblems = new Map<string, string>();
+  const references = (entry: string) => {
+    const cached = graphCache.get(entry); if (cached) return cached;
+    const found = new Set<string>([entry]);
+    try {
+      assert.ok(current.has(entry), "Entry missing from bound source snapshot.");
+      const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], symbolAware: false, sourceOverrides: codeSources });
+      for (const [file, tree] of graph) { found.add(file); for (const target of sourcePaths(tree)) found.add(target); }
+    } catch { graphProblems.set(entry, "unresolved_source_graph:" + entry); }
+    graphCache.set(entry, found); return found;
+  };
+  const checks: Array<{ check: string; entries: string[]; references: Set<string> }> = [];
+  for (const check of Object.keys(scripts).sort()) {
+    if (!/^(?:verify|qa):[a-zA-Z0-9:_-]+$/u.test(check)) continue;
+    try {
+      const entries = registeredVerificationNodeEntries(scripts, check), targets = new Set<string>();
+      for (const entry of entries) for (const target of references(entry)) targets.add(target);
+      checks.push({ check, entries, references: targets });
+    } catch { /* Unsupported shell/native entries cannot authorize source-derived coverage. */ }
+  }
+  const obligations: LocalVerificationSourceImpact["obligations"][number][] = [];
+  const exportedShapes = (file: string, source: string | undefined) => {
+    const result = new Map<string, string>(); if (source === undefined || !/\.[cm]?[jt]sx?$/u.test(file)) return result;
+    const semantic = localVerificationSemanticSource(file, source), tree = parse(file, semantic);
+    const authority = authorities.includes(file), explicitContract = /(?:^|[\/._-])contracts?(?:[\/._-]|$)/iu.test(file);
+    if (authority) { result.set("manifest-obligations", semantic); return result; }
+    for (const node of tree.statements) {
+      if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+      if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) result.set(node.name.text, node.getText(tree));
+      else if (ts.isFunctionDeclaration(node)) result.set(node.name?.text ?? "default",
+        node.getText(tree).slice(0, node.body ? node.body.getStart(tree) - node.getStart(tree) : undefined));
+      else if (ts.isVariableStatement(node)) for (const declaration of node.declarationList.declarations) {
+        if (explicitContract) result.set(declaration.name.getText(tree), declaration.getText(tree));
+        else if (declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer))) {
+          const functionValue = declaration.initializer;
+          result.set(declaration.name.getText(tree), declaration.name.getText(tree) + ":" + (declaration.type?.getText(tree) ?? "") + ":"
+            + functionValue.getText(tree).slice(0, functionValue.body.getStart(tree) - functionValue.getStart(tree)));
+        }
+      }
+    }
+    return result;
+  };
+  const capabilityAxes = (source: string | undefined) => {
+    const rows = new Map<string, string>(); if (!source) return rows;
+    const tree = parse(authorities[0], localVerificationSemanticSource(authorities[0], source));
+    for (const statement of tree.statements) if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) {
+      if (declaration.name.getText(tree) !== "ADMIN_CURRENT_SHARED_CAPABILITY_SET" || !declaration.initializer || !ts.isCallExpression(declaration.initializer)) continue;
+      const object = declaration.initializer.arguments[0];
+      if (object && ts.isObjectLiteralExpression(object)) for (const property of object.properties) if (ts.isPropertyAssignment(property)) rows.set(name(property.name), property.initializer.getText(tree));
+    }
+    return rows;
+  };
+  for (const change of changes) {
+    const previousBytes = before.get(change.file), nextBytes = current.get(change.file);
+    const previous = previousBytes?.toString(), next = nextBytes?.toString();
+    assert.equal(previousBytes === undefined ? null : digest(previousBytes), change.beforeSha256, "Impact baseline bytes differ: " + change.file);
+    assert.equal(nextBytes === undefined ? null : digest(nextBytes), change.afterSha256, "Impact current bytes differ: " + change.file);
+    const oldShapes = exportedShapes(change.file, previous), newShapes = exportedShapes(change.file, next);
+    const oldAxes = capabilityAxes(change.file === authorities[0] ? previous : undefined), newAxes = capabilityAxes(change.file === authorities[0] ? next : undefined);
+    const onlyAxesAdded = newAxes.size > oldAxes.size && [...oldAxes].every(([key, value]) => newAxes.get(key) === value);
+    // Dynamic-axis preservation is intentionally narrow: the rest of the authority must be unchanged.
+    const withoutAxes = (source: string | undefined) => {
+      if (source === undefined) return "";
+      const tree = parse(change.file, source);
+      for (const statement of tree.statements) if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations)
+        if (declaration.name.getText(tree) === "ADMIN_CURRENT_SHARED_CAPABILITY_SET" && declaration.initializer)
+          return localVerificationSemanticSource(change.file, source.slice(0, declaration.initializer.getStart(tree)) + "{}" + source.slice(declaration.initializer.end));
+      return localVerificationSemanticSource(change.file, source);
+    };
+    const pureAxisAddition = onlyAxesAdded && withoutAxes(previous) === withoutAxes(next);
+    for (const contract of unique([...oldShapes.keys(), ...newShapes.keys()])) if (oldShapes.get(contract) !== newShapes.get(contract)) obligations.push({
+      file: change.file, owner: unique(owners.filter(owner => owner.files.includes(change.file)).map(owner => owner.owner)).join(", ") || change.file,
+      contract: change.file + "#" + contract, before: oldShapes.has(contract) ? digest(oldShapes.get(contract)!) : null,
+      after: newShapes.has(contract) ? digest(newShapes.get(contract)!) : null, addedCapabilityAxis: pureAxisAddition && contract === "manifest-obligations",
+    });
+  }
+  const protections: LocalVerificationSourceImpact["protections"][number][] = [];
+  const needsDynamicAxes = obligations.some(obligation => obligation.addedCapabilityAxis);
+  const authorityTree = parse(authorities[0], needsDynamicAxes ? text(current, authorities[0]) ?? "" : "");
+  const keyDeriver = authorityTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "adminSharedCapabilityKeys");
+  const keyReturn = keyDeriver?.body?.statements.length === 1 && ts.isReturnStatement(keyDeriver.body.statements[0]) ? keyDeriver.body.statements[0].expression : undefined;
+  let keyExpression = keyReturn;
+  while (keyExpression && (ts.isAsExpression(keyExpression) || ts.isTypeAssertionExpression(keyExpression) || ts.isParenthesizedExpression(keyExpression))) keyExpression = keyExpression.expression;
+  const derivesActualKeys = Boolean(keyDeriver?.parameters.length === 1 && keyExpression && ts.isCallExpression(keyExpression)
+    && keyExpression.expression.getText(authorityTree) === "Object.keys" && keyExpression.arguments.length === 1
+    && keyExpression.arguments[0].getText(authorityTree) === keyDeriver.parameters[0].name.getText(authorityTree));
+  const assertionShapes = (file: string, source: string | undefined) => {
+    const shapes = new Map<string, string[]>(); if (source === undefined) return shapes;
+    const tree = parse(file, localVerificationSemanticSource(file, source));
+    const bindings = new Map<string, ts.Node[]>(), imports = new Map<string, string>();
+    const register = (key: string, node: ts.Node) => bindings.set(key, [...(bindings.get(key) ?? []), node]);
+    const declarations = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) register(node.name.text, node.initializer);
+      if (ts.isFunctionDeclaration(node) && node.name && node.body) register(node.name.text, node.body);
+      if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith(".")) {
+        const base = resolve(ROOT, dirname(file), node.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+        const target = [base, base + ".ts", base + ".tsx", base + ".mts", base + ".mjs", base + "/index.ts"].find(candidate => current.has(candidate) || before.has(candidate));
+        if (target) {
+          if (node.importClause?.name) imports.set(node.importClause.name.text, target);
+          const named = node.importClause?.namedBindings;
+          if (named && ts.isNamedImports(named)) for (const element of named.elements) imports.set(element.name.text, target);
+        }
+      }
+      ts.forEachChild(node, declarations);
+    };
+    declarations(tree);
+    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>): string[] => {
+      const targets = sourcePaths(node);
+      const visit = (part: ts.Node) => {
+        if (ts.isIdentifier(part) && !seen.has(part.text)) {
+          seen.add(part.text);
+          const imported = imports.get(part.text); if (imported) targets.add(imported);
+          const candidates = bindings.get(part.text);
+          if (candidates?.length === 1) {
+            if (!ts.isBlock(candidates[0])) closure.add(candidates[0].getText(tree));
+            for (const target of dependencyPaths(candidates[0], seen, closure)) targets.add(target);
+          }
+        }
+        ts.forEachChild(part, visit);
+      };
+      visit(node); return unique(targets);
+    };
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|check|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) {
+        const callee = node.expression.getText(tree);
+        const argumentsUnderTest = callee === "check" ? node.arguments.slice(1, 2) : /^(?:assert|assert\.ok|expect)$/u.test(callee) ? node.arguments.slice(0, 1) : node.arguments.slice(0, 2);
+        // Callback-based check wrappers have their assertions inspected independently.
+        if (!argumentsUnderTest.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) || callee !== "check") {
+          const closure = new Set<string>(), references = unique(argumentsUnderTest.flatMap(argument => dependencyPaths(argument, new Set(), closure)));
+          shapes.set(JSON.stringify([callee, argumentsUnderTest.map(argument => argument.getText(tree)), unique(closure)]), references);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree); return shapes;
+  };
+  const protectionCache = new Map<string, Omit<LocalVerificationSourceImpact["protections"][number], "check" | "references">>();
+  const obligationFiles = new Set(obligations.map(obligation => obligation.file));
+  for (const check of obligations.length ? checks : []) for (const file of check.entries) {
+    const entryReferences = references(file);
+    if (![...obligationFiles].some(target => entryReferences.has(target))) continue;
+    const cached = protectionCache.get(file);
+    if (cached) { protections.push({ ...cached, check: check.check, references: unique(entryReferences) }); continue; }
+    const source = text(current, file); if (source === undefined) continue;
+    const previous = text(before, file), tree = parse(file, needsDynamicAxes ? source : "");
+    // This recognizes the existing dynamic capability audit, not arbitrary caller declarations.
+    const keyDeclarations = new Set<string>(); let importsAuthority = false, rejectsMissingAxis = false, iteratesAxes = false;
+    for (const statement of tree.statements) {
+      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) && /interaction-system\/adoption-manifest\.ts$/u.test(statement.moduleSpecifier.text)) {
+        const text = statement.getText(tree); importsAuthority ||= text.includes("ADMIN_CURRENT_SHARED_CAPABILITY_SET") && text.includes("adminSharedCapabilityKeys");
+      }
+      if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name) && declaration.initializer
+        && ts.isCallExpression(declaration.initializer) && declaration.initializer.expression.getText(tree) === "adminSharedCapabilityKeys"
+        && declaration.initializer.arguments.length === 1 && declaration.initializer.arguments[0].getText(tree) === "ADMIN_CURRENT_SHARED_CAPABILITY_SET") keyDeclarations.add(declaration.name.text);
+    }
+    const inspect = (node: ts.Node) => {
+      if (ts.isForOfStatement(node) && ts.isIdentifier(node.expression) && keyDeclarations.has(node.expression.text)
+        && /ADMIN_CURRENT_SHARED_CAPABILITY_SET\[\s*capability\s*\]/u.test(node.statement.getText(tree))
+        && /decisions\[\s*capability\s*\]/u.test(node.statement.getText(tree))) iteratesAxes = true;
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "push"
+        && node.arguments.some(argument => ts.isStringLiteralLike(argument) && argument.text === "unclassified_capability_axis")) rejectsMissingAxis = true;
+      ts.forEachChild(node, inspect);
+    };
+    inspect(tree);
+    const beforeSha256 = before.has(file) ? digest(before.get(file)!) : null, afterSha256 = digest(current.get(file)!);
+    const semanticChange = beforeSha256 !== afterSha256 && (previous === undefined || localVerificationSemanticSource(file, previous) !== localVerificationSemanticSource(file, source));
+    const oldAssertions = semanticChange ? assertionShapes(file, previous) : new Map<string, string[]>();
+    const newAssertions = semanticChange ? assertionShapes(file, source) : new Map<string, string[]>();
+    const protection = { file, beforeSha256, afterSha256, semanticChange,
+      assertionChanges: [...newAssertions].filter(([shape]) => !oldAssertions.has(shape)).map(([shape, references]) => ({ sha256: digest(shape), references })),
+      dynamicCapabilityAxes: derivesActualKeys && importsAuthority && iteratesAxes && rejectsMissingAxis };
+    protectionCache.set(file, protection);
+    protections.push({ ...protection, check: check.check, references: unique(entryReferences) });
+  }
+  const rows = changes.map(change => {
+    const matched = owners.filter(owner => owner.files.includes(change.file));
+    const registered = consumers.filter(consumer => consumer.files.includes(change.file) || matched.some(owner => consumer.files.some(entry =>
+      [...references(entry)].some(target => owner.files.includes(target)))));
+    const covering = checks.filter(check => check.references.has(change.file));
+    const unresolved = unique([...(matched.length ? unresolvedAuthorities : []), ...(covering.length ? [] : ["no_positive_source_protection_relationship"]),
+      ...registered.flatMap(consumer => consumer.files.flatMap(entry => graphProblems.has(entry) ? [graphProblems.get(entry)!] : []))]);
+    return { file: change.file, owners: matched.length ? unique(matched.map(owner => owner.owner)) : [change.file], capabilities: unique(matched.flatMap(owner => owner.capability ? [owner.capability] : [])),
+      consumers: unique(registered.map(consumer => consumer.manifest + "#" + consumer.id)),
+      contracts: unique([...obligations.filter(row => row.file === change.file).map(row => row.contract), ...registered.map(consumer => consumer.manifest)]),
+      candidateChecks: unique(covering.map(check => check.check)), unresolved };
+  });
+  return { proofBoundary: "source_discovery_only", changes: rows, obligations, protections };
+}
+
+/** A changed obligation cannot be silently blessed by changed Product bytes or a free-form waiver. */
+export function assertLocalVerificationProtectionMaintenance(impact: LocalVerificationImpact, actual: LocalVerificationInputs) {
+  const analysis = actual.changeImpact;
+  if (!analysis) return; // The real admission reader always supplies this; legacy pure callers are not release admission.
+  assert.equal(analysis.proofBoundary, "source_discovery_only");
+  assert.deepEqual(analysis.changes.map(row => row.file).sort(), actual.changes.map(row => row.file).sort(),
+    "Derived impact must cover every actual changed file.");
+  for (const obligation of analysis.obligations) {
+    const diagnostic = `Contract drift: file=${obligation.file}; owner=${obligation.owner}; contract=${obligation.contract}`;
+    const reviews = (impact.protectionMaintenance ?? []).filter(row => row.file === obligation.file && row.contract === obligation.contract);
+    assert.equal(reviews.length, 1, diagnostic + "; missing unique reviewed protection maintenance.");
+    const review = reviews[0];
+    assert.ok(review.reviewedBy?.trim() && review.rationale?.trim(), diagnostic + "; protection review is incomplete.");
+    const protection: LocalVerificationSourceImpact["protections"][number] | undefined = analysis.protections.find(row => row.file === review.protectionFile && row.check === review.check);
+    assert.ok(protection && protection.references.includes(obligation.file), diagnostic + "; protection has no bound source relationship.");
+    assert.equal(review.beforeSha256, protection.beforeSha256, diagnostic + "; stale protection baseline bytes.");
+    assert.equal(review.afterSha256, protection.afterSha256, diagnostic + "; stale protection current bytes.");
+    assert.ok(impact.changes.some(row => row.checks.includes(review.check)), diagnostic + "; protection check is not selected fresh.");
+    if (review.mode === "updated") {
+      const changed = actual.changes.find(row => row.file === review.protectionFile);
+      assert.ok(changed && /^(?:scripts|tests)\//u.test(changed.file) && protection.semanticChange
+        && protection.assertionChanges.some(assertion => assertion.sha256 === review.assertionSha256 && assertion.references.includes(obligation.file)),
+        diagnostic + "; updated protection must contain a real verification-source change.");
+      assert.equal(changed.beforeSha256, review.beforeSha256); assert.equal(changed.afterSha256, review.afterSha256);
+    } else {
+      assert.equal(review.mode, "existing_dynamic_axes", diagnostic + "; unknown maintenance mode.");
+      assert.ok(obligation.addedCapabilityAxis && protection.dynamicCapabilityAxes && !protection.semanticChange
+        && protection.beforeSha256 === protection.afterSha256,
+      diagnostic + "; unchanged protection is valid only for proven existing dynamic capability-axis expansion.");
+    }
+  }
+  for (const review of impact.protectionMaintenance ?? []) assert.ok(analysis.obligations.some(row => row.file === review.file && row.contract === review.contract),
+    `Unexpected protection maintenance: file=${review.file}; contract=${review.contract}`);
+}
+
+/** Exact literal command/argv identity only; unsupported command shapes are never pruned. */
+export function localVerificationCommandSteps(scripts: Readonly<Record<string, string>>, check: string, active = new Set<string>()): string[] | undefined {
+  if (active.has(check) || typeof scripts[check] !== "string" || /[\r\n]/u.test(scripts[check])) return undefined;
+  const next = new Set([...active, check]), result: string[] = [];
+  for (const raw of scripts[check].split("&&")) {
+    const step = raw.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
+    if (wrapper) {
+      const nested = localVerificationCommandSteps(scripts, wrapper[1], next); if (!nested) return undefined;
+      result.push(...nested);
+    } else if (/^node (?:--experimental-strip-types )?[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)(?: [a-zA-Z0-9_./:=+,-]+)*$/u.test(step)) result.push(step);
+    else return undefined;
+  }
+  return result.length ? result : undefined;
+}
 
 /** Select existing named checks; unresolved impact widens to the unchanged full gate. */
 export function planLocalVerification(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact, actual: LocalVerificationInputs, request?: PublicGateRequest) {
@@ -115,11 +442,15 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   const bindings = (rows: LocalVerificationInputs["changes"]) => rows.map(({ file, beforeSha256, afterSha256 }) =>
     ({ file, beforeSha256, afterSha256 })).sort((a, b) => a.file.localeCompare(b.file));
   assert.deepEqual(bindings(impact.changes), bindings(actual.changes), "Risk evidence must cover every actual changed file and byte identity.");
+  assertLocalVerificationProtectionMaintenance(impact, actual);
   const present = (value: unknown) => typeof value === "string" && value.trim().length > 0;
   const risks = ["A", "B", "C", "D", "E"] as const;
   let rank = 0, bounded = true;
   const selected = new Set<string>(["lint", "typecheck"]);
   const unresolvedVerificationInputs: string[] = [];
+  for (const discovery of actual.changeImpact?.changes ?? []) if (discovery.unresolved.length) bounded = false;
+  if (actual.changeImpact?.obligations.some(obligation => /(?:^|[\/._-])contracts?(?:[\/._-]|$)/iu.test(obligation.file)
+    || /(?:^|\/)adoption-manifest\.[cm]?ts$/u.test(obligation.file))) rank = Math.max(rank, 2);
   for (const row of impact.changes) {
     assert.ok(sourceIncluded(row.file), "Risk evidence cannot include private or generated source.");
     for (const sha of [row.beforeSha256, row.afterSha256]) if (sha !== null) assert.match(sha, /^[a-f0-9]{64}$/u);
@@ -157,13 +488,34 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   }
   assert.ok(Object.hasOwn(scripts, "lint") && Object.hasOwn(scripts, "typecheck"));
   const mode = rank <= 1 && bounded ? "bounded" : "full";
-  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...selected])];
-  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs, ...(nativeGate ? { nativeGate } : {}) };
+  const coveredChains = fullPrefix.map(check => localVerificationCommandSteps(scripts, check)).filter((chain): chain is string[] => Boolean(chain));
+  const invokedChecks = new Set<string>();
+  const collectInvocations = (name: string, active = new Set<string>()) => {
+    if (active.has(name) || !localVerificationCommandSteps(scripts, name)) return;
+    const next = new Set([...active, name]);
+    for (const step of scripts[name].split("&&")) {
+      const nested = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step.trim());
+      if (nested) { invokedChecks.add(nested[1]); collectInvocations(nested[1], next); }
+    }
+  };
+  for (const check of fullPrefix) collectInvocations(check);
+  const redundantAdditionalChecks = mode === "full" ? [...selected].filter(check => {
+    if (fullPrefix.includes(check) || !invokedChecks.has(check)) return false;
+    const additional = localVerificationCommandSteps(scripts, check);
+    return Boolean(additional && coveredChains.some(chain => chain.some((_, index) => additional.every((step, offset) => chain[index + offset] === step))));
+  }) : [];
+  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...[...selected].filter(check => !redundantAdditionalChecks.includes(check))])];
+  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs,
+    redundantAdditionalChecks,
+    ...(actual.changeImpact ? { changeImpact: actual.changeImpact } : {}),
+    fast: { profile: "fast" as const, prefix: [...selected], tail: [], releaseEvidence: false as const },
+    ...(nativeGate ? { nativeGate } : {}) };
 }
 
 /** Bounded requests cannot borrow an older subset/retained/measurement admission. */
 export function assertLocalVerificationRequest(request: PublicGateRequest, plan: ReturnType<typeof planLocalVerification>) {
   assert.ok(request.localVerification);
+  assert.ok(!("profile" in plan) && !("releaseEvidence" in plan), "A Fast report cannot authorize release execution.");
   if (plan.nativeGate) assert.deepEqual(localVerificationNativeGate(request), plan.nativeGate,
     "Native tail coverage cannot be borrowed by a different request, script, cohort or argument selection.");
   assert.deepEqual(plan.unresolvedVerificationInputs, [],
@@ -178,7 +530,7 @@ export function assertLocalVerificationRequest(request: PublicGateRequest, plan:
 }
 
 /** Bind reviewed impact to Git's actual delta and source bytes; Git remains the membership owner. */
-function readLocalVerificationInputs(context: PrivatePublicVerificationContext, impact: LocalVerificationImpact,
+function readLocalVerificationInputs(context: Pick<PrivatePublicVerificationContext, "cleanEnvironment">, impact: LocalVerificationImpact,
   manifest: readonly { file: string; sha256: string }[], additionalSourceFiles: readonly string[], request: PublicGateRequest, previous?: LocalVerificationInputs): LocalVerificationInputs {
   assert.match(impact.baselineHead, /^[a-f0-9]{40}$/u);
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(),
@@ -189,7 +541,7 @@ function readLocalVerificationInputs(context: PrivatePublicVerificationContext, 
     git("merge-base", "--is-ancestor", impact.baselineHead, finalHead);
   }
   const baselineFiles = previous ? undefined : new Set(git("ls-tree", "-r", "--name-only", "-z", impact.baselineHead).toString("utf8").split("\0").filter(Boolean));
-  const changed = new Set([...git("diff", "--no-renames", "--name-only", "-z", impact.baselineHead, "--").toString("utf8").split("\0").filter(Boolean), ...additionalSourceFiles]);
+  const changed = new Set([...git("diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z", impact.baselineHead, "--").toString("utf8").split("\0").filter(Boolean), ...additionalSourceFiles]);
   if (previous) assert.deepEqual([...changed].sort(), previous.changes.map(row => row.file));
   const changes = [...changed].sort().map(file => {
     const source = safeSourcePath(file), exists = existsSync(source);
@@ -205,36 +557,71 @@ function readLocalVerificationInputs(context: PrivatePublicVerificationContext, 
   const verificationNativeGate = localVerificationNativeGate(request);
   if (previous) assert.deepEqual(verificationNativeGate, previous.verificationNativeGate, "Cached executable coverage cannot change its selected native tail.");
   const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest, request);
-  return { baselineHead: impact.baselineHead, finalHead, sourceSha256: digest(JSON.stringify(manifest)), changes, verificationCoverage,
+  const sourceSha256 = digest(JSON.stringify(manifest));
+  if (previous) assert.equal(sourceSha256, previous.sourceSha256, "Cached source discovery cannot survive a changed source manifest.");
+  const changeImpact = previous?.changeImpact ?? (() => {
+    const currentSources = new Map(manifest.map(row => { const source = readFileSync(safeSourcePath(row.file)); assert.equal(digest(source), row.sha256,
+      "Impact source differs from the bound manifest: " + row.file); return [row.file, source] as const; }));
+    const baselineSources = new Map(currentSources);
+    for (const change of changes) {
+      if (change.beforeSha256 === null) baselineSources.delete(change.file);
+      else baselineSources.set(change.file, git("show", impact.baselineHead + ":" + change.file));
+    }
+    return deriveLocalVerificationSourceImpact(scripts, changes, currentSources, baselineSources);
+  })();
+  return { baselineHead: impact.baselineHead, finalHead, sourceSha256, changes, verificationCoverage,
+    changeImpact,
     ...(verificationNativeGate ? { verificationNativeGate } : {}) };
+}
+
+/** Read-only source consistency entry: no owned lifecycle, fixture, Browser, database or verification check starts. */
+export function inspectLocalVerificationChangeImpact(options: { baselineHead: string; additionalSourceFiles?: readonly string[]; impact?: LocalVerificationImpact }) {
+  assert.match(options.baselineHead, /^[a-f0-9]{40}$/u, "An explicit immutable impact baseline is required.");
+  const environment: NodeJS.ProcessEnv = { GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const context = { cleanEnvironment: () => ({ ...environment }) };
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(), windowsHide: true,
+    timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
+  const tracked = git("ls-files", "-z").split("\0").filter(Boolean), additional = [...(options.additionalSourceFiles ?? [])];
+  const files = selectSourceInventory(tracked, additional);
+  for (const file of additional) assert.ok(existsSync(safeSourcePath(file)), "Explicit additional source is missing: " + file);
+  const manifest = files.flatMap(file => {
+    const path = safeSourcePath(file); if (!existsSync(path)) return [];
+    assert.ok(lstatSync(path).isFile() && realpathSync(path) === path, "Impact source cannot traverse a symlink or junction: " + file);
+    return [{ file, sha256: digest(readFileSync(path)) }];
+  });
+  const sourceSha256 = digest(JSON.stringify(manifest)), finalHead = git("rev-parse", "HEAD").trim();
+  const impact = options.impact ?? { baselineHead: options.baselineHead, finalHead, sourceSha256, changes: [] };
+  assert.equal(impact.baselineHead, options.baselineHead, "The reviewed impact baseline differs from the explicitly requested baseline.");
+  const actual = readLocalVerificationInputs(context, impact, manifest, additional, { additionalSourceFiles: additional });
+  const base = { baselineHead: actual.baselineHead, finalHead: actual.finalHead, sourceSha256: actual.sourceSha256,
+    actualDelta: actual.changes, changeImpact: actual.changeImpact, releaseEvidence: false as const,
+    proofBoundary: "source_discovery_only" as const, checksExecuted: 0, browserExecuted: false, databaseCalls: 0, networkRequests: 0 };
+  if (!options.impact) return { ...base, status: actual.changeImpact!.obligations.length ? "DRIFT" : "REVIEW_REQUIRED", exitCode: 2,
+    diagnostics: actual.changeImpact!.obligations.map(obligation => `file=${obligation.file}; owner=${obligation.owner}; contract=${obligation.contract}; reviewed protection maintenance is required.`) };
+  try {
+    const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+    const plan = planLocalVerification(scripts, impact, actual);
+    assert.deepEqual(plan.unresolvedVerificationInputs, [], "Source consistency requires positive executable coverage for every changed verification input.");
+    return { ...base, status: "PASS_SOURCE_CONSISTENCY", exitCode: 0, plan,
+      diagnostics: ["Source consistency only. Selected checks have not executed; behavior and release readiness remain unverified."] };
+  } catch (error) {
+    return { ...base, status: "DRIFT", exitCode: 2, diagnostics: [error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid reviewed source consistency evidence."] };
+  }
 }
 
 /** Inspect literal registered command chains without executing or expanding the gate prefix. */
 export function registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[] {
-  const resolved = new Map<string, Set<string>>(), active = new Set<string>();
-  const visit = (name: string): Set<string> => {
-    assert.ok(/^[a-zA-Z0-9:_-]+$/u.test(name) && Object.hasOwn(scripts, name) && typeof scripts[name] === "string",
-      "Verification wrappers must name an existing literal package command.");
-    assert.ok(!active.has(name), "Verification package command cycles cannot prove executable coverage.");
-    const cached = resolved.get(name); if (cached) return cached;
-    active.add(name);
-    const command = scripts[name];
-    assert.ok(!/[\r\n]/u.test(command), "Verification commands cannot contain shell line separators.");
-    const entries = new Set<string>();
-    for (const part of command.split("&&")) {
-      const step = part.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
-      if (wrapper) {
-        for (const entry of visit(wrapper[1])) entries.add(entry);
-      } else {
-        const node = /^node (?:--experimental-strip-types )?([a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts))(?: [a-zA-Z0-9_./:=+,-]+)*$/u.exec(step);
-        assert.ok(node && sourceIncluded(node[1]),
-          "Verification coverage requires literal Node entries or argument-free npm run wrappers; shell, environment and dynamic commands are unsupported.");
-        entries.add(node[1]);
-      }
-    }
-    active.delete(name); resolved.set(name, entries); return entries;
-  };
-  return [...visit(check)];
+  assert.ok(/^[a-zA-Z0-9:_-]+$/u.test(check) && Object.hasOwn(scripts, check),
+    "Verification wrappers must name an existing literal package command.");
+  const steps = localVerificationCommandSteps(scripts, check);
+  assert.ok(steps, "Verification coverage requires literal Node entries or argument-free npm run wrappers; shell, environment, cycles and dynamic commands are unsupported.");
+  return [...new Set(steps.map(step => {
+    const words = step.split(" "), entry = words[1] === "--experimental-strip-types" ? words[2] : words[1];
+    assert.ok(sourceIncluded(entry), "A verification entry cannot include private or generated source.");
+    return entry;
+  }))];
 }
 
 /** Positive executable proof only; dynamic/non-import fixture use cannot authorize a bounded gate. */

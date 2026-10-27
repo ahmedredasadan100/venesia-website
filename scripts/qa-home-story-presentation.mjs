@@ -2660,7 +2660,7 @@ async function verifyTopicContentPresentation() {
   };
   if (contentPanelGalleryOnly) await recordPanelGallerySourceIdentity();
   const draftNoticeEvidenceRoot = path.join(fixtureRoot, '.tmp-qa/admin-development-batch-01/draft-notice-unification-20261024');
-  const draftNoticeOwnerFiles = [...new Set([...draftOwnerFiles, 'src/lib/admin/form-system/adoption-manifest.ts', 'scripts/verify-admin-form-system.mts', 'scripts/verify-admin-entity-list.mjs'])];
+  const draftNoticeOwnerFiles = [...new Set([...draftOwnerFiles, 'src/lib/admin/form-system/adoption-manifest.ts', 'scripts/verify-admin-form-system.mts', 'scripts/fixtures/admin-form-section-contract.mts', 'scripts/verify-admin-entity-list.mjs'])];
   const readDraftNoticeSourceHashes = async () => Object.fromEntries(await Promise.all(draftNoticeOwnerFiles.map(async file => [file, createHash('sha256').update(await readFile(path.join(fixtureRoot, file))).digest('hex')])));
   const draftNoticeStartedAt = new Date().toISOString(), draftNoticeSourceHashesAtStart = draftNoticeOnly ? await readDraftNoticeSourceHashes() : null;
   const recordDraftNoticeSourceIdentity = async end => {
@@ -2669,7 +2669,7 @@ async function verifyTopicContentPresentation() {
   };
   if (draftNoticeOnly) await recordDraftNoticeSourceIdentity();
   const unifiedImageEvidenceRoot = path.join(fixtureRoot, '.tmp-qa/admin-development-batch-01/unified-image-system-20261024', ...(process.argv.includes('--unified-image-draft-before-only') ? ['draft-duplicate-before'] : []));
-  const unifiedImageOwnerFiles = [...new Set([...panelGalleryOwnerFiles, 'src/components/admin/content/editors/article/TopicImageField.tsx', 'src/components/admin/media/AdminMediaSlotGuidance.tsx', 'src/components/admin/media/AdminDeletedMediaNotice.tsx', 'src/lib/media/media-slot-contract.ts', 'src/lib/media-center/detail-page-config.ts', 'src/lib/admin/admin-ui-styles.ts', 'scripts/verify-page-block-editor-presentation.mts', 'scripts/verify-topic-editor-basic-data.mjs'])];
+  const unifiedImageOwnerFiles = [...new Set([...panelGalleryOwnerFiles, 'src/components/admin/content/editors/article/TopicImageField.tsx', 'src/components/admin/media/AdminMediaSlotGuidance.tsx', 'src/components/admin/media/AdminDeletedMediaNotice.tsx', 'src/lib/media/media-slot-contract.ts', 'src/lib/media-center/detail-page-config.ts', 'src/lib/admin/admin-ui-styles.ts', 'scripts/verify-page-block-editor-presentation.mts', 'scripts/fixtures/admin-form-section-contract.mts', 'scripts/verify-topic-editor-basic-data.mjs'])];
   const readUnifiedImageSourceHashes = async () => Object.fromEntries(await Promise.all(unifiedImageOwnerFiles.map(async file => [file, createHash('sha256').update(await readFile(path.join(fixtureRoot, file))).digest('hex')])));
   const unifiedImageStartedAt = new Date().toISOString(), unifiedImageSourceHashesAtStart = unifiedImageOnly ? await readUnifiedImageSourceHashes() : null;
   const recordUnifiedImageSourceIdentity = async end => {
@@ -3868,7 +3868,7 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
       'src/app/admin/content/topics/[id]/preview/page.tsx',
       'src/lib/seo/run-global-seo-health.ts',
       'scripts/verify-unified-content-editors-adoption.mts',
-      'scripts/verify-admin-form-system.mts',
+      'scripts/verify-admin-form-system.mts', 'scripts/fixtures/admin-form-section-contract.mts',
       'scripts/verify-public-media-truth.mts',
       'scripts/verify-public-media-truth-db.mjs',
       'scripts/verify-public-content-delivery.mts',
@@ -4091,7 +4091,7 @@ async function verifyPremiumAdoptionAcceptance() {
       assert.equal(selection.independence.promptSuppliedReferenceIdentity, false);
       blind = { sourceFile: blindFile, selectionFile, selectionSha256: createHash('sha256').update(await readFile(path.join(fixtureRoot, selectionFile))).digest('hex'), observation };
     }
-    const sourceFiles = new Set([...owners.files, ...(blind ? [blind.selectionFile] : []), routeFile, actionFile, 'src/components/admin/ui/ADMIN_UI_RULES.md', 'src/components/admin/page-blocks/ContentModuleEditClient.tsx', 'src/lib/page-blocks/module-editor-presentation-contract.ts', 'src/lib/page-composition/module-registry-metadata.ts', 'scripts/qa-home-story-presentation.mjs', 'scripts/fixtures/remaining-content-owner-harness.mjs', 'scripts/verify-page-block-editor-presentation.mts', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.mjs', 'src/app/globals.css']);
+    const sourceFiles = new Set([...owners.files, ...(blind ? [blind.selectionFile] : []), routeFile, actionFile, 'src/components/admin/ui/ADMIN_UI_RULES.md', 'src/components/admin/page-blocks/ContentModuleEditClient.tsx', 'src/lib/page-blocks/module-editor-presentation-contract.ts', 'src/lib/page-composition/module-registry-metadata.ts', 'scripts/qa-home-story-presentation.mjs', 'scripts/fixtures/remaining-content-owner-harness.mjs', 'scripts/verify-page-block-editor-presentation.mts', 'scripts/fixtures/admin-form-section-contract.mts', 'package.json', 'package-lock.json', 'tsconfig.json', 'postcss.config.mjs', 'src/app/globals.css']);
     const sourceHashes = Object.fromEntries(await Promise.all([...sourceFiles].sort().map(async file => [file, createHash('sha256').update(await readFile(path.join(fixtureRoot, file))).digest('hex')])));
     const visualCases = [25, 28].flatMap(consumerId => [[1440, 900], [390, 844]].map(([width, height]) => ({ role: consumerId === 25 ? 'reference' : 'adopter', consumerId, state: 'cta-populated', viewport: { width, height }, direction: 'rtl', required: true, completeGroups: ['data', 'appearance'] })));
     if (blind) visualCases.push(...[[1440, 900], [390, 844]].map(([width, height]) => ({ role: 'blind', consumerId: 'blind', state: 'cta-inactive', viewport: { width, height }, direction: 'rtl', required: false })));

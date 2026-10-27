@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
@@ -12,7 +13,7 @@ import ts from "typescript";
 import sharp from "sharp";
 import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application-cli-pulse.mjs";
 import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
-import { sourceIncluded } from "./lib/verification-source-inventory.mts";
+import { selectSourceInventory, sourceIncluded } from "./lib/verification-source-inventory.mts";
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -1547,6 +1548,227 @@ function verifyFinalQualityGatePlan() {
   cases.push("Hero prerequisite build and journey precede the complete unchanged canonical Quality prefix and Public tail");
 }
 
+/** Execute source discovery and admission with in-memory source bytes, never Browser/DB transports. */
+function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated-public-verification.mts"),
+  "deriveLocalVerificationSourceImpact" | "localVerificationSemanticSource" | "planLocalVerification" | "assertLocalVerificationRequest" | "localVerificationCommandSteps">,
+  repositoryScripts: Record<string, string>) {
+  const authority = "src/lib/admin/interaction-system/adoption-manifest.ts", formAuthority = "src/lib/admin/form-system/adoption-manifest.ts";
+  const owner = "src/components/admin/ui/Phase03Owner.tsx", consumer = "src/app/admin/phase03/Consumer.tsx";
+  const contract = "src/lib/admin/phase03/contracts.ts", entry = "scripts/verify-phase03-contract.mts", css = "src/styles/phase03.css";
+  const browser = "scripts/qa-phase03-browser.mjs", database = "scripts/qa-phase03-database.mjs", checkName = "verify:phase03-owner";
+  const capability = 'widget: { owner: "Phase03Owner", sourceFiles: ["' + owner + '"], executableBindings: [{sourceFile: "' + owner + '", exportNames:["Phase03Owner"]}] }';
+  const authoritySource = 'function defineAdminSharedCapabilitySet(value) { return value; } export const ADMIN_CURRENT_SHARED_CAPABILITY_SET = defineAdminSharedCapabilitySet({' + capability + '});\n'
+    + 'export function adminSharedCapabilityKeys(capabilitySet) { return Object.keys(capabilitySet); }\n'
+    + 'export const ADMIN_COLLECTION_SURFACE_ADOPTION = {surfaces:[{id:"phase03-consumer",pageSourceFiles:["' + consumer + '"],presentationSourceFiles:[],capabilityAudit:{}}]};';
+  const guardSource = 'import assert from "node:assert/strict"; import { readFileSync } from "node:fs"; const target="' + contract + '"; const value=readFileSync(target,"utf8"); assert.ok(value.includes("value: string")); const ownerPath="' + owner + '"; const cssPath="' + css + '";';
+  const originals = new Map<string, string | Buffer>([
+    [authority, authoritySource], [formAuthority, "export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [];"],
+    [owner, 'export function Phase03Owner() { return "before"; }'],
+    [consumer, 'import {Phase03Owner} from "../../../components/admin/ui/Phase03Owner"; export function Consumer() { return Phase03Owner(); }'],
+    [contract, "export type RecordContract = { value: string };"], [entry, guardSource], [css, ".card { gap: 8px; }"],
+    [browser, 'const marker="' + owner + '";'], [database, 'const marker="' + owner + '";'],
+  ]);
+  const scripts: Record<string, string> = { lint: repositoryScripts.lint, typecheck: repositoryScripts.typecheck,
+    [checkName]: "node --experimental-strip-types " + entry,
+    "qa:phase03-browser": "node " + browser + " --browser", "qa:phase03-database": "node " + database + " --database" };
+  const tail = ["build", "verify:product-surface-identity-build", "verify:platform-contracts", "test:e2e:public"];
+  for (const name of tail) scripts[name] = repositoryScripts[name];
+  scripts["ci:check"] = ["lint", "typecheck", checkName, ...tail].map(name => "npm run " + name).join(" && ");
+  type Impact = import("./lib/isolated-public-verification.mts").LocalVerificationImpact;
+  type Actual = import("./lib/isolated-public-verification.mts").LocalVerificationInputs;
+  const scenario = (edits: Array<[string, string | Buffer | undefined]>, baseline = originals) => {
+    const current = new Map(baseline);
+    for (const [file, source] of edits) if (source === undefined) current.delete(file); else current.set(file, source);
+    const changes: import("./lib/isolated-public-verification.mts").LocalVerificationChange[] = edits.map(([file]) => ({
+      file, beforeSha256: baseline.has(file) ? sha256(baseline.get(file)!) : null, afterSha256: current.has(file) ? sha256(current.get(file)!) : null,
+      risk: file === contract || file === authority || file === formAuthority ? "C" : file.startsWith("scripts/") ? "E" : "A",
+      owner: file, reviewedBy: "phase03-source-impact-controls", rationale: "Exact in-memory source control.", bounded: true, nonImportImpactReviewed: true,
+      contracts: [contract], consumers: [consumer], checks: [checkName],
+    }));
+    const impact: Impact = { baselineHead: "a".repeat(40), finalHead: "b".repeat(40), sourceSha256: "c".repeat(64), changes };
+    const actual: Actual = { baselineHead: impact.baselineHead, finalHead: impact.finalHead, sourceSha256: impact.sourceSha256,
+      changes: changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 })),
+      changeImpact: api.deriveLocalVerificationSourceImpact(scripts, changes, current, baseline) };
+    return { impact, actual, current, baseline };
+  };
+  const maintain = (value: ReturnType<typeof scenario>, mode: "updated" | "existing_dynamic_axes" = "updated") => {
+    value.impact.protectionMaintenance = value.actual.changeImpact!.obligations.map(obligation => ({ file: obligation.file, contract: obligation.contract,
+      protectionFile: entry, check: checkName, beforeSha256: sha256(value.baseline.get(entry)!), afterSha256: sha256(value.current.get(entry)!),
+      mode, reviewedBy: "phase03-contract-maintenance-review", rationale: "The source-bound changed assertion preserves this exact obligation.",
+      assertionSha256: value.actual.changeImpact!.protections.find(protection => protection.file === entry && protection.check === checkName)?.assertionChanges
+        .find(assertion => assertion.references.includes(obligation.file))?.sha256 }));
+  };
+  const plan = (value: ReturnType<typeof scenario>) => api.planLocalVerification(scripts, value.impact, value.actual);
+  check("source impact small owner edit preserves contracts and reports candidates without scheduling Browser/Database", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "after"; }']]), result = plan(value);
+    assert.equal(result.mode, "bounded"); assert.equal(result.changeImpact?.proofBoundary, "source_discovery_only");
+    const row = result.changeImpact!.changes.find(row => row.file === owner)!;
+    assert.ok(row.owners.includes("Phase03Owner") && row.capabilities.includes("widget"));
+    assert.ok(row.consumers.includes(authority + "#phase03-consumer"));
+    assert.ok(row.candidateChecks.includes("qa:phase03-browser") && row.candidateChecks.includes("qa:phase03-database"));
+    assert.deepEqual(result.fast.prefix, ["lint", "typecheck", checkName]); assert.equal(result.fast.releaseEvidence, false);
+    assert.deepEqual(result.changeImpact!.obligations, []);
+    assert.deepEqual(result.changeImpact!.protections, [], "No unchanged-obligation edit should traverse protection assertions.");
+    assert.throws(() => api.assertLocalVerificationRequest({ localVerification: value.impact, additionalSourceFiles: [] }, result.fast as unknown as ReturnType<typeof api.planLocalVerification>), /Fast report/u);
+  });
+  check("shared owner impact discovers every statically registered direct and indirect consumer without granting adoption PASS", () => {
+    const second = "src/app/admin/phase03/Indirect.tsx", baseline = new Map(originals);
+    baseline.set(second, 'import {Consumer} from "./Consumer"; export function Indirect() { return Consumer(); }');
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"second-consumer",sourceFiles:["' + second + '"],capabilityAudit:{}}];');
+    const value = scenario([[owner, 'export function Phase03Owner() { return "shared after"; }']], baseline);
+    assert.ok(value.actual.changeImpact!.changes[0].consumers.includes(formAuthority + "#second-consumer"));
+    assert.equal(value.actual.changeImpact!.proofBoundary, "source_discovery_only");
+  });
+  check("unknown generated adoption stays explicit and widens only the affected shared owner", () => {
+    const baseline = new Map(originals);
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = values.map(value => ({id:`generated-${value}`,sourceFiles:[value],capabilityAudit:{}}));');
+    const shared = scenario([[owner, 'export function Phase03Owner() { return "shared"; }']], baseline);
+    assert.equal(plan(shared).mode, "full"); assert.ok(shared.actual.changeImpact!.changes[0].unresolved.some(value => value.includes("generated_or_dynamic_consumer")));
+    const small = scenario([[css, ".card { gap: 12px; }"]], baseline);
+    assert.equal(plan(small).mode, "bounded"); assert.deepEqual(small.actual.changeImpact!.obligations, []);
+  });
+  check("contract drift without maintained protection fails with file owner and contract diagnostic", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"]]);
+    assert.throws(() => plan(value), error => error instanceof Error && error.message.includes(contract) && error.message.includes("owner=") && error.message.includes("#RecordContract"));
+  });
+  check("exact-byte contract maintenance requires a newly changed assertion linked to that contract", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    maintain(value); const result = plan(value); assert.equal(result.mode, "full"); assert.equal(result.risk, "E");
+    const review = value.impact.protectionMaintenance![0];
+    value.impact.protectionMaintenance = [{ ...review, afterSha256: "f".repeat(64) }]; assert.throws(() => plan(value), /stale protection current bytes/u);
+  });
+  check("source-confirmed explicit contract changes cannot be mislabeled A to avoid the C full-risk floor", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    value.impact.changes = value.impact.changes.map(row => ({ ...row, risk: "A" }));
+    value.actual.verificationCoverage = [{ file: entry, checks: [checkName] }]; maintain(value);
+    const result = plan(value); assert.equal(result.risk, "C"); assert.equal(result.mode, "full");
+  });
+  check("repeated canonical aliases share only identical per-entry protection metadata within the same exact source snapshot", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    const commands = { ...scripts, "verify:phase03-owner-wrapper": "npm run " + checkName, "verify:phase03-owner-alias": scripts[checkName] };
+    const analysis = api.deriveLocalVerificationSourceImpact(commands, value.actual.changes, value.current, value.baseline);
+    const rows = analysis.protections.filter(protection => protection.file === entry);
+    assert.equal(rows.length, 3); assert.ok(rows[0].assertionChanges.length > 0);
+    for (const row of rows.slice(1)) {
+      assert.equal(row.afterSha256, rows[0].afterSha256); assert.equal(row.beforeSha256, rows[0].beforeSha256);
+      assert.equal(row.assertionChanges, rows[0].assertionChanges, "An alias must reuse the exact per-entry immutable assertion projection.");
+      assert.deepEqual(row.references, rows[0].references);
+    }
+    const changed = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: string"')]]);
+    const next = api.deriveLocalVerificationSourceImpact(commands, changed.actual.changes, changed.current, changed.baseline).protections.find(protection => protection.file === entry)!;
+    assert.notEqual(next.afterSha256, rows[0].afterSha256); assert.notEqual(next.assertionChanges, rows[0].assertionChanges);
+    assert.notDeepEqual(next.assertionChanges.map(assertion => assertion.sha256), rows[0].assertionChanges.map(assertion => assertion.sha256));
+  });
+  for (const [label, nextGuard] of [["logging-only", guardSource + '\nconsole.log("changed");'], ["unrelated assertion", guardSource + "\nassert.equal(1, 2);"], ["comments-only", guardSource + "\n// contract review"],
+    ["diagnostic-only", guardSource.replace('assert.ok(value.includes("value: string"))', 'assert.ok(value.includes("value: string"),"new message")')]] as const)
+    check("contract maintenance rejects " + label + " changes as replacement protection", () => {
+      const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, nextGuard]]);
+      maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    });
+  check("changed local expected vectors preserve assertion identity and still require the exact reviewed protection fingerprint", () => {
+    const baseline = new Map(originals), vectorGuard = guardSource.replace('assert.ok(value.includes("value: string"))', 'const expected="value: string"; assert.ok(value.includes(expected))');
+    baseline.set(entry, vectorGuard);
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, vectorGuard.replace('expected="value: string"', 'expected="revision: number"')]], baseline);
+    maintain(value); assert.equal(plan(value).mode, "full");
+    value.impact.protectionMaintenance = value.impact.protectionMaintenance!.map(review => ({ ...review, assertionSha256: "f".repeat(64) }));
+    assert.throws(() => plan(value), /real verification-source change/u);
+  });
+  check("contract evidence data and approved presentation values remain semantic obligations", () => {
+    const baseline = new Map(originals); baseline.set(contract, 'export const contractData={evidence:"required"};');
+    assert.equal(scenario([[contract, 'export const contractData={evidence:"different"};']], baseline).actual.changeImpact!.obligations.length, 1);
+    const presentation = 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"form",sourceFiles:["' + consumer + '"],capabilityAudit:{},presentationContract:{requirements:[{target:"grid",requirement:"required",presentation:{port:"columns",value:"2"},evidence:["required-proof"]}]}}];';
+    baseline.set(formAuthority, presentation);
+    const changed = scenario([[formAuthority, presentation.replace('value:"2"', 'value:"3"')]], baseline);
+    assert.throws(() => plan(changed), /manifest-obligations/u);
+    assert.equal(scenario([[formAuthority, presentation.replace('required-proof', 'different-proof')]], baseline).actual.changeImpact!.obligations.length, 1);
+  });
+  check("valid TypeScript angle assertions and generic arrows parse while malformed contracts fail closed", () => {
+    assert.ok(api.localVerificationSemanticSource("contract.mts", "export const cast = <string>value; export const identity = <T>(value:T) => value;").includes("identity"));
+    assert.throws(() => api.localVerificationSemanticSource("contract.ts", "export type Broken = {"), /malformed/u);
+    const value = scenario([[contract, "  // formatting\nexport type RecordContract = { value: string };\n"]]);
+    assert.deepEqual(value.actual.changeImpact!.obligations, []);
+    const baseline = new Map(originals); baseline.set(owner, 'export const Owner = (value: string): string => value;');
+    const signature = scenario([[owner, 'export const Owner = (value: number): string => String(value);']], baseline);
+    assert.equal(signature.actual.changeImpact!.obligations[0].contract, owner + "#Owner");
+    assert.throws(() => plan(signature), /Contract drift/u);
+  });
+  check("binary source bytes stay exact and opaque asset impact is unresolved instead of decoded or silently bounded", () => {
+    const asset = "public/phase03.png", baseline = new Map(originals); baseline.set(asset, Buffer.from([0, 255, 1]));
+    const value = scenario([[asset, Buffer.from([0, 254, 1])]], baseline);
+    assert.deepEqual(value.actual.changeImpact!.obligations, []); assert.equal(plan(value).mode, "full");
+    value.current.delete(asset);
+    assert.throws(() => api.deriveLocalVerificationSourceImpact(scripts, value.actual.changes, value.current, baseline), /current bytes differ/u);
+  });
+  check("added and deleted contract boundaries cannot borrow missing or stale source bytes", () => {
+    const added = "src/lib/admin/phase03/new-contract.ts", value = scenario([[added, "export type Added = {id: string};"]]);
+    assert.equal(value.actual.changeImpact!.obligations[0].before, null); assert.throws(() => plan(value), /Contract drift/u);
+    const removed = scenario([[contract, undefined]]); assert.equal(removed.actual.changeImpact!.obligations[0].after, null);
+    const stale = new Map(originals); stale.set(contract, "export type RecordContract = { value: number };");
+    assert.throws(() => api.deriveLocalVerificationSourceImpact(scripts, removed.actual.changes, removed.current, stale), /baseline bytes differ/u);
+  });
+  check("existing dynamic axes require actual Object.keys derivation and unchanged source-bound audit protection", () => {
+    const dynamicGuard = 'import assert from "node:assert/strict"; import {ADMIN_CURRENT_SHARED_CAPABILITY_SET,adminSharedCapabilityKeys} from "../src/lib/admin/interaction-system/adoption-manifest.ts";\n'
+      + 'const currentSharedCapabilityKeys=adminSharedCapabilityKeys(ADMIN_CURRENT_SHARED_CAPABILITY_SET); const decisions={}; const failures=[];\n'
+      + 'if(Object.keys(decisions).length!==currentSharedCapabilityKeys.length) failures.push("unclassified_capability_axis");\n'
+      + 'for(const capability of currentSharedCapabilityKeys) { assert.ok(ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability]); assert.ok(decisions[capability]); }';
+    const baseline = new Map(originals); baseline.set(entry, dynamicGuard);
+    const nextAuthority = authoritySource.replace(capability, capability + ',other:{owner:"Other",sourceFiles:["src/other.ts"],executableBindings:[]}');
+    const value = scenario([[authority, nextAuthority]], baseline); maintain(value, "existing_dynamic_axes");
+    assert.equal(value.actual.changeImpact!.obligations[0].addedCapabilityAxis, true); assert.equal(plan(value).mode, "full");
+    const hardcoded = new Map(baseline); hardcoded.set(entry, dynamicGuard.replace("of currentSharedCapabilityKeys", 'of ["widget"]'));
+    const invalid = scenario([[authority, nextAuthority]], hardcoded); maintain(invalid, "existing_dynamic_axes");
+    assert.throws(() => plan(invalid), /proven existing dynamic/u);
+    const modified = scenario([[authority, authoritySource.replace('owner: "Phase03Owner"', 'owner: "ChangedOwner"')]], baseline); maintain(modified, "existing_dynamic_axes");
+    assert.throws(() => plan(modified), /proven existing dynamic/u);
+  });
+  check("additional checks prune only an ordered exact canonical command and argv chain already inside a full-prefix owner", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "dedupe"; }']]);
+    const changes = value.impact.changes.map(row => ({ ...row, risk: "C" as const, checks: ["verify:phase03-child", "verify:phase03-direct-alias", "verify:phase03-different-mode", "verify:phase03-reversed", "verify:phase03-repeated", "verify:phase03-unsupported"] }));
+    const commandA = "node scripts/phase03-a.mjs --mode=one", commandB = "node scripts/phase03-b.mjs";
+    const commands = { ...scripts, [checkName]: "npm run verify:phase03-child && " + commandB,
+      "verify:phase03-child": commandA, "verify:phase03-direct-alias": commandA, "verify:phase03-different-mode": commandA.replace("one", "two"),
+      "verify:phase03-reversed": commandB + " && " + commandA, "verify:phase03-repeated": commandA + " && " + commandA,
+      "verify:phase03-unsupported": "node scripts/phase03-a.mjs --mode=one; echo unsupported" };
+    const result = api.planLocalVerification(commands, { ...value.impact, changes }, { ...value.actual, changeImpact: undefined });
+    assert.deepEqual(result.redundantAdditionalChecks, ["verify:phase03-child"]);
+    assert.equal(result.prefix.includes("verify:phase03-child"), false);
+    for (const name of changes[0].checks.slice(1)) assert.ok(result.prefix.includes(name));
+    assert.deepEqual(result.prefix.slice(0, 3), ["lint", "typecheck", checkName]);
+    assert.equal(api.localVerificationCommandSteps(commands, "verify:phase03-unsupported"), undefined);
+  });
+  check("actual admission reader derives from controlled Git and raw source bytes then reuses only an identical immutable snapshot", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "reader"; }']]);
+    value.current.set("package.json", JSON.stringify({ scripts })); value.baseline.set("package.json", JSON.stringify({ scripts }));
+    const manifest = [...value.current].map(([file, source]) => ({ file, sha256: sha256(source) })).sort((a, b) => a.file.localeCompare(b.file));
+    value.impact.sourceSha256 = sha256(JSON.stringify(manifest));
+    const ownerSource = readSource("scripts/lib/isolated-public-verification.mts"), tree = ts.createSourceFile("owner.mts", ownerSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const declaration = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "readLocalVerificationInputs"); assert.ok(declaration);
+    let discoveries = 0;
+    const git = (_command: string, args: string[]) => {
+      if (args[0] === "rev-parse") return Buffer.from(args.includes("--verify") ? value.impact.baselineHead : value.impact.finalHead);
+      if (args[0] === "merge-base") return Buffer.alloc(0);
+      if (args[0] === "ls-tree") return Buffer.from([...value.baseline.keys()].join("\0") + "\0");
+      if (args[0] === "diff") return Buffer.from(value.actual.changes.map(row => row.file).join("\0") + "\0");
+      if (args[0] === "show") { const bytes = value.baseline.get(args[1].slice(41)); assert.ok(bytes !== undefined); return typeof bytes === "string" ? Buffer.from(bytes) : Buffer.from(bytes); }
+      throw Error("Unexpected controlled Git command");
+    };
+    const read = (file: string, encoding?: string) => { const bytes = value.current.get(file); assert.ok(bytes !== undefined); return encoding ? bytes.toString() : typeof bytes === "string" ? Buffer.from(bytes) : Buffer.from(bytes); };
+    const code = ts.transpileModule(declaration.getText(tree), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const reader = new Function("assert", "execFileSync", "ROOT", "digest", "safeSourcePath", "existsSync", "lstatSync", "realpathSync", "readFileSync", "localVerificationNativeGate", "localVerificationCoverage", "deriveLocalVerificationSourceImpact", code + ";return readLocalVerificationInputs;")(
+      assert, git, root, sha256, (file: string) => file, (file: string) => value.current.has(file), () => ({ isFile: () => true }), (file: string) => file, read,
+      () => undefined, () => [], (...args: Parameters<typeof api.deriveLocalVerificationSourceImpact>) => { discoveries += 1; return api.deriveLocalVerificationSourceImpact(...args); }) as
+      (context: { cleanEnvironment(): object }, impact: Impact, manifest: Array<{ file: string; sha256: string }>, additional: string[], request: object, previous?: Actual) => Actual;
+    const context = { cleanEnvironment: () => ({}) }, first = reader(context, value.impact, manifest, [], {});
+    assert.equal(first.sourceSha256, value.impact.sourceSha256); assert.equal(first.changeImpact!.proofBoundary, "source_discovery_only");
+    assert.equal(api.planLocalVerification(scripts, value.impact, first).mode, "bounded");
+    const second = reader(context, value.impact, manifest, [], {}, first);
+    assert.equal(second.changeImpact, first.changeImpact); assert.equal(discoveries, 1);
+    assert.throws(() => reader(context, value.impact, manifest.map(row => row.file === contract ? { ...row, sha256: "f".repeat(64) } : row), [], {}, first), /changed source manifest/u);
+    value.current.set(owner, 'export function Phase03Owner() { return "unreviewed"; }');
+    assert.throws(() => reader(context, value.impact, manifest, [], {}, first), /omits or differs/u);
+  });
+}
+
 /** Execute the canonical local-risk planner without starting its owned lifecycle. */
 function verifyLocalRiskVerificationPlan() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
@@ -1557,7 +1779,7 @@ function verifyLocalRiskVerificationPlan() {
     assert.ok(found, `Missing canonical local verification declaration: ${name}`);
     return found.getText(file).replace(/^export /u, "");
   };
-  const declarations = ["GATES", "finalQualityScriptNames", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
+  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "deriveLocalVerificationSourceImpact", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
   const code = ts.transpileModule(adminAdoptionControlSource(file) + "\n" + declarations.map(statement).join("\n"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -1568,14 +1790,18 @@ function verifyLocalRiskVerificationPlan() {
     changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
   type Plan = ReturnType<typeof import("./lib/isolated-public-verification.mts").planLocalVerification>;
   type Request = import("./lib/isolated-public-verification.mts").PublicGateRequest;
-  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256) as {
-    planLocalVerification(scripts: Readonly<Record<string, string>>, impact: Impact, actual: Actual, request?: Request): Plan;
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,localVerificationSemanticSource,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
+    planLocalVerification: typeof import("./lib/isolated-public-verification.mts").planLocalVerification;
     assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
     registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[];
     localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: Impact, manifest: Array<{ file: string; sha256: string }>, request?: Request): NonNullable<Actual["verificationCoverage"]>;
     adminAdoptionGate(request: Request): ReturnType<typeof import("./lib/isolated-public-verification.mts").adminAdoptionGate>;
+    deriveLocalVerificationSourceImpact: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceImpact;
+    localVerificationSemanticSource: typeof import("./lib/isolated-public-verification.mts").localVerificationSemanticSource;
+    localVerificationCommandSteps: typeof import("./lib/isolated-public-verification.mts").localVerificationCommandSteps;
   };
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  verifyLocalSourceImpactControls(api, scripts);
   const fullPrefix = new Function("assert", ts.transpileModule(statement("GATES") + "\n" + statement("finalQualityScriptNames"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText + ";return finalQualityScriptNames;")(assert)(scripts) as string[];
@@ -1597,7 +1823,11 @@ function verifyLocalRiskVerificationPlan() {
   const requiresFull = (name: string, mutate: (value: ReturnType<typeof fixture>) => void) => check("local risk requires full for " + name, () => {
     const value = fixture(); mutate(value); const plan = run(value);
     assert.equal(plan.mode, "full"); assert.deepEqual(plan.prefix.slice(0, fullPrefix.length), fullPrefix);
-    for (const row of value.impact.changes) for (const check of row.checks) assert.ok(plan.prefix.includes(check), "Full Gate must also retain fresh affected specialized checks.");
+    for (const row of value.impact.changes) for (const check of row.checks) {
+      const covered = new Set(plan.prefix.flatMap(name => api.localVerificationCommandSteps(scripts, name) ?? []));
+      assert.ok(plan.prefix.includes(check) || plan.redundantAdditionalChecks.includes(check) &&
+        api.localVerificationCommandSteps(scripts, check)?.every(step => covered.has(step)), "Full Gate must retain every affected command and its exact arguments.");
+    }
   });
   check("bounded A includes selected affected checks, TypeScript, ESLint and every canonical Public tail", () => {
     const plan = run(); assert.equal(plan.risk, "A"); assert.equal(plan.mode, "bounded");
@@ -2072,6 +2302,51 @@ async function localRiskVerificationOnly() {
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
     fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
+}
+
+/** Existing verifier adapter; only canonical pure/source-reader declarations are loaded, never fixture modules. */
+async function changeImpactOnly() {
+  try {
+    const args = process.argv.slice(2);
+    assert.equal(args.filter(argument => argument === "--change-impact-only").length, 1);
+    assert.ok(args.every(argument => argument === "--change-impact-only" || /^--(?:impact-baseline|impact-record|additional-source)=.+$/u.test(argument)),
+      "Change-impact inspection accepts only explicit baseline, review record and additional source arguments.");
+    const one = (prefix: string) => {
+      const values = args.filter(argument => argument.startsWith(prefix)); assert.ok(values.length <= 1, "Duplicate impact argument: " + prefix);
+      return values[0]?.slice(prefix.length);
+    };
+    const recordPath = one("--impact-record=");
+    let impact: import("./lib/isolated-public-verification.mts").LocalVerificationImpact | undefined;
+    if (recordPath) {
+      const record = path.resolve(recordPath), evidenceRoot = path.resolve(root, ".tmp-qa") + path.sep;
+      assert.ok(record.toLowerCase().startsWith(evidenceRoot.toLowerCase()) && record.endsWith(".json") && !/\.private\.|(?:^|[\\/])\.env(?:[.\\/]|$)/iu.test(record),
+        "Impact review must be an explicit nonprivate JSON evidence file under this workspace's .tmp-qa directory.");
+      assert.ok(lstatSync(record).isFile() && realpathSync(record) === record, "Impact review cannot traverse a symlink or junction.");
+      try { impact = JSON.parse(readFileSync(record, "utf8")) as import("./lib/isolated-public-verification.mts").LocalVerificationImpact; }
+      catch { throw Error("Invalid reviewed impact JSON; record values are not echoed."); }
+      assert.ok(impact && typeof impact === "object" && !Array.isArray(impact), "Impact review JSON must contain an explicit reviewed record object.");
+    }
+    const baselineHead = one("--impact-baseline=") ?? impact?.baselineHead;
+    assert.ok(baselineHead, "Supply --impact-baseline=<40sha> or an explicit --impact-record=<path>; no baseline is inferred.");
+    const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "deriveLocalVerificationSourceImpact", "assertLocalVerificationProtectionMaintenance",
+      "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath"];
+    const declarations = names.map(name => {
+      const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
+        || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name));
+      assert.ok(found, "Missing canonical source impact declaration: " + name); return found.getText(parsed).replace(/^export /u, "");
+    });
+    const code = ts.transpileModule(adminAdoptionControlSource(parsed) + "\n" + declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const inspect = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph", code + ";return inspectLocalVerificationChangeImpact;")(
+      assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph) as
+      typeof import("./lib/isolated-public-verification.mts").inspectLocalVerificationChangeImpact;
+    const report = inspect({ baselineHead, impact, additionalSourceFiles: args.filter(argument => argument.startsWith("--additional-source=")).map(argument => argument.slice("--additional-source=".length)) });
+    console.log(JSON.stringify(report, null, 2)); process.exitCode = report.exitCode;
+  } catch (error) {
+    console.log(JSON.stringify({ status: "BLOCKED_SOURCE_CONSISTENCY", releaseEvidence: false, checksExecuted: 0, browserExecuted: false,
+      databaseCalls: 0, networkRequests: 0, diagnostic: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid impact inspection input." }, null, 2));
+    process.exitCode = 1;
+  }
 }
 
 async function verifyMigrationToolPlatforms(lock: StackLock) {
@@ -3007,5 +3282,5 @@ async function retainedFinalQualityOnly() {
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
 }
 
-const verification = process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+const verification = process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
