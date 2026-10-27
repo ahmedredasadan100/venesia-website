@@ -340,9 +340,112 @@ async function currentInfrastructureOnly() {
   check("cleanup-only branch has no startup, download or SQL calls", () => {
     assert.ok(cleanupBranch?.elseStatement);
     const allowed = new Set(["prepareCompose", "discoverOwned", "requireThat", "recordFile", "safeRecord"]);
-    function inspect(node: ts.Node) { if (ts.isCallExpression(node)) assert.ok(allowed.has(node.expression.getText(file)), "Unexpected cleanup-only operation."); ts.forEachChild(node, inspect); }
-    inspect(cleanupBranch.thenStatement);
+    // Admit the reviewed read/ownership expressions, not every use of their
+    // helper names. AST identity ignores trivia, quotes and runtime-neutral TS.
+    const shape = (node: ts.Node): string => {
+      if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isAsExpression(node)
+        || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node)) return shape(node.expression);
+      const value = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null;
+      return JSON.stringify([node.kind, value, node.getChildren(node.getSourceFile()).map(shape)]);
+    };
+    const parse = (source: string) => ts.createSourceFile("cleanup-control.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const approvedCalls = new Set<string>();
+    for (const expression of [
+      "Object.keys(config!.volumes)", "Object.keys(config!.networks)",
+      'captured.filter(row => row.identity.kind === "container").map(row => row.identity.id)',
+      'captured.filter(row => row.identity.kind === "network")',
+      'inspect("network", item.identity.id)',
+      "Object.keys(object(network.containers ?? {})).every(id => ownedContainerIds.has(id))",
+      "sha256(readFileSync(path))", "Boolean(recoveryBaseline)", "Boolean(recoveryCurrentInventorySha256)",
+    ]) {
+      const collect = (node: ts.Node) => { if (ts.isCallExpression(node)) approvedCalls.add(shape(node)); ts.forEachChild(node, collect); };
+      collect(parse(expression + ";"));
+    }
+    // These ownership checks must run before authorizing cleanup. Mere call
+    // presence would also accept a dead branch or a predicate replaced by true.
+    const requiredPrefix = parse(`
+      await prepareCompose(); await discoverOwned();
+      requireThat(captured.length === SERVICES.length + Object.keys(config!.volumes).length + Object.keys(config!.networks).length,
+        "FAILED_CREATION_RESOURCE_SET_CHANGED", "cleanup-preflight");
+      if (recoveryManifest) {
+        requireThat(captured.length === recoveryManifest.length, "RECOVERY_RESOURCE_SET_CHANGED", "cleanup-preflight");
+        const ownedContainerIds = new Set(captured.filter(row => row.identity.kind === "container").map(row => row.identity.id));
+        for (const item of captured.filter(row => row.identity.kind === "network")) {
+          const network = await inspect("network", item.identity.id);
+          requireThat(Object.keys(object(network.containers ?? {})).every(id => ownedContainerIds.has(id)),
+            "FOREIGN_NETWORK_MEMBER", "cleanup-preflight");
+        }
+      }
+      for (const [path, expectedHash] of recoveryFiles) requireThat(sha256(readFileSync(path)) === expectedHash,
+        "RECOVERY_EVIDENCE_CHANGED", "cleanup-preflight");
+      created = true; recoveryAuthorized = true;
+    `).statements;
+    const approvedSet = shape(parse('new Set(captured.filter(row => row.identity.kind === "container").map(row => row.identity.id));').statements[0]);
+    const protectedNames = new Set([...allowed, "Object", "Set", "inspect", "object", "sha256", "readFileSync", "Boolean", "captured", "recoveryFiles", "recoveryManifest"]);
+    const assertCleanupOperations = (block: ts.Statement) => {
+      assert.ok(ts.isBlock(block));
+      assert.ok(block.statements.length >= requiredPrefix.length, "Cleanup ownership checks are missing.");
+      assert.deepEqual(block.statements.slice(0, requiredPrefix.length).map(shape), requiredPrefix.map(shape),
+        "Cleanup must validate resource identities, network ownership and evidence before authorization.");
+      const assertBinding = (name: ts.BindingName) => {
+        if (ts.isIdentifier(name)) assert.ok(!protectedNames.has(name.text), "Cleanup cannot shadow a reviewed owner or input.");
+        else for (const element of name.elements) if (ts.isBindingElement(element)) assertBinding(element.name);
+      };
+      function inspect(node: ts.Node) {
+        if (ts.isVariableDeclaration(node) || ts.isParameter(node)) assertBinding(node.name);
+        if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name) assertBinding(node.name);
+        if (ts.isCallExpression(node)) assert.ok(
+          (ts.isIdentifier(node.expression) && allowed.has(node.expression.text)) || approvedCalls.has(shape(node)),
+          "Unexpected cleanup-only operation.",
+        );
+        if (ts.isNewExpression(node)) {
+          const statement = parse(node.getText(node.getSourceFile()) + ";").statements[0];
+          assert.equal(shape(statement), approvedSet, "Unexpected cleanup-only constructor.");
+        }
+        ts.forEachChild(node, inspect);
+      }
+      inspect(block);
+    };
+    assertCleanupOperations(cleanupBranch.thenStatement);
     assert.ok(cleanupBranch.elseStatement.getText(file).includes('currentStage = "upstream-provenance"'));
+    const actual = cleanupBranch.thenStatement.getText(file);
+    const blockFrom = (source: string) => {
+      const declaration = parse("async function cleanupControl() " + source).statements[0];
+      assert.ok(ts.isFunctionDeclaration(declaration) && declaration.body);
+      return declaration.body;
+    };
+    check("cleanup ownership proof accepts actual CRLF, quote and parenthesis variants", () => {
+      const equivalent = actual.replace(/\r\n/gu, "\n").replace(/\n/gu, "\r\n")
+        .replace('inspect("network", item.identity.id)', "inspect('network', item.identity.id)")
+        .replace("Object.keys(config!.volumes)", "Object.keys((config!).volumes)");
+      assert.notEqual(equivalent, actual);
+      assertCleanupOperations(blockFrom(equivalent));
+    });
+    const reject = (name: string, from: string, to: string) => check("cleanup ownership proof rejects " + name, () => {
+      const mutant = actual.replace(from, to); assert.notEqual(mutant, actual, "Control must mutate the actual cleanup branch.");
+      assert.throws(() => assertCleanupOperations(blockFrom(mutant)));
+    });
+    for (const [name, operation] of [
+      ["download", 'fetch("https://unowned.invalid")'], ["startup", 'startService("db")'],
+      ["connection", "connect()"], ["SQL", 'db.query("select 1")'],
+      ["migration", "pushApplicationMigrations()"], ["unknown helper", "unreviewedRecoveryOperation()"],
+    ]) {
+      reject("direct " + name, 'recordFile("owned-resources.json", captured)', operation);
+      reject("nested " + name, 'recordFile("owned-resources.json", captured)', 'recordFile("owned-resources.json", () => { ' + operation + '; return captured; })');
+    }
+    for (const [name, from, to] of [
+      ["non-network inspection", 'inspect("network", item.identity.id)', 'inspect("container", item.identity.id)'],
+      ["foreign metadata identity", 'inspect("network", item.identity.id)', 'inspect("network", foreignId)'],
+      ["foreign evidence read", "readFileSync(path)", 'readFileSync(".env.local")'],
+      ["missing evidence hash", "sha256(readFileSync(path)) === expectedHash", "true"],
+      ["foreign network membership", "ownedContainerIds.has(id)", "true"],
+      ["wrong manifest bound", "captured.length === recoveryManifest.length", "captured.length >= recoveryManifest.length"],
+      ["dead ownership branch", "if (recoveryManifest)", "if (false && recoveryManifest)"],
+      ["early cleanup authorization", "await prepareCompose();", "recoveryAuthorized = true; await prepareCompose();"],
+      ["missing captured ownership discovery", "await discoverOwned();", ""],
+      ["shadowed hash helper", 'recordFile("owned-resources.json", captured)', 'recordFile("owned-resources.json", captured); const sha256 = () => expectedHash'],
+      ["unknown constructor", 'recordFile("owned-resources.json", captured)', 'recordFile("owned-resources.json", captured); new UnreviewedCleanupWorker()'],
+    ]) reject(name, from, to);
   });
   check("cleanup compose preparation only reads config and uses generated local values", () => {
     assert.ok(prepareCompose);
@@ -362,7 +465,70 @@ async function currentInfrastructureOnly() {
     const helper = texts[sources[3]];
     assert.ok(helper.includes("await context.assertOwned();") && helper.includes("assertApplicationMigrationStage(request.stage, corpus())"));
     assert.ok(helper.includes('"--skip-vault"') && helper.includes('"--output-format", "json"'));
-    assert.ok(helper.includes('PGPASSWORD: password') && !helper.includes("context.password}@"));
+    const unwrap = (node: ts.Node): ts.Node => ts.isParenthesizedExpression(node) || ts.isAsExpression(node)
+      || ts.isNonNullExpression(node) || ts.isTypeAssertionExpression(node) ? unwrap(node.expression) : node;
+    const shape = (input: ts.Node): string => {
+      const node = unwrap(input), value = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null;
+      return JSON.stringify([node.kind, value, node.getChildren(node.getSourceFile()).map(shape)]);
+    };
+    const parse = (text: string) => ts.createSourceFile("cli-binding-control.mts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const expectedArguments = parse('const args = ["db", "push", "--db-url", `postgresql://postgres@127.0.0.1:${context.port}/postgres`, "--skip-vault", "--workdir", workdir, "--output-format", "json", request.mode === "dry-run" ? "--dry-run" : "--yes"];').statements[0];
+    assert.ok(ts.isVariableStatement(expectedArguments));
+    const expectedArgv = expectedArguments.declarationList.declarations[0].initializer!;
+    const assertPrivatePushBinding = (text: string) => {
+      const tree = parse(text);
+      const declaration = (name: string) => {
+        const matches = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+        assert.equal(matches.length, 1, `The actual ${name} owner must be unique.`);
+        assert.ok(matches[0].body); return matches[0];
+      };
+      const push = declaration("pushApplicationMigrations"), environment = declaration("applicationMigrationChildEnvironment");
+      const pushText = push.getText(tree);
+      assert.ok(pushText.includes("await context.assertOwned();") && pushText.includes("assertApplicationMigrationStage(request.stage, corpus())"));
+      assert.ok(pushText.includes('"--skip-vault"') && pushText.includes('"--output-format", "json"'));
+      assert.ok(!pushText.includes("context.password}@"), "Migration push must never interpolate the password into its URL.");
+      const variables = (scope: ts.Node, name: string) => {
+        const matches: ts.VariableDeclaration[] = [];
+        const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) matches.push(node); ts.forEachChild(node, visit); };
+        visit(scope); assert.equal(matches.length, 1, `${name} must have one actual binding.`); assert.ok(matches[0].initializer); return matches[0].initializer;
+      };
+      assert.equal(shape(variables(push, "args")), shape(expectedArgv), "Migration push argv must retain its reviewed password-free target and flags.");
+      const env = variables(push, "env");
+      assert.ok(ts.isCallExpression(env) && ts.isIdentifier(env.expression) && env.expression.text === "applicationMigrationChildEnvironment");
+      assert.deepEqual(env.arguments.map(node => node.getText(tree)), ["home", "workdir", "context.password"]);
+      const childEnvironment = variables(environment, "childEnvironment");
+      assert.ok(ts.isObjectLiteralExpression(childEnvironment));
+      const password = childEnvironment.properties.filter((node): node is ts.PropertyAssignment => ts.isPropertyAssignment(node) && node.name.getText(tree) === "PGPASSWORD");
+      assert.equal(password.length, 1, "The private environment must retain exactly one password binding.");
+      assert.ok(ts.isIdentifier(password[0].initializer) && password[0].initializer.text === "password");
+      const returns = environment.body!.statements.filter(ts.isReturnStatement);
+      assert.equal(returns.length, 1); assert.ok(returns[0].expression);
+      const returned = unwrap(returns[0].expression);
+      assert.ok(ts.isIdentifier(returned) && returned.text === "childEnvironment", "The actual private environment must be returned.");
+      const runs: ts.CallExpression[] = [];
+      const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "run") runs.push(node); ts.forEachChild(node, visit); };
+      visit(push); assert.equal(runs.length, 1);
+      assert.deepEqual(runs[0].arguments.map(node => node.getText(tree)), ["state.binary", "args", "workdir", "env", "control"], "The actual CLI runner must receive the private environment separately from argv.");
+    };
+    assertPrivatePushBinding(helper);
+    check("CLI password-free argv proof preserves separate owned SEO and type-generation URL helpers", () => {
+      assertPrivatePushBinding(helper.replace(/\r\n/gu, "\n").replace(/\n/gu, "\r\n"));
+    });
+    for (const [name, from, to] of [
+      ["password URL in push argv", "postgresql://postgres@127.0.0.1:${context.port}/postgres", "postgresql://postgres:${context.password}@127.0.0.1:${context.port}/postgres"],
+      ["password as an extra push argument", '["db", "push", "--db-url",', '["db", "push", context.password, "--db-url",'],
+      ["missing private environment password", "PGPASSWORD: password", "REMOVED_PASSWORD: password"],
+      ["incorrect private environment password", "PGPASSWORD: password", 'PGPASSWORD: ""'],
+      ["wrong returned environment", "return childEnvironment as NodeJS.ProcessEnv", "return source as NodeJS.ProcessEnv"],
+      ["disconnected push environment", "applicationMigrationChildEnvironment(home, workdir, context.password)", "applicationMigrationChildEnvironment(home, workdir, unownedPassword)"],
+      ["disconnected CLI runner environment", "run(state.binary, args, workdir, env, control)", "run(state.binary, args, workdir, process.env, control)"],
+      ["missing ownership check", "await context.assertOwned();", "void context;"],
+      ["missing migration-stage recheck", "assertApplicationMigrationStage(request.stage, corpus())", "void request.stage"],
+      ["missing skip-vault boundary", '"--skip-vault"', '"--skip-other"'],
+    ]) check("CLI private push binding rejects " + name, () => {
+      const mutant = helper.replaceAll(from, to); assert.notEqual(mutant, helper, "Control must mutate the actual CLI helper source.");
+      assert.throws(() => assertPrivatePushBinding(mutant));
+    });
     assert.ok(!/\bfetch\s*\(/u.test(helper));
   });
   for (const source of sources) assert.equal(sha256(readSource(source)), sourceHashes[source], "Current infrastructure changed during verification.");
