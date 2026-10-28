@@ -303,13 +303,19 @@ snapshot/delta bindings, current contract projection and applicable changed
 assertion/vector correspondence. It reads immutable event Git objects from
 `GITHUB_EVENT_PATH`: PR base/head and the actual head or merge checkout, or push
 before/after. The checkout must equal `GITHUB_SHA`, history must exist locally,
-and the baseline must be an ancestor. A supplied non-null `merge_commit_sha`
-must be a valid existing immutable SHA; a merge checkout must match it. When
-that optional field is absent or null, a merge checkout requires exactly two
-ordered local Git parents equal to the event's base and head. This independent
-identity proof does not relax either ancestry check or infer a baseline/ref.
-Missing/zero/foreign/non-ancestor objects, unsupported events and changed tracked
-checkout bytes fail closed; there is no
+and the baseline must be an ancestor. Optional `merge_commit_sha` is advisory
+metadata: a supplied non-null value must still be a nonzero lowercase 40-hex
+SHA, but its existence or equality cannot select or authorize the checkout.
+The retained diagnostic CI event proved that this field can differ from the
+actual checkout while that checkout, base/head objects and both ancestry checks
+are valid. Every merge checkout therefore requires exactly two ordered local
+Git parents equal to the immutable event base and head, regardless of whether
+advisory metadata is present, absent, null, locally available or outdated. An
+exact event-head checkout retains the same HEAD/GITHUB_SHA identity and baseline
+ancestry requirements. This independent identity proof does not infer a
+baseline/ref. Missing/zero/foreign/non-ancestor authoritative objects, malformed
+advisory values, unsupported events and changed tracked checkout bytes fail
+closed; there is no
 fetch, guessed baseline, shell interpolation of event values, or borrowed local
 approval record. Use the existing full-history checkout without persisted Git
 credentials. The source step blanks all three existing Supabase environment
@@ -351,6 +357,70 @@ failure propagates to the same required job; a report is not a replacement gate.
 Full Regression remains mandatory under release/risk policy. Local targeted
 verification of this integration is separate from actual GitHub execution and
 does not establish remote CI timings or Release Readiness.
+
+One separately selected execution mode exists at the same verifier:
+`npm run verify:isolated-supabase -- --execute-qualified-impact --impact-baseline=<40sha>`.
+Use it only within an authorized targeted runtime task after qualifying the
+actual effects. It first requires automatic source consistency for an explicit
+immutable baseline and the complete current tracked snapshot; approval records,
+untracked additions, stale selectors and arbitrary commands cannot authorize
+execution. Current manifest owner bindings, actual changed inputs, registered
+literal command steps and the reviewed harness bytes qualify one existing leaf:
+`node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts --save-cache-only`.
+The exact flag selects thirteen existing controlled save/cache scenarios; it
+rejects additional or combined flags before allocating resources. A changed
+qualification input blocks the affected family for review. Unmapped families
+remain unexecuted under their existing gates. If no qualified family is
+affected, the result is `NOT RUN`; an applicable but unqualified family is `BLOCKED`.
+The execution API accepts only that baseline and derives actual source impact
+again inside the owner; caller-supplied analysis cannot become authority. Its
+reviewed fixture fingerprint uses canonical LF text for the effect contract,
+while the complete source snapshot remains bound to raw file bytes. The current
+execution pilot supports `win32` only: unsupported platforms return `BLOCKED`
+before starting the leaf because equivalent process-tree timeout cleanup has
+not been proved there. Linux source selection and the ordinary mandatory CI
+commands retain their existing behavior and obligations.
+
+This leaf mounts the actual Form Runtime, Entity List controller and QueryClient
+with controlled action results and an in-memory source. It covers confirmed
+save/warning, Create-to-Edit handoff, cache-settlement failure, error/throw/no
+confirmation, opt-out, plain/controlled second-save failure and a fresh list
+read without resaving. This is `shared_owner_controlled_browser_behavior`, not
+native Database persistence, authenticated domain save or behavioral adoption
+of every applicable business consumer. The existing source report's
+`behavioralPass=false`, `ownerReviewSatisfied=false` and `releaseEvidence=false`
+remain intact; `qualifiedBehavioralPass` can describe only this actually
+completed family. Native readback, permissions, duplicate/data-loss protection,
+consumer parity and all other applicable obligations retain their existing
+owners and required verification.
+
+Execution reuses the existing owned Node-child lifecycle, log writer and cleanup
+ports in `isolated-public-verification.mts`; it does not prepare or pretend to
+have Supabase readiness. It uses a fresh owned evidence/TEMP directory, a
+restricted credential-free environment, ephemeral loopback HTTP and a new
+Browser context without Service Workers. Requests are fenced to the fixture
+origin or inline data; Blob URLs must retain the same owned origin. Finite page
+and owner deadlines remain active. Browser, server and fixture TEMP cleanup are
+all attempted after body failure, the original failure is preserved, and cleanup
+failure cannot emit PASS. The outer owner verifies child termination before
+removing its own TEMP tree; an abort is never a successful behavioral result.
+Process, filesystem and network cleanup require their actual scoped receipts,
+not merely source reachability or an assumed signal-handler outcome.
+
+The same existing receipt path records commit/source SHA, owners, capabilities,
+contracts, affected-consumer reasons, exact leaf command, duration, exit/result,
+log hashes/evidence reference and cleanup. Attempt and retry are explicit; this
+mode runs once with no automatic retry. Unobserved network counts or Browser
+completion remain unknown/null if the terminal fixture evidence is missing;
+absence of evidence is never recorded as zero calls or successful cleanup.
+A failed assertion or process is
+initially `UNKNOWN`, with its technical failure kind and original evidence
+retained. Reclassify Product/QA/Fixture/Environment only after supporting
+evidence; a label or a later green attempt cannot replace the failed result.
+The existing CI invocation stays read-only source selection and still executes
+zero candidate commands. This explicit local execution mode does not alter,
+prune or satisfy the existing eight CI jobs, complete `ci:check`, release risk
+requirements or separate Owner approvals.
 
 Changed semantic obligations require reviewed protection maintenance in this
 same batch record: the changed file/contract, selected existing check, protection

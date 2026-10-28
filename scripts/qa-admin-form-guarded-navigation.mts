@@ -110,6 +110,57 @@ function validateTempPath(tempPath: string) {
   return resolvedTempPath;
 }
 
+type GuardedNavigationCleanupResult = {
+  resource: "browser" | "server" | "temp";
+  status: "PASS" | "FAIL";
+  error?: unknown;
+};
+
+async function settleGuardedNavigationCleanup(resources: readonly {
+  resource: GuardedNavigationCleanupResult["resource"];
+  close: () => Promise<void>;
+}[]): Promise<GuardedNavigationCleanupResult[]> {
+  const results: GuardedNavigationCleanupResult[] = [];
+  for (const resource of resources) {
+    try {
+      await resource.close();
+      results.push({ resource: resource.resource, status: "PASS" });
+    } catch (error) {
+      results.push({ resource: resource.resource, status: "FAIL", error });
+    }
+  }
+  return results;
+}
+
+type SaveCacheDeniedRequest = {
+  method: string;
+  origin: string | null;
+  resourceType: string;
+};
+
+async function installSaveCacheNetworkFence(
+  page: Page,
+  harnessUrl: string,
+  denied: SaveCacheDeniedRequest[],
+) {
+  const ownedOrigin = new URL(harnessUrl).origin;
+  // Registered after the controlled API route: allowed requests fall through
+  // to that existing stub, while a matching foreign URL cannot bypass the fence.
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    let target: URL | null = null;
+    try { target = new URL(request.url()); } catch { /* Malformed requests fail closed. */ }
+    // Blob URLs inherit their creator's origin; foreign or opaque blob origins
+    // receive the same rejection as other foreign requests.
+    if (target && (target.origin === ownedOrigin || target.protocol === "data:")) {
+      await route.fallback();
+      return;
+    }
+    denied.push({ method: request.method(), origin: target?.origin ?? null, resourceType: request.resourceType() });
+    await route.abort("blockedbyclient");
+  });
+}
+
 const entrySource = String.raw`
 import * as React from "react";
 import { createRoot } from "react-dom/client";
@@ -1381,9 +1432,14 @@ const rootDir = process.cwd();
 const saveCacheOnly = process.argv.includes("--save-cache-only");
 const reportFreshnessOnly = process.argv.includes("--report-freshness-only");
 const returnPathOnly = process.argv.includes("--return-path-only");
+if (saveCacheOnly) assert.deepEqual(process.argv.slice(2), ["--save-cache-only"], "The bounded save-cache family accepts only its exact flag.");
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
 let server: Server | null = null;
+let primaryFailed = false;
+let saveCacheScenariosStarted = 0;
+let saveCacheScenariosCompleted = 0;
+const saveCacheDeniedRequests: SaveCacheDeniedRequest[] = [];
 
 try {
   const webpackWarnings = await compileHarness(rootDir, tempDir);
@@ -1439,7 +1495,12 @@ try {
     { outcome: "success", expected: "success", secondFailure: "error", controlled: true },
     { outcome: "success", expected: "success", secondFailure: "throw", controlled: true },
   ]) {
-    const page = await browser.newPage();
+    if (saveCacheOnly) saveCacheScenariosStarted += 1;
+    const page = await browser.newPage(saveCacheOnly ? { serviceWorkers: "block" } : undefined);
+    if (saveCacheOnly) {
+      page.setDefaultTimeout(30_000);
+      page.setDefaultNavigationTimeout(30_000);
+    }
     observeBrowserIssues(page, browserIssues);
     await page.route("**/api/admin/entity-lists/topics?**", async (route) => {
       const title = await page.evaluate(() => {
@@ -1455,6 +1516,7 @@ try {
         meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
       }) });
     });
+    if (saveCacheOnly) await installSaveCacheNetworkFence(page, harnessUrl, saveCacheDeniedRequests);
     await page.goto(harnessUrl);
     await page.evaluate((options) => {
       (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { mountSaveCache(value: unknown): void } })
@@ -1554,6 +1616,7 @@ try {
       if (dirty !== "true") secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
     }
     await closePage(page);
+    if (saveCacheOnly) saveCacheScenariosCompleted += 1;
   }
   if (!reportFreshnessOnly && !returnPathOnly) check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
     secondSaveFailures.length === 0);
@@ -2587,10 +2650,43 @@ try {
     }`,
     browserIssues.length === 0,
   );
+  if (saveCacheOnly) {
+    check("bounded save-cache fixture denies foreign requests", saveCacheDeniedRequests.length === 0);
+    check("all thirteen bounded save-cache scenarios completed", saveCacheScenariosStarted === 13 && saveCacheScenariosCompleted === 13);
+  }
+} catch (error) {
+  primaryFailed = true;
+  throw error;
 } finally {
-  if (browser) await browser.close();
-  if (server) await stopServer(server);
-  await rm(validateTempPath(tempDir), { recursive: true, force: true });
+  const cleanup = await settleGuardedNavigationCleanup([
+    { resource: "browser", close: async () => { if (browser) await browser.close(); } },
+    { resource: "server", close: async () => { if (server) await stopServer(server); } },
+    { resource: "temp", close: async () => { await rm(validateTempPath(tempDir), { recursive: true, force: true }); } },
+  ]);
+  const cleanupFailures = cleanup.filter((result) => result.status === "FAIL");
+  if (saveCacheOnly) {
+    console.log(JSON.stringify({
+      family: "admin-form-save-cache",
+      proofLevel: "shared_owner_controlled_browser_behavior",
+      status: primaryFailed || cleanupFailures.length > 0 ? "FAIL" : "PASS",
+      scenariosStarted: saveCacheScenariosStarted,
+      scenariosCompleted: saveCacheScenariosCompleted,
+      assertions: passed,
+      browserExecuted: browser !== null,
+      databaseExecuted: false,
+      nativePersistenceVerified: false,
+      businessConsumerAdoptionVerified: false,
+      deniedForeignRequests: saveCacheDeniedRequests,
+      cleanup: cleanup.map(({ resource, status }) => ({ resource, status,
+        created: resource === "browser" ? browser !== null : resource === "server" ? server !== null : true })),
+    }));
+  }
+  if (cleanupFailures.length > 0) {
+    console.error("Guarded-navigation fixture cleanup failed: " + cleanupFailures.map((result) => result.resource).join(", "));
+    // Preserve the original assertion/startup failure; cleanup failures still
+    // fail an otherwise successful run and never permit the final PASS line.
+    if (!primaryFailed) throw new AggregateError(cleanupFailures.map((result) => result.error), "Guarded-navigation fixture cleanup failed.");
+  }
 }
 
 console.log(

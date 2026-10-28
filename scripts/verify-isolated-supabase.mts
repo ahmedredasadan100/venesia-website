@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1885,19 +1885,44 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
       assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: opened, githubSha: head, checkoutHead: head }, history).finalHead, head,
         "An exact event-head checkout does not need a synthesized merge.");
     }
-    for (const value of ["", "not-a-sha", "0".repeat(40), 229, "d".repeat(40)]) {
+    for (const value of ["", "not-a-sha", "0".repeat(40), 229, "D".repeat(40)]) {
       const malformed = { pull_request: { ...event.pull_request, merge_commit_sha: value } };
       for (const checkout of [head, merge]) assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: malformed,
         githubSha: checkout, checkoutHead: checkout }, history), /Invalid or missing immutable CI|Missing local Git history/u,
       "Present merge metadata cannot bypass validation even for an exact event-head checkout.");
     }
     assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: { pull_request: { ...event.pull_request, merge_commit_sha: base } },
-      githubSha: merge, checkoutHead: merge }, history), /merge checkout differs/u, "A supplied valid but mismatched merge SHA cannot use the optional-metadata recovery path.");
+      githubSha: merge, checkoutHead: merge }, { ...history, parents: () => [base, base] }), /parents differ/u,
+    "Advisory metadata cannot authorize a checkout whose actual parents differ from the immutable event.");
+    for (const advisory of [base, "d".repeat(40)]) for (const checkout of [head, merge]) {
+      assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: { pull_request: { ...event.pull_request, merge_commit_sha: advisory } },
+        githubSha: checkout, checkoutHead: checkout }, history).finalHead, checkout,
+      "Canonical advisory metadata neither replaces the actual checkout nor requires an unrelated local Git object.");
+    }
+    // Exact original Actions bindings from diagnostic run 40615509207, artifact 12784204891.
+    // Its supplied merge SHA was absent locally (identity/type/parents exit 128); actual base/head
+    // identities, checkout equality, ordered two-parent topology and both ancestry probes passed.
+    const recorded = { base: "a29a9a89779c70fcf8f256faebd6103d566f5b1c", head: "545ee380ecedd8ba0e4d5c7d9e949bcb5309c34e",
+      checkout: "4fafac2754f2f11f54f1bda84c62464050791944", advisory: "1ff04a04d24bcaaa8a38d13028469a0e8025622b" };
+    const recordedEvent = { action: "synchronize", number: 229, pull_request: { base: { sha: recorded.base }, head: { sha: recorded.head }, merge_commit_sha: recorded.advisory } };
+    const recordedHistory = { exists: (sha: string) => [recorded.base, recorded.head, recorded.checkout].includes(sha),
+      parents: (sha: string) => sha === recorded.checkout ? [recorded.base, recorded.head] : [],
+      isAncestor: (ancestor: string, descendant: string) => ancestor === descendant || descendant === recorded.checkout && [recorded.base, recorded.head].includes(ancestor) };
+    assert.equal(recordedHistory.exists(recorded.advisory), false);
+    assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout }, recordedHistory),
+      { baselineHead: recorded.base, finalHead: recorded.checkout, eventName: "pull_request" }, "Replay the captured event rather than guessing current PR metadata.");
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.head, checkoutHead: recorded.checkout }, recordedHistory), /checkout HEAD differs/u);
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout },
+      { ...recordedHistory, exists: (sha: string) => sha !== recorded.head }), /Missing local Git history/u);
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout },
+      { ...recordedHistory, parents: () => [recorded.base, recorded.advisory] }), /Missing local Git history|parents differ/u);
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout },
+      { ...recordedHistory, isAncestor: () => false }), /not an ancestor/u);
     const withoutMerge = { action: "opened", pull_request: { base: { sha: base }, head: { sha: head } } };
-    for (const parents of [[], [base], [head, base], [base, head, merge], [base, merge], ["0".repeat(40), head], ["d".repeat(40), head]]) {
-      assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge },
+    for (const guardedEvent of [withoutMerge, event]) for (const parents of [[], [base], [head, base], [base, head, merge], [base, merge], ["0".repeat(40), head], ["d".repeat(40), head]]) {
+      assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: guardedEvent, githubSha: merge, checkoutHead: merge },
         { ...history, parents: () => parents }), /exactly two Git parents|parents differ|Invalid or missing immutable CI|Missing local Git history/u,
-      "Absent merge metadata cannot admit missing, reversed, foreign or octopus merge topology.");
+      "Every merge checkout rejects missing, reversed, foreign or octopus topology regardless of advisory metadata.");
     }
     assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge },
       { ...history, parents: () => { throw new Error("Git parent history unavailable"); } }), /Git parent history unavailable/u);
@@ -2451,27 +2476,323 @@ async function verifyLocalRiskControlLeaseAdmission() {
   cases.push("bounded cleanup revokes lease eligibility instead of extending request lifetime or authority");
 }
 
+async function verifyQualifiedFormHarnessControls() {
+  const filename = "scripts/qa-admin-form-guarded-navigation.mts";
+  const source = ts.createSourceFile(filename, readSource(filename), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  type CleanupResource = { resource: "browser" | "server" | "temp"; close: () => Promise<void> };
+  type CleanupResult = { resource: CleanupResource["resource"]; status: "PASS" | "FAIL"; error?: unknown };
+  type DeniedRequest = { method: string; origin: string | null; resourceType: string };
+  type RoutePort = {
+    request: () => { url: () => string; method: () => string; resourceType: () => string };
+    fallback: () => Promise<void>;
+    abort: (reason: string) => Promise<void>;
+  };
+  type FenceHandler = (route: RoutePort) => Promise<void>;
+  type HarnessApi = {
+    settleGuardedNavigationCleanup: (resources: readonly CleanupResource[]) => Promise<CleanupResult[]>;
+    installSaveCacheNetworkFence: (page: { route: (pattern: string, handler: FenceHandler) => Promise<void> }, url: string, denied: DeniedRequest[]) => Promise<void>;
+  };
+  const compile = (text: string) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+  const declarations = ["settleGuardedNavigationCleanup", "installSaveCacheNetworkFence"].map(name => {
+    const matches = source.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.equal(matches.length, 1, "The qualified fixture retains one original " + name + " owner.");
+    return matches[0].getText(source);
+  }).join("\n");
+  const load = (text = declarations) => new Function(compile(text) + "; return { settleGuardedNavigationCleanup, installSaveCacheNetworkFence };")() as HarnessApi;
+  const api = load(), resources = ["browser", "server", "temp"] as const;
+  for (const [label, failures, synchronous] of [
+    ["all cleanup succeeds", [], false], ["first cleanup rejects", [0], false], ["middle cleanup rejects", [1], false],
+    ["last cleanup rejects", [2], false], ["first cleanup throws synchronously", [0], true], ["every cleanup rejects", [0, 1, 2], false],
+  ] as const) {
+    const calls: string[] = [], errors = new Map<number, Error>();
+    for (const index of failures) errors.set(index, new Error("controlled-" + resources[index] + "-cleanup-failure"));
+    const actual = await api.settleGuardedNavigationCleanup(resources.map((resource, index) => ({ resource, close: () => {
+      calls.push(resource);
+      const error = errors.get(index);
+      if (error && synchronous) throw error;
+      return error ? Promise.reject(error) : Promise.resolve();
+    } })));
+    assert.deepEqual(calls, resources, "A cleanup failure cannot skip any later resource.");
+    assert.deepEqual(actual.map(row => row.resource), resources);
+    actual.forEach((row, index) => {
+      assert.equal(row.status, errors.has(index) ? "FAIL" : "PASS");
+      assert.equal(row.error, errors.get(index), "Cleanup preserves each failure identity.");
+    });
+    cases.push("Qualified Form harness: " + label + " still attempts all cleanup resources");
+  }
+  const harnessUrl = "http://127.0.0.1:43127/harness";
+  const fenceCase = async (actualApi: HarnessApi, requestUrl: string, allowed: boolean, portFailure?: "fallback" | "abort") => {
+    let handler: FenceHandler | undefined;
+    const denied: DeniedRequest[] = [], events: string[] = [], expected = new Error("controlled-route-port-failure");
+    await actualApi.installSaveCacheNetworkFence({ route: async (pattern, value) => { assert.equal(pattern, "**/*"); handler = value; } }, harnessUrl, denied);
+    assert.ok(handler, "The fence is actually registered before fixture navigation.");
+    const route: RoutePort = { request: () => ({ url: () => requestUrl, method: () => "GET", resourceType: () => "fetch" }),
+      fallback: async () => { events.push("fallback"); if (portFailure === "fallback") throw expected; },
+      abort: async reason => { assert.equal(reason, "blockedbyclient"); events.push("abort"); if (portFailure === "abort") throw expected; } };
+    if (portFailure) await assert.rejects(handler(route), error => error === expected);
+    else await handler(route);
+    assert.deepEqual(events, [allowed ? "fallback" : "abort"]);
+    assert.equal(denied.length, allowed ? 0 : 1);
+    if (!allowed) {
+      assert.deepEqual(Object.keys(denied[0]).sort(), ["method", "origin", "resourceType"]);
+      assert.equal(denied[0].method, "GET"); assert.equal(denied[0].resourceType, "fetch");
+    }
+  };
+  for (const [label, requestUrl, allowed] of [
+    ["owned document", harnessUrl, true], ["owned API stub", "http://127.0.0.1:43127/api/admin/entity-lists/topics?page=1", true],
+    ["foreign origin", "https://example.invalid/path?private=value", false], ["deceptive hostname", "http://127.0.0.1.example.invalid:43127/harness", false],
+    ["different port", "http://127.0.0.1:43128/harness", false], ["userinfo camouflage", "http://127.0.0.1:43127@example.invalid/harness", false],
+    ["foreign matching API path", "https://example.invalid/api/admin/entity-lists/topics?page=1", false], ["malformed URL", "not a URL", false],
+    ["inline data", "data:text/plain,controlled", true], ["owned blob", "blob:http://127.0.0.1:43127/controlled", true],
+    ["foreign blob", "blob:https://example.invalid/controlled", false], ["opaque blob", "blob:null/controlled", false],
+  ] as const) {
+    await fenceCase(api, requestUrl, allowed);
+    cases.push("Qualified Form harness network fence: " + label);
+  }
+  await fenceCase(api, harnessUrl, true, "fallback");
+  await fenceCase(api, "https://example.invalid/path", false, "abort");
+  cases.push("Qualified Form harness propagates allowed-route and denied-route transport failures");
+  const broadBlob = declarations.replace('target.protocol === "data:"', '["data:", "blob:"].includes(target.protocol)');
+  assert.notEqual(broadBlob, declarations);
+  await assert.rejects(fenceCase(load(broadBlob), "blob:https://example.invalid/controlled", false));
+  cases.push("Qualified Form harness rejects a broadened foreign-blob fence mutation");
+  check("Qualified Form harness source retains exact canonical flag, thirteen scenarios, primary failure and post-cleanup PASS boundary", () => {
+    const scripts = (JSON.parse(readSource("package.json")) as { scripts: Record<string, string> }).scripts;
+    assert.equal(scripts["qa:admin-form-guarded-navigation"], "node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts");
+    const main = source.statements.find((node): node is ts.TryStatement => ts.isTryStatement(node));
+    assert.ok(main?.catchClause && main.finallyBlock);
+    const parameter = main.catchClause.variableDeclaration?.name.getText(source);
+    assert.ok(parameter);
+    assert.ok(main.catchClause.block.statements.some(node => ts.isThrowStatement(node) && node.expression?.getText(source) === parameter), "The main body rethrows its original failure object.");
+    assert.ok(main.catchClause.block.getText(source).includes("primaryFailed = true"));
+    const throws: ts.ThrowStatement[] = [], visit = (node: ts.Node) => { if (ts.isThrowStatement(node)) throws.push(node); ts.forEachChild(node, visit); };
+    visit(main.finallyBlock); assert.equal(throws.length, 1);
+    assert.ok(ts.isIfStatement(throws[0].parent) && throws[0].parent.expression.getText(source) === "!primaryFailed", "Cleanup may throw only when no primary failure is pending.");
+    assert.ok(throws[0].expression && ts.isNewExpression(throws[0].expression) && throws[0].expression.expression.getText(source) === "AggregateError");
+    const scenarioLoops = main.tryBlock.statements.filter((node): node is ts.ForOfStatement => ts.isForOfStatement(node) && ts.isVariableDeclarationList(node.initializer) && node.initializer.declarations.some(value => value.name.getText(source) === "scenario"));
+    assert.equal(scenarioLoops.length, 1);
+    const expression = scenarioLoops[0].expression;
+    assert.ok(ts.isConditionalExpression(expression) && ts.isArrayLiteralExpression(expression.whenFalse));
+    assert.equal(expression.whenFalse.elements.length, 13);
+    const strictFlag = source.statements.find(node => ts.isIfStatement(node) && node.expression.getText(source) === "saveCacheOnly" && node.getText(source).includes('assert.deepEqual(process.argv.slice(2), ["--save-cache-only"]'));
+    const temporaryDirectory = source.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(value => value.name.getText(source) === "tempDir"));
+    assert.ok(strictFlag && temporaryDirectory && strictFlag.end < temporaryDirectory.getStart(source), "Bounded flag rejection precedes resource creation.");
+    const finalPass = source.statements.at(-1);
+    assert.ok(finalPass && ts.isExpressionStatement(finalPass) && finalPass.getText(source).includes("qa:admin-form-guarded-navigation passed") && finalPass.getStart(source) > main.end, "The final PASS cannot precede cleanup.");
+    assert.ok(main.finallyBlock.getText(source).includes('proofLevel: "shared_owner_controlled_browser_behavior"'));
+    assert.ok(main.finallyBlock.getText(source).includes("nativePersistenceVerified: false"));
+    assert.ok(main.finallyBlock.getText(source).includes("businessConsumerAdoptionVerified: false"));
+  });
+}
+
+/** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */
+async function verifySharedChildControls() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations = ["ownedPath", "stopChild", "runOwnedVerificationChild"].map(name => {
+    const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
+  });
+  const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const buildApi = (write: typeof writeFileSync = writeFileSync) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild};")(
+    assert, path.isAbsolute, path.resolve, path.sep, spawn, write) as {
+      run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
+      stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<void>;
+    };
+  const api = buildApi();
+  const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-child-controls-"))), children = new Set<ChildProcess>();
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const context = { runDirectory: directory, sanitize: (value: string) => value.replaceAll("private-sentinel", "[redacted]"), cleanEnvironment: () => ({ ...environment }) };
+  const run = (name: string, args: string[], signal = new AbortController().signal, limitMs = 10_000, sourceDirectory = directory) =>
+    api.run({ sourceDirectory, context, children, signal }, args, { ...environment }, name, limitMs);
+  const control = async (name: string, execute: () => Promise<void>) => {
+    try { await execute(); } catch (error) { console.error("FAIL shared owned child " + name); throw error; }
+    cases.push("shared owned child " + name);
+  };
+  try {
+    await control("success preserves sanitized stdout stderr duration and cleanup", async () => {
+      const result = await run("success", ["-e", "process.stdout.write('ok private-sentinel');process.stderr.write('warning private-sentinel');"]);
+      assert.equal(result.code, 0); assert.equal(result.stdout, "ok [redacted]"); assert.equal(result.stderr, "warning [redacted]");
+      assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0); assert.equal(children.size, 0);
+      assert.equal(readFileSync(path.join(directory, "public-success.stdout.log"), "utf8"), result.stdout);
+      assert.equal(readFileSync(path.join(directory, "public-success.stderr.log"), "utf8"), result.stderr);
+    });
+    await control("nonzero status retains actual output duration and cleanup", async () => {
+      const result = await run("nonzero", ["-e", "process.stdout.write('partial');process.stderr.write('failure');process.exitCode=7;"]);
+      assert.equal(result.code, 7); assert.equal(result.stdout, "partial"); assert.equal(result.stderr, "failure");
+      assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0); assert.equal(children.size, 0);
+    });
+    await control("sanitizer failure rejects instead of escaping the close callback", async () => {
+      const failure = new Error("Controlled sanitizer failure");
+      const failingContext = { ...context, sanitize: (_value: string): string => { throw failure; } };
+      await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
+        ["-e", "process.stdout.write('private-sentinel');"], { ...environment }, "sanitize-failure", 10_000), (error: unknown) => error === failure);
+      assert.equal(children.size, 0);
+      assert.equal(existsSync(path.join(directory, "public-sanitize-failure.stdout.log")), false);
+      assert.equal(existsSync(path.join(directory, "public-sanitize-failure.stderr.log")), false);
+    });
+    await control("log-write failure rejects and retains the already sanitized output", async () => {
+      const failure = new Error("Controlled stderr-log write failure");
+      const failingWrite: typeof writeFileSync = (file, data, options) => {
+        if (typeof file === "string" && file.endsWith("public-write-failure.stderr.log")) throw failure;
+        writeFileSync(file, data, options);
+      };
+      await assert.rejects(buildApi(failingWrite).run({ sourceDirectory: directory, context, children, signal: new AbortController().signal },
+        ["-e", "process.stdout.write('partial private-sentinel');process.stderr.write('failure private-sentinel');"], { ...environment }, "write-failure", 10_000),
+      (error: unknown) => error === failure);
+      assert.equal(children.size, 0);
+      assert.equal(readFileSync(path.join(directory, "public-write-failure.stdout.log"), "utf8"), "partial [redacted]");
+      assert.equal(existsSync(path.join(directory, "public-write-failure.stderr.log")), false);
+    });
+    await control("timeout remains the primary failure when sanitization also fails", async () => {
+      const failure = new Error("Secondary sanitizer failure");
+      const failingContext = { ...context, sanitize: (_value: string): string => { throw failure; } };
+      await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
+        ["-e", "setInterval(()=>{},1000)"], { ...environment }, "timeout-sanitize-failure", 100),
+      (error: unknown) => error instanceof Error && /aborted or exceeded its bound/u.test(error.message) && error.cause === failure);
+      assert.equal(children.size, 0);
+    });
+    await control("timeout rejects and removes the owned process", async () => {
+      await assert.rejects(run("timeout", ["-e", "setInterval(()=>{},1000)"], new AbortController().signal, 100), /aborted or exceeded its bound/u);
+      assert.equal(children.size, 0); assert.ok(existsSync(path.join(directory, "public-timeout.stdout.log")));
+      assert.ok(existsSync(path.join(directory, "public-timeout.stderr.log")));
+    });
+    await control("abort stops an actually started owned process", async () => {
+      const controller = new AbortController(), pending = run("abort", ["-e", "process.stdout.write('ready');setInterval(()=>{},1000)"], controller.signal);
+      const child = [...children][0]; assert.ok(child?.stdout);
+      const rejected = assert.rejects(pending, /aborted or exceeded its bound/u);
+      await new Promise<void>((done, reject) => {
+        const timer = setTimeout(() => reject(Error("Owned control child did not become ready.")), 5_000);
+        child.stdout!.once("data", () => { clearTimeout(timer); done(); });
+        child.once("error", () => { clearTimeout(timer); reject(Error("Owned control child failed before readiness.")); });
+      });
+      controller.abort(Error("Owned control abort")); await rejected;
+      assert.equal(children.size, 0); assert.equal(readFileSync(path.join(directory, "public-abort.stdout.log"), "utf8"), "ready");
+    });
+    await control("pre-aborted admission starts no child and writes no logs", async () => {
+      const controller = new AbortController(); controller.abort(Error("Pre-aborted control"));
+      const before = readdirSync(directory).sort();
+      await assert.rejects(run("pre-aborted", ["-e", "throw Error('must not execute')"], controller.signal), /Pre-aborted control/u);
+      assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+    });
+    await control("spawn failure rejects and drains its owned child registration", async () => {
+      const pending = run("spawn-error", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "absent-owned-cwd"));
+      const child = [...children][0]; assert.ok(child);
+      const closed = new Promise<void>(done => child.once("close", () => done()));
+      await assert.rejects(pending, /process failed/u); await closed; assert.equal(children.size, 0);
+    });
+    await control("spawn failure remains primary when its close callback cannot write logs", async () => {
+      const failure = new Error("Secondary spawn log-write failure");
+      const failingWrite: typeof writeFileSync = () => { throw failure; };
+      const pending = buildApi(failingWrite).run({ sourceDirectory: path.join(directory, "absent-owned-cwd"), context, children,
+        signal: new AbortController().signal }, ["-e", "throw Error('must not execute')"], { ...environment }, "spawn-write-failure", 10_000);
+      const child = [...children][0]; assert.ok(child);
+      const closed = new Promise<void>(done => child.once("close", () => done()));
+      await assert.rejects(pending, /process failed/u); await closed; assert.equal(children.size, 0);
+      assert.equal(existsSync(path.join(directory, "public-spawn-write-failure.stdout.log")), false);
+    });
+  } finally {
+    const stopped = await Promise.allSettled([...children].map(child => api.stop(child, environment)));
+    assert.equal(realpathSync(directory), directory);
+    assert.ok(path.basename(directory).startsWith("venisia-owned-child-controls-") && path.dirname(directory) === realpathSync(tmpdir()));
+    rmSync(directory, { recursive: true, force: true });
+    assert.ok(stopped.every(result => result.status === "fulfilled")); assert.equal(children.size, 0); assert.equal(existsSync(directory), false);
+  }
+}
+
+function verifyQualifiedSelectionControls() {
+  const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations = ["qualifyLocalVerificationTargets", "localVerificationCommandSteps"].map(name => {
+    const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
+    assert.ok(node); return node.getText(file).replace(/^export /u, "");
+  });
+  const qualify = new Function("assert", ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return qualifyLocalVerificationTargets;")(assert) as typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets;
+  type Analysis = import("./lib/isolated-public-verification.mts").LocalVerificationSourceImpact;
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const entry = "scripts/qa-admin-form-guarded-navigation.mts", step = "node --experimental-strip-types " + entry + " --save-cache-only";
+  const fixtureHash = sha256(readFileSync(path.join(root, entry), "utf8").replaceAll("\r\n", "\n"));
+  const owner = "src/components/admin/ui/AdminFormRuntime.tsx", manifest = "src/lib/admin/interaction-system/adoption-manifest.ts";
+  const analysis = (): Analysis => ({ proofBoundary: "source_discovery_only", sourceSha256: "a".repeat(64), deltaSha256: "b".repeat(64),
+    ownerBindings: [{ owner: "AdminFormRuntime", capability: "form_runtime", files: [owner], manifest }], obligations: [], protections: [],
+    changes: [{ file: owner, owners: ["AdminFormRuntime"], capabilities: ["form_runtime"], consumers: ["src/lib/admin/form-system/adoption-manifest.ts#controlled-consumer"],
+      contracts: [manifest], candidateChecks: ["verify:admin-query-save-failure-contracts"], unresolved: [], semanticChange: true, presentationOnly: false }] });
+  check("qualified shared Form change selects one actual registered leaf with owner/contract/consumer reasons", () => {
+    const result = qualify(scripts, analysis(), fixtureHash); assert.equal(result.targets.length, 1); assert.equal(result.targets[0]!.step, step);
+    assert.deepEqual(result.targets[0]!.owners, ["AdminFormRuntime"]); assert.deepEqual(result.targets[0]!.capabilities, ["form_runtime"]);
+    assert.equal(result.targets[0]!.consumers.length, 1); assert.equal(result.targets[0]!.nativePersistenceVerified, false);
+    assert.equal(result.targets[0]!.businessConsumerAdoptionVerified, false); assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+  });
+  check("qualified fixture maintenance selects its actual behavior family rather than claiming business consumer adoption", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: entry, capabilities: [], consumers: [] }];
+    assert.equal(qualify(scripts, value, fixtureHash).targets.length, 1);
+  });
+  check("simple presentation and unchanged inputs never execute the Form family", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, presentationOnly: true }]; assert.equal(qualify(scripts, value, fixtureHash).targets.length, 0);
+    value.changes = [{ ...value.changes[0]!, presentationOnly: false, semanticChange: false }]; assert.equal(qualify(scripts, value, fixtureHash).targets.length, 0);
+  });
+  check("an unrelated functional change does not inherit a Form leaf from a broad wrapper", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: "src/lib/unrelated.ts", owners: ["other"], capabilities: [], contracts: [], consumers: [] }];
+    assert.equal(qualify(scripts, value, fixtureHash).targets.length, 0);
+  });
+  check("Form contract changes keep eligible behavior alongside all existing contract and adoption gates", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: "src/lib/admin/form-system/adoption-manifest.ts", capabilities: [] }];
+    assert.equal(qualify(scripts, value, fixtureHash).targets.length, 1); assert.equal(qualify(scripts, value, fixtureHash).unqualifiedRemainUnderExistingGates, true);
+  });
+  check("unknown fixture bytes cannot silently renew their own effect qualification", () => {
+    const result = qualify(scripts, analysis(), "f".repeat(64)); assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("qualified_fixture_bytes_changed_review_effect_contract"));
+  });
+  check("missing current owner evidence blocks qualification rather than copying a registry", () => {
+    const value = analysis(); value.ownerBindings = []; const result = qualify(scripts, value, fixtureHash);
+    assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("missing_current_manifest_form_runtime_owner"));
+  });
+  check("unsupported shell or redirected canonical entry cannot authorize execution", () => {
+    const unsafe = { ...scripts, "verify:admin-query-save-failure-contracts": step + " && echo unsafe" };
+    assert.equal(qualify(unsafe, analysis(), fixtureHash).targets.length, 0);
+    assert.equal(qualify({ ...scripts, "verify:admin-query-save-failure-contracts": step.replace("--save-cache-only", "--unknown-mode") }, analysis(), fixtureHash).targets.length, 0);
+  });
+  check("overlapping wrappers and repeated leaf occurrences execute the same family only once", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, candidateChecks: ["qa:qualified-control", "verify:admin-query-save-failure-contracts"] }];
+    assert.equal(qualify({ ...scripts, "qa:qualified-control": step + " && " + step }, value, fixtureHash).targets.length, 1);
+  });
+  check("dependency or tooling changes require effect review before automatic execution", () => {
+    const value = analysis(); value.changes = [...value.changes, { ...value.changes[0]!, file: "package-lock.json" }];
+    const result = qualify(scripts, value, fixtureHash); assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("dependency_or_command_contract_changed"));
+  });
+  check("qualified execution source keeps immutable snapshot/selector checks and actual terminal behavior requirements", () => {
+    const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "executeLocalVerificationTargets"); assert.ok(node);
+    const source = node.getText(file);
+    for (const required of ["Targeted execution has a stale source snapshot.", "Targeted selector is stale or incomplete.", "inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead, automatic: true })", "never supplied impact analysis", "runOwnedVerificationChild", "scenariosCompleted", "businessConsumerAdoptionVerified", "cleanupFailurePreserved"])
+      assert.ok(source.includes(required), required);
+    assert.ok(readSource(entry).includes("installSaveCacheNetworkFence"));
+  });
+}
+
 async function localRiskVerificationOnly() {
   verifyFinalQualityGatePlan(); const plan = verifyLocalRiskVerificationPlan(); await verifyLocalRiskExecutionControls(plan.prefix);
-  await verifyLocalRiskControlLeaseAdmission(); verifyAdminMeasurementRestartPolicy();
+  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); verifyQualifiedSelectionControls(); verifyAdminMeasurementRestartPolicy();
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
     fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
 }
 
-/** Existing verifier adapter; only canonical pure/source-reader declarations are loaded, never fixture modules. */
+/** Existing verifier adapter; source mode reads only, explicit qualified mode delegates one canonical leaf. */
 async function changeImpactOnly() {
   try {
     const args = process.argv.slice(2);
     const ciMode = args.includes("--ci-change-impact");
-    assert.equal(args.filter(argument => argument === "--change-impact-only" || argument === "--ci-change-impact").length, 1);
-    assert.ok(ciMode ? args.length === 1 : args.every(argument => argument === "--change-impact-only" || /^--(?:impact-baseline|impact-record|additional-source)=.+$/u.test(argument)),
+    const executeMode = args.includes("--execute-qualified-impact");
+    assert.equal(args.filter(argument => ["--change-impact-only", "--ci-change-impact", "--execute-qualified-impact"].includes(argument)).length, 1);
+    assert.ok(ciMode ? args.length === 1 : args.every(argument => argument === "--change-impact-only" || argument === "--execute-qualified-impact" || /^--(?:impact-baseline|impact-record|additional-source)=.+$/u.test(argument)),
       "Change-impact inspection accepts only explicit baseline, review record and additional source arguments.");
     const one = (prefix: string) => {
       const values = args.filter(argument => argument.startsWith(prefix)); assert.ok(values.length <= 1, "Duplicate impact argument: " + prefix);
       return values[0]?.slice(prefix.length);
     };
     const recordPath = one("--impact-record=");
+    assert.ok(!executeMode || !recordPath && !args.some(argument => argument.startsWith("--additional-source=")),
+      "Qualified execution uses tracked source and an explicit baseline, never an approval record or untracked entry.");
     let impact: import("./lib/isolated-public-verification.mts").LocalVerificationImpact | undefined;
     if (recordPath) {
       const record = path.resolve(recordPath), evidenceRoot = path.resolve(root, ".tmp-qa") + path.sep;
@@ -2495,18 +2816,29 @@ async function changeImpactOnly() {
       ci = { eventName, event, githubSha };
     }
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "assertLocalVerificationProtectionMaintenance",
-      "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath"];
+    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
+      "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",
+      "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild"];
     const declarations = names.map(name => {
       const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
         || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name));
       assert.ok(found, "Missing canonical source impact declaration: " + name); return found.getText(parsed).replace(/^export /u, "");
     });
     const code = ts.transpileModule(adminAdoptionControlSource(parsed) + "\n" + declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    const inspect = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph", code + ";return inspectLocalVerificationChangeImpact;")(
-      assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph) as
-      typeof import("./lib/isolated-public-verification.mts").inspectLocalVerificationChangeImpact;
-    const report = inspect({ baselineHead, impact, automatic: ciMode, ci,
+    const api = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph",
+      "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets};")(
+      assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph,
+      spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep) as
+      Pick<typeof import("./lib/isolated-public-verification.mts"), "inspectLocalVerificationChangeImpact" | "executeLocalVerificationTargets">;
+    if (executeMode) {
+      const { sourceReport: report, ...targetedExecution } = await api.executeLocalVerificationTargets({ baselineHead: baselineHead! }, new AbortController().signal);
+      const combined = { ...report, sourceStatus: report.status, status: targetedExecution.status, targetedExecution,
+        qualifiedBehavioralPass: targetedExecution.status === "PASS", candidateCommandsExecuted: targetedExecution.executedCommands,
+        browserExecuted: targetedExecution.browserExecuted, sourceNetworkRequests: report.networkRequests, networkRequests: targetedExecution.commandAttempts ? null : 0,
+        exitCode: targetedExecution.exitCode, behavioralPass: false, releaseEvidence: false };
+      console.log(JSON.stringify(combined, null, 2)); process.exitCode = combined.exitCode; return;
+    }
+    const report = api.inspectLocalVerificationChangeImpact({ baselineHead, impact, automatic: ciMode, ci,
       additionalSourceFiles: args.filter(argument => argument.startsWith("--additional-source=")).map(argument => argument.slice("--additional-source=".length)) });
     console.log(JSON.stringify(report, null, 2)); process.exitCode = report.exitCode;
   } catch (error) {
@@ -2603,6 +2935,9 @@ async function main() {
   const riskPlan = verifyLocalRiskVerificationPlan();
   await verifyLocalRiskExecutionControls(riskPlan.prefix);
   await verifyLocalRiskControlLeaseAdmission();
+  await verifyQualifiedFormHarnessControls();
+  await verifySharedChildControls();
+  verifyQualifiedSelectionControls();
   await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
   verifyScanner();
@@ -3450,4 +3785,4 @@ async function retainedFinalQualityOnly() {
 }
 
 const verification = process.argv.includes("--ci-change-impact") || process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
-verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
+(process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : verification)().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
