@@ -2625,7 +2625,7 @@ async function verifySharedChildControls() {
     });
     await control("sanitizer failure rejects instead of escaping the close callback", async () => {
       const failure = new Error("Controlled sanitizer failure");
-      const failingContext = { ...context, sanitize: (_value: string): string => { throw failure; } };
+      const failingContext = { ...context, sanitize: (): string => { throw failure; } };
       await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
         ["-e", "process.stdout.write('private-sentinel');"], { ...environment }, "sanitize-failure", 10_000), (error: unknown) => error === failure);
       assert.equal(children.size, 0);
@@ -2647,7 +2647,7 @@ async function verifySharedChildControls() {
     });
     await control("timeout remains the primary failure when sanitization also fails", async () => {
       const failure = new Error("Secondary sanitizer failure");
-      const failingContext = { ...context, sanitize: (_value: string): string => { throw failure; } };
+      const failingContext = { ...context, sanitize: (): string => { throw failure; } };
       await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
         ["-e", "setInterval(()=>{},1000)"], { ...environment }, "timeout-sanitize-failure", 100),
       (error: unknown) => error instanceof Error && /aborted or exceeded its bound/u.test(error.message) && error.cause === failure);
