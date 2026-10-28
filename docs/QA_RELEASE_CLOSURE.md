@@ -317,6 +317,12 @@ values before Node starts, executes no candidate command and has no Browser,
 database or fixture lifecycle. Its sanitized JSON report alone is retained as
 an attempt-specific artifact after success or failure; missing evidence fails.
 
+CI admission failure also retains a bounded `ciBinding` diagnostic from the
+original in-memory event: canonical SHA bindings, the original commit lookup
+exit/identity, local object types, parents and ancestry query outcomes. It
+excludes event text, arbitrary values, environment contents and Git stderr.
+These probes preserve the failed exit and never fetch or authorize execution.
+
 Automatic `PASS_AUTOMATIC_SOURCE_PROTECTION` means syntactic source protection
 correspondence only. `ownerReviewSatisfied=false`, `behavioralPass=false` and
 `releaseEvidence=false` remain explicit. Missing correspondence is `DRIFT`

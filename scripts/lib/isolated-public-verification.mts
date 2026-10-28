@@ -442,6 +442,42 @@ export function resolveLocalVerificationCiBaseline(input: { eventName: string; e
   return { baselineHead: baseline, finalHead: current, eventName: input.eventName };
 }
 
+/** Bounded public Git bindings only; no event text, credentials, paths or Git error output is retained. */
+export function localVerificationCiDiagnostic(input: { eventName: string; event: unknown; githubSha: string; checkoutHead: string; lastCommitLookup?: string;
+  lastCommitProbe?: { sha: string; exitCode: number | null; identity: string | null } },
+  probe: (operation: "identity" | "objectType" | "parents" | "ancestry", sha: string, descendant?: string) => { exitCode: number | null; output: string }) {
+  const canonical = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{40}$/u.test(value);
+  const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const field = (container: Record<string, unknown>, key: string) => {
+    const value = container[key]; return { present: Object.hasOwn(container, key), type: value === null ? "null" : Array.isArray(value) ? "array" : typeof value,
+      value: canonical(value) ? value : null };
+  };
+  const event = object(input.event), request = object(event.pull_request);
+  const bindings = { checkoutHead: field(object(input), "checkoutHead"), githubSha: field(object(input), "githubSha"),
+    base: field(object(request.base), "sha"), head: field(object(request.head), "sha"), mergeCommitSha: field(request, "merge_commit_sha"),
+    pushBefore: field(event, "before"), pushAfter: field(event, "after"), lastCommitLookup: field(object(input), "lastCommitLookup") };
+  const query = (operation: "identity" | "objectType" | "parents" | "ancestry", sha: string, descendant?: string) => {
+    try {
+      const result = probe(operation, sha, descendant);
+      return { exitCode: Number.isInteger(result.exitCode) && result.exitCode! >= 0 && result.exitCode! <= 255 ? result.exitCode : null, output: result.output.trim() };
+    } catch { return { exitCode: null, output: "" }; }
+  };
+  const objects = [...new Set(Object.values(bindings).flatMap(binding => binding.value ? [binding.value] : []))].map(sha => {
+    const identity = query("identity", sha), kind = query("objectType", sha), parents = query("parents", sha), values = parents.output.split(/\s+/u).filter(Boolean);
+    return { sha, identity: { exitCode: identity.exitCode, value: canonical(identity.output) ? identity.output : null },
+      objectType: { exitCode: kind.exitCode, value: ["commit", "tree", "blob", "tag"].includes(kind.output) ? kind.output : null },
+      parents: { exitCode: parents.exitCode, values: values.length <= 8 && values.every(canonical) ? values : [], complete: parents.exitCode === 0 && values.length <= 8 && values.every(canonical) } };
+  });
+  const ancestry = bindings.checkoutHead.value ? [...new Set([bindings.base.value, bindings.head.value, bindings.mergeCommitSha.value, bindings.pushBefore.value].filter((sha): sha is string => sha !== null))]
+    .map(ancestor => { const result = query("ancestry", ancestor, bindings.checkoutHead.value!); return { ancestor, descendant: bindings.checkoutHead.value,
+      exitCode: result.exitCode, isAncestor: result.exitCode === 0 ? true : result.exitCode === 1 ? false : null }; }) : [];
+  const original = input.lastCommitProbe;
+  return { schema: "ci_event_binding_diagnostic_v1", eventName: ["pull_request", "push"].includes(input.eventName) ? input.eventName : "unsupported",
+    bindings, originalCommitProbe: original ? { operation: "identity", sha: canonical(original.sha) ? original.sha : null,
+      exitCode: Number.isInteger(original.exitCode) && original.exitCode! >= 0 && original.exitCode! <= 255 ? original.exitCode : null,
+      identity: canonical(original.identity) ? original.identity : null } : null, objects, ancestry };
+}
+
 /** Automatic source correspondence is distinct from reviewed local admission and from behavioral/runtime proof. */
 export function deriveLocalVerificationSourceCoherence(scripts: Readonly<Record<string, string>>, actual: LocalVerificationInputs) {
   const analysis = actual.changeImpact; assert.ok(analysis, "Automatic coherence requires complete actual source discovery.");
@@ -699,10 +735,26 @@ export function inspectLocalVerificationChangeImpact(options: { baselineHead?: s
     assert.equal(options.automatic, true, "CI source selection requires automatic source coherence.");
     assert.equal(options.impact, undefined, "CI source coherence cannot fabricate or borrow local approval records.");
     assert.deepEqual(options.additionalSourceFiles ?? [], [], "CI source selection accepts committed source only.");
-    const history = { exists: (sha: string) => { try { return git("rev-parse", "--verify", sha + "^{commit}").trim() === sha; } catch { return false; } },
+    let lastCommitLookup: string | undefined, lastCommitProbe: { sha: string; exitCode: number | null; identity: string | null } | undefined;
+    const exitStatus = (failure: unknown) => failure !== null && typeof failure === "object" && "status" in failure && typeof failure.status === "number" ? failure.status : null;
+    const history = { exists: (sha: string) => {
+      lastCommitLookup = sha;
+      try { const identity = git("rev-parse", "--verify", sha + "^{commit}").trim(); lastCommitProbe = { sha, exitCode: 0, identity }; return identity === sha; }
+      catch (failure) { lastCommitProbe = { sha, exitCode: exitStatus(failure), identity: null }; return false; }
+    },
       isAncestor: (ancestor: string, descendant: string) => { try { git("merge-base", "--is-ancestor", ancestor, descendant); return true; } catch { return false; } },
       parents: (sha: string) => git("show", "--no-patch", "--format=%P", sha, "--").trim().split(/\s+/u).filter(Boolean) };
-    baselineHead = resolveLocalVerificationCiBaseline({ ...options.ci, checkoutHead }, history).baselineHead;
+    try { baselineHead = resolveLocalVerificationCiBaseline({ ...options.ci, checkoutHead }, history).baselineHead; }
+    catch (error) {
+      const ciBinding = localVerificationCiDiagnostic({ ...options.ci, checkoutHead, ...(lastCommitLookup ? { lastCommitLookup } : {}), ...(lastCommitProbe ? { lastCommitProbe } : {}) }, (operation, sha, descendant) => {
+        const commands = { identity: ["rev-parse", "--verify", sha + "^{commit}"], objectType: ["cat-file", "-t", sha],
+          parents: ["show", "--no-patch", "--format=%P", sha, "--"], ancestry: ["merge-base", "--is-ancestor", sha, descendant!] };
+        try { return { exitCode: 0, output: git(...commands[operation]) }; }
+        catch (failure) { return { exitCode: exitStatus(failure), output: "" }; }
+      });
+      return { status: "BLOCKED_SOURCE_CONSISTENCY", exitCode: 1, releaseEvidence: false, checksExecuted: 0, browserExecuted: false,
+        databaseCalls: 0, networkRequests: 0, diagnostic: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid CI source admission.", ciBinding };
+    }
     git("diff", "--no-ext-diff", "--no-textconv", "--quiet", "HEAD", "--");
   }
   assert.ok(baselineHead && /^[a-f0-9]{40}$/u.test(baselineHead), "An explicit immutable impact baseline is required.");

@@ -1551,7 +1551,7 @@ function verifyFinalQualityGatePlan() {
 /** Execute source discovery and admission with in-memory source bytes, never Browser/DB transports. */
 function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated-public-verification.mts"),
   "deriveLocalVerificationSourceImpact" | "localVerificationSemanticSource" | "planLocalVerification" | "assertLocalVerificationRequest" | "localVerificationCommandSteps"
-  | "deriveLocalVerificationSourceCoherence" | "resolveLocalVerificationCiBaseline">,
+  | "deriveLocalVerificationSourceCoherence" | "resolveLocalVerificationCiBaseline" | "localVerificationCiDiagnostic">,
   repositoryScripts: Record<string, string>) {
   const authority = "src/lib/admin/interaction-system/adoption-manifest.ts", formAuthority = "src/lib/admin/form-system/adoption-manifest.ts";
   const owner = "src/components/admin/ui/Phase03Owner.tsx", consumer = "src/app/admin/phase03/Consumer.tsx";
@@ -1830,6 +1830,44 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
       GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false", PATH: "safe" });
     assert.equal(Object.hasOwn(environment, "SUPABASE_SERVICE_ROLE_KEY"), false, "Caller credentials cannot enter the inspector's Git environment.");
   });
+  check("CI admission diagnostics preserve original public bindings and actual bounded Git query results", () => {
+    const base = "a".repeat(40), head = "b".repeat(40), checkout = "c".repeat(40), merge = "d".repeat(40);
+    const report = api.localVerificationCiDiagnostic({ eventName: "pull_request", event: { pull_request: { base: { sha: base }, head: { sha: head }, merge_commit_sha: merge } },
+      githubSha: checkout, checkoutHead: checkout, lastCommitLookup: merge, lastCommitProbe: { sha: merge, exitCode: 128, identity: null } }, (operation, sha) => {
+      assert.match(sha, /^[a-f0-9]{40}$/u);
+      if (sha === merge) return { exitCode: 128, output: "" };
+      return { exitCode: 0, output: operation === "identity" ? sha : operation === "objectType" ? "commit" : operation === "parents" && sha === checkout ? base + " " + head : "" };
+    });
+    assert.deepEqual(report.bindings.mergeCommitSha, { present: true, type: "string", value: merge });
+    assert.deepEqual(report.originalCommitProbe, { operation: "identity", sha: merge, exitCode: 128, identity: null });
+    assert.deepEqual(report.objects.find(object => object.sha === checkout)?.parents, { exitCode: 0, values: [base, head], complete: true });
+    assert.deepEqual(report.objects.find(object => object.sha === merge)?.identity, { exitCode: 128, value: null });
+    assert.equal(report.ancestry.find(row => row.ancestor === merge)?.isAncestor, null);
+    assert.equal(report.ancestry.find(row => row.ancestor === head)?.isAncestor, true);
+  });
+  check("CI admission diagnostics suppress arbitrary payload text Git output paths and caller secrets", () => {
+    const secret = "sentinel-private-body-path-and-credential", checkout = "c".repeat(40);
+    const report = api.localVerificationCiDiagnostic({ eventName: secret, event: { title: secret, body: secret, pull_request: {
+      base: { sha: secret }, head: { sha: secret }, merge_commit_sha: secret, credentials: secret } }, githubSha: secret, checkoutHead: checkout,
+    lastCommitProbe: { sha: secret, exitCode: -1, identity: secret } }, (_operation, sha) => {
+      assert.equal(sha, checkout, "Noncanonical event values cannot become Git arguments."); return { exitCode: 300, output: secret };
+    });
+    assert.equal(report.eventName, "unsupported"); assert.equal(JSON.stringify(report).includes(secret), false);
+    assert.deepEqual(report.objects[0].identity, { exitCode: null, value: null });
+    assert.deepEqual(report.objects[0].objectType, { exitCode: null, value: null });
+    assert.deepEqual(report.objects[0].parents, { exitCode: null, values: [], complete: false });
+    assert.deepEqual(report.originalCommitProbe, { operation: "identity", sha: null, exitCode: null, identity: null });
+  });
+  check("CI admission diagnostics distinguish absent null and invalid merge metadata and contain probe failures", () => {
+    for (const request of [{}, { merge_commit_sha: null }, { merge_commit_sha: [] }]) {
+      const report = api.localVerificationCiDiagnostic({ eventName: "pull_request", event: { pull_request: request }, githubSha: "c".repeat(40), checkoutHead: "c".repeat(40) },
+        () => { throw Error("sentinel Git error must not appear"); });
+      assert.equal(report.bindings.mergeCommitSha.present, Object.hasOwn(request, "merge_commit_sha"));
+      assert.equal(report.bindings.mergeCommitSha.type, "merge_commit_sha" in request ? request.merge_commit_sha === null ? "null" : "array" : "undefined");
+      assert.equal(report.bindings.mergeCommitSha.value, null); assert.equal(report.originalCommitProbe, null);
+      assert.equal(report.objects[0].identity.exitCode, null); assert.equal(JSON.stringify(report).includes("sentinel"), false);
+    }
+  });
   check("immutable CI event resolution distinguishes PR merge checkout from PR head and validates push before history", () => {
     const base = "a".repeat(40), head = "b".repeat(40), merge = "c".repeat(40), known = new Set([base, head, merge]);
     const history = { exists: (sha: string) => known.has(sha), isAncestor: (left: string, right: string) => left === right || left === base || left === head && right === merge,
@@ -1893,7 +1931,7 @@ function verifyLocalRiskVerificationPlan() {
     assert.ok(found, `Missing canonical local verification declaration: ${name}`);
     return found.getText(file).replace(/^export /u, "");
   };
-  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
+  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
   const code = ts.transpileModule(adminAdoptionControlSource(file) + "\n" + declarations.map(statement).join("\n"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -1904,7 +1942,7 @@ function verifyLocalRiskVerificationPlan() {
     changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
   type Plan = ReturnType<typeof import("./lib/isolated-public-verification.mts").planLocalVerification>;
   type Request = import("./lib/isolated-public-verification.mts").PublicGateRequest;
-  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,deriveLocalVerificationSourceCoherence,resolveLocalVerificationCiBaseline,localVerificationSemanticSource,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,deriveLocalVerificationSourceCoherence,resolveLocalVerificationCiBaseline,localVerificationCiDiagnostic,localVerificationSemanticSource,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
     planLocalVerification: typeof import("./lib/isolated-public-verification.mts").planLocalVerification;
     assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
     registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[];
@@ -1915,6 +1953,7 @@ function verifyLocalRiskVerificationPlan() {
     localVerificationCommandSteps: typeof import("./lib/isolated-public-verification.mts").localVerificationCommandSteps;
     deriveLocalVerificationSourceCoherence: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceCoherence;
     resolveLocalVerificationCiBaseline: typeof import("./lib/isolated-public-verification.mts").resolveLocalVerificationCiBaseline;
+    localVerificationCiDiagnostic: typeof import("./lib/isolated-public-verification.mts").localVerificationCiDiagnostic;
   };
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
   verifyLocalSourceImpactControls(api, scripts);
@@ -2456,7 +2495,7 @@ async function changeImpactOnly() {
       ci = { eventName, event, githubSha };
     }
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "assertLocalVerificationProtectionMaintenance",
+    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath"];
     const declarations = names.map(name => {
       const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
