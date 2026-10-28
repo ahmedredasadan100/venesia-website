@@ -42,19 +42,24 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npm run --silent verify:isolated-supabase -- --ci-change-impact > "$RUNNER_TEMP/qa-change-impact.json"
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run canonical PR-safe Quality Gate
+        env:
+          VENESIA_ALT_DIAGNOSTIC: QA-IMAGE-ALT-228-01-ci-attempt-01
+        run: npm run ci:check
+
       - name: Preserve QA change-impact source report
         if: ${{ always() && steps.qa-change-impact.outcome != 'skipped' && steps.qa-change-impact.outcome != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: qa-change-impact-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/qa-change-impact.json
+          path: |
+            ${{ runner.temp }}/qa-change-impact.json
+            .tmp-qa/admin-development-batch-01/image-alt-ci-attempt-01/
+          include-hidden-files: true
           if-no-files-found: error
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run canonical PR-safe Quality Gate
-        run: npm run ci:check
 
   topic-view-postgres:
     name: Metrics and Publishing Integrity · PostgreSQL 17
