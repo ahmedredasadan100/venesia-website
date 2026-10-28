@@ -1433,6 +1433,9 @@ const saveCacheOnly = process.argv.includes("--save-cache-only");
 const reportFreshnessOnly = process.argv.includes("--report-freshness-only");
 const returnPathOnly = process.argv.includes("--return-path-only");
 if (saveCacheOnly) assert.deepEqual(process.argv.slice(2), ["--save-cache-only"], "The bounded save-cache family accepts only its exact flag.");
+const fixtureStarted = performance.now();
+const fixtureTimings = { preparationMs: 0, executionMs: 0, cleanupMs: 0 };
+let executionStarted: number | null = null;
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
 let server: Server | null = null;
@@ -1452,6 +1455,8 @@ try {
   const destinationUrl = `${harnessServer.baseUrl}/destination`;
   const browserIssues: BrowserIssue[] = [];
   browser = await chromium.launch({ headless: true });
+  fixtureTimings.preparationMs = performance.now() - fixtureStarted;
+  executionStarted = performance.now();
   if (reportFreshnessOnly) await runReportFreshnessCases(browser, harnessUrl, rootDir, browserIssues);
   if (!saveCacheOnly && !reportFreshnessOnly) {
     for (const listPath of ["/admin/content/categories", "/admin/content/series", "/admin/projects/residential", "/admin/projects/commercial"]) {
@@ -2658,11 +2663,15 @@ try {
   primaryFailed = true;
   throw error;
 } finally {
+  const cleanupStarted = performance.now();
+  if (executionStarted !== null) fixtureTimings.executionMs = cleanupStarted - executionStarted;
+  else fixtureTimings.preparationMs = cleanupStarted - fixtureStarted;
   const cleanup = await settleGuardedNavigationCleanup([
     { resource: "browser", close: async () => { if (browser) await browser.close(); } },
     { resource: "server", close: async () => { if (server) await stopServer(server); } },
     { resource: "temp", close: async () => { await rm(validateTempPath(tempDir), { recursive: true, force: true }); } },
   ]);
+  fixtureTimings.cleanupMs = performance.now() - cleanupStarted;
   const cleanupFailures = cleanup.filter((result) => result.status === "FAIL");
   if (saveCacheOnly) {
     console.log(JSON.stringify({
@@ -2672,6 +2681,7 @@ try {
       scenariosStarted: saveCacheScenariosStarted,
       scenariosCompleted: saveCacheScenariosCompleted,
       assertions: passed,
+      timings: fixtureTimings,
       browserExecuted: browser !== null,
       databaseExecuted: false,
       nativePersistenceVerified: false,

@@ -1597,7 +1597,7 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
       protectionFile: entry, check: checkName, beforeSha256: sha256(value.baseline.get(entry)!), afterSha256: sha256(value.current.get(entry)!),
       mode, reviewedBy: "phase03-contract-maintenance-review", rationale: "The source-bound changed assertion preserves this exact obligation.",
       assertionSha256: value.actual.changeImpact!.protections.find(protection => protection.file === entry && protection.check === checkName)?.assertionChanges
-        .find(assertion => assertion.references.includes(obligation.file))?.sha256 }));
+        .find(assertion => assertion.references.includes(obligation.file) && assertion.contracts.includes(obligation.contract))?.sha256 }));
   };
   const plan = (value: ReturnType<typeof scenario>) => api.planLocalVerification(scripts, value.impact, value.actual);
   check("source impact small owner edit preserves contracts and reports candidates without scheduling Browser/Database", () => {
@@ -1673,6 +1673,103 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     maintain(value); assert.equal(plan(value).mode, "full");
     value.impact.protectionMaintenance = value.impact.protectionMaintenance!.map(review => ({ ...review, assertionSha256: "f".repeat(64) }));
     assert.throws(() => plan(value), /real verification-source change/u);
+  });
+  check("contract-specific assertion projection rejects a changed assertion about an unrelated export in the same file", () => {
+    const baseline = new Map(originals), both = "export type RecordContract = { value: string }; export type OtherContract = { other: number };";
+    const otherGuard = guardSource.replace('"value: string"', '"other:number"');
+    baseline.set(contract, both); baseline.set(entry, otherGuard);
+    const value = scenario([[contract, both.replace("value: string", "value: string; revision: number")],
+      [entry, otherGuard.replace('"other:number"', '"other: number"')]], baseline);
+    assert.ok(value.actual.changeImpact!.protections[0].assertionChanges.some(assertion => assertion.references.includes(contract)), "Preserve the demonstrated same-file relationship.");
+    assert.ok(value.actual.changeImpact!.protections[0].assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#RecordContract")));
+    maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "DRIFT"); assert.ok(result.diagnostics.some(message => message.includes(contract + "#RecordContract")));
+  });
+  for (const [label, nextGuard] of [
+    ["whole-file length", guardSource + "\nassert.equal(value.length,1234);"],
+    ["unchanged export name", guardSource + '\nassert.ok(value.includes("RecordContract"));'],
+    ["diagnostic symbol mention", guardSource.replace('assert.ok(value.includes("value: string"))', 'assert.ok(value.includes("value: string"),"RecordContract revision: number")')],
+    ["unrelated local expected vector", guardSource + '\nconst otherExpected="other: number"; assert.ok(value.includes(otherExpected));'],
+  ] as const) check("contract specificity rejects " + label + " as updated protection", () => {
+    const baseline = new Map(originals); baseline.set(contract, "export type RecordContract = { value: string }; export type OtherContract = { other: number };");
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number }; export type OtherContract = { other: number };"], [entry, nextGuard]], baseline);
+    maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
+  });
+  check("each changed export requires its own applicable assertion rather than borrowing a sibling contract", () => {
+    const baseline = new Map(originals), before = "export type RecordContract = { value: string }; export type OtherContract = { other: number };";
+    baseline.set(contract, before);
+    const next = "export type RecordContract = { value: string; revision: number }; export type OtherContract = { other: number; enabled: boolean };";
+    const firstGuard = guardSource.replace('"value: string"', '"revision: number"');
+    const partial = scenario([[contract, next], [entry, firstGuard]], baseline);
+    maintain(partial); assert.throws(() => plan(partial), /real verification-source change/u);
+    const rejected = api.deriveLocalVerificationSourceCoherence(scripts, { ...partial.actual, sourceSha256: partial.actual.changeImpact!.sourceSha256 });
+    assert.equal(rejected.status, "DRIFT"); assert.equal(rejected.fast.correspondence.find(row => row.contract.endsWith("#RecordContract"))?.protected, true);
+    assert.equal(rejected.fast.correspondence.find(row => row.contract.endsWith("#OtherContract"))?.protected, false);
+    const complete = scenario([[contract, next], [entry, firstGuard + '\nassert.ok(value.includes("enabled: boolean"));']], baseline);
+    maintain(complete); assert.equal(plan(complete).mode, "full");
+    const accepted = api.deriveLocalVerificationSourceCoherence(scripts, { ...complete.actual, sourceSha256: complete.actual.changeImpact!.sourceSha256 });
+    assert.equal(accepted.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(accepted.behavioralPass, false);
+  });
+  check("changed runtime export invocation through an imported alias binds its exact contract without generating expectations", () => {
+    const baseline = new Map(originals), oldGuard = 'import assert from "node:assert/strict"; import {saveRecord as actualSave} from "../' + contract + '"; assert.equal(actualSave("before"), "before");';
+    baseline.set(contract, "export function saveRecord(value: string) { return value; }"); baseline.set(entry, oldGuard);
+    const value = scenario([[contract, "export function saveRecord(value: string, confirmed: boolean) { return confirmed ? value : undefined; }"],
+      [entry, oldGuard.replace('actualSave("before"), "before"', 'actualSave("after", true), "after"')]], baseline);
+    const assertion = value.actual.changeImpact!.protections[0].assertionChanges.find(row => row.contracts.includes(contract + "#saveRecord"));
+    assert.ok(assertion); maintain(value); assert.equal(plan(value).mode, "full");
+  });
+  check("a changed data export binds only the asserted imported value and cannot borrow a sibling numeric assertion", () => {
+    const baseline = new Map(originals), oldGuard = 'import assert from "node:assert/strict"; import {SAVE_LIMIT as actualLimit,OTHER_LIMIT} from "../' + contract + '"; assert.equal(actualLimit,1); assert.equal(OTHER_LIMIT,2);';
+    baseline.set(contract, "export const SAVE_LIMIT=1; export const OTHER_LIMIT=2;"); baseline.set(entry, oldGuard);
+    const valid = scenario([[contract, "export const SAVE_LIMIT=3; export const OTHER_LIMIT=2;"], [entry, oldGuard.replace("actualLimit,1", "actualLimit,3")]], baseline);
+    maintain(valid); assert.equal(plan(valid).mode, "full");
+    const unrelated = scenario([[contract, "export const SAVE_LIMIT=3; export const OTHER_LIMIT=2;"], [entry, oldGuard.replace("OTHER_LIMIT,2", "OTHER_LIMIT,2+0")]], baseline);
+    maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
+    assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...unrelated.actual, sourceSha256: unrelated.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
+  });
+  check("repeated local assertion names resolve only their nearest lexical contract source", () => {
+    const baseline = new Map(originals), both = "export type RecordContract = { value: string }; export type OtherContract = { other: number };";
+    const oldGuard = 'import assert from "node:assert/strict"; import {readFileSync} from "node:fs"; '
+      + 'function first(){const value=readFileSync("' + contract + '","utf8"); assert.ok(value.includes("value: string"));} '
+      + 'function second(){const value="local unrelated value"; assert.equal(value,"local unrelated value");}';
+    baseline.set(contract, both); baseline.set(entry, oldGuard);
+    const valid = scenario([[contract, both.replace("value: string", "value: string; revision: number")], [entry, oldGuard.replace('"value: string"', '"revision: number"')]], baseline);
+    maintain(valid); assert.equal(plan(valid).mode, "full");
+    const unrelated = scenario([[contract, both.replace("value: string", "value: string; revision: number")], [entry, oldGuard.replace('assert.equal(value,"local unrelated value")', 'assert.equal(value,"revision: number")')]], baseline);
+    maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
+  });
+  check("typed owner API parameters stay scoped and reject a foreign same-named runtime export", () => {
+    const baseline = new Map(originals), foreign = "src/lib/admin/phase03/foreign.ts";
+    const oldGuard = 'import assert from "node:assert/strict"; import {saveRecord} from "../' + contract + '"; import {saveRecord as foreignSave} from "../' + foreign
+      + '"; function ownerCase(api: Pick<typeof import("../' + contract + '"),"saveRecord">){const actual=api.saveRecord("before"); assert.equal(actual,"before");} '
+      + 'function foreignCase(api: Pick<typeof import("../' + foreign + '"),"saveRecord">){const actual=api.saveRecord("other"); assert.equal(actual,"other");} ownerCase({saveRecord}); foreignCase({saveRecord:foreignSave});';
+    baseline.set(contract, "export function saveRecord(value: string) { return value; }"); baseline.set(foreign, "export function saveRecord(value: string) { return value; }"); baseline.set(entry, oldGuard);
+    const next = "export function saveRecord(value: string, confirmed: boolean) { return confirmed ? value : undefined; }";
+    const valid = scenario([[contract, next], [entry, oldGuard.replace('api.saveRecord("before")', 'api.saveRecord("before",true)')]], baseline);
+    maintain(valid); assert.equal(plan(valid).mode, "full");
+    const unrelated = scenario([[contract, next], [entry, oldGuard.replace('api.saveRecord("other")', 'api.saveRecord("other",true)')]], baseline);
+    maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
+  });
+  check("explicit removed-field rejection remains valid source correspondence and cannot establish behavioral PASS", () => {
+    const baseline = new Map(originals); baseline.set(contract, "export type RecordContract = { value: string; obsolete: number };");
+    const value = scenario([[contract, "export type RecordContract = { value: string };"], [entry, guardSource + '\nassert.equal(value.includes("obsolete: number"),false);']], baseline);
+    maintain(value); assert.equal(plan(value).mode, "full");
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+  });
+  check("the maintained impact type carries exact assertion contract correspondence beside file references", () => {
+    const source = readSource("scripts/lib/isolated-public-verification.mts");
+    assert.ok(source.includes("assertionChanges: readonly { sha256: string; references: readonly string[]; contracts: readonly string[] }[]"));
+  });
+  check("reviewed QA input and maintenance records retain exact identity and source-discovery boundaries", () => {
+    const verificationOwnerTypeSource = readSource("scripts/lib/isolated-public-verification.mts").replaceAll("\r\n", "\n");
+    assert.ok(verificationOwnerTypeSource.includes("export type LocalVerificationInputs = {\n  baselineHead: string; finalHead: string; sourceSha256: string;"));
+    assert.ok(verificationOwnerTypeSource.includes("changeImpact?: LocalVerificationSourceImpact;"));
+    assert.ok(verificationOwnerTypeSource.includes("changeImpact?: LocalVerificationSourceImpact;\n};"));
+    assert.ok(verificationOwnerTypeSource.includes('export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact"> & {\n  changes: readonly LocalVerificationChange[];'));
+    assert.ok(verificationOwnerTypeSource.includes("export type LocalVerificationProtectionMaintenance = {\n  file: string; contract: string; protectionFile: string; check: string;\n  beforeSha256: string | null; afterSha256: string;"));
   });
   check("contract evidence data and approved presentation values remain semantic obligations", () => {
     const baseline = new Map(originals); baseline.set(contract, 'export const contractData={evidence:"required"};');
@@ -1780,6 +1877,20 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     const stateChange = automatic(scenario([[owner, jsx.replace("p-4", "hover:p-6")]], baseline));
     assert.equal(stateChange.fullRequired, true, "Changing a governed visual state cannot be masked as the same spacing port.");
   });
+  check("approved height and responsive geometry cannot be normalized as a historical spacing or radius expectation", () => {
+    const baseline = new Map(originals), jsx = 'export function Phase03Owner() { return <section className="h-10 md:grid-cols-2 p-4 rounded-lg">Content</section>; }';
+    baseline.set(owner, jsx);
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"geometry-consumer",sourceFiles:["' + consumer
+      + '"],capabilityAudit:{},presentationContract:{requirements:[{target:"rowGeometry",requirement:"required",owner:{sourceFile:"'
+      + owner + '",exportName:"Phase03Owner"},presentation:{port:"height",value:"40px"}}]}}];');
+    for (const after of [jsx.replace("h-10", "h-8"), jsx.replace("md:grid-cols-2", "md:grid-cols-3")]) {
+      const value = scenario([[owner, after]], baseline), result = automatic(value);
+      assert.equal(value.actual.changeImpact!.changes[0].presentationOnly, false);
+      assert.equal(result.fullRequired, true); assert.equal(result.functionalEvidenceRequired[0].sourceChecksAdequate, false);
+      assert.ok(result.targeted.some(target => target.reasons.some(reason => reason.consumers.includes(formAuthority + "#geometry-consumer"))));
+      assert.equal(result.behavioralPass, false); assert.equal(result.fast.databaseCalls, 0);
+    }
+  });
   check("automatic shared contract coherence reports owner and all registered consumers and rejects missing protection", () => {
     const second = "src/app/admin/phase03/Indirect.tsx", baseline = new Map(originals);
     baseline.set(authority, authoritySource.replace('sourceFiles: ["' + owner + '"]', 'sourceFiles: ["' + owner + '","' + contract + '"]'));
@@ -1817,7 +1928,10 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     const inspector = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
       && node.name?.text === "inspectLocalVerificationChangeImpact");
     assert.ok(inspector?.body, "The canonical source inspector must own its clean environment.");
-    const [initialization, inheritance] = inspector.body.statements;
+    const initialization = inspector.body.statements.find(node => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some(declaration => declaration.name.getText(file) === "environment"));
+    const inheritance = inspector.body.statements.find(node => ts.isForOfStatement(node)
+      && ts.isArrayLiteralExpression(node.expression) && node.statement.getText(file).includes("environment[key]"));
     assert.ok(initialization && ts.isVariableStatement(initialization)
       && initialization.declarationList.declarations.some(declaration => declaration.name.getText(file) === "environment"));
     assert.ok(inheritance && ts.isForOfStatement(inheritance), "Only the actual whitelist loop may inherit caller values.");
@@ -2594,8 +2708,8 @@ async function verifySharedChildControls() {
     assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
   });
   const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const buildApi = (write: typeof writeFileSync = writeFileSync) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild};")(
-    assert, path.isAbsolute, path.resolve, path.sep, spawn, write) as {
+  const buildApi = (write: typeof writeFileSync = writeFileSync) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild};")(
+    assert, path.isAbsolute, path.resolve, path.sep, spawn, write, existsSync, readFileSync, readdirSync, lstatSync) as {
       run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
       stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<void>;
     };
@@ -2617,6 +2731,27 @@ async function verifySharedChildControls() {
       assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0); assert.equal(children.size, 0);
       assert.equal(readFileSync(path.join(directory, "public-success.stdout.log"), "utf8"), result.stdout);
       assert.equal(readFileSync(path.join(directory, "public-success.stderr.log"), "utf8"), result.stderr);
+      assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0);
+      assert.equal(result.cleanup.processTreeVerified, process.platform === "linux");
+    });
+    await control("duplicate evidence names reject before execution and preserve both original logs", async () => {
+      const before = readdirSync(directory).sort(), output = readFileSync(path.join(directory, "public-success.stdout.log")), errors = readFileSync(path.join(directory, "public-success.stderr.log"));
+      await assert.rejects(run("success", ["-e", "throw Error('duplicate must not execute')"]), /evidence already exists/u);
+      assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+      assert.deepEqual(readFileSync(path.join(directory, "public-success.stdout.log")), output);
+      assert.deepEqual(readFileSync(path.join(directory, "public-success.stderr.log")), errors);
+    });
+    await control("invalid deadlines reject before process or evidence allocation", async () => {
+      const before = readdirSync(directory).sort();
+      for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) await assert.rejects(run("invalid-deadline", ["-e", "throw Error('must not execute')"], new AbortController().signal, limit), /deadline must be finite and positive/u);
+      assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+    });
+    await control("ownership marker is fresh for the child and redacted from every retained log", async () => {
+      const result = await run("marker", ["-e", "const marker=process.env.VENESIA_QA_OWNED_CHILD;if(!/^[a-f0-9-]{36}$/.test(marker||''))throw Error('missing ownership');process.stdout.write(marker);process.stderr.write(marker);"]);
+      assert.equal(result.stdout, "[REDACTED_CHILD_OWNERSHIP]"); assert.equal(result.stderr, "[REDACTED_CHILD_OWNERSHIP]");
+      assert.equal(readFileSync(path.join(directory, "public-marker.stdout.log"), "utf8"), result.stdout);
+      assert.equal(readFileSync(path.join(directory, "public-marker.stderr.log"), "utf8"), result.stderr);
+      assert.equal(environment.VENESIA_QA_OWNED_CHILD, undefined); assert.equal(children.size, 0);
     });
     await control("nonzero status retains actual output duration and cleanup", async () => {
       const result = await run("nonzero", ["-e", "process.stdout.write('partial');process.stderr.write('failure');process.exitCode=7;"]);
@@ -2654,7 +2789,12 @@ async function verifySharedChildControls() {
       assert.equal(children.size, 0);
     });
     await control("timeout rejects and removes the owned process", async () => {
-      await assert.rejects(run("timeout", ["-e", "setInterval(()=>{},1000)"], new AbortController().signal, 100), /aborted or exceeded its bound/u);
+      await assert.rejects(run("timeout", ["-e", "setInterval(()=>{},1000)"], new AbortController().signal, 100), (error: unknown) => {
+        assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+        const retained = (error as Error & { childResult: { reason: string; durationMs: number; cleanup: { status: string; liveProcesses: number } } }).childResult;
+        assert.equal(retained.reason, "timeout"); assert.ok(retained.durationMs >= 100);
+        assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.liveProcesses, 0); return true;
+      });
       assert.equal(children.size, 0); assert.ok(existsSync(path.join(directory, "public-timeout.stdout.log")));
       assert.ok(existsSync(path.join(directory, "public-timeout.stderr.log")));
     });
@@ -2680,7 +2820,10 @@ async function verifySharedChildControls() {
       const pending = run("spawn-error", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "absent-owned-cwd"));
       const child = [...children][0]; assert.ok(child);
       const closed = new Promise<void>(done => child.once("close", () => done()));
-      await assert.rejects(pending, /process failed/u); await closed; assert.equal(children.size, 0);
+      await assert.rejects(pending, (error: unknown) => {
+        assert.ok(error instanceof Error && /process failed/u.test(error.message));
+        assert.deepEqual(error.cause, { code: "ENOENT" }); return true;
+      }); await closed; assert.equal(children.size, 0);
     });
     await control("spawn failure remains primary when its close callback cannot write logs", async () => {
       const failure = new Error("Secondary spawn log-write failure");
@@ -2692,6 +2835,65 @@ async function verifySharedChildControls() {
       await assert.rejects(pending, /process failed/u); await closed; assert.equal(children.size, 0);
       assert.equal(existsSync(path.join(directory, "public-spawn-write-failure.stdout.log")), false);
     });
+    if (process.platform === "linux") {
+      await control("Linux immediate zero-exit child retains an inspectable root identity and leaves no live process", async () => {
+        const result = await run("linux-fast-exit", ["-e", "process.exit(0)"]);
+        assert.equal(result.code, 0); assert.equal(result.stdout, ""); assert.equal(result.stderr, "");
+        assert.equal(result.cleanup.processTreeVerified, true); assert.equal(result.cleanup.observedProcesses, 1);
+        assert.equal(result.cleanup.liveProcesses, 0); assert.equal(result.cleanup.residualProcessesAfterExit, 0); assert.equal(children.size, 0);
+      });
+      const processAlive = (pid: number) => {
+        try { const raw = readFileSync(`/proc/${pid}/stat`, "utf8"), state = raw.slice(raw.lastIndexOf(")") + 2).split(" ")[0]; return !["Z", "X", "x"].includes(state!); }
+        catch (error) { if (["ENOENT", "ESRCH"].includes(String((error as NodeJS.ErrnoException).code))) return false; throw error; }
+      };
+      const readyLine = (child: ChildProcess, prefix: string) => new Promise<string>((done, reject) => {
+        let output = "";
+        const timer = setTimeout(() => { child.stdout!.off("data", data); reject(Error("Owned Linux tree readiness exceeded its bound.")); }, 8_000);
+        const data = (value: Buffer) => {
+          output += String(value);
+          const line = output.split("\n").find(line => line.startsWith(prefix));
+          if (line) { clearTimeout(timer); child.stdout!.off("data", data); done(line.slice(prefix.length)); }
+        };
+        child.stdout!.on("data", data);
+        child.once("error", () => { clearTimeout(timer); child.stdout!.off("data", data); reject(Error("Owned Linux tree failed before readiness.")); });
+      });
+      const leaf = "process.on('SIGTERM',()=>{});process.stdout.write(String(process.pid)+'\\n');setInterval(()=>{},1000);";
+      const middle = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:['ignore','pipe','pipe']});leaf.stdout.once('data',data=>process.stdout.write(JSON.stringify([process.pid,Number(String(data).trim())])+'\\n'));setInterval(()=>{},1000);`;
+      const tree = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});const middle=spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:['ignore','pipe','pipe']});middle.stdout.once('data',data=>process.stdout.write('tree-ready:'+JSON.stringify([process.pid,...JSON.parse(String(data))])+'\\n'));setInterval(()=>{},1000);`;
+      for (const kind of ["timeout", "cancelled"] as const) await control(`Linux ${kind} kills TERM-ignoring detached descendants and preserves an unrelated live child`, async () => {
+        let sentinel: ChildProcess | undefined;
+        try {
+          const controller = new AbortController(), pending = run(`linux-tree-${kind}`, ["-e", tree], controller.signal, kind === "timeout" ? 3_000 : 15_000);
+          const child = [...children][0]; assert.ok(child);
+          const outcome = pending.then(() => assert.fail("A terminated owned tree must not PASS."), (error: unknown) => error);
+          const pids = JSON.parse(await readyLine(child, "tree-ready:")) as number[];
+          assert.equal(pids.length, 3); assert.ok(pids.every(pid => Number.isSafeInteger(pid) && pid > 1 && processAlive(pid)));
+          sentinel = spawn(process.execPath, ["-e", "process.stdout.write('sentinel\\n');setInterval(()=>{},1000)"], { env: { ...environment }, stdio: ["ignore", "pipe", "pipe"] });
+          await readyLine(sentinel, "sentinel"); assert.ok(sentinel.pid && processAlive(sentinel.pid));
+          const identity = (pid: number) => { const raw = readFileSync(`/proc/${pid}/stat`, "utf8"); return raw.slice(raw.lastIndexOf(")") + 2).trim().split(/\s+/u); };
+          assert.equal(lstatSync(`/proc/${sentinel.pid}`).uid, process.getuid!());
+          assert.ok(BigInt(identity(sentinel.pid)[19]!) >= BigInt(identity(pids[0]!)[19]!), "Unrelated sentinel must reach the same-user newer-process discovery filter.");
+          if (kind === "cancelled") controller.abort(Error("Controlled Linux tree cancellation"));
+          const error = await outcome;
+          assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+          const retained = (error as Error & { childResult: { reason: string; cleanup: { status: string; forcedTermination: boolean; processTreeVerified: boolean; observedProcesses: number; liveProcesses: number } } }).childResult;
+          assert.equal(retained.reason, kind); assert.equal(retained.cleanup.status, "PASS");
+          assert.equal(retained.cleanup.forcedTermination, true); assert.equal(retained.cleanup.processTreeVerified, true);
+          assert.ok(retained.cleanup.observedProcesses >= 3); assert.equal(retained.cleanup.liveProcesses, 0);
+          assert.ok(pids.every(pid => !processAlive(pid))); assert.equal(children.size, 0);
+          assert.ok(processAlive(sentinel.pid), "Owned cleanup must preserve an unrelated newly created live process.");
+        } finally { if (sentinel) await api.stop(sentinel, environment); }
+      });
+      await control("Linux zero-exit parent still drains a detached orphan and reports the residual instead of hiding it", async () => {
+        const orphan = `const {spawn}=require('node:child_process');const orphan=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:['ignore','pipe','pipe']});orphan.stdout.once('data',data=>{process.stdout.write('orphan:'+String(data));orphan.stdout.destroy();orphan.stderr.destroy();orphan.unref();process.exit(0);});`;
+        const result = await run("linux-orphan", ["-e", orphan]);
+        const pid = Number(result.stdout.trim().replace(/^orphan:/u, "")); assert.ok(Number.isSafeInteger(pid) && pid > 1);
+        assert.equal(result.code, 0); assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true);
+        assert.equal(result.cleanup.forcedTermination, true); assert.ok(result.cleanup.residualProcessesAfterExit >= 1);
+        assert.ok(result.cleanup.observedProcesses >= 2); assert.equal(result.cleanup.liveProcesses, 0);
+        assert.equal(processAlive(pid), false); assert.equal(children.size, 0);
+      });
+    }
   } finally {
     const stopped = await Promise.allSettled([...children].map(child => api.stop(child, environment)));
     assert.equal(realpathSync(directory), directory);
@@ -2771,13 +2973,66 @@ function verifyQualifiedSelectionControls() {
 
 async function localRiskVerificationOnly() {
   verifyFinalQualityGatePlan(); const plan = verifyLocalRiskVerificationPlan(); await verifyLocalRiskExecutionControls(plan.prefix);
-  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); verifyQualifiedSelectionControls(); verifyAdminMeasurementRestartPolicy();
+  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
     fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
 }
 
 /** Existing verifier adapter; source mode reads only, explicit qualified mode delegates one canonical leaf. */
+function verifyQualifiedResultControls() {
+  const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "localVerificationFailureClassification");
+  assert.ok(node);
+  const classify = new Function(ts.transpileModule(node.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return localVerificationFailureClassification;")() as typeof import("./lib/isolated-public-verification.mts").localVerificationFailureClassification;
+  const receiptNode = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "localVerificationFamilyReceipt"); assert.ok(receiptNode);
+  const parse = new Function("assert", ts.transpileModule(receiptNode.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return localVerificationFamilyReceipt;")(assert) as typeof import("./lib/isolated-public-verification.mts").localVerificationFamilyReceipt;
+  check("terminal receipt parsing accepts one actual family and rejects missing or duplicate PASS/FAIL evidence", () => {
+    const pass = JSON.stringify({ family: "admin-form-save-cache", status: "PASS" });
+    const fail = JSON.stringify({ family: "admin-form-save-cache", status: "FAIL" });
+    assert.equal(parse("ordinary output\n" + pass, "admin-form-save-cache").status, "PASS");
+    assert.throws(() => parse("ordinary output", "admin-form-save-cache"), /exactly one/u);
+    assert.throws(() => parse(fail + "\n" + pass, "admin-form-save-cache"), /exactly one/u);
+    assert.throws(() => parse(pass + "\n" + pass, "admin-form-save-cache"), /exactly one/u);
+    assert.equal(parse(JSON.stringify({ family: "other", status: "FAIL" }) + "\n" + pass, "admin-form-save-cache").status, "PASS");
+  });
+  check("classification supports the complete taxonomy without guessing a Product cause from labels", () => {
+    assert.ok(node.getText(file).includes('["Product", "QA / Test", "Fixture", "Harness", "Environment", "UNKNOWN"]'));
+    for (const label of ["Product data lost", "flaky test", "Fixture timeout", "Harness failure", "Environment ENOSPC"]) {
+      const result = classify({ stage: "execution", error: Error(label), exitCode: 1 });
+      assert.equal(result.category, "UNKNOWN"); assert.equal(result.osCode, null);
+    }
+  });
+  check("classification uses an actual operating-system error code and preserves its evidence", () => {
+    for (const code of ["ENOSPC", "EACCES", "EROFS", "ENOENT", "EPERM"]) {
+      const error = Object.assign(Error("Controlled evidence write"), { code });
+      const result = classify({ stage: "evidence", error }); assert.equal(result.category, "Environment"); assert.equal(result.osCode, code);
+    }
+    assert.equal(classify({ stage: "evidence", error: { code: "ENOSPC" } }).category, "UNKNOWN");
+    assert.equal(classify({ stage: "evidence", error: Object.assign(Error("unknown"), { code: "FAKE" }) }).category, "UNKNOWN");
+  });
+  check("only a zero-exit invalid terminal family receipt establishes a fixture protocol failure", () => {
+    assert.equal(classify({ stage: "terminal_receipt", exitCode: 0, error: Error("Required receipt invalid") }).category, "Fixture");
+    for (const exitCode of [null, 1, undefined]) assert.equal(classify({ stage: "terminal_receipt", exitCode }).category, "UNKNOWN");
+    assert.equal(classify({ stage: "execution", exitCode: 0 }).category, "UNKNOWN");
+  });
+  check("timeouts and cancellation retain UNKNOWN rather than declaring flakiness or hiding a failure", () => {
+    for (const childReason of ["timeout", "cancelled", "output_limit", "nonzero_exit"]) {
+      const result = classify({ stage: "execution", childReason }); assert.equal(result.category, "UNKNOWN"); assert.ok(result.technicalKind.endsWith(childReason));
+    }
+  });
+  check("qualified receipts retain run identity, first attempt, no retry, cleanup and sanitized log hashes", () => {
+    const execute = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "executeLocalVerificationTargets"); assert.ok(execute);
+    const source = execute.getText(file);
+    for (const fragment of ["globalThis.crypto.randomUUID()", "runId: invocationId", "NOT_ASSESSED_SINGLE_ATTEMPT", "attempts:", "childOutcome:",
+      "stdoutSha256: digest(stdout)", "stderrSha256: digest(stderr)", "cleanupFailurePreserved", "originalAttempt:", "A qualified leaf cannot execute twice in one path."])
+      assert.ok(source.includes(fragment), "Missing retained execution invariant: " + fragment);
+    assert.equal(source.includes("retry: 1"), false);
+  });
+}
+
 async function changeImpactOnly() {
   try {
     const args = process.argv.slice(2);
@@ -2818,7 +3073,7 @@ async function changeImpactOnly() {
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",
-      "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild"];
+      "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild"];
     const declarations = names.map(name => {
       const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
         || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name));
@@ -2938,6 +3193,7 @@ async function main() {
   await verifyQualifiedFormHarnessControls();
   await verifySharedChildControls();
   verifyQualifiedSelectionControls();
+  verifyQualifiedResultControls();
   await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
   verifyScanner();

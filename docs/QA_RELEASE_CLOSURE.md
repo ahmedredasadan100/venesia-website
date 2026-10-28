@@ -376,10 +376,21 @@ The execution API accepts only that baseline and derives actual source impact
 again inside the owner; caller-supplied analysis cannot become authority. Its
 reviewed fixture fingerprint uses canonical LF text for the effect contract,
 while the complete source snapshot remains bound to raw file bytes. The current
-execution pilot supports `win32` only: unsupported platforms return `BLOCKED`
-before starting the leaf because equivalent process-tree timeout cleanup has
-not been proved there. Linux source selection and the ordinary mandatory CI
-commands retain their existing behavior and obligations.
+execution pilot supports `win32` and `linux` only after their source-bound
+qualification receipts. Other platforms return `BLOCKED` before starting the
+leaf. Windows retains the existing taskkill process-tree boundary. Linux uses
+an inherited, redacted ownership marker plus same-UID PID/starttime identities
+to discover detached Chromium descendants and reparented children. It verifies
+identity before signaling, bounds discovery, attempts TERM, freezes remaining
+owned processes before KILL and proves no live owned processes before removing
+the registration or TEMP. The reviewed fixture inherits the marker; unknown
+environment-clearing detached descendants are outside qualification. Actual
+timeout, cancellation, orphan, fast-exit and unrelated-process preservation
+controls are required; source inspection alone cannot qualify a platform.
+Linux source selection and ordinary mandatory CI commands retain their existing
+behavior and obligations. The read-only CI source step is unchanged; this
+explicit qualified path does not add a second execution of the same leaf to
+the mandatory full CI chain.
 
 This leaf mounts the actual Form Runtime, Entity List controller and QueryClient
 with controlled action results and an in-memory source. It covers confirmed
@@ -406,6 +417,37 @@ failure cannot emit PASS. The outer owner verifies child termination before
 removing its own TEMP tree; an abort is never a successful behavioral result.
 Process, filesystem and network cleanup require their actual scoped receipts,
 not merely source reachability or an assumed signal-handler outcome.
+
+Within one selection, overlapping registered wrappers resolve the qualified leaf
+once. Existing exclusive receipt and child-log writes refuse evidence-name reuse
+before another command starts. Each targeted receipt carries commit/source SHA,
+Run ID, owners/capabilities/contracts/consumers, test and canonical command,
+status/duration, attempt/retry, first failure, evidence hashes and cleanup.
+There is no automatic retry; a single attempt has
+`flakyStatus=NOT_ASSESSED_SINGLE_ATTEMPT`. An evidence failure cannot erase the
+original attempt. Categories are Product, QA / Test, Fixture, Harness, Environment
+and UNKNOWN. A directly observed OS error code can establish Environment; a
+zero-exit process with an invalid required terminal receipt establishes a
+Fixture protocol failure. Assertion labels, nonzero exit, timeout and cancellation
+alone remain UNKNOWN and cannot establish a Product diagnosis.
+
+Contract correspondence is per exported contract/symbol and its actual
+assertion dependency, including lexically bound runtime aliases. An unrelated
+export, message-only change, file length/hash check or unrelated vector cannot
+maintain another changed contract. Explicit changed expectations remain human
+reviewed; source correspondence never proves arbitrary assertion semantics,
+behavioral equivalence or Owner approval. Existing dynamic capability-axis
+coverage and approved geometry/presentation requirements remain protected.
+
+Performance memos live only within one source-read invocation: exact file/source
+semantic projection, immutable AST paths with fresh Set results, and immutable
+baseline Git blobs. There is no cross-SHA behavioral evidence cache. Inspector
+and targeted receipts measure source snapshot/hash, discovery, coherence,
+execution and evidence/cleanup; the existing fixture reports preparation,
+scenario execution and cleanup. Inclusive timings are not summed as disjoint
+costs. Comparable frozen-input measurements and source-bound runtime outcomes
+are retained in the existing Phase 05 evidence receipt; historical timings from
+different cache/load conditions cannot establish a speed improvement.
 
 The same existing receipt path records commit/source SHA, owners, capabilities,
 contracts, affected-consumer reasons, exact leaf command, duration, exit/result,
