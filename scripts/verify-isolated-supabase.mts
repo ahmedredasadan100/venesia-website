@@ -1811,14 +1811,67 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changes: actual.changes.slice(0, 1) }), /stale or partial/u);
     assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changeImpact: { ...actual.changeImpact!, changes: actual.changeImpact!.changes.slice(0, 1) } }), /omits actual/u);
   });
+  check("actual CI inspector fixes test mode and preserves Git environment isolation", () => {
+    const source = readSource("scripts/lib/isolated-public-verification.mts");
+    const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const inspector = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
+      && node.name?.text === "inspectLocalVerificationChangeImpact");
+    assert.ok(inspector?.body, "The canonical source inspector must own its clean environment.");
+    const [initialization, inheritance] = inspector.body.statements;
+    assert.ok(initialization && ts.isVariableStatement(initialization)
+      && initialization.declarationList.declarations.some(declaration => declaration.name.getText(file) === "environment"));
+    assert.ok(inheritance && ts.isForOfStatement(inheritance), "Only the actual whitelist loop may inherit caller values.");
+    const code = ts.transpileModule(initialization.getText(file) + "\n" + inheritance.getText(file), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    const initialize = new Function("process", code + ";return environment;") as (process: { env: Record<string, string> }) => Record<string, string | undefined>;
+    const environment = initialize({ env: { NODE_ENV: "production", SUPABASE_SERVICE_ROLE_KEY: "sentinel", PATH: "safe", GIT_OPTIONAL_LOCKS: "1", GIT_CONFIG_COUNT: "99" } });
+    assert.deepEqual(environment, { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false", PATH: "safe" });
+    assert.equal(Object.hasOwn(environment, "SUPABASE_SERVICE_ROLE_KEY"), false, "Caller credentials cannot enter the inspector's Git environment.");
+  });
   check("immutable CI event resolution distinguishes PR merge checkout from PR head and validates push before history", () => {
     const base = "a".repeat(40), head = "b".repeat(40), merge = "c".repeat(40), known = new Set([base, head, merge]);
-    const history = { exists: (sha: string) => known.has(sha), isAncestor: (left: string, right: string) => left === right || left === base || left === head && right === merge };
+    const history = { exists: (sha: string) => known.has(sha), isAncestor: (left: string, right: string) => left === right || left === base || left === head && right === merge,
+      parents: (sha: string) => sha === merge ? [base, head] : [] };
     const event = { pull_request: { base: { sha: base }, head: { sha: head }, merge_commit_sha: merge, title: "untrusted $(title) is never a command" } };
     assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event, githubSha: merge, checkoutHead: merge }, history), { baselineHead: base, finalHead: merge, eventName: "pull_request" });
+    assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event, githubSha: head, checkoutHead: head }, history), { baselineHead: base, finalHead: head, eventName: "pull_request" });
+    for (const request of [
+      { base: { sha: base }, head: { sha: head } },
+      { base: { sha: base }, head: { sha: head }, merge_commit_sha: null },
+    ]) {
+      const opened = { action: "opened", number: 229, pull_request: request };
+      assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: opened, githubSha: merge, checkoutHead: merge }, history),
+        { baselineHead: base, finalHead: merge, eventName: "pull_request" }, "Absent/null merge metadata requires independently exact base/head merge parents.");
+      assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: opened, githubSha: head, checkoutHead: head }, history).finalHead, head,
+        "An exact event-head checkout does not need a synthesized merge.");
+    }
+    for (const value of ["", "not-a-sha", "0".repeat(40), 229, "d".repeat(40)]) {
+      const malformed = { pull_request: { ...event.pull_request, merge_commit_sha: value } };
+      for (const checkout of [head, merge]) assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: malformed,
+        githubSha: checkout, checkoutHead: checkout }, history), /Invalid or missing immutable CI|Missing local Git history/u,
+      "Present merge metadata cannot bypass validation even for an exact event-head checkout.");
+    }
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: { pull_request: { ...event.pull_request, merge_commit_sha: base } },
+      githubSha: merge, checkoutHead: merge }, history), /merge checkout differs/u, "A supplied valid but mismatched merge SHA cannot use the optional-metadata recovery path.");
+    const withoutMerge = { action: "opened", pull_request: { base: { sha: base }, head: { sha: head } } };
+    for (const parents of [[], [base], [head, base], [base, head, merge], [base, merge], ["0".repeat(40), head], ["d".repeat(40), head]]) {
+      assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge },
+        { ...history, parents: () => parents }), /exactly two Git parents|parents differ|Invalid or missing immutable CI|Missing local Git history/u,
+      "Absent merge metadata cannot admit missing, reversed, foreign or octopus merge topology.");
+    }
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge },
+      { ...history, parents: () => { throw new Error("Git parent history unavailable"); } }), /Git parent history unavailable/u);
     assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, history).baselineHead, base);
     for (const [label, input, facts] of [
       ["missing base", { eventName: "pull_request", event: { pull_request: { head: { sha: head } } }, githubSha: head, checkoutHead: head }, history],
+      ["missing head", { eventName: "pull_request", event: { pull_request: { base: { sha: base } } }, githubSha: merge, checkoutHead: merge }, history],
+      ["invalid GitHub SHA", { eventName: "pull_request", event: withoutMerge, githubSha: "invalid", checkoutHead: merge }, history],
+      ["missing checkout SHA", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: "" }, history],
+      ["PR missing history", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge }, { ...history, exists: (sha: string) => sha !== head }],
+      ["PR head nonancestor", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge }, { ...history, isAncestor: (left: string) => left !== head }],
+      ["PR base nonancestor", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge }, { ...history, isAncestor: (left: string) => left !== base }],
       ["zero before", { eventName: "push", event: { before: "0".repeat(40), after: head }, githubSha: head, checkoutHead: head }, history],
       ["checkout mismatch", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: merge }, history],
       ["missing history", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, { ...history, exists: () => false }],

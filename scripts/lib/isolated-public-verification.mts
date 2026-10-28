@@ -407,7 +407,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
 
 /** Trusted event data identifies Git objects; no ref strings, network lookup or missing-history fallback is accepted. */
 export function resolveLocalVerificationCiBaseline(input: { eventName: string; event: unknown; githubSha: string; checkoutHead: string },
-  history: { exists(sha: string): boolean; isAncestor(ancestor: string, descendant: string): boolean }) {
+  history: { exists(sha: string): boolean; isAncestor(ancestor: string, descendant: string): boolean; parents(sha: string): readonly string[] }) {
   const sha = (value: unknown, label: string) => {
     assert.ok(typeof value === "string" && /^[a-f0-9]{40}$/u.test(value) && value !== "0".repeat(40), "Invalid or missing immutable CI " + label);
     assert.ok(history.exists(value), "Missing local Git history for CI " + label); return value;
@@ -419,7 +419,20 @@ export function resolveLocalVerificationCiBaseline(input: { eventName: string; e
   if (input.eventName === "pull_request") {
     const request = event.pull_request as { base?: { sha?: unknown }; head?: { sha?: unknown }; merge_commit_sha?: unknown } | undefined;
     baseline = sha(request?.base?.sha, "pull request base"); const head = sha(request?.head?.sha, "pull request head");
-    if (current !== head) assert.equal(sha(request?.merge_commit_sha, "pull request merge commit"), current, "CI merge checkout differs from its immutable event.");
+    const merge = request?.merge_commit_sha === undefined || request.merge_commit_sha === null ? undefined
+      : sha(request.merge_commit_sha, "pull request merge commit");
+    if (current !== head) {
+      if (merge !== undefined) {
+        assert.equal(merge, current, "CI merge checkout differs from its immutable event.");
+      } else {
+        // Optional merge metadata may be absent. Bind the actual
+        // immutable checkout to the event's exact base/head parents rather than trusting a ref name.
+        const parents = history.parents(current);
+        assert.equal(parents.length, 2, "CI merge checkout without event merge metadata requires exactly two Git parents.");
+        assert.deepEqual(parents.map((parent, index) => sha(parent, "pull request merge parent " + index)), [baseline, head],
+          "CI merge checkout parents differ from the immutable pull request base and head.");
+      }
+    }
     assert.ok(history.isAncestor(head, current), "Pull request head is not an ancestor of the actual CI checkout.");
   } else {
     assert.equal(input.eventName, "push", "Unsupported CI event for source impact.");
@@ -674,7 +687,7 @@ function readLocalVerificationInputs(context: Pick<PrivatePublicVerificationCont
 /** Read-only source consistency entry: no owned lifecycle, fixture, Browser, database or verification check starts. */
 export function inspectLocalVerificationChangeImpact(options: { baselineHead?: string; additionalSourceFiles?: readonly string[]; impact?: LocalVerificationImpact;
   automatic?: boolean; ci?: { eventName: string; event: unknown; githubSha: string } }) {
-  const environment: NodeJS.ProcessEnv = { GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
   const context = { cleanEnvironment: () => ({ ...environment }) };
@@ -687,7 +700,8 @@ export function inspectLocalVerificationChangeImpact(options: { baselineHead?: s
     assert.equal(options.impact, undefined, "CI source coherence cannot fabricate or borrow local approval records.");
     assert.deepEqual(options.additionalSourceFiles ?? [], [], "CI source selection accepts committed source only.");
     const history = { exists: (sha: string) => { try { return git("rev-parse", "--verify", sha + "^{commit}").trim() === sha; } catch { return false; } },
-      isAncestor: (ancestor: string, descendant: string) => { try { git("merge-base", "--is-ancestor", ancestor, descendant); return true; } catch { return false; } } };
+      isAncestor: (ancestor: string, descendant: string) => { try { git("merge-base", "--is-ancestor", ancestor, descendant); return true; } catch { return false; } },
+      parents: (sha: string) => git("show", "--no-patch", "--format=%P", sha, "--").trim().split(/\s+/u).filter(Boolean) };
     baselineHead = resolveLocalVerificationCiBaseline({ ...options.ci, checkoutHead }, history).baselineHead;
     git("diff", "--no-ext-diff", "--no-textconv", "--quiet", "HEAD", "--");
   }

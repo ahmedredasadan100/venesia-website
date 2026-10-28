@@ -303,8 +303,13 @@ snapshot/delta bindings, current contract projection and applicable changed
 assertion/vector correspondence. It reads immutable event Git objects from
 `GITHUB_EVENT_PATH`: PR base/head and the actual head or merge checkout, or push
 before/after. The checkout must equal `GITHUB_SHA`, history must exist locally,
-and the baseline must be an ancestor. Missing/zero/foreign/non-ancestor objects,
-unsupported events and changed tracked checkout bytes fail closed; there is no
+and the baseline must be an ancestor. A supplied non-null `merge_commit_sha`
+must be a valid existing immutable SHA; a merge checkout must match it. When
+that optional field is absent or null, a merge checkout requires exactly two
+ordered local Git parents equal to the event's base and head. This independent
+identity proof does not relax either ancestry check or infer a baseline/ref.
+Missing/zero/foreign/non-ancestor objects, unsupported events and changed tracked
+checkout bytes fail closed; there is no
 fetch, guessed baseline, shell interpolation of event values, or borrowed local
 approval record. Use the existing full-history checkout without persisted Git
 credentials. The source step blanks all three existing Supabase environment
