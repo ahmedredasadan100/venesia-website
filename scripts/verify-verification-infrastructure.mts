@@ -188,8 +188,6 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
   const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
   const workflow = yaml.load(source);
   assert.ok(record(workflow) && record(workflow.jobs));
-  const diagnosticEnvironment = { VENESIA_ALT_DIAGNOSTIC: "QA-IMAGE-ALT-228-01-ci-attempt-01" };
-  assert.ok(!record(workflow.env) || !Object.hasOwn(workflow.env, "VENESIA_ALT_DIAGNOSTIC"), "Diagnostic activation belongs only to the existing canonical gate step");
   assert.deepEqual(workflow.on, { pull_request: { branches: ["main"] }, push: { branches: ["main"] } }, "Keep the existing event boundary; never use pull_request_target for candidate source.");
   const names: Readonly<Record<string, string>> = {
     "quality-gate": "Lint · Typecheck · Verify · Build",
@@ -205,10 +203,6 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
   const active = (value: Record<string, unknown>) => !Object.hasOwn(value, "if") && (!Object.hasOwn(value, "continue-on-error") || value["continue-on-error"] === false);
   for (const [id, job] of Object.entries(workflow.jobs)) {
     assert.ok(record(job) && active(job), `${id}: existing job must propagate failure without a new condition`);
-    assert.ok(!record(job.env) || !Object.hasOwn(job.env, "VENESIA_ALT_DIAGNOSTIC"), `${id}: do not activate diagnostics for an entire job`);
-    if (id !== "quality-gate" && Array.isArray(job.steps)) {
-      for (const step of job.steps) assert.ok(!record(step) || !record(step.env) || !Object.hasOwn(step.env, "VENESIA_ALT_DIAGNOSTIC"), `${id}: specialized steps must not activate the Alt diagnostic`);
-    }
     assert.equal(job.name, names[id], `${id}: preserve its existing check identity`);
     if (id !== "quality-gate" && id !== "audit-root-cause-postgres") {
       assert.ok(record(job.services) && record(job.services.postgres), `${id}: retain isolated PostgreSQL service`);
@@ -242,31 +236,22 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
   assert.equal((artifact.if as string).replace(/\s+/gu, ""), "${{always()&&steps.qa-change-impact.outcome!='skipped'&&steps.qa-change-impact.outcome!=''}}", "Publish after success/failure/cancellation only when the source step started");
   assert.ok(!Object.hasOwn(artifact, "continue-on-error") || artifact["continue-on-error"] === false);
   assert.ok(record(artifact.with));
-  assert.equal(typeof artifact.with.path, "string");
-  assert.deepEqual((artifact.with.path as string).split(/\r?\n/u).map(value => value.trim()).filter(Boolean), [
-    "${{ runner.temp }}/qa-change-impact.json",
-    ".tmp-qa/admin-development-batch-01/image-alt-ci-attempt-01/",
-  ], "Upload only the original source report and this bounded sanitized diagnostic directory");
-  assert.equal(artifact.with["include-hidden-files"], true, "The explicitly bounded .tmp-qa diagnostic path must survive artifact filtering");
+  assert.equal(artifact.with.path, "${{ runner.temp }}/qa-change-impact.json", "Do not upload the source workspace, private files or unrelated proof");
   assert.equal(artifact.with["if-no-files-found"], "error");
   assert.ok(!Object.hasOwn(artifact.with, "overwrite") || artifact.with.overwrite === false);
   const browser = exactly(step => step.run === "npx playwright install --with-deps chromium", "Preserve the existing browser installation");
   const gate = exactly(step => step.run === "npm run ci:check", "Preserve the complete canonical required gate once");
   assert.ok(active(browser) && active(gate));
-  assert.deepEqual(gate.env, diagnosticEnvironment, "Only the approved diagnostic marker may extend the unchanged canonical gate environment");
-  for (const step of steps.filter(step => step !== gate)) {
-    assert.ok(!record(step.env) || !Object.hasOwn(step.env, "VENESIA_ALT_DIAGNOSTIC"), "Do not enable the Alt diagnostic in source inspection, installation or evidence upload");
-  }
   assert.equal(steps.indexOf(impact), steps.indexOf(install) + 1, "Inspect source before expensive browser setup");
-  assert.ok(steps.indexOf(browser) > steps.indexOf(impact) && steps.indexOf(gate) > steps.indexOf(browser), "Source consistency does not replace Browser or the full required gate");
-  assert.equal(steps.indexOf(artifact), steps.indexOf(gate) + 1, "Preserve source and diagnostic evidence after the canonical gate, including its original failure");
+  assert.equal(steps.indexOf(artifact), steps.indexOf(impact) + 1, "Keep failed source evidence before later steps");
+  assert.ok(steps.indexOf(browser) > steps.indexOf(artifact) && steps.indexOf(gate) > steps.indexOf(browser), "Source consistency does not replace Browser or the full required gate");
 }
 
 {
   const yaml = createRequire(import.meta.url)("js-yaml") as { load(value: string): unknown; dump(value: unknown, options?: { lineWidth: number }): string };
   const source = readFileSync(join(root, ".github/workflows/quality-gate.yml"), "utf8");
   const scripts = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { scripts: Record<string, string> }).scripts;
-  type Workflow = { on: Record<string, unknown>; env?: Record<string, unknown>; jobs: Record<string, { name: string; steps: Array<Record<string, unknown>>; services?: Record<string, unknown>; [key: string]: unknown }> };
+  type Workflow = { on: Record<string, unknown>; jobs: Record<string, { name: string; steps: Array<Record<string, unknown>>; services?: Record<string, unknown>; [key: string]: unknown }> };
   const current = yaml.load(source) as Workflow;
   assertQualityChangeImpactWorkflow(source, scripts);
   assertQualityChangeImpactWorkflow(yaml.dump(current, { lineWidth: -1 }), scripts);
@@ -290,28 +275,12 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
     ["success-only evidence", value => { artifact(value).if = "success()"; }],
     ["missing-report skip", value => { (artifact(value).with as Record<string, unknown>)["if-no-files-found"] = "ignore"; }],
     ["broad evidence upload", value => { (artifact(value).with as Record<string, unknown>).path = "."; }],
-    ["missing original source report path", value => { (artifact(value).with as Record<string, unknown>).path = ".tmp-qa/admin-development-batch-01/image-alt-ci-attempt-01/"; }],
-    ["missing bounded diagnostic path", value => { (artifact(value).with as Record<string, unknown>).path = "${{ runner.temp }}/qa-change-impact.json"; }],
-    ["additional unrelated evidence path", value => { (artifact(value).with as Record<string, unknown>).path = String((artifact(value).with as Record<string, unknown>).path) + "\n.tmp-qa/"; }],
-    ["diagnostic parent traversal", value => { (artifact(value).with as Record<string, unknown>).path = String((artifact(value).with as Record<string, unknown>).path).replace("image-alt-ci-attempt-01/", "image-alt-ci-attempt-01/../"); }],
-    ["diagnostic wildcard expansion", value => { (artifact(value).with as Record<string, unknown>).path = String((artifact(value).with as Record<string, unknown>).path).replace("image-alt-ci-attempt-01/", "*/"); }],
-    ["hidden diagnostic evidence omitted", value => { delete (artifact(value).with as Record<string, unknown>)["include-hidden-files"]; }],
-    ["hidden diagnostic evidence disabled", value => { (artifact(value).with as Record<string, unknown>)["include-hidden-files"] = false; }],
     ["overwritten attempt", value => { (artifact(value).with as Record<string, unknown>).overwrite = true; }],
     ["late source inspection", value => { const selected = impact(value); primary(value).steps = primary(value).steps.filter(step => step !== selected); primary(value).steps.push(selected); }],
-    ["evidence upload before diagnostic gate", value => { const selected = artifact(value); primary(value).steps = primary(value).steps.filter(step => step !== selected); primary(value).steps.splice(primary(value).steps.indexOf(gate(value)), 0, selected); }],
     ["missing full gate", value => { primary(value).steps = primary(value).steps.filter(step => step.run !== "npm run ci:check"); }],
     ["ignored full gate failure", value => { gate(value)["continue-on-error"] = true; }],
     ["conditional full gate", value => { gate(value).if = false; }],
     ["duplicate full gate", value => { primary(value).steps.push({ run: "npm run ci:check" }); }],
-    ["missing diagnostic activation", value => { delete gate(value).env; }],
-    ["unapproved diagnostic marker", value => { (gate(value).env as Record<string, unknown>).VENESIA_ALT_DIAGNOSTIC = "another-attempt"; }],
-    ["diagnostic gate provenance override", value => { (gate(value).env as Record<string, unknown>).GITHUB_EVENT_PATH = "candidate-event.json"; }],
-    ["workflow-wide diagnostic activation", value => { value.env = { VENESIA_ALT_DIAGNOSTIC: "QA-IMAGE-ALT-228-01-ci-attempt-01" }; }],
-    ["job-wide diagnostic activation", value => { primary(value).env = { VENESIA_ALT_DIAGNOSTIC: "QA-IMAGE-ALT-228-01-ci-attempt-01" }; }],
-    ["browser-install diagnostic activation", value => { primary(value).steps.find(step => step.run === "npx playwright install --with-deps chromium")!.env = { VENESIA_ALT_DIAGNOSTIC: "QA-IMAGE-ALT-228-01-ci-attempt-01" }; }],
-    ["specialized-job diagnostic activation", value => { value.jobs["reports-analytics-postgres"]!.env = { VENESIA_ALT_DIAGNOSTIC: "QA-IMAGE-ALT-228-01-ci-attempt-01" }; }],
-    ["specialized-step diagnostic activation", value => { value.jobs["reports-analytics-postgres"]!.steps[0]!.env = { VENESIA_ALT_DIAGNOSTIC: "QA-IMAGE-ALT-228-01-ci-attempt-01" }; }],
     ["missing specialized job", value => { delete value.jobs["topic-view-postgres"]; }],
     ["renamed required check", value => { value.jobs["reports-analytics-postgres"]!.name = "Different Reports Check"; }],
     ["parallel QA job", value => { value.jobs["parallel-qa"] = { name: "Parallel QA", steps: [] }; }],

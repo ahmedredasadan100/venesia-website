@@ -2283,7 +2283,7 @@ try{
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 
 async function verifyContentPanelGalleryAdoption(context) {
-  const { fixtureRoot, page, browser, open, errors, forbidden, seoReads, iframeReads, captureImageAltDiagnostic, imageAltDiagnosticEnabled, panelGalleryEvidenceRoot: output, panelGallerySourceHashesAtStart: sourceHashesAtStart, readPanelGallerySourceHashes, recordPanelGallerySourceIdentity, getHarness, setHarness, setMode, savedSlugRows, slugSaveResults } = context;
+  const { fixtureRoot, page, browser, open, errors, forbidden, seoReads, iframeReads, panelGalleryEvidenceRoot: output, panelGallerySourceHashesAtStart: sourceHashesAtStart, readPanelGallerySourceHashes, recordPanelGallerySourceIdentity, getHarness, setHarness, setMode, savedSlugRows, slugSaveResults } = context;
   const { mkdir, writeFile } = await import('node:fs/promises');
   const { createTopicSlugSaveHarness, createRemainingContentOwnerHarness } = await import('./fixtures/remaining-content-owner-harness.mjs');
   await mkdir(output, { recursive: true });
@@ -2367,7 +2367,7 @@ async function verifyContentPanelGalleryAdoption(context) {
   for (const width of [1440, 390]) for (const type of ['news', 'press', 'site_update', 'gallery']) for (const mode of ['create', 'edit']) {
     console.log('Content Panel/Gallery case ' + type + ' ' + mode + ' RTL ' + width); await page.setViewportSize({ width, height: 1100 }); await fresh(`${type}-${mode}`); const savesBefore = slugSaveResults.length;
     await tab('basic').click(); const title = `اعتماد ${type} ${mode}`, slug = `panel-${type.replaceAll('_', '-')}-${mode}`; await form.locator('[name="title"]').fill(title); await form.locator('[name="slug"]').fill('manual-'); await expect(form.locator('[name="slug"]')).toHaveValue('manual-'); await form.locator('[name="slug"]').fill(slug); await form.locator('[name="title"]').fill(title + ' محفوظ'); await expect(form.locator('[name="slug"]')).toHaveValue(slug); await form.locator('[name="excerpt"]').fill('مقتطف ثابت لاختبار الحفاظ على بيانات النموذج.');
-    await form.locator('#content-category-listbox').press('Home'); await form.locator('#content-category-listbox').press('Enter'); await chooseSingle('image', 'SEO fixture replacement'); await form.locator('[name="image_alt"]').fill('Explicit cover alt'); assert.equal(await form.locator('[name="image_alt"]').inputValue(), 'Explicit cover alt', 'Explicit cover Alt must be present immediately after the existing fill.'); if (imageAltDiagnosticEnabled) await captureImageAltDiagnostic('panel-primary-read'); if (type !== 'gallery') await page.getByRole('textbox', { name: 'نص المقال', exact: true }).fill('محتوى Markdown محفوظ عند اعتماد التبويبات.');
+    await form.locator('#content-category-listbox').press('Home'); await form.locator('#content-category-listbox').press('Enter'); await chooseSingle('image', 'SEO fixture replacement'); await form.locator('[name="image_alt"]').fill('Explicit cover alt'); assert.equal(await form.locator('[name="image_alt"]').inputValue(), 'Explicit cover alt', 'Explicit cover Alt must be present immediately after the existing fill.'); if (type !== 'gallery') await page.getByRole('textbox', { name: 'نص المقال', exact: true }).fill('محتوى Markdown محفوظ عند اعتماد التبويبات.');
     if (['news', 'site_update'].includes(type)) await form.locator('[name="media_project"]').fill('PRESERVED TEXT');
     await tab('seo').click(); await form.locator('[name="seo_title"]').fill('عنوان بحث ' + type); await form.locator('[name="seo_description"]').fill('وصف بحث ثابت مع مشاركة اجتماعية محفوظة.'); await form.locator('[name="canonical_url"]').fill('https://example.test/panel-' + type); await chooseSingle('og_image', 'SEO fixture original'); await form.locator('[name="og_image_alt"]').fill('OG alt ' + type);
     const gallery = type === 'gallery' ? await exerciseGallery(mode, width) : null; const panels = await verifyPanels(type, mode, width); await expect(form).toHaveAttribute('data-admin-form-dirty', 'true');
@@ -2611,286 +2611,6 @@ async function verifyDraftNoticeUnification(context) {
   await writeFile(path.join(output, 'draft-notice-browser.json'), JSON.stringify(receipt, null, 2)); console.log('PASS Draft notice unification ' + JSON.stringify({ cases: cases.length, defaults: defaults.length, screenshots: screenshots.length, sourceSaves: slugSaveResults.length }));
 }
 
-
-/** One approved PR-event diagnostic. This never changes admission or test results. */
-function imageAltDiagnosticBinding(root) {
-  const token = 'QA-IMAGE-ALT-228-01-ci-attempt-01';
-  if (process.env.VENESIA_ALT_DIAGNOSTIC !== token || process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_EVENT_NAME !== 'pull_request' || process.env.GITHUB_RUN_ATTEMPT !== '1') return null;
-  try {
-    const require = createRequire(import.meta.url), event = JSON.parse(require('node:fs').readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-    const head = event.pull_request?.head?.sha;
-    if (Number(event.number) !== 229 || !/^[a-f0-9]{40}$/.test(head || '')) return null;
-    const git = args => require('node:child_process').execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    if (git(['show', '-s', '--format=%P', head]) !== 'cf54f7fe1f7a790137e772f98f3cd161dd9e2994') return null;
-    if (git(['show', '-s', '--format=%B', head]).split(/\r?\n/).filter(line => line === 'QA-Alt-Diagnostic-Attempt: 20261029-01').length !== 1) return null;
-    return { token, pullRequest: 229, eventHead: head, checkout: git(['rev-parse', 'HEAD']), githubSha: /^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '') ? process.env.GITHUB_SHA : null, runId: /^\d{1,30}$/.test(process.env.GITHUB_RUN_ID || '') ? process.env.GITHUB_RUN_ID : null, attempt: 1 };
-  } catch { return null; }
-}
-
-/** Instrument actual installed React in memory, retaining every original body. */
-function instrumentImageAltDiagnosticReact(source, filename) {
-  const parsed = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS), nodes = new Map();
-  const specs = new Map([
-    ['dispatchSetStateInternal', { args: ['fiber', 'queue', 'action', 'lane'], before: 'globalThis.__altCausalReact?.("dispatchSetStateInternal", fiber, queue, action, lane);' }],
-    ['scheduleUpdateOnFiber', { args: ['root', 'fiber', 'lane'], before: 'globalThis.__altCausalReact?.("scheduleUpdateOnFiber", fiber, null, null, lane, root.pendingLanes);' }],
-    ['commitHostUpdate', { args: ['finishedWork', 'newProps', 'oldProps'], before: 'globalThis.__altCausalHostCommit?.(finishedWork, newProps, oldProps);' }],
-    ['commitHookEffectListMount', { args: ['flags', 'finishedWork'], phase: true, fiber: 'finishedWork', flags: 'flags' }],
-    ['commitHookEffectListUnmount', { args: ['flags', 'finishedWork', 'nearestMountedAncestor'], phase: true, fiber: 'finishedWork', flags: 'flags' }],
-    ['processRootScheduleInMicrotask', { args: [], phase: true, fiber: 'null', flags: 'firstScheduledRoot?.pendingLanes ?? null' }],
-    ['executeDispatch', { args: ['event', 'listener', 'currentTarget'], synthetic: true }],
-  ]);
-  const visit = node => { if (ts.isFunctionDeclaration(node) && specs.has(node.name?.text)) { assert.equal(nodes.has(node.name.text), false); nodes.set(node.name.text, node); } ts.forEachChild(node, visit); }; visit(parsed);
-  assert.equal(nodes.size, specs.size, 'Installed React diagnostic function set must match');
-  const edits = [];
-  for (const [name, spec] of specs) {
-    const node = nodes.get(name); assert.deepEqual(node.parameters.map(parameter => parameter.name.getText(parsed)), spec.args, 'Installed React signature: ' + name);
-    const start = node.body.getStart(parsed) + 1, end = node.body.end - 1, body = source.slice(start, end);
-    let replacement = '\n' + spec.before + body;
-    if (spec.phase) replacement = '\nconst __venesiaAltPhase = globalThis.__altCausalPhase?.("begin", ' + JSON.stringify(name) + ', ' + spec.fiber + ', ' + spec.flags + '); try {' + body + '} finally { globalThis.__altCausalPhase?.("end", ' + JSON.stringify(name) + ', null, null, __venesiaAltPhase); }\n';
-    if (spec.synthetic) replacement = '\nglobalThis.__altCausalSynthetic?.("begin", event, currentTarget); try {' + body + '} finally { globalThis.__altCausalSynthetic?.("end", event, currentTarget); }\n';
-    edits.push({ start, end, replacement });
-  }
-  for (const edit of edits.sort((a, b) => b.start - a.start)) source = source.slice(0, edit.start) + edit.replacement + source.slice(edit.end);
-  return source;
-}
-
-function installImageAltDiagnosticObserver() {
-  const cap = 12000, events = [], ids = new WeakMap(), registrations = new WeakMap(), nativeStack = [];
-  let nextNode = 0, nextListener = 0, sequence = 0, dropped = 0, errors = 0;
-  const owners = new Set(['AdminMediaImageField', 'AdminMediaGalleryField', 'AdminMediaAltWarning', 'ContentReviewPanel', 'AdminFormRuntime', 'TopicFormDraftRecovery', 'ModeledContentEditorShell', 'AdminEntitySeoPanel', 'TopicSlugInput', 'TopicMarkdownEditor', 'MediaContentForm', 'ArticleEditor', 'ArticleCreateEditor', 'ContentBasicDataPanel', 'TopicImageField']);
-  const fieldName = node => node?.name || node?.getAttribute?.("data-admin-media-image-input-name") || "";
-  const phases = []; let nextPhase = 0; const nativeInputs = new WeakMap();
-  const documentId = String(performance.timeOrigin);
-  const trackedNames = new Set(["image_alt", "gallery_image_alt", "gallery_image_caption", "og_image_alt"]);
-  const metadataSelector = [...trackedNames].flatMap(name => [`[name="${name}"]`, `[data-admin-media-image-input-name="${name}"]`]).join(",");
-  const queueIds = new WeakMap(); let nextQueue = 0;
-  const queueId = queue => { if (!queue) return null; if (!queueIds.has(queue)) queueIds.set(queue, ++nextQueue); return queueIds.get(queue); };
-  const stateIds = new WeakMap(); let nextState = 0;
-  const stateId = value => { if (!stateIds.has(value)) stateIds.set(value, ++nextState); return stateIds.get(value); };
-  const primitive = value => value === null || ['string', 'number', 'boolean', 'undefined'].includes(typeof value);
-  const summary = value => {
-    if (typeof value === 'bigint' || typeof value === 'symbol') return { kind: typeof value, value: String(value).slice(0, 160) };
-    if (typeof value === 'string') return value.slice(0, 160);
-    if (primitive(value)) return value;
-    if (typeof value === 'function') return { kind: 'function', name: value.name };
-    const result = { kind: Array.isArray(value) ? 'array' : typeof value, objectId: stateId(value) };
-    if (Array.isArray(value)) { result.length = value.length; result.items = value.slice(0, 6).map(item => summary(item)); return result; }
-    const allowed = new Set(['key', 'url', 'alt', 'caption', 'value', 'width', 'height', 'count', 'available', 'image', 'imageAlt', 'image_alt', 'kind', 'status', 'revision', 'mode', 'pending', 'isDirty']);
-    for (const key of Object.keys(value).filter(key => allowed.has(key)).slice(0, 12)) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor && 'value' in descriptor) {
-        if (primitive(descriptor.value)) result[key] = typeof descriptor.value === 'string' ? descriptor.value.slice(0, 160) : descriptor.value;
-        else if (['image', 'image_alt', 'imageAlt'].includes(key) && Array.isArray(descriptor.value)) result[key] = summary(descriptor.value);
-      }
-    }
-    return result;
-  };
-  const info = node => {
-    if (!node) return null;
-    if (!ids.has(node)) ids.set(node, ++nextNode);
-    return { id: ids.get(node), tag: node.tagName || node.nodeName, name: node.name || '', field: fieldName(node), inputType: node.type, value: trackedNames.has(fieldName(node)) && typeof node.value === 'string' ? node.value.slice(0, 160) : undefined, galleryIndex: node.closest?.('[data-admin-media-gallery-index]')?.getAttribute('data-admin-media-gallery-index'), connected: node.isConnected };
-  };
-  const props = node => {
-    if (!node) return null;
-    const key = Object.keys(node).find(name => name.startsWith('__reactProps$'));
-    return key ? { value: summary(node[key]?.value), defaultValue: summary(node[key]?.defaultValue) } : null;
-  };
-  const exactHookIndex = (fiber, queue) => {
-    if (!queue) return null;
-    for (const [side, current] of [['current', fiber], ['alternate', fiber?.alternate]]) {
-      for (let hook = current?.memoizedState, index = 0; hook && index < 40; hook = hook.next, index++) if (hook.queue === queue) return { side, index };
-    }
-    return null;
-  };
-  const stateSummary = value => {
-    if (!Array.isArray(value)) return summary(value);
-    return { kind: 'array', length: value.length, items: value.slice(0, 6).map(item => summary(item)) };
-  };
-  const hookSummaries = fiber => {
-    const result = [];
-    for (let hook = fiber?.memoizedState, index = 0; hook && index < 32; hook = hook.next, index++) if (hook.queue) result.push({ index, queueId: queueId(hook.queue), state: stateSummary(hook.memoizedState) });
-    return result;
-  };
-  const primary = () => document.querySelector('[name="image_alt"]');
-  const push = (kind, node, detail = {}) => {
-    try {
-      if (events.length >= cap) { dropped++; return; }
-      events.push({ sequence: ++sequence, ms: performance.now(), kind, target: info(node), active: info(document.activeElement), primary: info(primary()), callback: nativeStack.at(-1) || null, phase: phases.at(-1) || null, ...detail });
-    } catch { errors++; }
-  };
-  const fiberName = fiber => fiber?.type?.displayName || fiber?.type?.name || fiber?.type?.render?.displayName || fiber?.type?.render?.name || '';
-  const ownerProps = fiber => {
-    const pick = value => {
-      if (!value || typeof value !== 'object') return null;
-      const result = {};
-      for (const key of ['name', 'altName', 'defaultAlt', 'altValue', 'captionValue', 'defaultValue', 'value', 'image', 'imageAlt', 'image_alt']) if (Object.hasOwn(value, key)) result[key] = summary(value[key]);
-      for (const key of ['defaultItems', 'controlledItems']) if (Array.isArray(value[key])) result[key] = summary(value[key]);
-      for (const key of ['values', 'topic', 'recoveryFields']) if (value[key] && typeof value[key] === 'object') {
-        const nested = value[key]; result[key] = {};
-        for (const field of ['image', 'image_alt', 'imageAlt']) if (Object.hasOwn(nested, field)) result[key][field] = summary(nested[field]);
-        if (nested.media_payload?.kind === 'gallery') result[key].gallery = summary(nested.media_payload.images);
-      }
-      return result;
-    };
-    return { memoized: pick(fiber?.memoizedProps), pending: pick(fiber?.pendingProps), alternate: pick(fiber?.alternate?.memoizedProps) };
-  };
-  window.__altCausalPhase = (status, kind, fiber, flags, id) => {
-    try {
-      if (status === 'end') { if (!id) return; push('react:phase:end', primary(), { phaseKind: kind, id }); const index = phases.findIndex(phase => phase.id === id); if (index >= 0) phases.splice(index, 1); return; }
-      if (fiber && !owners.has(fiberName(fiber))) return null;
-      if (!fiber && !primary()) return null;
-      const phase = { id: ++nextPhase, kind, owner: fiberName(fiber), flags };
-      phases.push(phase); push('react:phase:begin', primary(), { id: phase.id, phaseKind: kind, owner: phase.owner, flags, ownerProps: fiber ? ownerProps(fiber) : null }); return phase.id;
-    } catch { errors++; return null; }
-  };
-  window.__altCausalSynthetic = (status, event, node) => {
-    try { if (trackedNames.has(fieldName(node)) && event?._reactName === 'onChange') push('react:onChange:' + status, node, { props: props(node), nativeType: event.nativeEvent?.type }); } catch { errors++; }
-  };
-  window.__altCausalReact = (kind, fiber, queue, action, lane, pendingLanes) => {
-    try {
-      const name = fiberName(fiber);
-      if (!owners.has(name)) return;
-      push('react:' + kind, primary(), { fiber: name, ownerProps: ownerProps(fiber), lane, pendingLanes, queueId: queueId(queue), hook: exactHookIndex(fiber, queue), previous: queue ? summary(queue.lastRenderedState) : undefined, action: queue ? summary(action) : undefined, fiberLanes: fiber.lanes, alternateLanes: fiber.alternate?.lanes, stack: String(new Error().stack).split('\n').slice(0, 9).join('\n').slice(0, 1800) });
-    } catch { errors++; }
-  };
-  window.__altCausalHostCommit = (finishedWork, newProps, oldProps) => {
-    try {
-      const node = finishedWork.stateNode;
-      const field = newProps?.name || node?.name || newProps?.['data-admin-media-image-input-name'];
-      if (!trackedNames.has(field)) return;
-      const ancestorOwners = new Set(['AdminMediaImageField', 'AdminMediaGalleryField', 'AdminFormRuntime', 'ModeledContentEditorShell', 'MediaContentForm', 'ArticleEditor', 'ArticleCreateEditor', 'ContentBasicDataPanel', 'TopicImageField']);
-      const ancestors = [];
-      for (let fiber = finishedWork.return, depth = 0; fiber && depth < 25; fiber = fiber.return, depth++) {
-        const name = fiberName(fiber);
-        if (!ancestorOwners.has(name)) continue;
-        const current = hookSummaries(fiber), alternate = hookSummaries(fiber.alternate);
-        const diffs = [];
-        for (let index = 0; index < Math.max(current.length, alternate.length); index++) {
-          if (JSON.stringify(current[index]?.state) !== JSON.stringify(alternate[index]?.state)) diffs.push({ index: current[index]?.index ?? alternate[index]?.index, queueId: current[index]?.queueId || alternate[index]?.queueId, previous: alternate[index]?.state, next: current[index]?.state });
-        }
-        ancestors.push({ name, finishedWorkHooks: current, previousAlternateHooks: alternate, diffs, ownerProps: ownerProps(fiber) });
-      }
-      push('react:commitHostUpdate', node, { field, newValue: summary(newProps?.value), oldValue: summary(oldProps?.value), ancestors, stack: String(new Error().stack).split('\n').slice(0, 9).join('\n').slice(0, 1800) });
-    } catch { errors++; }
-  };
-  const nativeAdd = EventTarget.prototype.addEventListener;
-  const nativeRemove = EventTarget.prototype.removeEventListener;
-  const observedTarget = target => target === document || target instanceof HTMLFormElement || (target instanceof Element && target.id === 'root');
-  const captureFlag = options => typeof options === 'boolean' ? options : Boolean(options?.capture);
-  EventTarget.prototype.addEventListener = function(type, listener, options) {
-    if (!['input', 'change'].includes(type) || !listener || !observedTarget(this)) return nativeAdd.call(this, type, listener, options);
-    try {
-      let byType = registrations.get(this);
-      if (!byType) { byType = new Map(); registrations.set(this, byType); }
-      let byListener = byType.get(type);
-      if (!byListener) { byListener = new WeakMap(); byType.set(type, byListener); }
-      let byCapture = byListener.get(listener);
-      if (!byCapture) { byCapture = new Map(); byListener.set(listener, byCapture); }
-      const capture = captureFlag(options);
-      let record = byCapture.get(capture);
-      if (!record) {
-        const registration = { id: ++nextListener, type, capture, target: info(this), stack: String(new Error().stack).split('\n').slice(0, 9).join('\n').slice(0, 1800) };
-        const wrapped = function(event) {
-          const tracked = trackedNames.has(fieldName(event.target));
-          if (tracked) { nativeStack.push(registration.id); push('native-listener:begin', event.target, { registration, trusted: event.isTrusted, props: props(event.target) }); }
-          try {
-            return typeof listener === 'function' ? Reflect.apply(listener, this, [event]) : Reflect.apply(listener.handleEvent, listener, [event]);
-          } catch (error) {
-            if (tracked) push('native-listener:throw', event.target, { registrationId: registration.id, message: String(error?.message || error) });
-            throw error;
-          } finally {
-            if (tracked) { push('native-listener:end', event.target, { registrationId: registration.id, props: props(event.target) }); nativeStack.pop(); }
-          }
-        };
-        record = { wrapped, registration }; byCapture.set(capture, record);
-      }
-      return nativeAdd.call(this, type, record.wrapped, options);
-    } catch {
-      errors++;
-      // Retain native API behavior if diagnostic bookkeeping cannot wrap it.
-      return nativeAdd.call(this, type, listener, options);
-    }
-  };
-  EventTarget.prototype.removeEventListener = function(type, listener, options) {
-    if (['input', 'change'].includes(type) && listener && observedTarget(this)) {
-      try {
-        const record = registrations.get(this)?.get(type)?.get(listener)?.get(captureFlag(options));
-        if (record) return nativeRemove.call(this, type, record.wrapped, options);
-      } catch { errors++; }
-    }
-    return nativeRemove.call(this, type, listener, options);
-  };
-  for (const type of ['beforeinput', 'input', 'change', 'focusin', 'focusout']) {
-    nativeAdd.call(document, type, event => {
-      if (type === 'input' && event.isTrusted && trackedNames.has(fieldName(event.target))) nativeInputs.set(event.target, { value: String(event.target.value).slice(0, 160), ms: performance.now() });
-      if (trackedNames.has(fieldName(event.target)) || type.startsWith('focus')) push(type + ':capture', event.target, { trusted: event.isTrusted, inputType: event.inputType, data: event.data, props: props(event.target) });
-    }, true);
-    nativeAdd.call(document, type, event => {
-      if (trackedNames.has(fieldName(event.target))) push(type + ':bubble', event.target, { trusted: event.isTrusted, props: props(event.target), lastTrustedInput: nativeInputs.get(event.target), changedSinceTrustedInput: type === 'input' && nativeInputs.get(event.target)?.value !== event.target.value });
-    });
-  }
-  for (const owner of [HTMLInputElement, HTMLTextAreaElement]) {
-    const descriptor = Object.getOwnPropertyDescriptor(owner.prototype, 'value');
-    Object.defineProperty(owner.prototype, 'value', { ...descriptor, set(value) {
-      if (trackedNames.has(fieldName(this))) push('value:set:before', this, { next: String(value), stack: String(new Error().stack).split('\n').slice(0, 9).join('\n').slice(0, 1800) });
-      const result = descriptor.set.call(this, value);
-      if (trackedNames.has(fieldName(this))) push('value:set:after', this, { props: props(this), lastTrustedInput: nativeInputs.get(this) });
-      return result;
-    } });
-  }
-  const nativeFocus = HTMLElement.prototype.focus;
-  HTMLElement.prototype.focus = function(...args) { push('focus:call', this, { stack: String(new Error().stack).split('\n').slice(0, 9).join('\n').slice(0, 1800) }); return Reflect.apply(nativeFocus, this, args); };
-  const nativeReset = HTMLFormElement.prototype.reset;
-  HTMLFormElement.prototype.reset = function(...args) { push('form:reset', this, { stack: String(new Error().stack).split('\n').slice(0, 9).join('\n').slice(0, 1800) }); return Reflect.apply(nativeReset, this, args); };
-  const removedMetadata = node => {
-    try {
-      if (node?.nodeType !== 1) return [];
-      return [...(trackedNames.has(fieldName(node)) ? [node] : []), ...node.querySelectorAll(metadataSelector)].slice(0, 32);
-    } catch { errors++; return []; }
-  };
-  const removeChild = Node.prototype.removeChild;
-  Node.prototype.removeChild = function(...args) {
-    const removed = removedMetadata(args[0]);
-    const result = Reflect.apply(removeChild, this, args);
-    for (const node of removed) push('alt:removed', node);
-    return result;
-  };
-  const replaceChild = Node.prototype.replaceChild;
-  Node.prototype.replaceChild = function(...args) {
-    const removed = removedMetadata(args[1]);
-    const result = Reflect.apply(replaceChild, this, args);
-    for (const node of removed) push('alt:replaced', node);
-    return result;
-  };
-  window.__altCausalSnapshot = () => {
-    try {
-      const node = primary(), key = node && Object.keys(node).find(name => name.startsWith('__reactFiber$'));
-      let fiber = key ? node[key] : null;
-      const observedOwners = [], states = current => {
-        const values = [];
-        for (let hook = current?.memoizedState, count = 0; hook && count < 20; hook = hook.next, count++) values.push(primitive(hook.memoizedState) ? hook.memoizedState : typeof hook.memoizedState);
-        return values;
-      };
-      for (let depth = 0; fiber && depth < 16; depth++, fiber = fiber.return) {
-        const name = fiberName(fiber);
-        if (name) observedOwners.push({ name, states: states(fiber), alternate: states(fiber.alternate) });
-      }
-      const metadataControls = [...document.querySelectorAll(metadataSelector)].map(control => {
-        const fiberKey = Object.keys(control).find(name => name.startsWith('__reactFiber$'));
-        let owner = fiberKey ? control[fiberKey] : null;
-        const controlOwners = [];
-        for (let depth = 0; owner && depth < 16; depth++, owner = owner.return) {
-          const name = fiberName(owner);
-          if (name && owners.has(name)) controlOwners.push({ name, states: states(owner), alternate: states(owner.alternate) });
-        }
-        return { node: info(control), props: props(control), galleryIndex: control.closest('[data-admin-media-gallery-index]')?.getAttribute('data-admin-media-gallery-index'), owners: controlOwners };
-      });
-      return { documentId, mainFrame: window === window.top, fixtureMode: new URLSearchParams(location.search).get('mode'), viewport: { width: innerWidth, height: innerHeight }, metadataControls, observerVersion: 5, cap, dropped, errors, node: info(node), props: props(node), owners: observedOwners, native: node?.form ? new FormData(node.form).get('image_alt') : null, seed: window.topicFixtureSeed?.image_alt, events: [...events] };
-    } catch (error) { errors++; return { observerVersion: 5, cap, dropped, errors, snapshotError: String(error?.message || error), events: [...events] }; }
-  };
-  push('observer:installed', null, { version: 5, explicitAdditionalMicrotasks: 0, explicitAdditionalTimers: 0 });
-}
-
 async function verifyTopicContentPresentation() {
   const fixtureRoot = process.cwd(), fixtureRequire = createRequire(import.meta.url), project = fixtureRoot.replaceAll('\\', '/');
   const fieldsOnly = process.argv.includes('--topic-content-fields-only');
@@ -2901,27 +2621,6 @@ async function verifyTopicContentPresentation() {
   const draftNoticeOnly = process.argv.includes('--draft-notice-only');
   const unifiedImageOnly = process.argv.includes('--unified-image-only');
   const recoveryFixture = fullFormDraftOnly || contentPanelGalleryOnly || draftNoticeOnly || unifiedImageOnly;
-  const imageAltDiagnostic = (fullFormDraftOnly || contentPanelGalleryOnly || unifiedImageOnly) ? imageAltDiagnosticBinding(fixtureRoot) : null;
-  const imageAltDiagnosticCommand = fullFormDraftOnly ? 'qa:topic-form-draft-recovery' : contentPanelGalleryOnly ? 'qa:content-panel-gallery' : 'qa:unified-image-system';
-  const imageAltDiagnosticRoot = path.join(fixtureRoot, '.tmp-qa/admin-development-batch-01/image-alt-ci-attempt-01', imageAltDiagnosticCommand.replaceAll(':', '-'));
-  const imageAltDiagnosticBlocked = (stage, failure) => { try { console.log('QA_IMAGE_ALT_DIAGNOSTIC ' + JSON.stringify({ diagnosticOnly: true, binding: imageAltDiagnostic, command: imageAltDiagnosticCommand, status: 'BLOCKED', stage, reason: failure.code || failure.name })); } catch { /* Diagnostics never replace the original result. */ } };
-  if (imageAltDiagnostic) console.log('QA_IMAGE_ALT_DIAGNOSTIC_ACTIVE ' + JSON.stringify({ ...imageAltDiagnostic, command: imageAltDiagnosticCommand }));
-  let imageAltDiagnosticCheckpoint = 0;
-  const captureImageAltDiagnostic = async (stage, error) => {
-    if (!imageAltDiagnostic) return;
-    try {
-    let snapshot = null, evidence = null, captureError = null;
-    try {
-      snapshot = await page.evaluate(() => window.__altCausalSnapshot?.() ?? null);
-      const fs = await import('node:fs/promises'); await fs.mkdir(imageAltDiagnosticRoot, { recursive: true });
-      evidence = path.join(imageAltDiagnosticRoot, String(++imageAltDiagnosticCheckpoint).padStart(3, '0') + '-' + stage + '.json');
-      await fs.writeFile(evidence, JSON.stringify({ diagnosticOnly: true, binding: imageAltDiagnostic, command: imageAltDiagnosticCommand, stage, status: error ? 'FAIL' : 'CHECKPOINT', error: error ? { name: error.name, code: error.code, operator: error.operator, location: String(error.stack).match(/qa-home-story-presentation\.mjs:\d+:\d+/)?.[0] } : null, snapshot }, null, 2), { flag: 'wx' });
-    } catch (failure) { captureError = failure.code || failure.name; }
-    if (captureError) imageAltDiagnosticBlocked('snapshot-evidence', { name: captureError });
-    if (error) console.log('QA_IMAGE_ALT_DIAGNOSTIC ' + JSON.stringify({ diagnosticOnly: true, binding: imageAltDiagnostic, command: imageAltDiagnosticCommand, status: 'FAIL', evidence: evidence ? path.relative(fixtureRoot, evidence).replaceAll('\\', '/') : null, captureError, fixtureMode: snapshot?.fixtureMode, viewport: snapshot?.viewport, documentId: snapshot?.documentId, dropped: snapshot?.dropped, observerErrors: snapshot?.errors, node: snapshot?.node, props: snapshot?.props, tail: snapshot?.events?.slice(-8).map(event => ({ sequence: event.sequence, ms: event.ms, kind: event.kind, target: event.target, callback: event.callback, phase: event.phase, next: event.next, fiber: event.fiber, hook: event.hook })) }));
-    } catch { try { console.log('QA_IMAGE_ALT_DIAGNOSTIC {"diagnosticOnly":true,"status":"BLOCKED","reason":"terminal-accounting"}'); } catch { /* Original test result remains authoritative. */ } }
-  };
-
   const draftFirstCaseOnly = fullFormDraftOnly && process.argv.includes('--draft-first-case');
   const draftBoundariesOnly = fullFormDraftOnly && process.argv.includes('--draft-boundaries-only');
   const videoOnly = process.argv.includes('--video-panel-only'), mediaTabsOnly = process.argv.includes('--media-tabs-only'), slugAuditOnly = process.argv.includes('--slug-audit-only') || process.argv.includes('--slug-system-only'), videoTransport = videoOnly || mediaTabsOnly || slugAuditOnly || recoveryFixture, mediaFixture = seoOnly || videoTransport;
@@ -3037,16 +2736,6 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
       new webpack.ProvidePlugin({ process: fixtureRequire.resolve('next/dist/build/polyfills/process') }),
       { apply(c) { c.hooks.shouldEmit.tap('TopicContentMemory', () => false); c.hooks.compilation.tap('TopicContentMemory', compilation => { webpack.NormalModule.getCompilationHooks(compilation).readResource.for(undefined).tapPromise('TopicContentMemory', async context => {
         const file = context.resourcePath;
-        if (imageAltDiagnostic && file.replaceAll('\\', '/').endsWith('/react-dom/cjs/react-dom-client.development.js')) {
-          const originalReact = await readFile(file, 'utf8');
-          try {
-            const instrumentedReact = instrumentImageAltDiagnosticReact(originalReact, file);
-            const fs = await import('node:fs/promises'); await fs.mkdir(imageAltDiagnosticRoot, { recursive: true });
-            await fs.writeFile(path.join(imageAltDiagnosticRoot, 'react-identity.json'), JSON.stringify({ binding: imageAltDiagnostic, originalSha256: createHash('sha256').update(originalReact).digest('hex'), instrumentedSha256: createHash('sha256').update(instrumentedReact).digest('hex'), installedPackageChanged: false }, null, 2), { flag: 'wx' });
-            return instrumentedReact;
-          } catch (failure) { imageAltDiagnosticBlocked('react-instrumentation', failure); return originalReact; }
-        }
-
         if (file.endsWith('.module.css')) {
           const scope = fixtureRequire('next/dist/compiled/postcss-modules-scope'), { getCssModuleLocalIdent } = fixtureRequire('next/dist/build/webpack/config/blocks/css/loaders/getCssModuleLocalIdent');
           const result = await fixtureRequire('postcss')([fixtureRequire('next/dist/compiled/postcss-modules-values'), fixtureRequire('next/dist/compiled/postcss-modules-local-by-default')({ mode: 'local' }), fixtureRequire('next/dist/compiled/postcss-modules-extract-imports')(), scope({ generateScopedName: name => getCssModuleLocalIdent({ rootContext: fixtureRoot, resourcePath: file }, null, name, { context: fixtureRoot }) })]).process(await readFile(file, 'utf8'), { from: file });
@@ -3067,7 +2756,6 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
   });
   let bundle;
   await new Promise((resolve, reject) => compiler.run((error, stats) => { if (!error && !stats.hasErrors()) bundle = Buffer.from(stats.compilation.assets['fixture.js'].source()); compiler.close(closeError => error || closeError || stats.hasErrors() ? reject(error || closeError || Error(stats.toString({ all: false, errors: true }))) : resolve()); }));
-  if (imageAltDiagnostic) { try { const fs = await import('node:fs/promises'); await fs.mkdir(imageAltDiagnosticRoot, { recursive: true }); await fs.writeFile(path.join(imageAltDiagnosticRoot, 'compiled-fixture.js'), bundle, { flag: 'wx' }); } catch (failure) { imageAltDiagnosticBlocked('compiled-bundle-evidence', failure); } }
   console.log('Topic Content fixture: actual Article/Media consumers compiled in memory');
   const css = (await fixtureRequire('postcss')([fixtureRequire('@tailwindcss/postcss')({ base: fixtureRoot })]).process(await readFile(path.join(fixtureRoot, 'src/app/globals.css'), 'utf8'), { from: path.join(fixtureRoot, 'src/app/globals.css') })).css;
   const fonts = [300, 400, 500, 600, 700].map(weight => `@font-face{font-family:FixtureArabic;src:url('/font-${weight}.woff2');font-weight:${weight};font-display:block}`).join('') + ':root{--font-arabic:FixtureArabic;--font-inter:Arial}';
@@ -3082,7 +2770,6 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
   // defaults to today's date on each mount, so hold Date stable across midnight
   // while leaving browser timers and the actual source save/PGlite clock real.
   const slugBrowserDate = slugAuditOnly ? '2026-10-23T12:00:00.000Z' : recoveryFixture ? '2026-10-24T12:00:00.000Z' : null;
-  if (imageAltDiagnostic) { try { await page.addInitScript(installImageAltDiagnosticObserver); } catch (failure) { imageAltDiagnosticBlocked('observer-installation', failure); } }
   if (recoveryFixture) await page.clock.install({ time: new Date(slugBrowserDate) });
   else if (slugBrowserDate) await page.clock.setFixedTime(slugBrowserDate);
   const delayedMetaSdkRoutes = [];
@@ -3578,7 +3265,7 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
       return;
     }
     if (contentPanelGalleryOnly) {
-      await verifyContentPanelGalleryAdoption({ fixtureRoot, page, browser, open, errors, forbidden, seoReads, iframeReads, captureImageAltDiagnostic, imageAltDiagnosticEnabled: Boolean(imageAltDiagnostic), panelGalleryEvidenceRoot, panelGallerySourceHashesAtStart, readPanelGallerySourceHashes, recordPanelGallerySourceIdentity, getHarness: () => slugHarness, setHarness: value => { slugHarness = value; }, setMode: value => { slugMode = value; }, savedSlugRows, slugSaveResults });
+      await verifyContentPanelGalleryAdoption({ fixtureRoot, page, browser, open, errors, forbidden, seoReads, iframeReads, panelGalleryEvidenceRoot, panelGallerySourceHashesAtStart, readPanelGallerySourceHashes, recordPanelGallerySourceIdentity, getHarness: () => slugHarness, setHarness: value => { slugHarness = value; }, setMode: value => { slugMode = value; }, savedSlugRows, slugSaveResults });
       return;
     }
     if (fullFormDraftOnly) {
@@ -3628,7 +3315,7 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
         const series = form.locator('#content-series-listbox'); await series.press('End'); await series.press('Enter'); await expect(form.locator('select[name="series_id"]')).toHaveValue('187');
         if (draftFirstCaseOnly) console.log('DRAFT_STAGE populate image');
         await selectImage(form.locator('[data-admin-media-image-field="image"]'), 'SEO fixture original'); await form.locator('[name="image_alt"]').fill('وصف الصورة الرئيسية في المسودة');
-        assert.equal(await form.locator('[name="image_alt"]').inputValue(), 'وصف الصورة الرئيسية في المسودة', 'Manual primary Alt must be present immediately after the existing fill.'); if (imageAltDiagnostic) await captureImageAltDiagnostic('draft-primary-read');
+        assert.equal(await form.locator('[name="image_alt"]').inputValue(), 'وصف الصورة الرئيسية في المسودة', 'Manual primary Alt must be present immediately after the existing fill.');
         if (!['video', 'gallery'].includes(type)) { await editor().fill('نص Markdown محفوظ في المسودة الكاملة ' + type); await expect(content()).toHaveValue(/Markdown/); }
         if (['news', 'site_update'].includes(type)) await form.locator('[name="media_project"]').fill('D174');
         if (type === 'video') {
@@ -4191,7 +3878,6 @@ const fixtureReactRoot=createRoot(document.getElementById('root'));window.mountL
     const sourceHashes = fieldsOnly || reviewOnly || mediaFixture ? Object.fromEntries(await Promise.all([...new Set(sourceFiles)].map(async file => [file, createHash('sha256').update(await readFile(path.join(fixtureRoot, file))).digest('hex')]))) : undefined;
     assert.deepEqual(errors, []); assert.deepEqual(forbidden, []); console.log(JSON.stringify({ status: 'PASS', browser: 'Chrome ' + browser.version(), scope: mediaTabsOnly ? 'Actual Video/Gallery Create/Edit at1440/390 RTL: dedicated ordered tabs, cross-type absence, retained mounted native fields, dirty/close/pending/error-focus/success and isolated reload parity; existing gallery picker/alt/caption/reorder/replace/remove, Meta hide/remount lifecycle; finite media/SDK transports and in-memory save substitutions only, no screenshots or real writes' : videoOnly ? 'Actual Video Create/Edit panel only at Desktop/MobileRTL: two RTL columns, shared provider selection, six canonical provider bindings and honest embed/native/source preview modes, native video decode/start and12px labels, hidden historical duration preserved, existing thumbnail owner picker/preview/replace/remove, retained finalOG composition and natural media dimensions, Review score/issues/details/toggles/date/display navigation, dirty/pending/error/success in-memory saves; News omitted defaults and Article reference checked once, finite media reads only; no screenshots or real writes' : seoOnly ? 'Actual Article Create/Edit SEO panel only: shared RTL2:1 information/media composition, nine unique fields and12px labels, native values/navigation/dirty/pending/error/success memory save, existing real media picker/preview/replace/remove plus known/absent dimensions and empty/unavailable states; finite read responses only, no real writes' : reviewOnly ? 'Actual Article Create/Edit Review panel only: current RTL12headers/rows, summaries, production scores/issues, independent inline details, publication/date/featured/popular, read-onlyDisplay navigation and dirty/pending/error/success memory save; defaults verified separately by SSR' : fieldsOnly ? 'Actual Article/Media Create/Edit: three canonical aligned Field Containers, current Content outer-height/ratio/excerpt geometry, shared Listbox portals/keyboard/disabled/errors and retained single-form dirty/value/memory-save behavior; earlier unchanged RichText/Display/Draft proof reused separately' : 'Actual Article/Media Create/Edit Content and independent Display tabs: shared premium composition, retained single-form fields/navigation/dirty/validation/memory-save behavior, panel excerpt and draft-notice refinements, native right scrollbar and omitted defaults', sourceHashes, results, ...(mediaFixture ? { finiteMediaReads: seoReads } : {}), ...(videoTransport ? { finiteIframeReads: iframeReads } : {}), screenshots: 0, filesWritten: 0, serverStarted: false, persistenceTransportExecuted: false, globalClosed: false }));
   } catch (error) {
-    if (imageAltDiagnostic) await captureImageAltDiagnostic('terminal-failure', error);
     if (fullFormDraftOnly) console.log('DRAFT_ORIGINAL_FAILURE ' + error.stack);
     throw error;
   } finally {
