@@ -231,12 +231,15 @@ export default function ContentReviewPanel({
     const form = document.getElementById(formId);
     if (!(form instanceof HTMLFormElement)) return;
     const sync = () => setInput(read(form, seed));
+    const observe = (event: Event) => {
+      if (event.target instanceof Node && form.contains(event.target)) sync();
+    };
     sync();
-    form.addEventListener("input", sync);
-    form.addEventListener("change", sync);
+    form.ownerDocument.addEventListener("input", observe);
+    form.ownerDocument.addEventListener("change", observe);
     return () => {
-      form.removeEventListener("input", sync);
-      form.removeEventListener("change", sync);
+      form.ownerDocument.removeEventListener("input", observe);
+      form.ownerDocument.removeEventListener("change", observe);
     };
   }, [formId, seed]);
 

@@ -9,6 +9,7 @@ import { createJiti } from "jiti";
 import ts from "typescript";
 import { Children, Fragment, createElement, isValidElement, useCallback, useState, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { verifyAdminFormSectionContract } from "./fixtures/admin-form-section-contract.mts";
 import { getModuleEditorHeaderMetadata, getModuleEditorSectionMetadata, resolveModuleEditorCompositionApplicability, SLOT_MODULE_SLUG_METADATA, MODULE_KIND_METADATA, MODULE_EDITOR_TAB_LABELS } from "../src/lib/page-composition/module-registry-metadata.ts";
 import { collectExecutableSourceGraph, graphUsesExecutableBinding } from "./lib/typescript-executable-graph.mts";
 
@@ -577,36 +578,11 @@ async function verifyBlockPanelComposition() {
   };
   const rejects = (probe: () => unknown) => { try { probe(); return false; } catch { return true; } };
   const native = createElement("input", { name: "preserved", defaultValue: "original", required: true, disabled: true, onChange: () => undefined });
-  const explicitHeader = createElement("header", { "data-original-header": "" }, "Original header");
   const formSource = read("src/components/admin/ui/AdminForm.tsx");
-  const verifyForm = (source: string) => {
-    const Section = compile(source, ["AdminFormSection"], { React: { createElement, Fragment }, AdminCard: card.default, AdminModuleSectionHeader: headers.AdminModuleSectionHeader, adminFormHintClassName: styles.adminFormHintClassName }).AdminFormSection as typeof form.AdminFormSection;
-    for (const header of [undefined, explicitHeader]) {
-      const props = { id: "original-id", title: "Original title", description: "Original description", actions: createElement("button", { type: "button" }, "Original action"), header, className: "original-composition", children: native };
-      const panel = renderToStaticMarkup(createElement(Section, props));
-      assert.ok(panel.includes(styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME));
-      for (const presentation of [undefined, "default", "panel"] as const) assert.equal(renderToStaticMarkup(createElement(Section, { ...props, presentation, surface: "panel" })), panel);
-      const neutral = Section({ ...props, surface: "neutral" });
-      assert.ok(isValidElement<{ id: string; className: string; children: ReactNode[] }>(neutral));
-      assert.equal(neutral.type, "section"); assert.equal(neutral.props.id, props.id);
-      assert.equal(neutral.props.className, "min-w-0 original-composition");
-      assert.equal(neutral.props.children[1], native, "Neutral composition preserves exact callback-bearing native content");
-      const html = renderToStaticMarkup(neutral);
-      assert.ok(html.includes('data-admin-form-section-surface="neutral"') && html.includes('name="preserved"') && html.includes('value="original"') && html.includes('required=""') && html.includes('disabled=""'));
-      if (header) assert.equal(neutral.props.children[0], header);
-      else {
-        for (const text of ["Original title", "Original description", "Original action"]) assert.ok(html.includes(text));
-        assert.ok(!html.includes("-mx-3"), "Neutral implicit header uses the canonical standalone geometry");
-      }
-    }
-  };
-  verifyForm(formSource);
-  for (const [from, to] of [
-    ['surface = "panel"', 'surface = "neutral"'],
-    ['data-admin-form-section-surface="neutral"', 'data-lost-neutral=""'],
-    ['className={`min-w-0 ${className}`.trim()}', 'className={`min-w-0 p-3 border bg-black ${className}`.trim()}'],
-    ["{sectionHeader}", "{null}"], ["{children}", "{null}"],
-  ]) { const mutant = formSource.replaceAll(from, to); assert.notEqual(mutant, formSource); assert.ok(rejects(() => verifyForm(mutant)), "Neutral section negatives reject default changes, repeated visual chrome and lost headers/native content"); }
+  verifyAdminFormSectionContract(formSource, {
+    loadSection: source => compile(source, ["AdminFormSection"], { React: { createElement, Fragment }, AdminCard: card.default, AdminModuleSectionHeader: headers.AdminModuleSectionHeader, adminFormHintClassName: styles.adminFormHintClassName }).AdminFormSection as typeof form.AdminFormSection,
+    premiumSurfaceClassName: styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME,
+  });
   check("Section surface port preserves omitted/default/legacy Panel identity and neutral semantics, original header/native children; structural negatives reject regressions", true);
 
   const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");

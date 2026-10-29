@@ -2220,6 +2220,143 @@ assert.ok(
   "Admin Form dirty tracking must run after React input ownership while remaining scoped to its form.",
 );
 
+function hasPostReactFormObservation(source: string, ownerName: "AdminMediaAltWarning" | "ContentReviewPanel") {
+  const tree = parseTypeScriptSource(ownerName + ".tsx", source);
+  const owner = tree.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === ownerName);
+  if (!owner?.body || !owner.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    || !owner.modifiers.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return false;
+  const directCalls = (block: ts.Block) => block.statements.flatMap(statement =>
+    ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) ? [statement.expression] : []);
+  const effectCalls = directCalls(owner.body).filter(call => ts.isIdentifier(call.expression) && call.expression.text === "useEffect");
+  const effect = effectCalls.length === 1 ? effectCalls[0]!.arguments[0] : undefined;
+  if (!effect || !ts.isArrowFunction(effect) || !ts.isBlock(effect.body)) return false;
+  const block = effect.body;
+  const variable = (name: string) => block.statements.flatMap(statement =>
+    ts.isVariableStatement(statement) ? [...statement.declarationList.declarations] : [])
+    .find(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === name)?.initializer;
+  const pathIs = (expression: ts.Expression, expected: readonly string[]) => {
+    const actual = expressionPath(expression);
+    return actual?.length === expected.length && pathEndsWith(actual, expected);
+  };
+  const form = variable("form"), sync = variable("sync"), observe = variable("observe");
+  if (!form || !ts.isCallExpression(form) || !pathIs(form.expression, ["document", "getElementById"])
+    || form.arguments.length !== 1 || !pathIs(form.arguments[0]!, ["formId"])
+    || !sync || !ts.isArrowFunction(sync)
+    || !observe || !ts.isArrowFunction(observe) || !ts.isBlock(observe.body)
+    || observe.parameters.length !== 1 || !ts.isIdentifier(observe.parameters[0]!.name)) return false;
+  const syncCalls = ts.isBlock(sync.body) ? directCalls(sync.body) : ts.isCallExpression(sync.body) ? [sync.body] : [];
+  const expectedReads = ownerName === "AdminMediaAltWarning"
+    ? [["setImage", "readFieldValue", "imageFieldName"], ["setAlt", "readFieldValue", "altFieldName"]]
+    : [["setInput", "read", "seed"]];
+  if (syncCalls.length !== expectedReads.length || !expectedReads.every(([setter, reader, fieldName]) =>
+    syncCalls.some(call => pathIs(call.expression, [setter!]) && call.arguments.length === 1 && ts.isCallExpression(call.arguments[0]!)
+      && pathIs(call.arguments[0]!.expression, [reader!]) && call.arguments[0]!.arguments.length === 2
+      && pathIs(call.arguments[0]!.arguments[0]!, ["form"]) && pathIs(call.arguments[0]!.arguments[1]!, [fieldName!])))) return false;
+  const ownField = [observe.parameters[0]!.name.text, "target"];
+  const filter = observe.body.statements.length === 1 ? observe.body.statements[0] : undefined;
+  if (!filter || !ts.isIfStatement(filter) || filter.elseStatement || !ts.isBinaryExpression(filter.expression)
+    || filter.expression.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return false;
+  const nodeCheck = filter.expression.left, contains = filter.expression.right;
+  if (!ts.isBinaryExpression(nodeCheck) || nodeCheck.operatorToken.kind !== ts.SyntaxKind.InstanceOfKeyword
+    || !pathIs(nodeCheck.left, ownField) || !pathIs(nodeCheck.right, ["Node"])
+    || !ts.isCallExpression(contains) || !pathIs(contains.expression, ["form", "contains"])
+    || contains.arguments.length !== 1 || !pathIs(contains.arguments[0]!, ownField)
+    || !ts.isExpressionStatement(filter.thenStatement) || !ts.isCallExpression(filter.thenStatement.expression)
+    || !pathIs(filter.thenStatement.expression.expression, ["sync"]) || filter.thenStatement.expression.arguments.length !== 0) return false;
+  const direct = directCalls(block);
+  const registrations = direct.filter(call => callName(call) === "addEventListener");
+  const initial = direct.filter(call => pathIs(call.expression, ["sync"]) && call.arguments.length === 0);
+  const returned = block.statements.filter(ts.isReturnStatement);
+  const cleanup = returned.length === 1 ? returned[0]!.expression : undefined;
+  if (registrations.length !== 2 || collectNodes(block, ts.isCallExpression).filter(call => callName(call) === "addEventListener").length !== 2
+    || initial.length !== 1 || !cleanup || !ts.isArrowFunction(cleanup) || !ts.isBlock(cleanup.body)) return false;
+  const removals = directCalls(cleanup.body);
+  const binds = (call: ts.CallExpression, operation: string, type: string) =>
+    pathIs(call.expression, ["form", "ownerDocument", operation]) && staticString(call.arguments[0]) === type
+    && call.arguments.length >= 2 && call.arguments.length <= 3 && pathIs(call.arguments[1]!, ["observe"])
+    && (!call.arguments[2] || call.arguments[2].kind === ts.SyntaxKind.FalseKeyword);
+  return removals.length === 2 && ["input", "change"].every(type =>
+    registrations.some(call => binds(call, "addEventListener", type) && call.pos > initial[0]!.pos)
+    && removals.some(call => binds(call, "removeEventListener", type)));
+}
+
+for (const [ownerName, ownerFile] of [
+  ["AdminMediaAltWarning", "src/components/admin/media-intelligence/AdminMediaAltWarning.tsx"],
+  ["ContentReviewPanel", "src/components/admin/content-workflow/ContentReviewPanel.tsx"],
+] as const) {
+  const source = readSource(ownerFile);
+  assert.ok(hasPostReactFormObservation(source, ownerName),
+    `${ownerName}: the actual effect must initialize its existing fields, observe its own form after React input ownership and remove both bubbling listeners.`);
+  const tree = parseTypeScriptSource(ownerName + ".tsx", source), calls = collectNodes(tree, ts.isCallExpression);
+  const effectCall = calls.find(call => ts.isIdentifier(call.expression) && call.expression.text === "useEffect")!;
+  const effect = effectCall.arguments[0] as ts.ArrowFunction;
+  const observe = collectNodes(effect, ts.isVariableDeclaration).find(node => ts.isIdentifier(node.name) && node.name.text === "observe")!.initializer as ts.ArrowFunction;
+  const filter = (observe.body as ts.Block).statements[0] as ts.IfStatement;
+  const condition = filter.expression as ts.BinaryExpression;
+  const listener = (operation: string, type: string) => calls.find(call =>
+    pathEndsWith(expressionPath(call.expression), ["form", "ownerDocument", operation]) && staticString(call.arguments[0]) === type)!;
+  const input = listener("addEventListener", "input"), change = listener("addEventListener", "change");
+  const removeInput = listener("removeEventListener", "input"), removeChange = listener("removeEventListener", "change");
+  const initial = calls.find(call => ts.isIdentifier(call.expression) && call.expression.text === "sync"
+    && ts.isExpressionStatement(call.parent) && call.parent.parent === effect.body)!;
+  const contains = condition.right as ts.CallExpression;
+  const owner = functionDeclaration(tree, ownerName)!;
+  const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
+  const replaceNode = (node: ts.Node, next: ts.Node | undefined) => {
+    const transformed = ts.transform(tree, [context => {
+      const visit: ts.Visitor = current => current === node ? next : ts.visitEachChild(current, visit, context);
+      return root => ts.visitNode(root, visit, ts.isSourceFile)!;
+    }]);
+    try { return printer.printFile(transformed.transformed[0]!); }
+    finally { transformed.dispose(); }
+  };
+  const replaceExpression = (node: ts.Expression, next: ts.Expression) => replaceNode(node, next);
+  const withArguments = (call: ts.CallExpression, args: readonly ts.Expression[]) =>
+    replaceExpression(call, ts.factory.updateCallExpression(call, call.expression, call.typeArguments, args));
+  const disconnectedOwner = ts.factory.updateFunctionDeclaration(owner,
+    owner.modifiers?.filter(modifier => modifier.kind !== ts.SyntaxKind.ExportKeyword && modifier.kind !== ts.SyntaxKind.DefaultKeyword),
+    owner.asteriskToken, owner.name, owner.typeParameters, owner.parameters, owner.type, owner.body);
+  for (const [label, mutated] of [
+    ["pre-root form observation", replaceExpression(input.expression, ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("form"), "addEventListener"))],
+    ["capture-phase input observation", withArguments(input, [...input.arguments.slice(0, 2), ts.factory.createTrue()])],
+    ["capture-phase change observation", withArguments(change, [...change.arguments.slice(0, 2), ts.factory.createTrue()])],
+    ["missing own-form filter", replaceExpression(condition, condition.left)],
+    ["missing Node boundary", replaceExpression(condition, condition.right)],
+    ["foreign-form containment", replaceExpression(contains.expression, ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("otherForm"), "contains"))],
+    ["disconnected initial state", replaceNode(initial.parent, undefined)],
+    ["missing input registration", replaceNode(input.parent, undefined)],
+    ["missing change registration", replaceNode(change.parent, undefined)],
+    ["missing input cleanup", replaceNode(removeInput.parent, undefined)],
+    ["missing change cleanup", replaceNode(removeChange.parent, undefined)],
+    ["mismatched cleanup callback", withArguments(removeInput, [removeInput.arguments[0]!, ts.factory.createIdentifier("otherObserver")])],
+    ["cleanup capture mismatch", withArguments(removeInput, [...removeInput.arguments.slice(0, 2), ts.factory.createTrue()])],
+    ["listener bypasses filter", withArguments(input, [input.arguments[0]!, ts.factory.createIdentifier("sync")])],
+    ["effect disconnected behind a helper", replaceNode(effectCall.parent, ts.factory.createVariableStatement(undefined,
+      ts.factory.createVariableDeclarationList([ts.factory.createVariableDeclaration("unusedEffect", undefined, undefined,
+        ts.factory.createArrowFunction(undefined, undefined, [], undefined, ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken), effectCall))], ts.NodeFlags.Const)))],
+    ["canonical default owner disconnected", replaceNode(owner, disconnectedOwner)],
+  ] as const) {
+    assert.notEqual(mutated, source, `${ownerName} rejection must change actual source: ${label}`);
+    assert.ok(!hasPostReactFormObservation(mutated, ownerName), `${ownerName} ownership rejects ${label}.`);
+  }
+}
+const altWarningCaller = readParsedSource("src/components/admin/content/editors/article/TopicImageField.tsx");
+const warningCallerOwner = functionDeclaration(altWarningCaller, "TopicImageField");
+const warningReturn = warningCallerOwner?.body?.statements.find(ts.isReturnStatement)?.expression;
+const warningField = warningReturn && jsxElements(warningReturn, "AdminMediaImageField")[0];
+const warningProjection = warningField && jsxAttributeExpression(warningField, "altWarning");
+const warningNode = warningProjection && ts.isConditionalExpression(warningProjection)
+  && pathEndsWith(expressionPath(warningProjection.condition), ["formId"]) ? jsxElements(warningProjection.whenTrue, "AdminMediaAltWarning") : [];
+assert.ok(warningNode.length === 1 && jsxAttributePathIs(warningNode[0]!, "formId", ["formId"])
+  && jsxAttribute(warningNode[0]!, "requiredForPublish")
+  && (!jsxAttribute(warningNode[0]!, "requiredForPublish")!.initializer
+    || jsxAttributeExpression(warningNode[0]!, "requiredForPublish")?.kind === ts.SyntaxKind.TrueKeyword)
+  && collectNodes(altWarningCaller, ts.isImportDeclaration).some(declaration =>
+    staticString(declaration.moduleSpecifier) === "../../../media-intelligence/AdminMediaAltWarning"
+    && declaration.importClause?.name?.text === "AdminMediaAltWarning"),
+"The actual Topic image field must retain the canonical publish-required Alt Warning owner and its own form binding.");
+
 function assertCanonicalVideoRuntimeErrors(input: string) {
   const raw = parseTypeScriptSource("MediaVideoFields.tsx", input), rawPanel = videoPanelBranch(raw);
   assert.ok(rawPanel, "The actual Video panel branch remains present");

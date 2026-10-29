@@ -78,6 +78,28 @@ Examples:
 
 Required only when Production behavior is part of the closure claim and a safe trusted session exists.
 
+### 2.1 Responsibilities within the existing layers
+
+These responsibilities classify the existing owners; they do not introduce a
+second test registry or change any command, blocking rule or proof boundary.
+One entry can protect several responsibilities. Select its actual supported
+mode and arguments, rather than treating its filename as an execution identity.
+
+| Responsibility | Protection and existing examples | Evidence boundary |
+| --- | --- | --- |
+| Engine | Form, Entity List and Data Engine owners; `verify-admin-form-system.mts`, `verify-admin-entity-list.mjs`, `verify-admin-data-engine-contracts.mts` | Execute the actual owner through its existing ports; source/import checks alone do not establish behavior. |
+| Capability | Form Section/Field composition and Page Block presentation; the two existing Form/Page Block entries share `fixtures/admin-form-section-contract.mts` vectors | Preserve positive, negative and boundary states, native children/callbacks, and approved standalone geometry. Caller binding and consumer checks remain local. |
+| Contract | Save/cache failure, taxonomy and media RPC contracts; `verify:admin-query-save-failure-contracts`, `verify:content-taxonomy`, `verify:media-coordination-rpc-acl` | Data shape, rejection, rollback and permissions remain owned by their current contracts and guards. |
+| Adoption | Current Shared Capability Set and Collection/Form manifests; `verify:consumer-capability-adoption`, existing content-editor and Page Block adoption checks | Applicability, Source Proof, observed behavior, presentation and Owner approval remain distinct. Generated or unresolved consumers remain explicit gaps. |
+| Functional | Existing save/edit/delete/duplicate/failure/read-back journeys and their domain owners | A controlled owner test proves its tested ports; Browser or persisted round-trip claims require that actual runtime. |
+| Integration | Existing isolated Supabase/Public owner, `*-postgres` entries, PGlite fixtures and Public/Admin Browser journeys | Keep PG17, PGlite and Browser environments separate. Do not run a writable entry with Production data or real credentials. |
+
+Shared vectors remove duplicated assertion maintenance, not ownership or the
+independent execution of each consumer entry. Retain consumer-specific checks,
+failure propagation and source-provenance inputs when extracting a fixture.
+Consolidation requires an explicit before/after obligation map and rejection
+controls; name, age, size, or an import edge alone never justifies retirement.
+
 ## 3. Development and release verification
 
 Constitution Section 25.4 and ADR-028 define the Owner-approved sequence:
@@ -251,6 +273,222 @@ expand verification or block the unsupported claim, never prove exclusion.
 The existing focused contract guard is
 `node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
 
+The same reader derives an ephemeral source-impact report from the exact current
+snapshot and baseline Git bytes. It consults the existing Collection/Form and
+Current Shared Capability Set declarations, executable graph and literal source
+inputs to report owners, capabilities, consumers, contracts, candidate checks
+and unresolved relationships. These are discovery results, never Behavioral
+PASS. Candidates do not automatically execute Browser, database or other
+expensive commands. Review actual effects, mode/arguments, non-import inputs and
+cleanup before selecting the existing commands. Unknown mappings cannot justify
+a bounded release.
+
+For an actual read-only Git inspection, use the same existing verifier:
+`npm run verify:isolated-supabase -- --change-impact-only --impact-baseline=<40sha>`.
+Add `--additional-source=<file>` for each explicit new source input; private and
+generated inputs are rejected. Discovery returns `REVIEW_REQUIRED` or `DRIFT`
+with exit 2, not PASS. Supply `--impact-record=.tmp-qa/<reviewed-record>.json` to
+check the existing typed batch record against current bytes. A valid record can
+return `PASS_SOURCE_CONSISTENCY` (exit 0) only with positive affected-verification
+bindings and maintained obligations; malformed/unsafe input is blocked (exit 1),
+and drift remains exit 2. This manual mode has `checksExecuted=0` and
+`releaseEvidence=false`. Run it as part of the existing reviewed impact workflow
+before an authorized push. It cannot authorize a gate, mutate a contract or
+substitute for execution. No mandatory local pre-push hook is installed.
+
+The existing `quality-gate` job also invokes the same owner with
+`npm run --silent verify:isolated-supabase -- --ci-change-impact` immediately
+after `npm ci`, before Browser installation. This automatic mode checks actual
+snapshot/delta bindings, current contract projection and applicable changed
+assertion/vector correspondence. It reads immutable event Git objects from
+`GITHUB_EVENT_PATH`: PR base/head and the actual head or merge checkout, or push
+before/after. The checkout must equal `GITHUB_SHA`, history must exist locally,
+and the baseline must be an ancestor. Optional `merge_commit_sha` is advisory
+metadata: a supplied non-null value must still be a nonzero lowercase 40-hex
+SHA, but its existence or equality cannot select or authorize the checkout.
+The retained diagnostic CI event proved that this field can differ from the
+actual checkout while that checkout, base/head objects and both ancestry checks
+are valid. Every merge checkout therefore requires exactly two ordered local
+Git parents equal to the immutable event base and head, regardless of whether
+advisory metadata is present, absent, null, locally available or outdated. An
+exact event-head checkout retains the same HEAD/GITHUB_SHA identity and baseline
+ancestry requirements. This independent identity proof does not infer a
+baseline/ref. Missing/zero/foreign/non-ancestor authoritative objects, malformed
+advisory values, unsupported events and changed tracked checkout bytes fail
+closed; there is no
+fetch, guessed baseline, shell interpolation of event values, or borrowed local
+approval record. Use the existing full-history checkout without persisted Git
+credentials. The source step blanks all three existing Supabase environment
+values before Node starts, executes no candidate command and has no Browser,
+database or fixture lifecycle. Its sanitized JSON report alone is retained as
+an attempt-specific artifact after success or failure; missing evidence fails.
+
+CI admission failure also retains a bounded `ciBinding` diagnostic from the
+original in-memory event: canonical SHA bindings, the original commit lookup
+exit/identity, local object types, parents and ancestry query outcomes. It
+excludes event text, arbitrary values, environment contents and Git stderr.
+These probes preserve the failed exit and never fetch or authorize execution.
+
+Automatic `PASS_AUTOMATIC_SOURCE_PROTECTION` means syntactic source protection
+correspondence only. `ownerReviewSatisfied=false`, `behavioralPass=false` and
+`releaseEvidence=false` remain explicit. Missing correspondence is `DRIFT`
+(exit 2) with file, owner, contract and registered consumer diagnostics; unsafe
+provenance is blocked (exit 1). A changed assertion linked to a changed contract
+does not prove its relevance, equivalent coverage or Owner approval. Human
+contract review and applicable runtime/failure proofs remain mandatory, and
+expectations are never generated or rewritten from implementation changes.
+
+The JSON separates executed Fast source checks from explainable Targeted
+candidate commands. Each candidate retains the current named command, exact
+literal command steps and changed-file/owner/contract/consumer reasons. It has
+`executionAllowed=false`, unknown effects and an unexecuted proof level until
+its real harness, environment, cleanup and behavioral evidence are qualified.
+Functional code changes retain functional and native integration/readback
+obligations and a conservative `ci:check` requirement; unmapped inputs also
+retain Full. A narrowly recognized literal JSX padding/radius-only change can
+avoid that functional classification only when every other AST/class token is
+unchanged. This is a selection fact, never visual approval. Declared geometry,
+presentation/adoption obligations and applicable visual guards remain binding;
+opaque CSS or unproved mappings cannot authorize bounded release.
+
+This early source check does not prune or condition the existing eight CI jobs,
+their isolated services, Browser setup or complete `npm run ci:check`. Fast
+failure propagates to the same required job; a report is not a replacement gate.
+Full Regression remains mandatory under release/risk policy. Local targeted
+verification of this integration is separate from actual GitHub execution and
+does not establish remote CI timings or Release Readiness.
+
+One separately selected execution mode exists at the same verifier:
+`npm run verify:isolated-supabase -- --execute-qualified-impact --impact-baseline=<40sha>`.
+Use it only within an authorized targeted runtime task after qualifying the
+actual effects. It first requires automatic source consistency for an explicit
+immutable baseline and the complete current tracked snapshot; approval records,
+untracked additions, stale selectors and arbitrary commands cannot authorize
+execution. Current manifest owner bindings, actual changed inputs, registered
+literal command steps and the reviewed harness bytes qualify one existing leaf:
+`node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts --save-cache-only`.
+The exact flag selects thirteen existing controlled save/cache scenarios; it
+rejects additional or combined flags before allocating resources. A changed
+qualification input blocks the affected family for review. Unmapped families
+remain unexecuted under their existing gates. If no qualified family is
+affected, the result is `NOT RUN`; an applicable but unqualified family is `BLOCKED`.
+The execution API accepts only that baseline and derives actual source impact
+again inside the owner; caller-supplied analysis cannot become authority. Its
+reviewed fixture fingerprint uses canonical LF text for the effect contract,
+while the complete source snapshot remains bound to raw file bytes. The current
+execution pilot supports `win32` and `linux` only after their source-bound
+qualification receipts. Other platforms return `BLOCKED` before starting the
+leaf. Windows retains the existing taskkill process-tree boundary. Linux uses
+an inherited, redacted ownership marker plus same-UID PID/starttime identities
+to discover detached Chromium descendants and reparented children. It verifies
+identity before signaling, bounds discovery, attempts TERM, freezes remaining
+owned processes before KILL and proves no live owned processes before removing
+the registration or TEMP. The reviewed fixture inherits the marker; unknown
+environment-clearing detached descendants are outside qualification. Actual
+timeout, cancellation, orphan, fast-exit and unrelated-process preservation
+controls are required; source inspection alone cannot qualify a platform.
+Linux source selection and ordinary mandatory CI commands retain their existing
+behavior and obligations. The read-only CI source step is unchanged; this
+explicit qualified path does not add a second execution of the same leaf to
+the mandatory full CI chain.
+
+This leaf mounts the actual Form Runtime, Entity List controller and QueryClient
+with controlled action results and an in-memory source. It covers confirmed
+save/warning, Create-to-Edit handoff, cache-settlement failure, error/throw/no
+confirmation, opt-out, plain/controlled second-save failure and a fresh list
+read without resaving. This is `shared_owner_controlled_browser_behavior`, not
+native Database persistence, authenticated domain save or behavioral adoption
+of every applicable business consumer. The existing source report's
+`behavioralPass=false`, `ownerReviewSatisfied=false` and `releaseEvidence=false`
+remain intact; `qualifiedBehavioralPass` can describe only this actually
+completed family. Native readback, permissions, duplicate/data-loss protection,
+consumer parity and all other applicable obligations retain their existing
+owners and required verification.
+
+Execution reuses the existing owned Node-child lifecycle, log writer and cleanup
+ports in `isolated-public-verification.mts`; it does not prepare or pretend to
+have Supabase readiness. It uses a fresh owned evidence/TEMP directory, a
+restricted credential-free environment, ephemeral loopback HTTP and a new
+Browser context without Service Workers. Requests are fenced to the fixture
+origin or inline data; Blob URLs must retain the same owned origin. Finite page
+and owner deadlines remain active. Browser, server and fixture TEMP cleanup are
+all attempted after body failure, the original failure is preserved, and cleanup
+failure cannot emit PASS. The outer owner verifies child termination before
+removing its own TEMP tree; an abort is never a successful behavioral result.
+Process, filesystem and network cleanup require their actual scoped receipts,
+not merely source reachability or an assumed signal-handler outcome.
+
+Within one selection, overlapping registered wrappers resolve the qualified leaf
+once. Existing exclusive receipt and child-log writes refuse evidence-name reuse
+before another command starts. Each targeted receipt carries commit/source SHA,
+Run ID, owners/capabilities/contracts/consumers, test and canonical command,
+status/duration, attempt/retry, first failure, evidence hashes and cleanup.
+There is no automatic retry; a single attempt has
+`flakyStatus=NOT_ASSESSED_SINGLE_ATTEMPT`. An evidence failure cannot erase the
+original attempt. Categories are Product, QA / Test, Fixture, Harness, Environment
+and UNKNOWN. A directly observed OS error code can establish Environment; a
+zero-exit process with an invalid required terminal receipt establishes a
+Fixture protocol failure. Assertion labels, nonzero exit, timeout and cancellation
+alone remain UNKNOWN and cannot establish a Product diagnosis.
+
+Contract correspondence is per exported contract/symbol and its actual
+assertion dependency, including lexically bound runtime aliases. An unrelated
+export, message-only change, file length/hash check or unrelated vector cannot
+maintain another changed contract. Explicit changed expectations remain human
+reviewed; source correspondence never proves arbitrary assertion semantics,
+behavioral equivalence or Owner approval. Existing dynamic capability-axis
+coverage and approved geometry/presentation requirements remain protected.
+
+Performance memos live only within one source-read invocation: exact file/source
+semantic projection, immutable AST paths with fresh Set results, and immutable
+baseline Git blobs. There is no cross-SHA behavioral evidence cache. Inspector
+and targeted receipts measure source snapshot/hash, discovery, coherence,
+execution and evidence/cleanup; the existing fixture reports preparation,
+scenario execution and cleanup. Inclusive timings are not summed as disjoint
+costs. Comparable frozen-input measurements and source-bound runtime outcomes
+are retained in the existing Phase 05 evidence receipt; historical timings from
+different cache/load conditions cannot establish a speed improvement.
+
+The same existing receipt path records commit/source SHA, owners, capabilities,
+contracts, affected-consumer reasons, exact leaf command, duration, exit/result,
+log hashes/evidence reference and cleanup. Attempt and retry are explicit; this
+mode runs once with no automatic retry. Unobserved network counts or Browser
+completion remain unknown/null if the terminal fixture evidence is missing;
+absence of evidence is never recorded as zero calls or successful cleanup.
+A failed assertion or process is
+initially `UNKNOWN`, with its technical failure kind and original evidence
+retained. Reclassify Product/QA/Fixture/Environment only after supporting
+evidence; a label or a later green attempt cannot replace the failed result.
+The existing CI invocation stays read-only source selection and still executes
+zero candidate commands. This explicit local execution mode does not alter,
+prune or satisfy the existing eight CI jobs, complete `ci:check`, release risk
+requirements or separate Owner approvals.
+
+Changed semantic obligations require reviewed protection maintenance in this
+same batch record: the changed file/contract, selected existing check, protection
+source, exact before/current bytes and applicable assertion/vector binding.
+Missing or stale maintenance fails with file, owner and contract diagnostics.
+Existing dynamic capability-axis protection can be retained only when its actual
+source proves that bounded expansion; a free-form claim or changed Product code
+cannot update the expected contract. Contract types/signatures and explicit
+contract declarations, plus the existing manifest obligations, remain the
+authority. This bounded consistency check does not prove arbitrary behavioral
+equivalence or replace the review and runtime tests.
+
+Comments, formatting and reviewed narrative rationale are not presentation
+requirements. Contract data and enforced adoption evidence remain obligations.
+Ordinary CSS edits do not acquire historical numeric assertions merely by being
+changed; approved geometry and presentation requirements remain protected by
+their declared contracts and applicable behavioral/visual checks.
+
+`planLocalVerification` also reports `fast` targeted development commands with
+`releaseEvidence=false`; that report cannot authorize release execution. Its
+cost depends on the reviewed existing command/mode and is not inferred from an
+import edge. Release retains the current bounded A/B prefix and four Public
+gates; Full retains the canonical package prefix and high-risk admission.
+Full regression remains a separate release/high-risk obligation, not an
+automatic rerun after each small development edit.
+
 Positive command coverage may follow literal `npm run <registered-name>` chains
 joined by `&&` in the bound `package.json`, retaining the selected parent check
 as the execution boundary. Cycles, unknown names, dynamic commands and unsupported
@@ -258,6 +496,13 @@ shell syntax cannot establish coverage. Resolving a child entry must not append
 another child execution to the canonical Full Local Gate. Likewise, a dynamic
 cache query can preserve a proven fixed local module pathname; a dynamic pathname,
 URL base or shadowed constructor cannot establish an executable graph edge.
+
+An additional selected check can be omitted from the Full prefix only when the
+same named check is already positively invoked through a canonical prefix's
+literal npm chain, preserving its exact ordered commands, arguments and
+multiplicity. Keep the canonical prefix itself unchanged. Distinct named aliases
+remain distinct even with equal Node argv, since npm lifecycle context/hooks can
+differ; unsupported command syntax cannot justify pruning.
 
 The already-owned Admin adoption tail may supply positive coverage through the
 same fixed gate descriptor used by execution, bound to the complete fresh,

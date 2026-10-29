@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
@@ -12,7 +13,7 @@ import ts from "typescript";
 import sharp from "sharp";
 import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application-cli-pulse.mjs";
 import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
-import { sourceIncluded } from "./lib/verification-source-inventory.mts";
+import { selectSourceInventory, sourceIncluded } from "./lib/verification-source-inventory.mts";
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -340,9 +341,112 @@ async function currentInfrastructureOnly() {
   check("cleanup-only branch has no startup, download or SQL calls", () => {
     assert.ok(cleanupBranch?.elseStatement);
     const allowed = new Set(["prepareCompose", "discoverOwned", "requireThat", "recordFile", "safeRecord"]);
-    function inspect(node: ts.Node) { if (ts.isCallExpression(node)) assert.ok(allowed.has(node.expression.getText(file)), "Unexpected cleanup-only operation."); ts.forEachChild(node, inspect); }
-    inspect(cleanupBranch.thenStatement);
+    // Admit the reviewed read/ownership expressions, not every use of their
+    // helper names. AST identity ignores trivia, quotes and runtime-neutral TS.
+    const shape = (node: ts.Node): string => {
+      if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isAsExpression(node)
+        || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node)) return shape(node.expression);
+      const value = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null;
+      return JSON.stringify([node.kind, value, node.getChildren(node.getSourceFile()).map(shape)]);
+    };
+    const parse = (source: string) => ts.createSourceFile("cleanup-control.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const approvedCalls = new Set<string>();
+    for (const expression of [
+      "Object.keys(config!.volumes)", "Object.keys(config!.networks)",
+      'captured.filter(row => row.identity.kind === "container").map(row => row.identity.id)',
+      'captured.filter(row => row.identity.kind === "network")',
+      'inspect("network", item.identity.id)',
+      "Object.keys(object(network.containers ?? {})).every(id => ownedContainerIds.has(id))",
+      "sha256(readFileSync(path))", "Boolean(recoveryBaseline)", "Boolean(recoveryCurrentInventorySha256)",
+    ]) {
+      const collect = (node: ts.Node) => { if (ts.isCallExpression(node)) approvedCalls.add(shape(node)); ts.forEachChild(node, collect); };
+      collect(parse(expression + ";"));
+    }
+    // These ownership checks must run before authorizing cleanup. Mere call
+    // presence would also accept a dead branch or a predicate replaced by true.
+    const requiredPrefix = parse(`
+      await prepareCompose(); await discoverOwned();
+      requireThat(captured.length === SERVICES.length + Object.keys(config!.volumes).length + Object.keys(config!.networks).length,
+        "FAILED_CREATION_RESOURCE_SET_CHANGED", "cleanup-preflight");
+      if (recoveryManifest) {
+        requireThat(captured.length === recoveryManifest.length, "RECOVERY_RESOURCE_SET_CHANGED", "cleanup-preflight");
+        const ownedContainerIds = new Set(captured.filter(row => row.identity.kind === "container").map(row => row.identity.id));
+        for (const item of captured.filter(row => row.identity.kind === "network")) {
+          const network = await inspect("network", item.identity.id);
+          requireThat(Object.keys(object(network.containers ?? {})).every(id => ownedContainerIds.has(id)),
+            "FOREIGN_NETWORK_MEMBER", "cleanup-preflight");
+        }
+      }
+      for (const [path, expectedHash] of recoveryFiles) requireThat(sha256(readFileSync(path)) === expectedHash,
+        "RECOVERY_EVIDENCE_CHANGED", "cleanup-preflight");
+      created = true; recoveryAuthorized = true;
+    `).statements;
+    const approvedSet = shape(parse('new Set(captured.filter(row => row.identity.kind === "container").map(row => row.identity.id));').statements[0]);
+    const protectedNames = new Set([...allowed, "Object", "Set", "inspect", "object", "sha256", "readFileSync", "Boolean", "captured", "recoveryFiles", "recoveryManifest"]);
+    const assertCleanupOperations = (block: ts.Statement) => {
+      assert.ok(ts.isBlock(block));
+      assert.ok(block.statements.length >= requiredPrefix.length, "Cleanup ownership checks are missing.");
+      assert.deepEqual(block.statements.slice(0, requiredPrefix.length).map(shape), requiredPrefix.map(shape),
+        "Cleanup must validate resource identities, network ownership and evidence before authorization.");
+      const assertBinding = (name: ts.BindingName) => {
+        if (ts.isIdentifier(name)) assert.ok(!protectedNames.has(name.text), "Cleanup cannot shadow a reviewed owner or input.");
+        else for (const element of name.elements) if (ts.isBindingElement(element)) assertBinding(element.name);
+      };
+      function inspect(node: ts.Node) {
+        if (ts.isVariableDeclaration(node) || ts.isParameter(node)) assertBinding(node.name);
+        if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name) assertBinding(node.name);
+        if (ts.isCallExpression(node)) assert.ok(
+          (ts.isIdentifier(node.expression) && allowed.has(node.expression.text)) || approvedCalls.has(shape(node)),
+          "Unexpected cleanup-only operation.",
+        );
+        if (ts.isNewExpression(node)) {
+          const statement = parse(node.getText(node.getSourceFile()) + ";").statements[0];
+          assert.equal(shape(statement), approvedSet, "Unexpected cleanup-only constructor.");
+        }
+        ts.forEachChild(node, inspect);
+      }
+      inspect(block);
+    };
+    assertCleanupOperations(cleanupBranch.thenStatement);
     assert.ok(cleanupBranch.elseStatement.getText(file).includes('currentStage = "upstream-provenance"'));
+    const actual = cleanupBranch.thenStatement.getText(file);
+    const blockFrom = (source: string) => {
+      const declaration = parse("async function cleanupControl() " + source).statements[0];
+      assert.ok(ts.isFunctionDeclaration(declaration) && declaration.body);
+      return declaration.body;
+    };
+    check("cleanup ownership proof accepts actual CRLF, quote and parenthesis variants", () => {
+      const equivalent = actual.replace(/\r\n/gu, "\n").replace(/\n/gu, "\r\n")
+        .replace('inspect("network", item.identity.id)', "inspect('network', item.identity.id)")
+        .replace("Object.keys(config!.volumes)", "Object.keys((config!).volumes)");
+      assert.notEqual(equivalent, actual);
+      assertCleanupOperations(blockFrom(equivalent));
+    });
+    const reject = (name: string, from: string, to: string) => check("cleanup ownership proof rejects " + name, () => {
+      const mutant = actual.replace(from, to); assert.notEqual(mutant, actual, "Control must mutate the actual cleanup branch.");
+      assert.throws(() => assertCleanupOperations(blockFrom(mutant)));
+    });
+    for (const [name, operation] of [
+      ["download", 'fetch("https://unowned.invalid")'], ["startup", 'startService("db")'],
+      ["connection", "connect()"], ["SQL", 'db.query("select 1")'],
+      ["migration", "pushApplicationMigrations()"], ["unknown helper", "unreviewedRecoveryOperation()"],
+    ]) {
+      reject("direct " + name, 'recordFile("owned-resources.json", captured)', operation);
+      reject("nested " + name, 'recordFile("owned-resources.json", captured)', 'recordFile("owned-resources.json", () => { ' + operation + '; return captured; })');
+    }
+    for (const [name, from, to] of [
+      ["non-network inspection", 'inspect("network", item.identity.id)', 'inspect("container", item.identity.id)'],
+      ["foreign metadata identity", 'inspect("network", item.identity.id)', 'inspect("network", foreignId)'],
+      ["foreign evidence read", "readFileSync(path)", 'readFileSync(".env.local")'],
+      ["missing evidence hash", "sha256(readFileSync(path)) === expectedHash", "true"],
+      ["foreign network membership", "ownedContainerIds.has(id)", "true"],
+      ["wrong manifest bound", "captured.length === recoveryManifest.length", "captured.length >= recoveryManifest.length"],
+      ["dead ownership branch", "if (recoveryManifest)", "if (false && recoveryManifest)"],
+      ["early cleanup authorization", "await prepareCompose();", "recoveryAuthorized = true; await prepareCompose();"],
+      ["missing captured ownership discovery", "await discoverOwned();", ""],
+      ["shadowed hash helper", 'recordFile("owned-resources.json", captured)', 'recordFile("owned-resources.json", captured); const sha256 = () => expectedHash'],
+      ["unknown constructor", 'recordFile("owned-resources.json", captured)', 'recordFile("owned-resources.json", captured); new UnreviewedCleanupWorker()'],
+    ]) reject(name, from, to);
   });
   check("cleanup compose preparation only reads config and uses generated local values", () => {
     assert.ok(prepareCompose);
@@ -362,7 +466,70 @@ async function currentInfrastructureOnly() {
     const helper = texts[sources[3]];
     assert.ok(helper.includes("await context.assertOwned();") && helper.includes("assertApplicationMigrationStage(request.stage, corpus())"));
     assert.ok(helper.includes('"--skip-vault"') && helper.includes('"--output-format", "json"'));
-    assert.ok(helper.includes('PGPASSWORD: password') && !helper.includes("context.password}@"));
+    const unwrap = (node: ts.Node): ts.Node => ts.isParenthesizedExpression(node) || ts.isAsExpression(node)
+      || ts.isNonNullExpression(node) || ts.isTypeAssertionExpression(node) ? unwrap(node.expression) : node;
+    const shape = (input: ts.Node): string => {
+      const node = unwrap(input), value = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null;
+      return JSON.stringify([node.kind, value, node.getChildren(node.getSourceFile()).map(shape)]);
+    };
+    const parse = (text: string) => ts.createSourceFile("cli-binding-control.mts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const expectedArguments = parse('const args = ["db", "push", "--db-url", `postgresql://postgres@127.0.0.1:${context.port}/postgres`, "--skip-vault", "--workdir", workdir, "--output-format", "json", request.mode === "dry-run" ? "--dry-run" : "--yes"];').statements[0];
+    assert.ok(ts.isVariableStatement(expectedArguments));
+    const expectedArgv = expectedArguments.declarationList.declarations[0].initializer!;
+    const assertPrivatePushBinding = (text: string) => {
+      const tree = parse(text);
+      const declaration = (name: string) => {
+        const matches = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+        assert.equal(matches.length, 1, `The actual ${name} owner must be unique.`);
+        assert.ok(matches[0].body); return matches[0];
+      };
+      const push = declaration("pushApplicationMigrations"), environment = declaration("applicationMigrationChildEnvironment");
+      const pushText = push.getText(tree);
+      assert.ok(pushText.includes("await context.assertOwned();") && pushText.includes("assertApplicationMigrationStage(request.stage, corpus())"));
+      assert.ok(pushText.includes('"--skip-vault"') && pushText.includes('"--output-format", "json"'));
+      assert.ok(!pushText.includes("context.password}@"), "Migration push must never interpolate the password into its URL.");
+      const variables = (scope: ts.Node, name: string) => {
+        const matches: ts.VariableDeclaration[] = [];
+        const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) matches.push(node); ts.forEachChild(node, visit); };
+        visit(scope); assert.equal(matches.length, 1, `${name} must have one actual binding.`); assert.ok(matches[0].initializer); return matches[0].initializer;
+      };
+      assert.equal(shape(variables(push, "args")), shape(expectedArgv), "Migration push argv must retain its reviewed password-free target and flags.");
+      const env = variables(push, "env");
+      assert.ok(ts.isCallExpression(env) && ts.isIdentifier(env.expression) && env.expression.text === "applicationMigrationChildEnvironment");
+      assert.deepEqual(env.arguments.map(node => node.getText(tree)), ["home", "workdir", "context.password"]);
+      const childEnvironment = variables(environment, "childEnvironment");
+      assert.ok(ts.isObjectLiteralExpression(childEnvironment));
+      const password = childEnvironment.properties.filter((node): node is ts.PropertyAssignment => ts.isPropertyAssignment(node) && node.name.getText(tree) === "PGPASSWORD");
+      assert.equal(password.length, 1, "The private environment must retain exactly one password binding.");
+      assert.ok(ts.isIdentifier(password[0].initializer) && password[0].initializer.text === "password");
+      const returns = environment.body!.statements.filter(ts.isReturnStatement);
+      assert.equal(returns.length, 1); assert.ok(returns[0].expression);
+      const returned = unwrap(returns[0].expression);
+      assert.ok(ts.isIdentifier(returned) && returned.text === "childEnvironment", "The actual private environment must be returned.");
+      const runs: ts.CallExpression[] = [];
+      const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "run") runs.push(node); ts.forEachChild(node, visit); };
+      visit(push); assert.equal(runs.length, 1);
+      assert.deepEqual(runs[0].arguments.map(node => node.getText(tree)), ["state.binary", "args", "workdir", "env", "control"], "The actual CLI runner must receive the private environment separately from argv.");
+    };
+    assertPrivatePushBinding(helper);
+    check("CLI password-free argv proof preserves separate owned SEO and type-generation URL helpers", () => {
+      assertPrivatePushBinding(helper.replace(/\r\n/gu, "\n").replace(/\n/gu, "\r\n"));
+    });
+    for (const [name, from, to] of [
+      ["password URL in push argv", "postgresql://postgres@127.0.0.1:${context.port}/postgres", "postgresql://postgres:${context.password}@127.0.0.1:${context.port}/postgres"],
+      ["password as an extra push argument", '["db", "push", "--db-url",', '["db", "push", context.password, "--db-url",'],
+      ["missing private environment password", "PGPASSWORD: password", "REMOVED_PASSWORD: password"],
+      ["incorrect private environment password", "PGPASSWORD: password", 'PGPASSWORD: ""'],
+      ["wrong returned environment", "return childEnvironment as NodeJS.ProcessEnv", "return source as NodeJS.ProcessEnv"],
+      ["disconnected push environment", "applicationMigrationChildEnvironment(home, workdir, context.password)", "applicationMigrationChildEnvironment(home, workdir, unownedPassword)"],
+      ["disconnected CLI runner environment", "run(state.binary, args, workdir, env, control)", "run(state.binary, args, workdir, process.env, control)"],
+      ["missing ownership check", "await context.assertOwned();", "void context;"],
+      ["missing migration-stage recheck", "assertApplicationMigrationStage(request.stage, corpus())", "void request.stage"],
+      ["missing skip-vault boundary", '"--skip-vault"', '"--skip-other"'],
+    ]) check("CLI private push binding rejects " + name, () => {
+      const mutant = helper.replaceAll(from, to); assert.notEqual(mutant, helper, "Control must mutate the actual CLI helper source.");
+      assert.throws(() => assertPrivatePushBinding(mutant));
+    });
     assert.ok(!/\bfetch\s*\(/u.test(helper));
   });
   for (const source of sources) assert.equal(sha256(readSource(source)), sourceHashes[source], "Current infrastructure changed during verification.");
@@ -1381,6 +1548,518 @@ function verifyFinalQualityGatePlan() {
   cases.push("Hero prerequisite build and journey precede the complete unchanged canonical Quality prefix and Public tail");
 }
 
+/** Execute source discovery and admission with in-memory source bytes, never Browser/DB transports. */
+function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated-public-verification.mts"),
+  "deriveLocalVerificationSourceImpact" | "localVerificationSemanticSource" | "planLocalVerification" | "assertLocalVerificationRequest" | "localVerificationCommandSteps"
+  | "deriveLocalVerificationSourceCoherence" | "resolveLocalVerificationCiBaseline" | "localVerificationCiDiagnostic">,
+  repositoryScripts: Record<string, string>) {
+  const authority = "src/lib/admin/interaction-system/adoption-manifest.ts", formAuthority = "src/lib/admin/form-system/adoption-manifest.ts";
+  const owner = "src/components/admin/ui/Phase03Owner.tsx", consumer = "src/app/admin/phase03/Consumer.tsx";
+  const contract = "src/lib/admin/phase03/contracts.ts", entry = "scripts/verify-phase03-contract.mts", css = "src/styles/phase03.css";
+  const browser = "scripts/qa-phase03-browser.mjs", database = "scripts/qa-phase03-database.mjs", checkName = "verify:phase03-owner";
+  const capability = 'widget: { owner: "Phase03Owner", sourceFiles: ["' + owner + '"], executableBindings: [{sourceFile: "' + owner + '", exportNames:["Phase03Owner"]}] }';
+  const authoritySource = 'function defineAdminSharedCapabilitySet(value) { return value; } export const ADMIN_CURRENT_SHARED_CAPABILITY_SET = defineAdminSharedCapabilitySet({' + capability + '});\n'
+    + 'export function adminSharedCapabilityKeys(capabilitySet) { return Object.keys(capabilitySet); }\n'
+    + 'export const ADMIN_COLLECTION_SURFACE_ADOPTION = {surfaces:[{id:"phase03-consumer",pageSourceFiles:["' + consumer + '"],presentationSourceFiles:[],capabilityAudit:{}}]};';
+  const guardSource = 'import assert from "node:assert/strict"; import { readFileSync } from "node:fs"; const target="' + contract + '"; const value=readFileSync(target,"utf8"); assert.ok(value.includes("value: string")); const ownerPath="' + owner + '"; const cssPath="' + css + '";';
+  const originals = new Map<string, string | Buffer>([
+    [authority, authoritySource], [formAuthority, "export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [];"],
+    [owner, 'export function Phase03Owner() { return "before"; }'],
+    [consumer, 'import {Phase03Owner} from "../../../components/admin/ui/Phase03Owner"; export function Consumer() { return Phase03Owner(); }'],
+    [contract, "export type RecordContract = { value: string };"], [entry, guardSource], [css, ".card { gap: 8px; }"],
+    [browser, 'const marker="' + owner + '";'], [database, 'const marker="' + owner + '";'],
+  ]);
+  const scripts: Record<string, string> = { lint: repositoryScripts.lint, typecheck: repositoryScripts.typecheck,
+    [checkName]: "node --experimental-strip-types " + entry,
+    "qa:phase03-browser": "node " + browser + " --browser", "qa:phase03-database": "node " + database + " --database" };
+  const tail = ["build", "verify:product-surface-identity-build", "verify:platform-contracts", "test:e2e:public"];
+  for (const name of tail) scripts[name] = repositoryScripts[name];
+  scripts["ci:check"] = ["lint", "typecheck", checkName, ...tail].map(name => "npm run " + name).join(" && ");
+  type Impact = import("./lib/isolated-public-verification.mts").LocalVerificationImpact;
+  type Actual = import("./lib/isolated-public-verification.mts").LocalVerificationInputs;
+  const scenario = (edits: Array<[string, string | Buffer | undefined]>, baseline = originals) => {
+    const current = new Map(baseline);
+    for (const [file, source] of edits) if (source === undefined) current.delete(file); else current.set(file, source);
+    const changes: import("./lib/isolated-public-verification.mts").LocalVerificationChange[] = edits.map(([file]) => ({
+      file, beforeSha256: baseline.has(file) ? sha256(baseline.get(file)!) : null, afterSha256: current.has(file) ? sha256(current.get(file)!) : null,
+      risk: file === contract || file === authority || file === formAuthority ? "C" : file.startsWith("scripts/") ? "E" : "A",
+      owner: file, reviewedBy: "phase03-source-impact-controls", rationale: "Exact in-memory source control.", bounded: true, nonImportImpactReviewed: true,
+      contracts: [contract], consumers: [consumer], checks: [checkName],
+    }));
+    const impact: Impact = { baselineHead: "a".repeat(40), finalHead: "b".repeat(40), sourceSha256: "c".repeat(64), changes };
+    const actual: Actual = { baselineHead: impact.baselineHead, finalHead: impact.finalHead, sourceSha256: impact.sourceSha256,
+      changes: changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 })),
+      changeImpact: api.deriveLocalVerificationSourceImpact(scripts, changes, current, baseline) };
+    return { impact, actual, current, baseline };
+  };
+  const maintain = (value: ReturnType<typeof scenario>, mode: "updated" | "existing_dynamic_axes" = "updated") => {
+    value.impact.protectionMaintenance = value.actual.changeImpact!.obligations.map(obligation => ({ file: obligation.file, contract: obligation.contract,
+      protectionFile: entry, check: checkName, beforeSha256: sha256(value.baseline.get(entry)!), afterSha256: sha256(value.current.get(entry)!),
+      mode, reviewedBy: "phase03-contract-maintenance-review", rationale: "The source-bound changed assertion preserves this exact obligation.",
+      assertionSha256: value.actual.changeImpact!.protections.find(protection => protection.file === entry && protection.check === checkName)?.assertionChanges
+        .find(assertion => assertion.references.includes(obligation.file) && assertion.contracts.includes(obligation.contract))?.sha256 }));
+  };
+  const plan = (value: ReturnType<typeof scenario>) => api.planLocalVerification(scripts, value.impact, value.actual);
+  check("source impact small owner edit preserves contracts and reports candidates without scheduling Browser/Database", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "after"; }']]), result = plan(value);
+    assert.equal(result.mode, "bounded"); assert.equal(result.changeImpact?.proofBoundary, "source_discovery_only");
+    const row = result.changeImpact!.changes.find(row => row.file === owner)!;
+    assert.ok(row.owners.includes("Phase03Owner") && row.capabilities.includes("widget"));
+    assert.ok(row.consumers.includes(authority + "#phase03-consumer"));
+    assert.ok(row.candidateChecks.includes("qa:phase03-browser") && row.candidateChecks.includes("qa:phase03-database"));
+    assert.deepEqual(result.fast.prefix, ["lint", "typecheck", checkName]); assert.equal(result.fast.releaseEvidence, false);
+    assert.deepEqual(result.changeImpact!.obligations, []);
+    assert.deepEqual(result.changeImpact!.protections, [], "No unchanged-obligation edit should traverse protection assertions.");
+    assert.throws(() => api.assertLocalVerificationRequest({ localVerification: value.impact, additionalSourceFiles: [] }, result.fast as unknown as ReturnType<typeof api.planLocalVerification>), /Fast report/u);
+  });
+  check("shared owner impact discovers every statically registered direct and indirect consumer without granting adoption PASS", () => {
+    const second = "src/app/admin/phase03/Indirect.tsx", baseline = new Map(originals);
+    baseline.set(second, 'import {Consumer} from "./Consumer"; export function Indirect() { return Consumer(); }');
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"second-consumer",sourceFiles:["' + second + '"],capabilityAudit:{}}];');
+    const value = scenario([[owner, 'export function Phase03Owner() { return "shared after"; }']], baseline);
+    assert.ok(value.actual.changeImpact!.changes[0].consumers.includes(formAuthority + "#second-consumer"));
+    assert.equal(value.actual.changeImpact!.proofBoundary, "source_discovery_only");
+  });
+  check("unknown generated adoption stays explicit and widens only the affected shared owner", () => {
+    const baseline = new Map(originals);
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = values.map(value => ({id:`generated-${value}`,sourceFiles:[value],capabilityAudit:{}}));');
+    const shared = scenario([[owner, 'export function Phase03Owner() { return "shared"; }']], baseline);
+    assert.equal(plan(shared).mode, "full"); assert.ok(shared.actual.changeImpact!.changes[0].unresolved.some(value => value.includes("generated_or_dynamic_consumer")));
+    const small = scenario([[css, ".card { gap: 12px; }"]], baseline);
+    assert.equal(plan(small).mode, "bounded"); assert.deepEqual(small.actual.changeImpact!.obligations, []);
+  });
+  check("contract drift without maintained protection fails with file owner and contract diagnostic", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"]]);
+    assert.throws(() => plan(value), error => error instanceof Error && error.message.includes(contract) && error.message.includes("owner=") && error.message.includes("#RecordContract"));
+  });
+  check("exact-byte contract maintenance requires a newly changed assertion linked to that contract", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    maintain(value); const result = plan(value); assert.equal(result.mode, "full"); assert.equal(result.risk, "E");
+    const review = value.impact.protectionMaintenance![0];
+    value.impact.protectionMaintenance = [{ ...review, afterSha256: "f".repeat(64) }]; assert.throws(() => plan(value), /stale protection current bytes/u);
+  });
+  check("source-confirmed explicit contract changes cannot be mislabeled A to avoid the C full-risk floor", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    value.impact.changes = value.impact.changes.map(row => ({ ...row, risk: "A" }));
+    value.actual.verificationCoverage = [{ file: entry, checks: [checkName] }]; maintain(value);
+    const result = plan(value); assert.equal(result.risk, "C"); assert.equal(result.mode, "full");
+  });
+  check("repeated canonical aliases share only identical per-entry protection metadata within the same exact source snapshot", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    const commands = { ...scripts, "verify:phase03-owner-wrapper": "npm run " + checkName, "verify:phase03-owner-alias": scripts[checkName] };
+    const analysis = api.deriveLocalVerificationSourceImpact(commands, value.actual.changes, value.current, value.baseline);
+    const rows = analysis.protections.filter(protection => protection.file === entry);
+    assert.equal(rows.length, 3); assert.ok(rows[0].assertionChanges.length > 0);
+    for (const row of rows.slice(1)) {
+      assert.equal(row.afterSha256, rows[0].afterSha256); assert.equal(row.beforeSha256, rows[0].beforeSha256);
+      assert.equal(row.assertionChanges, rows[0].assertionChanges, "An alias must reuse the exact per-entry immutable assertion projection.");
+      assert.deepEqual(row.references, rows[0].references);
+    }
+    const changed = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: string"')]]);
+    const next = api.deriveLocalVerificationSourceImpact(commands, changed.actual.changes, changed.current, changed.baseline).protections.find(protection => protection.file === entry)!;
+    assert.notEqual(next.afterSha256, rows[0].afterSha256); assert.notEqual(next.assertionChanges, rows[0].assertionChanges);
+    assert.notDeepEqual(next.assertionChanges.map(assertion => assertion.sha256), rows[0].assertionChanges.map(assertion => assertion.sha256));
+  });
+  for (const [label, nextGuard] of [["logging-only", guardSource + '\nconsole.log("changed");'], ["unrelated assertion", guardSource + "\nassert.equal(1, 2);"], ["comments-only", guardSource + "\n// contract review"],
+    ["diagnostic-only", guardSource.replace('assert.ok(value.includes("value: string"))', 'assert.ok(value.includes("value: string"),"new message")')]] as const)
+    check("contract maintenance rejects " + label + " changes as replacement protection", () => {
+      const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, nextGuard]]);
+      maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    });
+  check("changed local expected vectors preserve assertion identity and still require the exact reviewed protection fingerprint", () => {
+    const baseline = new Map(originals), vectorGuard = guardSource.replace('assert.ok(value.includes("value: string"))', 'const expected="value: string"; assert.ok(value.includes(expected))');
+    baseline.set(entry, vectorGuard);
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, vectorGuard.replace('expected="value: string"', 'expected="revision: number"')]], baseline);
+    maintain(value); assert.equal(plan(value).mode, "full");
+    value.impact.protectionMaintenance = value.impact.protectionMaintenance!.map(review => ({ ...review, assertionSha256: "f".repeat(64) }));
+    assert.throws(() => plan(value), /real verification-source change/u);
+  });
+  check("contract-specific assertion projection rejects a changed assertion about an unrelated export in the same file", () => {
+    const baseline = new Map(originals), both = "export type RecordContract = { value: string }; export type OtherContract = { other: number };";
+    const otherGuard = guardSource.replace('"value: string"', '"other:number"');
+    baseline.set(contract, both); baseline.set(entry, otherGuard);
+    const value = scenario([[contract, both.replace("value: string", "value: string; revision: number")],
+      [entry, otherGuard.replace('"other:number"', '"other: number"')]], baseline);
+    assert.ok(value.actual.changeImpact!.protections[0].assertionChanges.some(assertion => assertion.references.includes(contract)), "Preserve the demonstrated same-file relationship.");
+    assert.ok(value.actual.changeImpact!.protections[0].assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#RecordContract")));
+    maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "DRIFT"); assert.ok(result.diagnostics.some(message => message.includes(contract + "#RecordContract")));
+  });
+  for (const [label, nextGuard] of [
+    ["whole-file length", guardSource + "\nassert.equal(value.length,1234);"],
+    ["unchanged export name", guardSource + '\nassert.ok(value.includes("RecordContract"));'],
+    ["diagnostic symbol mention", guardSource.replace('assert.ok(value.includes("value: string"))', 'assert.ok(value.includes("value: string"),"RecordContract revision: number")')],
+    ["unrelated local expected vector", guardSource + '\nconst otherExpected="other: number"; assert.ok(value.includes(otherExpected));'],
+  ] as const) check("contract specificity rejects " + label + " as updated protection", () => {
+    const baseline = new Map(originals); baseline.set(contract, "export type RecordContract = { value: string }; export type OtherContract = { other: number };");
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number }; export type OtherContract = { other: number };"], [entry, nextGuard]], baseline);
+    maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
+  });
+  check("each changed export requires its own applicable assertion rather than borrowing a sibling contract", () => {
+    const baseline = new Map(originals), before = "export type RecordContract = { value: string }; export type OtherContract = { other: number };";
+    baseline.set(contract, before);
+    const next = "export type RecordContract = { value: string; revision: number }; export type OtherContract = { other: number; enabled: boolean };";
+    const firstGuard = guardSource.replace('"value: string"', '"revision: number"');
+    const partial = scenario([[contract, next], [entry, firstGuard]], baseline);
+    maintain(partial); assert.throws(() => plan(partial), /real verification-source change/u);
+    const rejected = api.deriveLocalVerificationSourceCoherence(scripts, { ...partial.actual, sourceSha256: partial.actual.changeImpact!.sourceSha256 });
+    assert.equal(rejected.status, "DRIFT"); assert.equal(rejected.fast.correspondence.find(row => row.contract.endsWith("#RecordContract"))?.protected, true);
+    assert.equal(rejected.fast.correspondence.find(row => row.contract.endsWith("#OtherContract"))?.protected, false);
+    const complete = scenario([[contract, next], [entry, firstGuard + '\nassert.ok(value.includes("enabled: boolean"));']], baseline);
+    maintain(complete); assert.equal(plan(complete).mode, "full");
+    const accepted = api.deriveLocalVerificationSourceCoherence(scripts, { ...complete.actual, sourceSha256: complete.actual.changeImpact!.sourceSha256 });
+    assert.equal(accepted.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(accepted.behavioralPass, false);
+  });
+  check("changed runtime export invocation through an imported alias binds its exact contract without generating expectations", () => {
+    const baseline = new Map(originals), oldGuard = 'import assert from "node:assert/strict"; import {saveRecord as actualSave} from "../' + contract + '"; assert.equal(actualSave("before"), "before");';
+    baseline.set(contract, "export function saveRecord(value: string) { return value; }"); baseline.set(entry, oldGuard);
+    const value = scenario([[contract, "export function saveRecord(value: string, confirmed: boolean) { return confirmed ? value : undefined; }"],
+      [entry, oldGuard.replace('actualSave("before"), "before"', 'actualSave("after", true), "after"')]], baseline);
+    const assertion = value.actual.changeImpact!.protections[0].assertionChanges.find(row => row.contracts.includes(contract + "#saveRecord"));
+    assert.ok(assertion); maintain(value); assert.equal(plan(value).mode, "full");
+  });
+  check("a changed data export binds only the asserted imported value and cannot borrow a sibling numeric assertion", () => {
+    const baseline = new Map(originals), oldGuard = 'import assert from "node:assert/strict"; import {SAVE_LIMIT as actualLimit,OTHER_LIMIT} from "../' + contract + '"; assert.equal(actualLimit,1); assert.equal(OTHER_LIMIT,2);';
+    baseline.set(contract, "export const SAVE_LIMIT=1; export const OTHER_LIMIT=2;"); baseline.set(entry, oldGuard);
+    const valid = scenario([[contract, "export const SAVE_LIMIT=3; export const OTHER_LIMIT=2;"], [entry, oldGuard.replace("actualLimit,1", "actualLimit,3")]], baseline);
+    maintain(valid); assert.equal(plan(valid).mode, "full");
+    const unrelated = scenario([[contract, "export const SAVE_LIMIT=3; export const OTHER_LIMIT=2;"], [entry, oldGuard.replace("OTHER_LIMIT,2", "OTHER_LIMIT,2+0")]], baseline);
+    maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
+    assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...unrelated.actual, sourceSha256: unrelated.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
+  });
+  check("repeated local assertion names resolve only their nearest lexical contract source", () => {
+    const baseline = new Map(originals), both = "export type RecordContract = { value: string }; export type OtherContract = { other: number };";
+    const oldGuard = 'import assert from "node:assert/strict"; import {readFileSync} from "node:fs"; '
+      + 'function first(){const value=readFileSync("' + contract + '","utf8"); assert.ok(value.includes("value: string"));} '
+      + 'function second(){const value="local unrelated value"; assert.equal(value,"local unrelated value");}';
+    baseline.set(contract, both); baseline.set(entry, oldGuard);
+    const valid = scenario([[contract, both.replace("value: string", "value: string; revision: number")], [entry, oldGuard.replace('"value: string"', '"revision: number"')]], baseline);
+    maintain(valid); assert.equal(plan(valid).mode, "full");
+    const unrelated = scenario([[contract, both.replace("value: string", "value: string; revision: number")], [entry, oldGuard.replace('assert.equal(value,"local unrelated value")', 'assert.equal(value,"revision: number")')]], baseline);
+    maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
+  });
+  check("typed owner API parameters stay scoped and reject a foreign same-named runtime export", () => {
+    const baseline = new Map(originals), foreign = "src/lib/admin/phase03/foreign.ts";
+    const oldGuard = 'import assert from "node:assert/strict"; import {saveRecord} from "../' + contract + '"; import {saveRecord as foreignSave} from "../' + foreign
+      + '"; function ownerCase(api: Pick<typeof import("../' + contract + '"),"saveRecord">){const actual=api.saveRecord("before"); assert.equal(actual,"before");} '
+      + 'function foreignCase(api: Pick<typeof import("../' + foreign + '"),"saveRecord">){const actual=api.saveRecord("other"); assert.equal(actual,"other");} ownerCase({saveRecord}); foreignCase({saveRecord:foreignSave});';
+    baseline.set(contract, "export function saveRecord(value: string) { return value; }"); baseline.set(foreign, "export function saveRecord(value: string) { return value; }"); baseline.set(entry, oldGuard);
+    const next = "export function saveRecord(value: string, confirmed: boolean) { return confirmed ? value : undefined; }";
+    const valid = scenario([[contract, next], [entry, oldGuard.replace('api.saveRecord("before")', 'api.saveRecord("before",true)')]], baseline);
+    maintain(valid); assert.equal(plan(valid).mode, "full");
+    const unrelated = scenario([[contract, next], [entry, oldGuard.replace('api.saveRecord("other")', 'api.saveRecord("other",true)')]], baseline);
+    maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
+  });
+  check("explicit removed-field rejection remains valid source correspondence and cannot establish behavioral PASS", () => {
+    const baseline = new Map(originals); baseline.set(contract, "export type RecordContract = { value: string; obsolete: number };");
+    const value = scenario([[contract, "export type RecordContract = { value: string };"], [entry, guardSource + '\nassert.equal(value.includes("obsolete: number"),false);']], baseline);
+    maintain(value); assert.equal(plan(value).mode, "full");
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+  });
+  check("the maintained impact type carries exact assertion contract correspondence beside file references", () => {
+    const source = readSource("scripts/lib/isolated-public-verification.mts");
+    assert.ok(source.includes("assertionChanges: readonly { sha256: string; references: readonly string[]; contracts: readonly string[] }[]"));
+  });
+  check("reviewed QA input and maintenance records retain exact identity and source-discovery boundaries", () => {
+    const verificationOwnerTypeSource = readSource("scripts/lib/isolated-public-verification.mts").replaceAll("\r\n", "\n");
+    assert.ok(verificationOwnerTypeSource.includes("export type LocalVerificationInputs = {\n  baselineHead: string; finalHead: string; sourceSha256: string;"));
+    assert.ok(verificationOwnerTypeSource.includes("changeImpact?: LocalVerificationSourceImpact;"));
+    assert.ok(verificationOwnerTypeSource.includes("changeImpact?: LocalVerificationSourceImpact;\n};"));
+    assert.ok(verificationOwnerTypeSource.includes('export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact"> & {\n  changes: readonly LocalVerificationChange[];'));
+    assert.ok(verificationOwnerTypeSource.includes("export type LocalVerificationProtectionMaintenance = {\n  file: string; contract: string; protectionFile: string; check: string;\n  beforeSha256: string | null; afterSha256: string;"));
+  });
+  check("contract evidence data and approved presentation values remain semantic obligations", () => {
+    const baseline = new Map(originals); baseline.set(contract, 'export const contractData={evidence:"required"};');
+    assert.equal(scenario([[contract, 'export const contractData={evidence:"different"};']], baseline).actual.changeImpact!.obligations.length, 1);
+    const presentation = 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"form",sourceFiles:["' + consumer + '"],capabilityAudit:{},presentationContract:{requirements:[{target:"grid",requirement:"required",presentation:{port:"columns",value:"2"},evidence:["required-proof"]}]}}];';
+    baseline.set(formAuthority, presentation);
+    const changed = scenario([[formAuthority, presentation.replace('value:"2"', 'value:"3"')]], baseline);
+    assert.throws(() => plan(changed), /manifest-obligations/u);
+    assert.equal(scenario([[formAuthority, presentation.replace('required-proof', 'different-proof')]], baseline).actual.changeImpact!.obligations.length, 1);
+  });
+  check("valid TypeScript angle assertions and generic arrows parse while malformed contracts fail closed", () => {
+    assert.ok(api.localVerificationSemanticSource("contract.mts", "export const cast = <string>value; export const identity = <T>(value:T) => value;").includes("identity"));
+    assert.throws(() => api.localVerificationSemanticSource("contract.ts", "export type Broken = {"), /malformed/u);
+    const value = scenario([[contract, "  // formatting\nexport type RecordContract = { value: string };\n"]]);
+    assert.deepEqual(value.actual.changeImpact!.obligations, []);
+    const baseline = new Map(originals); baseline.set(owner, 'export const Owner = (value: string): string => value;');
+    const signature = scenario([[owner, 'export const Owner = (value: number): string => String(value);']], baseline);
+    assert.equal(signature.actual.changeImpact!.obligations[0].contract, owner + "#Owner");
+    assert.throws(() => plan(signature), /Contract drift/u);
+  });
+  check("binary source bytes stay exact and opaque asset impact is unresolved instead of decoded or silently bounded", () => {
+    const asset = "public/phase03.png", baseline = new Map(originals); baseline.set(asset, Buffer.from([0, 255, 1]));
+    const value = scenario([[asset, Buffer.from([0, 254, 1])]], baseline);
+    assert.deepEqual(value.actual.changeImpact!.obligations, []); assert.equal(plan(value).mode, "full");
+    value.current.delete(asset);
+    assert.throws(() => api.deriveLocalVerificationSourceImpact(scripts, value.actual.changes, value.current, baseline), /current bytes differ/u);
+  });
+  check("added and deleted contract boundaries cannot borrow missing or stale source bytes", () => {
+    const added = "src/lib/admin/phase03/new-contract.ts", value = scenario([[added, "export type Added = {id: string};"]]);
+    assert.equal(value.actual.changeImpact!.obligations[0].before, null); assert.throws(() => plan(value), /Contract drift/u);
+    const removed = scenario([[contract, undefined]]); assert.equal(removed.actual.changeImpact!.obligations[0].after, null);
+    const stale = new Map(originals); stale.set(contract, "export type RecordContract = { value: number };");
+    assert.throws(() => api.deriveLocalVerificationSourceImpact(scripts, removed.actual.changes, removed.current, stale), /baseline bytes differ/u);
+  });
+  check("existing dynamic axes require actual Object.keys derivation and unchanged source-bound audit protection", () => {
+    const dynamicGuard = 'import assert from "node:assert/strict"; import {ADMIN_CURRENT_SHARED_CAPABILITY_SET,adminSharedCapabilityKeys} from "../src/lib/admin/interaction-system/adoption-manifest.ts";\n'
+      + 'const currentSharedCapabilityKeys=adminSharedCapabilityKeys(ADMIN_CURRENT_SHARED_CAPABILITY_SET); const decisions={}; const failures=[];\n'
+      + 'if(Object.keys(decisions).length!==currentSharedCapabilityKeys.length) failures.push("unclassified_capability_axis");\n'
+      + 'for(const capability of currentSharedCapabilityKeys) { assert.ok(ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability]); assert.ok(decisions[capability]); }';
+    const baseline = new Map(originals); baseline.set(entry, dynamicGuard);
+    const nextAuthority = authoritySource.replace(capability, capability + ',other:{owner:"Other",sourceFiles:["src/other.ts"],executableBindings:[]}');
+    const value = scenario([[authority, nextAuthority]], baseline); maintain(value, "existing_dynamic_axes");
+    assert.equal(value.actual.changeImpact!.obligations[0].addedCapabilityAxis, true); assert.equal(plan(value).mode, "full");
+    const hardcoded = new Map(baseline); hardcoded.set(entry, dynamicGuard.replace("of currentSharedCapabilityKeys", 'of ["widget"]'));
+    const invalid = scenario([[authority, nextAuthority]], hardcoded); maintain(invalid, "existing_dynamic_axes");
+    assert.throws(() => plan(invalid), /proven existing dynamic/u);
+    const modified = scenario([[authority, authoritySource.replace('owner: "Phase03Owner"', 'owner: "ChangedOwner"')]], baseline); maintain(modified, "existing_dynamic_axes");
+    assert.throws(() => plan(modified), /proven existing dynamic/u);
+  });
+  check("additional checks prune only an ordered exact canonical command and argv chain already inside a full-prefix owner", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "dedupe"; }']]);
+    const changes = value.impact.changes.map(row => ({ ...row, risk: "C" as const, checks: ["verify:phase03-child", "verify:phase03-direct-alias", "verify:phase03-different-mode", "verify:phase03-reversed", "verify:phase03-repeated", "verify:phase03-unsupported"] }));
+    const commandA = "node scripts/phase03-a.mjs --mode=one", commandB = "node scripts/phase03-b.mjs";
+    const commands = { ...scripts, [checkName]: "npm run verify:phase03-child && " + commandB,
+      "verify:phase03-child": commandA, "verify:phase03-direct-alias": commandA, "verify:phase03-different-mode": commandA.replace("one", "two"),
+      "verify:phase03-reversed": commandB + " && " + commandA, "verify:phase03-repeated": commandA + " && " + commandA,
+      "verify:phase03-unsupported": "node scripts/phase03-a.mjs --mode=one; echo unsupported" };
+    const result = api.planLocalVerification(commands, { ...value.impact, changes }, { ...value.actual, changeImpact: undefined });
+    assert.deepEqual(result.redundantAdditionalChecks, ["verify:phase03-child"]);
+    assert.equal(result.prefix.includes("verify:phase03-child"), false);
+    for (const name of changes[0].checks.slice(1)) assert.ok(result.prefix.includes(name));
+    assert.deepEqual(result.prefix.slice(0, 3), ["lint", "typecheck", checkName]);
+    assert.equal(api.localVerificationCommandSteps(commands, "verify:phase03-unsupported"), undefined);
+  });
+  check("actual admission reader derives from controlled Git and raw source bytes then reuses only an identical immutable snapshot", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "reader"; }']]);
+    value.current.set("package.json", JSON.stringify({ scripts })); value.baseline.set("package.json", JSON.stringify({ scripts }));
+    const manifest = [...value.current].map(([file, source]) => ({ file, sha256: sha256(source) })).sort((a, b) => a.file.localeCompare(b.file));
+    value.impact.sourceSha256 = sha256(JSON.stringify(manifest));
+    const ownerSource = readSource("scripts/lib/isolated-public-verification.mts"), tree = ts.createSourceFile("owner.mts", ownerSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const declaration = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "readLocalVerificationInputs"); assert.ok(declaration);
+    let discoveries = 0;
+    const git = (_command: string, args: string[]) => {
+      if (args[0] === "rev-parse") return Buffer.from(args.includes("--verify") ? value.impact.baselineHead : value.impact.finalHead);
+      if (args[0] === "merge-base") return Buffer.alloc(0);
+      if (args[0] === "ls-tree") return Buffer.from([...value.baseline.keys()].join("\0") + "\0");
+      if (args[0] === "diff") return Buffer.from(value.actual.changes.map(row => row.file).join("\0") + "\0");
+      if (args[0] === "show") { const bytes = value.baseline.get(args[1].slice(41)); assert.ok(bytes !== undefined); return typeof bytes === "string" ? Buffer.from(bytes) : Buffer.from(bytes); }
+      throw Error("Unexpected controlled Git command");
+    };
+    const read = (file: string, encoding?: string) => { const bytes = value.current.get(file); assert.ok(bytes !== undefined); return encoding ? bytes.toString() : typeof bytes === "string" ? Buffer.from(bytes) : Buffer.from(bytes); };
+    const code = ts.transpileModule(declaration.getText(tree), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const reader = new Function("assert", "execFileSync", "ROOT", "digest", "safeSourcePath", "existsSync", "lstatSync", "realpathSync", "readFileSync", "localVerificationNativeGate", "localVerificationCoverage", "deriveLocalVerificationSourceImpact", code + ";return readLocalVerificationInputs;")(
+      assert, git, root, sha256, (file: string) => file, (file: string) => value.current.has(file), () => ({ isFile: () => true }), (file: string) => file, read,
+      () => undefined, () => [], (...args: Parameters<typeof api.deriveLocalVerificationSourceImpact>) => { discoveries += 1; return api.deriveLocalVerificationSourceImpact(...args); }) as
+      (context: { cleanEnvironment(): object }, impact: Impact, manifest: Array<{ file: string; sha256: string }>, additional: string[], request: object, previous?: Actual) => Actual;
+    const context = { cleanEnvironment: () => ({}) }, first = reader(context, value.impact, manifest, [], {});
+    assert.equal(first.sourceSha256, value.impact.sourceSha256); assert.equal(first.changeImpact!.proofBoundary, "source_discovery_only");
+    assert.equal(api.planLocalVerification(scripts, value.impact, first).mode, "bounded");
+    const second = reader(context, value.impact, manifest, [], {}, first);
+    assert.equal(second.changeImpact, first.changeImpact); assert.equal(discoveries, 1);
+    assert.throws(() => reader(context, value.impact, manifest.map(row => row.file === contract ? { ...row, sha256: "f".repeat(64) } : row), [], {}, first), /changed source manifest/u);
+    value.current.set(owner, 'export function Phase03Owner() { return "unreviewed"; }');
+    assert.throws(() => reader(context, value.impact, manifest, [], {}, first), /omits or differs/u);
+  });
+  const automatic = (value: ReturnType<typeof scenario>) => api.deriveLocalVerificationSourceCoherence(scripts,
+    { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+  check("automatic Fast source checks isolate literal spacing and radius presentation without executing unrelated Browser or database candidates", () => {
+    const baseline = new Map(originals), jsx = 'export function Phase03Owner() { return <section className="p-4 rounded-lg">Content</section>; }';
+    baseline.set(owner, jsx);
+    const value = scenario([[owner, jsx.replace("p-4 rounded-lg", "p-6 rounded-xl")]], baseline), result = automatic(value);
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.fullRequired, false);
+    assert.equal(result.fast.candidateCommandsExecuted, 0); assert.equal(result.fast.databaseCalls, 0); assert.equal(result.fast.browserExecuted, false);
+    assert.deepEqual(result.functionalEvidenceRequired, []); assert.equal(result.releaseEvidence, false); assert.equal(result.ownerReviewSatisfied, false);
+    const stateChange = automatic(scenario([[owner, jsx.replace("p-4", "hover:p-6")]], baseline));
+    assert.equal(stateChange.fullRequired, true, "Changing a governed visual state cannot be masked as the same spacing port.");
+  });
+  check("approved height and responsive geometry cannot be normalized as a historical spacing or radius expectation", () => {
+    const baseline = new Map(originals), jsx = 'export function Phase03Owner() { return <section className="h-10 md:grid-cols-2 p-4 rounded-lg">Content</section>; }';
+    baseline.set(owner, jsx);
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"geometry-consumer",sourceFiles:["' + consumer
+      + '"],capabilityAudit:{},presentationContract:{requirements:[{target:"rowGeometry",requirement:"required",owner:{sourceFile:"'
+      + owner + '",exportName:"Phase03Owner"},presentation:{port:"height",value:"40px"}}]}}];');
+    for (const after of [jsx.replace("h-10", "h-8"), jsx.replace("md:grid-cols-2", "md:grid-cols-3")]) {
+      const value = scenario([[owner, after]], baseline), result = automatic(value);
+      assert.equal(value.actual.changeImpact!.changes[0].presentationOnly, false);
+      assert.equal(result.fullRequired, true); assert.equal(result.functionalEvidenceRequired[0].sourceChecksAdequate, false);
+      assert.ok(result.targeted.some(target => target.reasons.some(reason => reason.consumers.includes(formAuthority + "#geometry-consumer"))));
+      assert.equal(result.behavioralPass, false); assert.equal(result.fast.databaseCalls, 0);
+    }
+  });
+  check("automatic shared contract coherence reports owner and all registered consumers and rejects missing protection", () => {
+    const second = "src/app/admin/phase03/Indirect.tsx", baseline = new Map(originals);
+    baseline.set(authority, authoritySource.replace('sourceFiles: ["' + owner + '"]', 'sourceFiles: ["' + owner + '","' + contract + '"]'));
+    baseline.set(second, 'import {Consumer} from "./Consumer"; export function Indirect() { return Consumer(); }');
+    baseline.set(formAuthority, 'export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST=[{id:"second-consumer",sourceFiles:["' + second + '"],capabilityAudit:{}}];');
+    const next = "export type RecordContract = { value: string; revision: number };";
+    const missing = automatic(scenario([[contract, next]], baseline));
+    assert.equal(missing.status, "DRIFT"); assert.equal(missing.exitCode, 2);
+    assert.ok(missing.diagnostics.some(message => message.includes(contract) && message.includes("Phase03Owner") && message.includes("second-consumer")));
+    const protectedResult = automatic(scenario([[contract, next], [entry, guardSource.replace('"value: string"', '"revision: number"')]], baseline));
+    assert.equal(protectedResult.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(protectedResult.behavioralPass, false);
+    assert.equal(JSON.stringify(protectedResult).includes("reviewedBy"), false, "Automatic source correspondence cannot manufacture approval metadata.");
+  });
+  check("save delete and duplicate body changes retain functional and native readback obligations despite unchanged signatures", () => {
+    for (const action of ["save", "delete", "duplicate"]) {
+      const baseline = new Map(originals); baseline.set(owner, `export async function ${action}Record() { return "before"; }`);
+      const result = automatic(scenario([[owner, `export async function ${action}Record() { return "after"; }`]], baseline));
+      assert.equal(result.fullRequired, true); assert.equal(result.functionalEvidenceRequired.length, 1);
+      assert.equal(result.functionalEvidenceRequired[0].sourceChecksAdequate, false);
+      assert.ok(result.functionalEvidenceRequired[0].required.includes("affected_native_integration_or_readback"));
+      assert.ok(result.targeted.every(target => target.executionAllowed === false && target.proofLevel === "unexecuted_source_candidate"));
+    }
+  });
+  check("automatic source selectors reject absent stale and partial actual input bindings", () => {
+    const value = scenario([[contract, "export type RecordContract = { value: string; revision: number };"], [entry, guardSource.replace('"value: string"', '"revision: number"')]]);
+    const actual = { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 };
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changeImpact: undefined }), /complete actual source/u);
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, sourceSha256: "f".repeat(64) }), /stale source snapshot/u);
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changes: actual.changes.slice(0, 1) }), /stale or partial/u);
+    assert.throws(() => api.deriveLocalVerificationSourceCoherence(scripts, { ...actual, changeImpact: { ...actual.changeImpact!, changes: actual.changeImpact!.changes.slice(0, 1) } }), /omits actual/u);
+  });
+  check("actual CI inspector fixes test mode and preserves Git environment isolation", () => {
+    const source = readSource("scripts/lib/isolated-public-verification.mts");
+    const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const inspector = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
+      && node.name?.text === "inspectLocalVerificationChangeImpact");
+    assert.ok(inspector?.body, "The canonical source inspector must own its clean environment.");
+    const initialization = inspector.body.statements.find(node => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some(declaration => declaration.name.getText(file) === "environment"));
+    const inheritance = inspector.body.statements.find(node => ts.isForOfStatement(node)
+      && ts.isArrayLiteralExpression(node.expression) && node.statement.getText(file).includes("environment[key]"));
+    assert.ok(initialization && ts.isVariableStatement(initialization)
+      && initialization.declarationList.declarations.some(declaration => declaration.name.getText(file) === "environment"));
+    assert.ok(inheritance && ts.isForOfStatement(inheritance), "Only the actual whitelist loop may inherit caller values.");
+    const code = ts.transpileModule(initialization.getText(file) + "\n" + inheritance.getText(file), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    const initialize = new Function("process", code + ";return environment;") as (process: { env: Record<string, string> }) => Record<string, string | undefined>;
+    const environment = initialize({ env: { NODE_ENV: "production", SUPABASE_SERVICE_ROLE_KEY: "sentinel", PATH: "safe", GIT_OPTIONAL_LOCKS: "1", GIT_CONFIG_COUNT: "99" } });
+    assert.deepEqual(environment, { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false", PATH: "safe" });
+    assert.equal(Object.hasOwn(environment, "SUPABASE_SERVICE_ROLE_KEY"), false, "Caller credentials cannot enter the inspector's Git environment.");
+  });
+  check("CI admission diagnostics preserve original public bindings and actual bounded Git query results", () => {
+    const base = "a".repeat(40), head = "b".repeat(40), checkout = "c".repeat(40), merge = "d".repeat(40);
+    const report = api.localVerificationCiDiagnostic({ eventName: "pull_request", event: { pull_request: { base: { sha: base }, head: { sha: head }, merge_commit_sha: merge } },
+      githubSha: checkout, checkoutHead: checkout, lastCommitLookup: merge, lastCommitProbe: { sha: merge, exitCode: 128, identity: null } }, (operation, sha) => {
+      assert.match(sha, /^[a-f0-9]{40}$/u);
+      if (sha === merge) return { exitCode: 128, output: "" };
+      return { exitCode: 0, output: operation === "identity" ? sha : operation === "objectType" ? "commit" : operation === "parents" && sha === checkout ? base + " " + head : "" };
+    });
+    assert.deepEqual(report.bindings.mergeCommitSha, { present: true, type: "string", value: merge });
+    assert.deepEqual(report.originalCommitProbe, { operation: "identity", sha: merge, exitCode: 128, identity: null });
+    assert.deepEqual(report.objects.find(object => object.sha === checkout)?.parents, { exitCode: 0, values: [base, head], complete: true });
+    assert.deepEqual(report.objects.find(object => object.sha === merge)?.identity, { exitCode: 128, value: null });
+    assert.equal(report.ancestry.find(row => row.ancestor === merge)?.isAncestor, null);
+    assert.equal(report.ancestry.find(row => row.ancestor === head)?.isAncestor, true);
+  });
+  check("CI admission diagnostics suppress arbitrary payload text Git output paths and caller secrets", () => {
+    const secret = "sentinel-private-body-path-and-credential", checkout = "c".repeat(40);
+    const report = api.localVerificationCiDiagnostic({ eventName: secret, event: { title: secret, body: secret, pull_request: {
+      base: { sha: secret }, head: { sha: secret }, merge_commit_sha: secret, credentials: secret } }, githubSha: secret, checkoutHead: checkout,
+    lastCommitProbe: { sha: secret, exitCode: -1, identity: secret } }, (_operation, sha) => {
+      assert.equal(sha, checkout, "Noncanonical event values cannot become Git arguments."); return { exitCode: 300, output: secret };
+    });
+    assert.equal(report.eventName, "unsupported"); assert.equal(JSON.stringify(report).includes(secret), false);
+    assert.deepEqual(report.objects[0].identity, { exitCode: null, value: null });
+    assert.deepEqual(report.objects[0].objectType, { exitCode: null, value: null });
+    assert.deepEqual(report.objects[0].parents, { exitCode: null, values: [], complete: false });
+    assert.deepEqual(report.originalCommitProbe, { operation: "identity", sha: null, exitCode: null, identity: null });
+  });
+  check("CI admission diagnostics distinguish absent null and invalid merge metadata and contain probe failures", () => {
+    for (const request of [{}, { merge_commit_sha: null }, { merge_commit_sha: [] }]) {
+      const report = api.localVerificationCiDiagnostic({ eventName: "pull_request", event: { pull_request: request }, githubSha: "c".repeat(40), checkoutHead: "c".repeat(40) },
+        () => { throw Error("sentinel Git error must not appear"); });
+      assert.equal(report.bindings.mergeCommitSha.present, Object.hasOwn(request, "merge_commit_sha"));
+      assert.equal(report.bindings.mergeCommitSha.type, "merge_commit_sha" in request ? request.merge_commit_sha === null ? "null" : "array" : "undefined");
+      assert.equal(report.bindings.mergeCommitSha.value, null); assert.equal(report.originalCommitProbe, null);
+      assert.equal(report.objects[0].identity.exitCode, null); assert.equal(JSON.stringify(report).includes("sentinel"), false);
+    }
+  });
+  check("immutable CI event resolution distinguishes PR merge checkout from PR head and validates push before history", () => {
+    const base = "a".repeat(40), head = "b".repeat(40), merge = "c".repeat(40), known = new Set([base, head, merge]);
+    const history = { exists: (sha: string) => known.has(sha), isAncestor: (left: string, right: string) => left === right || left === base || left === head && right === merge,
+      parents: (sha: string) => sha === merge ? [base, head] : [] };
+    const event = { pull_request: { base: { sha: base }, head: { sha: head }, merge_commit_sha: merge, title: "untrusted $(title) is never a command" } };
+    assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event, githubSha: merge, checkoutHead: merge }, history), { baselineHead: base, finalHead: merge, eventName: "pull_request" });
+    assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event, githubSha: head, checkoutHead: head }, history), { baselineHead: base, finalHead: head, eventName: "pull_request" });
+    for (const request of [
+      { base: { sha: base }, head: { sha: head } },
+      { base: { sha: base }, head: { sha: head }, merge_commit_sha: null },
+    ]) {
+      const opened = { action: "opened", number: 229, pull_request: request };
+      assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: opened, githubSha: merge, checkoutHead: merge }, history),
+        { baselineHead: base, finalHead: merge, eventName: "pull_request" }, "Absent/null merge metadata requires independently exact base/head merge parents.");
+      assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: opened, githubSha: head, checkoutHead: head }, history).finalHead, head,
+        "An exact event-head checkout does not need a synthesized merge.");
+    }
+    for (const value of ["", "not-a-sha", "0".repeat(40), 229, "D".repeat(40)]) {
+      const malformed = { pull_request: { ...event.pull_request, merge_commit_sha: value } };
+      for (const checkout of [head, merge]) assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: malformed,
+        githubSha: checkout, checkoutHead: checkout }, history), /Invalid or missing immutable CI|Missing local Git history/u,
+      "Present merge metadata cannot bypass validation even for an exact event-head checkout.");
+    }
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: { pull_request: { ...event.pull_request, merge_commit_sha: base } },
+      githubSha: merge, checkoutHead: merge }, { ...history, parents: () => [base, base] }), /parents differ/u,
+    "Advisory metadata cannot authorize a checkout whose actual parents differ from the immutable event.");
+    for (const advisory of [base, "d".repeat(40)]) for (const checkout of [head, merge]) {
+      assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: { pull_request: { ...event.pull_request, merge_commit_sha: advisory } },
+        githubSha: checkout, checkoutHead: checkout }, history).finalHead, checkout,
+      "Canonical advisory metadata neither replaces the actual checkout nor requires an unrelated local Git object.");
+    }
+    // Exact original Actions bindings from diagnostic run 40615509207, artifact 12784204891.
+    // Its supplied merge SHA was absent locally (identity/type/parents exit 128); actual base/head
+    // identities, checkout equality, ordered two-parent topology and both ancestry probes passed.
+    const recorded = { base: "a29a9a89779c70fcf8f256faebd6103d566f5b1c", head: "545ee380ecedd8ba0e4d5c7d9e949bcb5309c34e",
+      checkout: "4fafac2754f2f11f54f1bda84c62464050791944", advisory: "1ff04a04d24bcaaa8a38d13028469a0e8025622b" };
+    const recordedEvent = { action: "synchronize", number: 229, pull_request: { base: { sha: recorded.base }, head: { sha: recorded.head }, merge_commit_sha: recorded.advisory } };
+    const recordedHistory = { exists: (sha: string) => [recorded.base, recorded.head, recorded.checkout].includes(sha),
+      parents: (sha: string) => sha === recorded.checkout ? [recorded.base, recorded.head] : [],
+      isAncestor: (ancestor: string, descendant: string) => ancestor === descendant || descendant === recorded.checkout && [recorded.base, recorded.head].includes(ancestor) };
+    assert.equal(recordedHistory.exists(recorded.advisory), false);
+    assert.deepEqual(api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout }, recordedHistory),
+      { baselineHead: recorded.base, finalHead: recorded.checkout, eventName: "pull_request" }, "Replay the captured event rather than guessing current PR metadata.");
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.head, checkoutHead: recorded.checkout }, recordedHistory), /checkout HEAD differs/u);
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout },
+      { ...recordedHistory, exists: (sha: string) => sha !== recorded.head }), /Missing local Git history/u);
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout },
+      { ...recordedHistory, parents: () => [recorded.base, recorded.advisory] }), /Missing local Git history|parents differ/u);
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: recordedEvent, githubSha: recorded.checkout, checkoutHead: recorded.checkout },
+      { ...recordedHistory, isAncestor: () => false }), /not an ancestor/u);
+    const withoutMerge = { action: "opened", pull_request: { base: { sha: base }, head: { sha: head } } };
+    for (const guardedEvent of [withoutMerge, event]) for (const parents of [[], [base], [head, base], [base, head, merge], [base, merge], ["0".repeat(40), head], ["d".repeat(40), head]]) {
+      assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: guardedEvent, githubSha: merge, checkoutHead: merge },
+        { ...history, parents: () => parents }), /exactly two Git parents|parents differ|Invalid or missing immutable CI|Missing local Git history/u,
+      "Every merge checkout rejects missing, reversed, foreign or octopus topology regardless of advisory metadata.");
+    }
+    assert.throws(() => api.resolveLocalVerificationCiBaseline({ eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge },
+      { ...history, parents: () => { throw new Error("Git parent history unavailable"); } }), /Git parent history unavailable/u);
+    assert.equal(api.resolveLocalVerificationCiBaseline({ eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, history).baselineHead, base);
+    for (const [label, input, facts] of [
+      ["missing base", { eventName: "pull_request", event: { pull_request: { head: { sha: head } } }, githubSha: head, checkoutHead: head }, history],
+      ["missing head", { eventName: "pull_request", event: { pull_request: { base: { sha: base } } }, githubSha: merge, checkoutHead: merge }, history],
+      ["invalid GitHub SHA", { eventName: "pull_request", event: withoutMerge, githubSha: "invalid", checkoutHead: merge }, history],
+      ["missing checkout SHA", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: "" }, history],
+      ["PR missing history", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge }, { ...history, exists: (sha: string) => sha !== head }],
+      ["PR head nonancestor", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge }, { ...history, isAncestor: (left: string) => left !== head }],
+      ["PR base nonancestor", { eventName: "pull_request", event: withoutMerge, githubSha: merge, checkoutHead: merge }, { ...history, isAncestor: (left: string) => left !== base }],
+      ["zero before", { eventName: "push", event: { before: "0".repeat(40), after: head }, githubSha: head, checkoutHead: head }, history],
+      ["checkout mismatch", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: merge }, history],
+      ["missing history", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, { ...history, exists: () => false }],
+      ["nonancestor", { eventName: "push", event: { before: base, after: head }, githubSha: head, checkoutHead: head }, { ...history, isAncestor: () => false }],
+      ["unsupported event", { eventName: "workflow_dispatch", event: {}, githubSha: head, checkoutHead: head }, history],
+    ] as const) assert.throws(() => api.resolveLocalVerificationCiBaseline(input, facts), Error, label);
+    const phase04OwnerContractSource = readSource("scripts/lib/isolated-public-verification.mts");
+    assert.ok(phase04OwnerContractSource.includes("export function resolveLocalVerificationCiBaseline") && phase04OwnerContractSource.includes("export function deriveLocalVerificationSourceCoherence"));
+  });
+}
+
 /** Execute the canonical local-risk planner without starting its owned lifecycle. */
 function verifyLocalRiskVerificationPlan() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
@@ -1391,7 +2070,7 @@ function verifyLocalRiskVerificationPlan() {
     assert.ok(found, `Missing canonical local verification declaration: ${name}`);
     return found.getText(file).replace(/^export /u, "");
   };
-  const declarations = ["GATES", "finalQualityScriptNames", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
+  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
   const code = ts.transpileModule(adminAdoptionControlSource(file) + "\n" + declarations.map(statement).join("\n"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -1402,14 +2081,21 @@ function verifyLocalRiskVerificationPlan() {
     changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
   type Plan = ReturnType<typeof import("./lib/isolated-public-verification.mts").planLocalVerification>;
   type Request = import("./lib/isolated-public-verification.mts").PublicGateRequest;
-  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256) as {
-    planLocalVerification(scripts: Readonly<Record<string, string>>, impact: Impact, actual: Actual, request?: Request): Plan;
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,deriveLocalVerificationSourceCoherence,resolveLocalVerificationCiBaseline,localVerificationCiDiagnostic,localVerificationSemanticSource,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
+    planLocalVerification: typeof import("./lib/isolated-public-verification.mts").planLocalVerification;
     assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
     registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[];
     localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: Impact, manifest: Array<{ file: string; sha256: string }>, request?: Request): NonNullable<Actual["verificationCoverage"]>;
     adminAdoptionGate(request: Request): ReturnType<typeof import("./lib/isolated-public-verification.mts").adminAdoptionGate>;
+    deriveLocalVerificationSourceImpact: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceImpact;
+    localVerificationSemanticSource: typeof import("./lib/isolated-public-verification.mts").localVerificationSemanticSource;
+    localVerificationCommandSteps: typeof import("./lib/isolated-public-verification.mts").localVerificationCommandSteps;
+    deriveLocalVerificationSourceCoherence: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceCoherence;
+    resolveLocalVerificationCiBaseline: typeof import("./lib/isolated-public-verification.mts").resolveLocalVerificationCiBaseline;
+    localVerificationCiDiagnostic: typeof import("./lib/isolated-public-verification.mts").localVerificationCiDiagnostic;
   };
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  verifyLocalSourceImpactControls(api, scripts);
   const fullPrefix = new Function("assert", ts.transpileModule(statement("GATES") + "\n" + statement("finalQualityScriptNames"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText + ";return finalQualityScriptNames;")(assert)(scripts) as string[];
@@ -1431,7 +2117,11 @@ function verifyLocalRiskVerificationPlan() {
   const requiresFull = (name: string, mutate: (value: ReturnType<typeof fixture>) => void) => check("local risk requires full for " + name, () => {
     const value = fixture(); mutate(value); const plan = run(value);
     assert.equal(plan.mode, "full"); assert.deepEqual(plan.prefix.slice(0, fullPrefix.length), fullPrefix);
-    for (const row of value.impact.changes) for (const check of row.checks) assert.ok(plan.prefix.includes(check), "Full Gate must also retain fresh affected specialized checks.");
+    for (const row of value.impact.changes) for (const check of row.checks) {
+      const covered = new Set(plan.prefix.flatMap(name => api.localVerificationCommandSteps(scripts, name) ?? []));
+      assert.ok(plan.prefix.includes(check) || plan.redundantAdditionalChecks.includes(check) &&
+        api.localVerificationCommandSteps(scripts, check)?.every(step => covered.has(step)), "Full Gate must retain every affected command and its exact arguments.");
+    }
   });
   check("bounded A includes selected affected checks, TypeScript, ESLint and every canonical Public tail", () => {
     const plan = run(); assert.equal(plan.risk, "A"); assert.equal(plan.mode, "bounded");
@@ -1900,12 +2590,517 @@ async function verifyLocalRiskControlLeaseAdmission() {
   cases.push("bounded cleanup revokes lease eligibility instead of extending request lifetime or authority");
 }
 
+async function verifyQualifiedFormHarnessControls() {
+  const filename = "scripts/qa-admin-form-guarded-navigation.mts";
+  const source = ts.createSourceFile(filename, readSource(filename), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  type CleanupResource = { resource: "browser" | "server" | "temp"; close: () => Promise<void> };
+  type CleanupResult = { resource: CleanupResource["resource"]; status: "PASS" | "FAIL"; error?: unknown };
+  type DeniedRequest = { method: string; origin: string | null; resourceType: string };
+  type RoutePort = {
+    request: () => { url: () => string; method: () => string; resourceType: () => string };
+    fallback: () => Promise<void>;
+    abort: (reason: string) => Promise<void>;
+  };
+  type FenceHandler = (route: RoutePort) => Promise<void>;
+  type HarnessApi = {
+    settleGuardedNavigationCleanup: (resources: readonly CleanupResource[]) => Promise<CleanupResult[]>;
+    installSaveCacheNetworkFence: (page: { route: (pattern: string, handler: FenceHandler) => Promise<void> }, url: string, denied: DeniedRequest[]) => Promise<void>;
+  };
+  const compile = (text: string) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+  const declarations = ["settleGuardedNavigationCleanup", "installSaveCacheNetworkFence"].map(name => {
+    const matches = source.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.equal(matches.length, 1, "The qualified fixture retains one original " + name + " owner.");
+    return matches[0].getText(source);
+  }).join("\n");
+  const load = (text = declarations) => new Function(compile(text) + "; return { settleGuardedNavigationCleanup, installSaveCacheNetworkFence };")() as HarnessApi;
+  const api = load(), resources = ["browser", "server", "temp"] as const;
+  for (const [label, failures, synchronous] of [
+    ["all cleanup succeeds", [], false], ["first cleanup rejects", [0], false], ["middle cleanup rejects", [1], false],
+    ["last cleanup rejects", [2], false], ["first cleanup throws synchronously", [0], true], ["every cleanup rejects", [0, 1, 2], false],
+  ] as const) {
+    const calls: string[] = [], errors = new Map<number, Error>();
+    for (const index of failures) errors.set(index, new Error("controlled-" + resources[index] + "-cleanup-failure"));
+    const actual = await api.settleGuardedNavigationCleanup(resources.map((resource, index) => ({ resource, close: () => {
+      calls.push(resource);
+      const error = errors.get(index);
+      if (error && synchronous) throw error;
+      return error ? Promise.reject(error) : Promise.resolve();
+    } })));
+    assert.deepEqual(calls, resources, "A cleanup failure cannot skip any later resource.");
+    assert.deepEqual(actual.map(row => row.resource), resources);
+    actual.forEach((row, index) => {
+      assert.equal(row.status, errors.has(index) ? "FAIL" : "PASS");
+      assert.equal(row.error, errors.get(index), "Cleanup preserves each failure identity.");
+    });
+    cases.push("Qualified Form harness: " + label + " still attempts all cleanup resources");
+  }
+  const harnessUrl = "http://127.0.0.1:43127/harness";
+  const fenceCase = async (actualApi: HarnessApi, requestUrl: string, allowed: boolean, portFailure?: "fallback" | "abort") => {
+    let handler: FenceHandler | undefined;
+    const denied: DeniedRequest[] = [], events: string[] = [], expected = new Error("controlled-route-port-failure");
+    await actualApi.installSaveCacheNetworkFence({ route: async (pattern, value) => { assert.equal(pattern, "**/*"); handler = value; } }, harnessUrl, denied);
+    assert.ok(handler, "The fence is actually registered before fixture navigation.");
+    const route: RoutePort = { request: () => ({ url: () => requestUrl, method: () => "GET", resourceType: () => "fetch" }),
+      fallback: async () => { events.push("fallback"); if (portFailure === "fallback") throw expected; },
+      abort: async reason => { assert.equal(reason, "blockedbyclient"); events.push("abort"); if (portFailure === "abort") throw expected; } };
+    if (portFailure) await assert.rejects(handler(route), error => error === expected);
+    else await handler(route);
+    assert.deepEqual(events, [allowed ? "fallback" : "abort"]);
+    assert.equal(denied.length, allowed ? 0 : 1);
+    if (!allowed) {
+      assert.deepEqual(Object.keys(denied[0]).sort(), ["method", "origin", "resourceType"]);
+      assert.equal(denied[0].method, "GET"); assert.equal(denied[0].resourceType, "fetch");
+    }
+  };
+  for (const [label, requestUrl, allowed] of [
+    ["owned document", harnessUrl, true], ["owned API stub", "http://127.0.0.1:43127/api/admin/entity-lists/topics?page=1", true],
+    ["foreign origin", "https://example.invalid/path?private=value", false], ["deceptive hostname", "http://127.0.0.1.example.invalid:43127/harness", false],
+    ["different port", "http://127.0.0.1:43128/harness", false], ["userinfo camouflage", "http://127.0.0.1:43127@example.invalid/harness", false],
+    ["foreign matching API path", "https://example.invalid/api/admin/entity-lists/topics?page=1", false], ["malformed URL", "not a URL", false],
+    ["inline data", "data:text/plain,controlled", true], ["owned blob", "blob:http://127.0.0.1:43127/controlled", true],
+    ["foreign blob", "blob:https://example.invalid/controlled", false], ["opaque blob", "blob:null/controlled", false],
+  ] as const) {
+    await fenceCase(api, requestUrl, allowed);
+    cases.push("Qualified Form harness network fence: " + label);
+  }
+  await fenceCase(api, harnessUrl, true, "fallback");
+  await fenceCase(api, "https://example.invalid/path", false, "abort");
+  cases.push("Qualified Form harness propagates allowed-route and denied-route transport failures");
+  const broadBlob = declarations.replace('target.protocol === "data:"', '["data:", "blob:"].includes(target.protocol)');
+  assert.notEqual(broadBlob, declarations);
+  await assert.rejects(fenceCase(load(broadBlob), "blob:https://example.invalid/controlled", false));
+  cases.push("Qualified Form harness rejects a broadened foreign-blob fence mutation");
+  check("Qualified Form harness source retains exact canonical flag, thirteen scenarios, primary failure and post-cleanup PASS boundary", () => {
+    const scripts = (JSON.parse(readSource("package.json")) as { scripts: Record<string, string> }).scripts;
+    assert.equal(scripts["qa:admin-form-guarded-navigation"], "node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts");
+    const main = source.statements.find((node): node is ts.TryStatement => ts.isTryStatement(node));
+    assert.ok(main?.catchClause && main.finallyBlock);
+    const parameter = main.catchClause.variableDeclaration?.name.getText(source);
+    assert.ok(parameter);
+    assert.ok(main.catchClause.block.statements.some(node => ts.isThrowStatement(node) && node.expression?.getText(source) === parameter), "The main body rethrows its original failure object.");
+    assert.ok(main.catchClause.block.getText(source).includes("primaryFailed = true"));
+    const throws: ts.ThrowStatement[] = [], visit = (node: ts.Node) => { if (ts.isThrowStatement(node)) throws.push(node); ts.forEachChild(node, visit); };
+    visit(main.finallyBlock); assert.equal(throws.length, 1);
+    assert.ok(ts.isIfStatement(throws[0].parent) && throws[0].parent.expression.getText(source) === "!primaryFailed", "Cleanup may throw only when no primary failure is pending.");
+    assert.ok(throws[0].expression && ts.isNewExpression(throws[0].expression) && throws[0].expression.expression.getText(source) === "AggregateError");
+    const scenarioLoops = main.tryBlock.statements.filter((node): node is ts.ForOfStatement => ts.isForOfStatement(node) && ts.isVariableDeclarationList(node.initializer) && node.initializer.declarations.some(value => value.name.getText(source) === "scenario"));
+    assert.equal(scenarioLoops.length, 1);
+    const expression = scenarioLoops[0].expression;
+    assert.ok(ts.isConditionalExpression(expression) && ts.isArrayLiteralExpression(expression.whenFalse));
+    assert.equal(expression.whenFalse.elements.length, 13);
+    const strictFlag = source.statements.find(node => ts.isIfStatement(node) && node.expression.getText(source) === "saveCacheOnly" && node.getText(source).includes('assert.deepEqual(process.argv.slice(2), ["--save-cache-only"]'));
+    const temporaryDirectory = source.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(value => value.name.getText(source) === "tempDir"));
+    assert.ok(strictFlag && temporaryDirectory && strictFlag.end < temporaryDirectory.getStart(source), "Bounded flag rejection precedes resource creation.");
+    const finalPass = source.statements.at(-1);
+    assert.ok(finalPass && ts.isExpressionStatement(finalPass) && finalPass.getText(source).includes("qa:admin-form-guarded-navigation passed") && finalPass.getStart(source) > main.end, "The final PASS cannot precede cleanup.");
+    assert.ok(main.finallyBlock.getText(source).includes('proofLevel: "shared_owner_controlled_browser_behavior"'));
+    assert.ok(main.finallyBlock.getText(source).includes("nativePersistenceVerified: false"));
+    assert.ok(main.finallyBlock.getText(source).includes("businessConsumerAdoptionVerified: false"));
+  });
+}
+
+/** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */
+async function verifySharedChildControls() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations = ["ownedPath", "stopChild", "runOwnedVerificationChild"].map(name => {
+    const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
+  });
+  const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const buildApi = (write: typeof writeFileSync = writeFileSync) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild};")(
+    assert, path.isAbsolute, path.resolve, path.sep, spawn, write, existsSync, readFileSync, readdirSync, lstatSync) as {
+      run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
+      stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<void>;
+    };
+  const api = buildApi();
+  const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-child-controls-"))), children = new Set<ChildProcess>();
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const context = { runDirectory: directory, sanitize: (value: string) => value.replaceAll("private-sentinel", "[redacted]"), cleanEnvironment: () => ({ ...environment }) };
+  const run = (name: string, args: string[], signal = new AbortController().signal, limitMs = 10_000, sourceDirectory = directory) =>
+    api.run({ sourceDirectory, context, children, signal }, args, { ...environment }, name, limitMs);
+  const control = async (name: string, execute: () => Promise<void>) => {
+    try { await execute(); } catch (error) { console.error("FAIL shared owned child " + name); throw error; }
+    cases.push("shared owned child " + name);
+  };
+  try {
+    await control("success preserves sanitized stdout stderr duration and cleanup", async () => {
+      const result = await run("success", ["-e", "process.stdout.write('ok private-sentinel');process.stderr.write('warning private-sentinel');"]);
+      assert.equal(result.code, 0); assert.equal(result.stdout, "ok [redacted]"); assert.equal(result.stderr, "warning [redacted]");
+      assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0); assert.equal(children.size, 0);
+      assert.equal(readFileSync(path.join(directory, "public-success.stdout.log"), "utf8"), result.stdout);
+      assert.equal(readFileSync(path.join(directory, "public-success.stderr.log"), "utf8"), result.stderr);
+      assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0);
+      assert.equal(result.cleanup.processTreeVerified, process.platform === "linux");
+    });
+    await control("duplicate evidence names reject before execution and preserve both original logs", async () => {
+      const before = readdirSync(directory).sort(), output = readFileSync(path.join(directory, "public-success.stdout.log")), errors = readFileSync(path.join(directory, "public-success.stderr.log"));
+      await assert.rejects(run("success", ["-e", "throw Error('duplicate must not execute')"]), /evidence already exists/u);
+      assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+      assert.deepEqual(readFileSync(path.join(directory, "public-success.stdout.log")), output);
+      assert.deepEqual(readFileSync(path.join(directory, "public-success.stderr.log")), errors);
+    });
+    await control("invalid deadlines reject before process or evidence allocation", async () => {
+      const before = readdirSync(directory).sort();
+      for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) await assert.rejects(run("invalid-deadline", ["-e", "throw Error('must not execute')"], new AbortController().signal, limit), /deadline must be finite and positive/u);
+      assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+    });
+    await control("ownership marker is fresh for the child and redacted from every retained log", async () => {
+      const result = await run("marker", ["-e", "const marker=process.env.VENESIA_QA_OWNED_CHILD;if(!/^[a-f0-9-]{36}$/.test(marker||''))throw Error('missing ownership');process.stdout.write(marker);process.stderr.write(marker);"]);
+      assert.equal(result.stdout, "[REDACTED_CHILD_OWNERSHIP]"); assert.equal(result.stderr, "[REDACTED_CHILD_OWNERSHIP]");
+      assert.equal(readFileSync(path.join(directory, "public-marker.stdout.log"), "utf8"), result.stdout);
+      assert.equal(readFileSync(path.join(directory, "public-marker.stderr.log"), "utf8"), result.stderr);
+      assert.equal(environment.VENESIA_QA_OWNED_CHILD, undefined); assert.equal(children.size, 0);
+    });
+    await control("nonzero status retains actual output duration and cleanup", async () => {
+      const result = await run("nonzero", ["-e", "process.stdout.write('partial');process.stderr.write('failure');process.exitCode=7;"]);
+      assert.equal(result.code, 7); assert.equal(result.stdout, "partial"); assert.equal(result.stderr, "failure");
+      assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0); assert.equal(children.size, 0);
+    });
+    await control("sanitizer failure rejects instead of escaping the close callback", async () => {
+      const failure = new Error("Controlled sanitizer failure");
+      const failingContext = { ...context, sanitize: (): string => { throw failure; } };
+      await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
+        ["-e", "process.stdout.write('private-sentinel');"], { ...environment }, "sanitize-failure", 10_000), (error: unknown) => error === failure);
+      assert.equal(children.size, 0);
+      assert.equal(existsSync(path.join(directory, "public-sanitize-failure.stdout.log")), false);
+      assert.equal(existsSync(path.join(directory, "public-sanitize-failure.stderr.log")), false);
+    });
+    await control("log-write failure rejects and retains the already sanitized output", async () => {
+      const failure = new Error("Controlled stderr-log write failure");
+      const failingWrite: typeof writeFileSync = (file, data, options) => {
+        if (typeof file === "string" && file.endsWith("public-write-failure.stderr.log")) throw failure;
+        writeFileSync(file, data, options);
+      };
+      await assert.rejects(buildApi(failingWrite).run({ sourceDirectory: directory, context, children, signal: new AbortController().signal },
+        ["-e", "process.stdout.write('partial private-sentinel');process.stderr.write('failure private-sentinel');"], { ...environment }, "write-failure", 10_000),
+      (error: unknown) => error === failure);
+      assert.equal(children.size, 0);
+      assert.equal(readFileSync(path.join(directory, "public-write-failure.stdout.log"), "utf8"), "partial [redacted]");
+      assert.equal(existsSync(path.join(directory, "public-write-failure.stderr.log")), false);
+    });
+    await control("timeout remains the primary failure when sanitization also fails", async () => {
+      const failure = new Error("Secondary sanitizer failure");
+      const failingContext = { ...context, sanitize: (): string => { throw failure; } };
+      await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
+        ["-e", "setInterval(()=>{},1000)"], { ...environment }, "timeout-sanitize-failure", 100),
+      (error: unknown) => error instanceof Error && /aborted or exceeded its bound/u.test(error.message) && error.cause === failure);
+      assert.equal(children.size, 0);
+    });
+    await control("timeout rejects and removes the owned process", async () => {
+      await assert.rejects(run("timeout", ["-e", "setInterval(()=>{},1000)"], new AbortController().signal, 100), (error: unknown) => {
+        assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+        const retained = (error as Error & { childResult: { reason: string; durationMs: number; cleanup: { status: string; liveProcesses: number } } }).childResult;
+        assert.equal(retained.reason, "timeout"); assert.ok(retained.durationMs >= 100);
+        assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.liveProcesses, 0); return true;
+      });
+      assert.equal(children.size, 0); assert.ok(existsSync(path.join(directory, "public-timeout.stdout.log")));
+      assert.ok(existsSync(path.join(directory, "public-timeout.stderr.log")));
+    });
+    await control("abort stops an actually started owned process", async () => {
+      const controller = new AbortController(), pending = run("abort", ["-e", "process.stdout.write('ready');setInterval(()=>{},1000)"], controller.signal);
+      const child = [...children][0]; assert.ok(child?.stdout);
+      const rejected = assert.rejects(pending, /aborted or exceeded its bound/u);
+      await new Promise<void>((done, reject) => {
+        const timer = setTimeout(() => reject(Error("Owned control child did not become ready.")), 5_000);
+        child.stdout!.once("data", () => { clearTimeout(timer); done(); });
+        child.once("error", () => { clearTimeout(timer); reject(Error("Owned control child failed before readiness.")); });
+      });
+      controller.abort(Error("Owned control abort")); await rejected;
+      assert.equal(children.size, 0); assert.equal(readFileSync(path.join(directory, "public-abort.stdout.log"), "utf8"), "ready");
+    });
+    await control("pre-aborted admission starts no child and writes no logs", async () => {
+      const controller = new AbortController(); controller.abort(Error("Pre-aborted control"));
+      const before = readdirSync(directory).sort();
+      await assert.rejects(run("pre-aborted", ["-e", "throw Error('must not execute')"], controller.signal), /Pre-aborted control/u);
+      assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+    });
+    await control("spawn failure rejects and drains its owned child registration", async () => {
+      const pending = run("spawn-error", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "absent-owned-cwd"));
+      const child = [...children][0]; assert.ok(child);
+      const closed = new Promise<void>(done => child.once("close", () => done()));
+      await assert.rejects(pending, (error: unknown) => {
+        assert.ok(error instanceof Error && /process failed/u.test(error.message));
+        assert.deepEqual(error.cause, { code: "ENOENT" }); return true;
+      }); await closed; assert.equal(children.size, 0);
+    });
+    await control("spawn failure remains primary when its close callback cannot write logs", async () => {
+      const failure = new Error("Secondary spawn log-write failure");
+      const failingWrite: typeof writeFileSync = () => { throw failure; };
+      const pending = buildApi(failingWrite).run({ sourceDirectory: path.join(directory, "absent-owned-cwd"), context, children,
+        signal: new AbortController().signal }, ["-e", "throw Error('must not execute')"], { ...environment }, "spawn-write-failure", 10_000);
+      const child = [...children][0]; assert.ok(child);
+      const closed = new Promise<void>(done => child.once("close", () => done()));
+      await assert.rejects(pending, /process failed/u); await closed; assert.equal(children.size, 0);
+      assert.equal(existsSync(path.join(directory, "public-spawn-write-failure.stdout.log")), false);
+    });
+    if (process.platform === "linux") {
+      await control("Linux immediate zero-exit child retains an inspectable root identity and leaves no live process", async () => {
+        const result = await run("linux-fast-exit", ["-e", "process.exit(0)"]);
+        assert.equal(result.code, 0); assert.equal(result.stdout, ""); assert.equal(result.stderr, "");
+        assert.equal(result.cleanup.processTreeVerified, true); assert.equal(result.cleanup.observedProcesses, 1);
+        assert.equal(result.cleanup.liveProcesses, 0); assert.equal(result.cleanup.residualProcessesAfterExit, 0); assert.equal(children.size, 0);
+      });
+      const processAlive = (pid: number) => {
+        try { const raw = readFileSync(`/proc/${pid}/stat`, "utf8"), state = raw.slice(raw.lastIndexOf(")") + 2).split(" ")[0]; return !["Z", "X", "x"].includes(state!); }
+        catch (error) { if (["ENOENT", "ESRCH"].includes(String((error as NodeJS.ErrnoException).code))) return false; throw error; }
+      };
+      const readyLine = (child: ChildProcess, prefix: string) => new Promise<string>((done, reject) => {
+        let output = "";
+        const timer = setTimeout(() => { child.stdout!.off("data", data); reject(Error("Owned Linux tree readiness exceeded its bound.")); }, 8_000);
+        const data = (value: Buffer) => {
+          output += String(value);
+          const line = output.split("\n").find(line => line.startsWith(prefix));
+          if (line) { clearTimeout(timer); child.stdout!.off("data", data); done(line.slice(prefix.length)); }
+        };
+        child.stdout!.on("data", data);
+        child.once("error", () => { clearTimeout(timer); child.stdout!.off("data", data); reject(Error("Owned Linux tree failed before readiness.")); });
+      });
+      const leaf = "process.on('SIGTERM',()=>{});process.stdout.write(String(process.pid)+'\\n');setInterval(()=>{},1000);";
+      const middle = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:['ignore','pipe','pipe']});leaf.stdout.once('data',data=>process.stdout.write(JSON.stringify([process.pid,Number(String(data).trim())])+'\\n'));setInterval(()=>{},1000);`;
+      const tree = `const {spawn}=require('node:child_process');process.on('SIGTERM',()=>{});const middle=spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,stdio:['ignore','pipe','pipe']});middle.stdout.once('data',data=>process.stdout.write('tree-ready:'+JSON.stringify([process.pid,...JSON.parse(String(data))])+'\\n'));setInterval(()=>{},1000);`;
+      for (const kind of ["timeout", "cancelled"] as const) await control(`Linux ${kind} kills TERM-ignoring detached descendants and preserves an unrelated live child`, async () => {
+        let sentinel: ChildProcess | undefined;
+        try {
+          const controller = new AbortController(), pending = run(`linux-tree-${kind}`, ["-e", tree], controller.signal, kind === "timeout" ? 3_000 : 15_000);
+          const child = [...children][0]; assert.ok(child);
+          const outcome = pending.then(() => assert.fail("A terminated owned tree must not PASS."), (error: unknown) => error);
+          const pids = JSON.parse(await readyLine(child, "tree-ready:")) as number[];
+          assert.equal(pids.length, 3); assert.ok(pids.every(pid => Number.isSafeInteger(pid) && pid > 1 && processAlive(pid)));
+          sentinel = spawn(process.execPath, ["-e", "process.stdout.write('sentinel\\n');setInterval(()=>{},1000)"], { env: { ...environment }, stdio: ["ignore", "pipe", "pipe"] });
+          await readyLine(sentinel, "sentinel"); assert.ok(sentinel.pid && processAlive(sentinel.pid));
+          const identity = (pid: number) => { const raw = readFileSync(`/proc/${pid}/stat`, "utf8"); return raw.slice(raw.lastIndexOf(")") + 2).trim().split(/\s+/u); };
+          assert.equal(lstatSync(`/proc/${sentinel.pid}`).uid, process.getuid!());
+          assert.ok(BigInt(identity(sentinel.pid)[19]!) >= BigInt(identity(pids[0]!)[19]!), "Unrelated sentinel must reach the same-user newer-process discovery filter.");
+          if (kind === "cancelled") controller.abort(Error("Controlled Linux tree cancellation"));
+          const error = await outcome;
+          assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+          const retained = (error as Error & { childResult: { reason: string; cleanup: { status: string; forcedTermination: boolean; processTreeVerified: boolean; observedProcesses: number; liveProcesses: number } } }).childResult;
+          assert.equal(retained.reason, kind); assert.equal(retained.cleanup.status, "PASS");
+          assert.equal(retained.cleanup.forcedTermination, true); assert.equal(retained.cleanup.processTreeVerified, true);
+          assert.ok(retained.cleanup.observedProcesses >= 3); assert.equal(retained.cleanup.liveProcesses, 0);
+          assert.ok(pids.every(pid => !processAlive(pid))); assert.equal(children.size, 0);
+          assert.ok(processAlive(sentinel.pid), "Owned cleanup must preserve an unrelated newly created live process.");
+        } finally { if (sentinel) await api.stop(sentinel, environment); }
+      });
+      await control("Linux zero-exit parent still drains a detached orphan and reports the residual instead of hiding it", async () => {
+        const orphan = `const {spawn}=require('node:child_process');const orphan=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,stdio:['ignore','pipe','pipe']});orphan.stdout.once('data',data=>{process.stdout.write('orphan:'+String(data));orphan.stdout.destroy();orphan.stderr.destroy();orphan.unref();process.exit(0);});`;
+        const result = await run("linux-orphan", ["-e", orphan]);
+        const pid = Number(result.stdout.trim().replace(/^orphan:/u, "")); assert.ok(Number.isSafeInteger(pid) && pid > 1);
+        assert.equal(result.code, 0); assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true);
+        assert.equal(result.cleanup.forcedTermination, true); assert.ok(result.cleanup.residualProcessesAfterExit >= 1);
+        assert.ok(result.cleanup.observedProcesses >= 2); assert.equal(result.cleanup.liveProcesses, 0);
+        assert.equal(processAlive(pid), false); assert.equal(children.size, 0);
+      });
+    }
+  } finally {
+    const stopped = await Promise.allSettled([...children].map(child => api.stop(child, environment)));
+    assert.equal(realpathSync(directory), directory);
+    assert.ok(path.basename(directory).startsWith("venisia-owned-child-controls-") && path.dirname(directory) === realpathSync(tmpdir()));
+    rmSync(directory, { recursive: true, force: true });
+    assert.ok(stopped.every(result => result.status === "fulfilled")); assert.equal(children.size, 0); assert.equal(existsSync(directory), false);
+  }
+}
+
+function verifyQualifiedSelectionControls() {
+  const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declarations = ["qualifyLocalVerificationTargets", "localVerificationCommandSteps"].map(name => {
+    const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
+    assert.ok(node); return node.getText(file).replace(/^export /u, "");
+  });
+  const qualify = new Function("assert", ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return qualifyLocalVerificationTargets;")(assert) as typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets;
+  type Analysis = import("./lib/isolated-public-verification.mts").LocalVerificationSourceImpact;
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const entry = "scripts/qa-admin-form-guarded-navigation.mts", step = "node --experimental-strip-types " + entry + " --save-cache-only";
+  const fixtureHash = sha256(readFileSync(path.join(root, entry), "utf8").replaceAll("\r\n", "\n"));
+  const owner = "src/components/admin/ui/AdminFormRuntime.tsx", manifest = "src/lib/admin/interaction-system/adoption-manifest.ts";
+  const analysis = (): Analysis => ({ proofBoundary: "source_discovery_only", sourceSha256: "a".repeat(64), deltaSha256: "b".repeat(64),
+    ownerBindings: [{ owner: "AdminFormRuntime", capability: "form_runtime", files: [owner], manifest }], obligations: [], protections: [],
+    changes: [{ file: owner, owners: ["AdminFormRuntime"], capabilities: ["form_runtime"], consumers: ["src/lib/admin/form-system/adoption-manifest.ts#controlled-consumer"],
+      contracts: [manifest], candidateChecks: ["verify:admin-query-save-failure-contracts"], unresolved: [], semanticChange: true, presentationOnly: false }] });
+  check("qualified shared Form change selects one actual registered leaf with owner/contract/consumer reasons", () => {
+    const result = qualify(scripts, analysis(), fixtureHash); assert.equal(result.targets.length, 1); assert.equal(result.targets[0]!.step, step);
+    assert.deepEqual(result.targets[0]!.owners, ["AdminFormRuntime"]); assert.deepEqual(result.targets[0]!.capabilities, ["form_runtime"]);
+    assert.equal(result.targets[0]!.consumers.length, 1); assert.equal(result.targets[0]!.nativePersistenceVerified, false);
+    assert.equal(result.targets[0]!.businessConsumerAdoptionVerified, false); assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+  });
+  check("qualified fixture maintenance selects its actual behavior family rather than claiming business consumer adoption", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: entry, capabilities: [], consumers: [] }];
+    assert.equal(qualify(scripts, value, fixtureHash).targets.length, 1);
+  });
+  check("simple presentation and unchanged inputs never execute the Form family", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, presentationOnly: true }]; assert.equal(qualify(scripts, value, fixtureHash).targets.length, 0);
+    value.changes = [{ ...value.changes[0]!, presentationOnly: false, semanticChange: false }]; assert.equal(qualify(scripts, value, fixtureHash).targets.length, 0);
+  });
+  check("an unrelated functional change does not inherit a Form leaf from a broad wrapper", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: "src/lib/unrelated.ts", owners: ["other"], capabilities: [], contracts: [], consumers: [] }];
+    assert.equal(qualify(scripts, value, fixtureHash).targets.length, 0);
+  });
+  check("Form contract changes keep eligible behavior alongside all existing contract and adoption gates", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: "src/lib/admin/form-system/adoption-manifest.ts", capabilities: [] }];
+    assert.equal(qualify(scripts, value, fixtureHash).targets.length, 1); assert.equal(qualify(scripts, value, fixtureHash).unqualifiedRemainUnderExistingGates, true);
+  });
+  check("unknown fixture bytes cannot silently renew their own effect qualification", () => {
+    const result = qualify(scripts, analysis(), "f".repeat(64)); assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("qualified_fixture_bytes_changed_review_effect_contract"));
+  });
+  check("missing current owner evidence blocks qualification rather than copying a registry", () => {
+    const value = analysis(); value.ownerBindings = []; const result = qualify(scripts, value, fixtureHash);
+    assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("missing_current_manifest_form_runtime_owner"));
+  });
+  check("unsupported shell or redirected canonical entry cannot authorize execution", () => {
+    const unsafe = { ...scripts, "verify:admin-query-save-failure-contracts": step + " && echo unsafe" };
+    assert.equal(qualify(unsafe, analysis(), fixtureHash).targets.length, 0);
+    assert.equal(qualify({ ...scripts, "verify:admin-query-save-failure-contracts": step.replace("--save-cache-only", "--unknown-mode") }, analysis(), fixtureHash).targets.length, 0);
+  });
+  check("overlapping wrappers and repeated leaf occurrences execute the same family only once", () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, candidateChecks: ["qa:qualified-control", "verify:admin-query-save-failure-contracts"] }];
+    assert.equal(qualify({ ...scripts, "qa:qualified-control": step + " && " + step }, value, fixtureHash).targets.length, 1);
+  });
+  check("dependency or tooling changes require effect review before automatic execution", () => {
+    const value = analysis(); value.changes = [...value.changes, { ...value.changes[0]!, file: "package-lock.json" }];
+    const result = qualify(scripts, value, fixtureHash); assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("dependency_or_command_contract_changed"));
+  });
+  check("qualified execution source keeps immutable snapshot/selector checks and actual terminal behavior requirements", () => {
+    const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "executeLocalVerificationTargets"); assert.ok(node);
+    const source = node.getText(file);
+    for (const required of ["Targeted execution has a stale source snapshot.", "Targeted selector is stale or incomplete.", "inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead, automatic: true })", "never supplied impact analysis", "runOwnedVerificationChild", "scenariosCompleted", "businessConsumerAdoptionVerified", "cleanupFailurePreserved"])
+      assert.ok(source.includes(required), required);
+    assert.ok(readSource(entry).includes("installSaveCacheNetworkFence"));
+  });
+}
+
 async function localRiskVerificationOnly() {
   verifyFinalQualityGatePlan(); const plan = verifyLocalRiskVerificationPlan(); await verifyLocalRiskExecutionControls(plan.prefix);
-  await verifyLocalRiskControlLeaseAdmission(); verifyAdminMeasurementRestartPolicy();
+  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
     fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
+}
+
+/** Existing verifier adapter; source mode reads only, explicit qualified mode delegates one canonical leaf. */
+function verifyQualifiedResultControls() {
+  const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "localVerificationFailureClassification");
+  assert.ok(node);
+  const classify = new Function(ts.transpileModule(node.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return localVerificationFailureClassification;")() as typeof import("./lib/isolated-public-verification.mts").localVerificationFailureClassification;
+  const receiptNode = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "localVerificationFamilyReceipt"); assert.ok(receiptNode);
+  const parse = new Function("assert", ts.transpileModule(receiptNode.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return localVerificationFamilyReceipt;")(assert) as typeof import("./lib/isolated-public-verification.mts").localVerificationFamilyReceipt;
+  check("terminal receipt parsing accepts one actual family and rejects missing or duplicate PASS/FAIL evidence", () => {
+    const pass = JSON.stringify({ family: "admin-form-save-cache", status: "PASS" });
+    const fail = JSON.stringify({ family: "admin-form-save-cache", status: "FAIL" });
+    assert.equal(parse("ordinary output\n" + pass, "admin-form-save-cache").status, "PASS");
+    assert.throws(() => parse("ordinary output", "admin-form-save-cache"), /exactly one/u);
+    assert.throws(() => parse(fail + "\n" + pass, "admin-form-save-cache"), /exactly one/u);
+    assert.throws(() => parse(pass + "\n" + pass, "admin-form-save-cache"), /exactly one/u);
+    assert.equal(parse(JSON.stringify({ family: "other", status: "FAIL" }) + "\n" + pass, "admin-form-save-cache").status, "PASS");
+  });
+  check("classification supports the complete taxonomy without guessing a Product cause from labels", () => {
+    assert.ok(node.getText(file).includes('["Product", "QA / Test", "Fixture", "Harness", "Environment", "UNKNOWN"]'));
+    for (const label of ["Product data lost", "flaky test", "Fixture timeout", "Harness failure", "Environment ENOSPC"]) {
+      const result = classify({ stage: "execution", error: Error(label), exitCode: 1 });
+      assert.equal(result.category, "UNKNOWN"); assert.equal(result.osCode, null);
+    }
+  });
+  check("classification uses an actual operating-system error code and preserves its evidence", () => {
+    for (const code of ["ENOSPC", "EACCES", "EROFS", "ENOENT", "EPERM"]) {
+      const error = Object.assign(Error("Controlled evidence write"), { code });
+      const result = classify({ stage: "evidence", error }); assert.equal(result.category, "Environment"); assert.equal(result.osCode, code);
+    }
+    assert.equal(classify({ stage: "evidence", error: { code: "ENOSPC" } }).category, "UNKNOWN");
+    assert.equal(classify({ stage: "evidence", error: Object.assign(Error("unknown"), { code: "FAKE" }) }).category, "UNKNOWN");
+  });
+  check("only a zero-exit invalid terminal family receipt establishes a fixture protocol failure", () => {
+    assert.equal(classify({ stage: "terminal_receipt", exitCode: 0, error: Error("Required receipt invalid") }).category, "Fixture");
+    for (const exitCode of [null, 1, undefined]) assert.equal(classify({ stage: "terminal_receipt", exitCode }).category, "UNKNOWN");
+    assert.equal(classify({ stage: "execution", exitCode: 0 }).category, "UNKNOWN");
+  });
+  check("timeouts and cancellation retain UNKNOWN rather than declaring flakiness or hiding a failure", () => {
+    for (const childReason of ["timeout", "cancelled", "output_limit", "nonzero_exit"]) {
+      const result = classify({ stage: "execution", childReason }); assert.equal(result.category, "UNKNOWN"); assert.ok(result.technicalKind.endsWith(childReason));
+    }
+  });
+  check("qualified receipts retain run identity, first attempt, no retry, cleanup and sanitized log hashes", () => {
+    const execute = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "executeLocalVerificationTargets"); assert.ok(execute);
+    const source = execute.getText(file);
+    for (const fragment of ["globalThis.crypto.randomUUID()", "runId: invocationId", "NOT_ASSESSED_SINGLE_ATTEMPT", "attempts:", "childOutcome:",
+      "stdoutSha256: digest(stdout)", "stderrSha256: digest(stderr)", "cleanupFailurePreserved", "originalAttempt:", "A qualified leaf cannot execute twice in one path."])
+      assert.ok(source.includes(fragment), "Missing retained execution invariant: " + fragment);
+    assert.equal(source.includes("retry: 1"), false);
+  });
+}
+
+async function changeImpactOnly() {
+  try {
+    const args = process.argv.slice(2);
+    const ciMode = args.includes("--ci-change-impact");
+    const executeMode = args.includes("--execute-qualified-impact");
+    assert.equal(args.filter(argument => ["--change-impact-only", "--ci-change-impact", "--execute-qualified-impact"].includes(argument)).length, 1);
+    assert.ok(ciMode ? args.length === 1 : args.every(argument => argument === "--change-impact-only" || argument === "--execute-qualified-impact" || /^--(?:impact-baseline|impact-record|additional-source)=.+$/u.test(argument)),
+      "Change-impact inspection accepts only explicit baseline, review record and additional source arguments.");
+    const one = (prefix: string) => {
+      const values = args.filter(argument => argument.startsWith(prefix)); assert.ok(values.length <= 1, "Duplicate impact argument: " + prefix);
+      return values[0]?.slice(prefix.length);
+    };
+    const recordPath = one("--impact-record=");
+    assert.ok(!executeMode || !recordPath && !args.some(argument => argument.startsWith("--additional-source=")),
+      "Qualified execution uses tracked source and an explicit baseline, never an approval record or untracked entry.");
+    let impact: import("./lib/isolated-public-verification.mts").LocalVerificationImpact | undefined;
+    if (recordPath) {
+      const record = path.resolve(recordPath), evidenceRoot = path.resolve(root, ".tmp-qa") + path.sep;
+      assert.ok(record.toLowerCase().startsWith(evidenceRoot.toLowerCase()) && record.endsWith(".json") && !/\.private\.|(?:^|[\\/])\.env(?:[.\\/]|$)/iu.test(record),
+        "Impact review must be an explicit nonprivate JSON evidence file under this workspace's .tmp-qa directory.");
+      assert.ok(lstatSync(record).isFile() && realpathSync(record) === record, "Impact review cannot traverse a symlink or junction.");
+      try { impact = JSON.parse(readFileSync(record, "utf8")) as import("./lib/isolated-public-verification.mts").LocalVerificationImpact; }
+      catch { throw Error("Invalid reviewed impact JSON; record values are not echoed."); }
+      assert.ok(impact && typeof impact === "object" && !Array.isArray(impact), "Impact review JSON must contain an explicit reviewed record object.");
+    }
+    const baselineHead = one("--impact-baseline=") ?? impact?.baselineHead;
+    assert.ok(ciMode || baselineHead, "Supply --impact-baseline=<40sha> or an explicit --impact-record=<path>; no baseline is inferred.");
+    let ci: { eventName: string; event: unknown; githubSha: string } | undefined;
+    if (ciMode) {
+      const eventPath = process.env.GITHUB_EVENT_PATH, eventName = process.env.GITHUB_EVENT_NAME, githubSha = process.env.GITHUB_SHA;
+      assert.ok(eventPath && eventName && githubSha, "CI source selection requires immutable GITHUB_EVENT_PATH, GITHUB_EVENT_NAME and GITHUB_SHA.");
+      const eventFile = path.resolve(eventPath);
+      assert.ok(lstatSync(eventFile).isFile() && realpathSync(eventFile) === eventFile, "CI event must be a regular immutable event file.");
+      let event: unknown;
+      try { event = JSON.parse(readFileSync(eventFile, "utf8")); } catch { throw Error("Invalid immutable CI event JSON; values are not echoed."); }
+      ci = { eventName, event, githubSha };
+    }
+    const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
+      "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",
+      "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild"];
+    const declarations = names.map(name => {
+      const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
+        || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name));
+      assert.ok(found, "Missing canonical source impact declaration: " + name); return found.getText(parsed).replace(/^export /u, "");
+    });
+    const code = ts.transpileModule(adminAdoptionControlSource(parsed) + "\n" + declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const api = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph",
+      "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets};")(
+      assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph,
+      spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep) as
+      Pick<typeof import("./lib/isolated-public-verification.mts"), "inspectLocalVerificationChangeImpact" | "executeLocalVerificationTargets">;
+    if (executeMode) {
+      const { sourceReport: report, ...targetedExecution } = await api.executeLocalVerificationTargets({ baselineHead: baselineHead! }, new AbortController().signal);
+      const combined = { ...report, sourceStatus: report.status, status: targetedExecution.status, targetedExecution,
+        qualifiedBehavioralPass: targetedExecution.status === "PASS", candidateCommandsExecuted: targetedExecution.executedCommands,
+        browserExecuted: targetedExecution.browserExecuted, sourceNetworkRequests: report.networkRequests, networkRequests: targetedExecution.commandAttempts ? null : 0,
+        exitCode: targetedExecution.exitCode, behavioralPass: false, releaseEvidence: false };
+      console.log(JSON.stringify(combined, null, 2)); process.exitCode = combined.exitCode; return;
+    }
+    const report = api.inspectLocalVerificationChangeImpact({ baselineHead, impact, automatic: ciMode, ci,
+      additionalSourceFiles: args.filter(argument => argument.startsWith("--additional-source=")).map(argument => argument.slice("--additional-source=".length)) });
+    console.log(JSON.stringify(report, null, 2)); process.exitCode = report.exitCode;
+  } catch (error) {
+    console.log(JSON.stringify({ status: "BLOCKED_SOURCE_CONSISTENCY", releaseEvidence: false, checksExecuted: 0, browserExecuted: false,
+      databaseCalls: 0, networkRequests: 0, diagnostic: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid impact inspection input." }, null, 2));
+    process.exitCode = 1;
+  }
 }
 
 async function verifyMigrationToolPlatforms(lock: StackLock) {
@@ -1995,6 +3190,10 @@ async function main() {
   const riskPlan = verifyLocalRiskVerificationPlan();
   await verifyLocalRiskExecutionControls(riskPlan.prefix);
   await verifyLocalRiskControlLeaseAdmission();
+  await verifyQualifiedFormHarnessControls();
+  await verifySharedChildControls();
+  verifyQualifiedSelectionControls();
+  verifyQualifiedResultControls();
   await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
   verifyScanner();
@@ -2841,5 +4040,5 @@ async function retainedFinalQualityOnly() {
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
 }
 
-const verification = process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
-verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
+const verification = process.argv.includes("--ci-change-impact") || process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+(process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : verification)().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
