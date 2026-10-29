@@ -421,6 +421,8 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             || obligation.runtime && (calls.has(obligation.contract) || calls.has(obligation.key)) || [...fragments].some(fragment => {
             if (fragment.length < 2 || /^(?:true|false|null|undefined|number|string|boolean|object|function|any|unknown|void|never|readonly|export|type|const|interface|\d+)$/u.test(fragment)) return false;
             const previous = compactShape(obligation.previous), next = compactShape(obligation.next), expected = compactShape(fragment);
+            // A runtime export name proves availability only, not applicable contract protection.
+            if (obligation.runtime && expected === obligation.key) return false;
             return previous.includes(expected) !== next.includes(expected)
               && !obligation.siblings.some(shape => compactShape(shape).includes(expected));
           }))).map(obligation => obligation.contract);
