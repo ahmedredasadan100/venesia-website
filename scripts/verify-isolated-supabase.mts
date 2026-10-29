@@ -3002,7 +3002,7 @@ async function verifySharedChildControls() {
   }
 }
 
-function verifyQualifiedSelectionControls() {
+async function verifyQualifiedSelectionControls() {
   const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const declarations = ["qualifyLocalVerificationTargets", "localVerificationCommandSteps"].map(name => {
     const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
@@ -3078,11 +3078,53 @@ function verifyQualifiedSelectionControls() {
     };
     assertActualQualification({ qualifyLocalVerificationTargets: qualify });
   });
+  const executorNode = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "executeLocalVerificationTargets");
+  assert.ok(executorNode);
+  const inspectorRequests: Array<{ baselineHead: string; automatic: boolean }> = [], reachedExecutionPorts: string[] = [];
+  const baselineHead = "a".repeat(40), qualifiedTargets = qualify(scripts, analysis(), fixtureHash);
+  type AdmissionSnapshot = { status: string; exitCode: number; qualifiedTargets?: typeof qualifiedTargets; changeImpact?: Analysis };
+  let snapshot: AdmissionSnapshot = { status: "DRIFT", exitCode: 2 };
+  const inspector = (options: { baselineHead: string; automatic: boolean }) => { inspectorRequests.push(options); return snapshot; };
+  const executionPorts = ["execFileSync", "selectSourceInventory", "safeSourcePath", "existsSync", "lstatSync", "realpathSync", "readFileSync", "digest",
+    "qualifyLocalVerificationTargets", "resolve", "mkdirSync", "mkdtempSync", "join", "runOwnedVerificationChild", "stopChild", "readdirSync", "rmSync",
+    "ownedPath", "receipt", "localVerificationFamilyReceipt", "localVerificationFailureClassification"];
+  const execute = new Function("assert", "inspectLocalVerificationChangeImpact", "process", ...executionPorts,
+    ts.transpileModule(executorNode.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+      + ";return executeLocalVerificationTargets;")(assert, inspector, { env: {}, platform: "offline-admission" }, ...executionPorts.map(name => () => {
+        reachedExecutionPorts.push(name); throw Error("Executor admission reached forbidden execution port: " + name);
+      })) as typeof import("./lib/isolated-public-verification.mts").executeLocalVerificationTargets;
+  const admissionCase = "actual qualified executor rejects caller selectors and blocks incomplete source admission before execution";
+  try {
+    const assertActualExecutorAdmission = async (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "executeLocalVerificationTargets">) => {
+      const signal = new AbortController().signal;
+      const callerSelector = { baselineHead, qualifiedTargets }, callerImpact = { baselineHead, changeImpact: analysis() };
+      await assert.rejects(ownerApi.executeLocalVerificationTargets(callerSelector, signal), /only an immutable baseline, never supplied impact analysis/u);
+      await assert.rejects(ownerApi.executeLocalVerificationTargets(callerImpact, signal), /only an immutable baseline, never supplied impact analysis/u);
+      assert.deepEqual(inspectorRequests, []); assert.deepEqual(reachedExecutionPorts, []);
+      for (const input of [
+        { status: "DRIFT", exitCode: 2 },
+        { status: "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: 0, changeImpact: analysis() },
+        { status: "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: 0, qualifiedTargets },
+        { status: "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: 1, qualifiedTargets, changeImpact: analysis() },
+      ]) {
+        snapshot = input; const requestsBefore: number = inspectorRequests.length;
+        const result = await ownerApi.executeLocalVerificationTargets({ baselineHead }, signal);
+        assert.equal(result.status, "BLOCKED"); assert.equal(result.exitCode, 1); assert.equal(result.sourceReport, snapshot);
+        assert.equal(result.executedCommands, 0); assert.equal(result.commandAttempts, 0); assert.equal(result.browserExecuted, false);
+        assert.equal(result.attempt, 0); assert.equal(result.retry, 0); assert.equal(result.flakyStatus, "NOT_RUN"); assert.equal(result.fullGatesPreserved, true);
+        assert.deepEqual(result.results, []); assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0);
+        assert.equal(inspectorRequests.length, requestsBefore + 1); assert.deepEqual(inspectorRequests.at(-1), { baselineHead, automatic: true });
+        assert.deepEqual(reachedExecutionPorts, []);
+      }
+    };
+    await assertActualExecutorAdmission({ executeLocalVerificationTargets: execute });
+  } catch (error) { console.error("FAIL " + admissionCase); throw error; }
+  cases.push(admissionCase);
 }
 
 async function localRiskVerificationOnly() {
   verifyFinalQualityGatePlan(); const plan = verifyLocalRiskVerificationPlan(); await verifyLocalRiskExecutionControls(plan.prefix);
-  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
+  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); await verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
     fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
@@ -3301,7 +3343,7 @@ async function main() {
   await verifyLocalRiskControlLeaseAdmission();
   await verifyQualifiedFormHarnessControls();
   await verifySharedChildControls();
-  verifyQualifiedSelectionControls();
+  await verifyQualifiedSelectionControls();
   verifyQualifiedResultControls();
   await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
