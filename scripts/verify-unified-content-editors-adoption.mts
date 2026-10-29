@@ -2303,8 +2303,15 @@ for (const [ownerName, ownerFile] of [
   const contains = condition.right as ts.CallExpression;
   const owner = functionDeclaration(tree, ownerName)!;
   const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
-  const replaceNode = (node: ts.Node, text: string) => source.slice(0, node.getStart(tree)) + text + source.slice(node.end);
-  const replaceExpression = (node: ts.Expression, next: ts.Expression) => replaceNode(node, printer.printNode(ts.EmitHint.Expression, next, tree));
+  const replaceNode = (node: ts.Node, next: ts.Node | undefined) => {
+    const transformed = ts.transform(tree, [context => {
+      const visit: ts.Visitor = current => current === node ? next : ts.visitEachChild(current, visit, context);
+      return root => ts.visitNode(root, visit, ts.isSourceFile)!;
+    }]);
+    try { return printer.printFile(transformed.transformed[0]!); }
+    finally { transformed.dispose(); }
+  };
+  const replaceExpression = (node: ts.Expression, next: ts.Expression) => replaceNode(node, next);
   const withArguments = (call: ts.CallExpression, args: readonly ts.Expression[]) =>
     replaceExpression(call, ts.factory.updateCallExpression(call, call.expression, call.typeArguments, args));
   const disconnectedOwner = ts.factory.updateFunctionDeclaration(owner,
@@ -2317,16 +2324,18 @@ for (const [ownerName, ownerFile] of [
     ["missing own-form filter", replaceExpression(condition, condition.left)],
     ["missing Node boundary", replaceExpression(condition, condition.right)],
     ["foreign-form containment", replaceExpression(contains.expression, ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("otherForm"), "contains"))],
-    ["disconnected initial state", replaceNode(initial.parent, "")],
-    ["missing input registration", replaceNode(input.parent, "")],
-    ["missing change registration", replaceNode(change.parent, "")],
-    ["missing input cleanup", replaceNode(removeInput.parent, "")],
-    ["missing change cleanup", replaceNode(removeChange.parent, "")],
+    ["disconnected initial state", replaceNode(initial.parent, undefined)],
+    ["missing input registration", replaceNode(input.parent, undefined)],
+    ["missing change registration", replaceNode(change.parent, undefined)],
+    ["missing input cleanup", replaceNode(removeInput.parent, undefined)],
+    ["missing change cleanup", replaceNode(removeChange.parent, undefined)],
     ["mismatched cleanup callback", withArguments(removeInput, [removeInput.arguments[0]!, ts.factory.createIdentifier("otherObserver")])],
     ["cleanup capture mismatch", withArguments(removeInput, [...removeInput.arguments.slice(0, 2), ts.factory.createTrue()])],
     ["listener bypasses filter", withArguments(input, [input.arguments[0]!, ts.factory.createIdentifier("sync")])],
-    ["effect disconnected behind a helper", replaceNode(effectCall.parent, "const unusedEffect = () => " + effectCall.getText(tree) + ";")],
-    ["canonical default owner disconnected", replaceNode(owner, printer.printNode(ts.EmitHint.Unspecified, disconnectedOwner, tree))],
+    ["effect disconnected behind a helper", replaceNode(effectCall.parent, ts.factory.createVariableStatement(undefined,
+      ts.factory.createVariableDeclarationList([ts.factory.createVariableDeclaration("unusedEffect", undefined, undefined,
+        ts.factory.createArrowFunction(undefined, undefined, [], undefined, ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken), effectCall))], ts.NodeFlags.Const)))],
+    ["canonical default owner disconnected", replaceNode(owner, disconnectedOwner)],
   ] as const) {
     assert.notEqual(mutated, source, `${ownerName} rejection must change actual source: ${label}`);
     assert.ok(!hasPostReactFormObservation(mutated, ownerName), `${ownerName} ownership rejects ${label}.`);
