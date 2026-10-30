@@ -210,6 +210,53 @@ function verifyReleaseLock(): { lock: StackLock; hash: string } {
   return { lock, hash: sha256(lockSource) };
 }
 
+function verifyReleaseLockInputContracts(owner: Pick<typeof import("./lib/isolated-supabase.mts"), "readReleaseLock" | "IsolatedSupabaseError">) {
+  const input = readSource("scripts/fixtures/isolated-supabase/stack.lock.json"), expected = JSON.parse(input) as StackLock;
+  const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-release-lock-inputs-"))), names: string[] = [];
+  let serial = 0;
+  const read = (bytes: string) => {
+    const file = path.join(directory, "lock-" + ++serial + ".json");
+    writeFileSync(file, bytes, { flag: "wx", mode: 0o600 });
+    return owner.readReleaseLock(file);
+  };
+  try {
+    const actual = read(input); assert.deepEqual(actual, expected);
+    assert.equal(actual.schemaVersion, 1); assert.equal(actual.release.commit, expected.release.commit);
+    assert.equal(actual.compose.sha256, sha256(readSource(actual.compose.path)));
+    assert.equal(actual.transport.sha256, sha256(readSource(actual.transport.path)));
+    names.push("actual current JSON bytes parse and validate through the existing release lock owner");
+    const negative: Array<[string, string, (value: StackLock) => void]> = [
+      ["schema drift", "UNAPPROVED_RELEASE", value => { Object.assign(value, { schemaVersion: 2 }); }],
+      ["release drift", "UNAPPROVED_RELEASE", value => { value.release.commit = "0".repeat(40); }],
+      ["release source drift", "INCOMPLETE_RELEASE_LOCK", value => { value.release.sourceBaseUrl = "https://example.invalid/"; }],
+      ["missing upstream inputs", "INCOMPLETE_RELEASE_LOCK", value => { value.files = []; }],
+      ["duplicate upstream input", "DUPLICATE_LOCK_PATH", value => { value.files.push({ ...value.files[0]! }); }],
+      ["unsafe upstream path", "UNSAFE_UPSTREAM_PATH", value => { value.files[0]!.path = "docker/../outside.sql"; }],
+      ["upstream digest drift", "UNSAFE_UPSTREAM_PATH", value => { value.files[0]!.sha256 = "unqualified"; }],
+      ["missing image", "INVALID_IMAGE_SET", value => { delete value.images.db; }],
+      ["mutable image", "UNPINNED_IMAGE", value => { value.images.db!.reference = "supabase/postgres:latest"; }],
+      ["image config drift", "UNPINNED_IMAGE", value => { value.images.db!.configDigest = "unqualified"; }],
+      ["image manifest mismatch", "UNPINNED_IMAGE", value => { value.images.db!.manifestDigest = "sha256:" + "0".repeat(64); }],
+      ["compose content drift", "SOURCE_HASH_MISMATCH", value => { value.compose.sha256 = "0".repeat(64); }],
+      ["transport content drift", "TRANSPORT_SOURCE_HASH_MISMATCH", value => { value.transport.sha256 = "0".repeat(64); }],
+      ["transport owner substitution", "TRANSPORT_SOURCE_HASH_MISMATCH", value => { value.transport.path = "scripts/qa-isolated-supabase-transport.mjs"; }],
+    ];
+    for (const [name, code, mutate] of negative) {
+      const changed = structuredClone(expected); mutate(changed);
+      assert.throws(() => read(JSON.stringify(changed)), error => error instanceof owner.IsolatedSupabaseError && error.code === code);
+      names.push(name);
+    }
+    assert.throws(() => read("{"), SyntaxError); names.push("malformed JSON rejects before any lifecycle entry");
+    assert.equal(readSource("scripts/fixtures/isolated-supabase/stack.lock.json"), input);
+  } finally {
+    assert.equal(path.dirname(directory), realpathSync(tmpdir())); assert.ok(path.basename(directory).startsWith("venisia-release-lock-inputs-"));
+    assert.equal(realpathSync(directory), directory); rmSync(directory, { recursive: true, force: false }); assert.equal(existsSync(directory), false);
+  }
+  cases.push(...names.map(name => "Release lock input: " + name));
+  return { status: "PASS", input: "scripts/fixtures/isolated-supabase/stack.lock.json", sourceSha256: sha256(input), names,
+    actualOwnerReadParseValidation: true, tempFixtureCleanupVerified: true, dockerExecuted: false, databaseCalls: 0 };
+}
+
 function verifyImageIdentity(owner: typeof import("./lib/isolated-supabase.mts"), expected: StackLock["images"][string]) {
   const actual = { id: expected.configDigest, os: "linux", architecture: "amd64", repoDigests: [expected.reference] };
   check("image accepts the pinned config ID with exact RepoDigest and platform", () => owner.assertPinnedImageIdentity(actual, expected));
@@ -3387,6 +3434,7 @@ async function verifyQualifiedFormHarnessControls() {
 /** Real imported compiler contracts plus source-bound union/member checks, not native execution evidence. */
 function verifyWindowsOwnedProcessContracts() {
   function verifyNativeBuildPublicationControls() {
+    const capturedNativeSource = Buffer.from(readSource("scripts/lib/windows-owned-process.cs"));
     const nativeFile = "scripts/lib/windows-owned-process.mts", nativeSource = ts.createSourceFile(nativeFile, readSource(nativeFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const actual = ["hash", "build", "nativeBuild"].map(name => {
       const node = nativeSource.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
@@ -3399,7 +3447,7 @@ function verifyWindowsOwnedProcessContracts() {
       const fixtureRoot = path.resolve(root, ".tmp-qa", "controlled-native-build-no-files"), systemRoot = path.join(fixtureRoot, "controlled-windows");
       const framework = path.join(systemRoot, "Microsoft.NET/Framework64/v4.0.30319"), source = path.join(fixtureRoot, "scripts/lib/windows-owned-process.cs"), compiler = path.join(framework, "csc.exe");
       const references = ["mscorlib.dll", "System.dll", "System.Core.dll", "System.Web.dll", "System.Web.Extensions.dll"].map(name => path.join(framework, name));
-      const files = new Map<string, Buffer>([[source, Buffer.from("controlled captured C# source")], [compiler, Buffer.from("controlled compiler bytes")],
+      const files = new Map<string, Buffer>([[source, Buffer.from(capturedNativeSource)], [compiler, Buffer.from("controlled compiler bytes")],
         ...references.map(file => [file, Buffer.from("controlled reference " + path.basename(file))] as const)]);
       const directories = new Set<string>([fixtureRoot]), writes: Array<{ file: string; flag: string }> = [], invocations: Array<{ snapshot: string; flags: string[] }> = [];
       let serial = 0, failProvenance = options.failProvenanceOnce ?? false, corruptProvenance = options.corruptProvenanceOnce ?? false;
@@ -3420,7 +3468,7 @@ function verifyWindowsOwnedProcessContracts() {
         },
         execFileSync: (binary: string, flags: string[], settings: { cwd: string; timeout: number; env: { NODE_ENV: string } }) => {
           assert.equal(binary, compiler); assert.equal(settings.cwd, fixtureRoot); assert.equal(settings.timeout, 60_000); assert.equal(settings.env.NODE_ENV, "test");
-          const snapshot = flags.at(-1)!; assert.notEqual(snapshot, source); assert.deepEqual(read(snapshot), Buffer.from("controlled captured C# source"));
+          const snapshot = flags.at(-1)!; assert.notEqual(snapshot, source); assert.deepEqual(read(snapshot), capturedNativeSource);
           assert.ok(writes.some(row => row.file === snapshot && row.flag === "wx")); invocations.push({ snapshot, flags: [...flags] });
           const output = flags.find(flag => flag.startsWith("/out:")); assert.ok(output); files.set(output.slice(5), Buffer.from("controlled executable " + invocations.length));
           const changed = { source, snapshot, compiler, reference: references[0]! };
@@ -3472,7 +3520,8 @@ function verifyWindowsOwnedProcessContracts() {
       });
     }
     return { status: "PASS", scope: "actual_nativeBuild_hash_and_build_declarations_with_controlled_ports", checks: results.length, cases: results,
-      operatingSystemWrites: 0, compilerProcessesExecuted: 0, nativeProcessesAllocated: 0 };
+      operatingSystemWrites: 0, compilerProcessesExecuted: 0, nativeProcessesAllocated: 0,
+      actualNativeSourceInput: "scripts/lib/windows-owned-process.cs", actualNativeSourceSha256: sha256(capturedNativeSource) };
   }
   const nativeBuildPublication = verifyNativeBuildPublicationControls();
   const identity: import("./lib/windows-owned-process.mts").WindowsJobIdentity = {
@@ -3514,6 +3563,12 @@ function verifyWindowsOwnedProcessContracts() {
   if (process.platform === "win32") {
     const capability = windowsOwnedProcessCapability(); assert.ok(capability.status === "PASS");
     const native = capability.native, directory = path.dirname(native.executable), evidenceRoot = realpathSync(path.join(root, ".tmp-qa"));
+    const nativeSource = readSource("scripts/lib/windows-owned-process.cs"), provenance = JSON.parse(readFileSync(native.provenance, "utf8")) as {
+      sourceSha256: string; sourceSnapshot: string; executableSha256: string; compilerSha256: string; flags: string[] };
+    assert.equal(native.sourceSha256, sha256(nativeSource)); assert.equal(readFileSync(native.sourceSnapshot, "utf8"), nativeSource);
+    assert.equal(provenance.sourceSha256, native.sourceSha256); assert.equal(provenance.sourceSnapshot, native.sourceSnapshot);
+    assert.equal(provenance.executableSha256, native.executableSha256); assert.equal(provenance.compilerSha256, native.compilerSha256);
+    assert.equal(provenance.flags.at(-1), native.sourceSnapshot); assert.ok(!provenance.flags.includes(path.join(root, "scripts/lib/windows-owned-process.cs")));
     assert.equal(path.dirname(directory), evidenceRoot); assert.ok(path.basename(directory).startsWith("windows-native-build-"));
     assert.equal(realpathSync(native.executable), native.executable); assert.equal(lstatSync(native.executable).isFile(), true);
     assert.equal(Object.isFrozen(native), true); assert.equal(Object.isFrozen(native.frameworkReferences), true);
@@ -3876,6 +3931,71 @@ async function verifyWindowsClosureAcceptanceControls() {
   }
 }
 
+async function verifyIsolatedCliInputContracts(errorType: typeof import("./lib/isolated-supabase.mts").IsolatedSupabaseError) {
+  const source = readSource("scripts/qa-isolated-supabase.mts");
+  const tree = ts.createSourceFile("scripts/qa-isolated-supabase.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  assert.deepEqual((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, []);
+  const options = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "options");
+  const dispatch = tree.statements.filter(ts.isTryStatement); assert.ok(options?.body); assert.equal(dispatch.length, 1);
+  const body = ts.transpileModule(options.getText(tree) + "\nasync function dispatchActualCli(){" + dispatch[0]!.getText(tree) + "}", {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const names: string[] = [];
+  const invoke = async (args: string[]) => {
+    const calls: Array<{ name: string; input: unknown }> = []; let stdout = "", stderr = "";
+    const processPort = { argv: [process.execPath, path.join(root, "scripts/qa-isolated-supabase.mts"), ...args], exitCode: 0,
+      stdout: { write(value: string) { stdout += value; } }, stderr: { write(value: string) { stderr += value; } } };
+    const route = (name: string) => async (input: unknown) => { calls.push({ name, input }); return { controlledRoute: name }; };
+    const handoff = () => { throw Error("CLI parser controls must not enter an application handoff."); };
+    const ports = { assert, resolve: path.resolve, runApplicationHandoff: handoff, IsolatedSupabaseError: errorType, process: processPort,
+      connectionLifecycleProof: route("connectionLifecycleProof"), finalPublicProof: route("finalPublicProof"),
+      buildContractsProof: route("buildContractsProof"), mediaUploadLimitProof: route("mediaUploadLimitProof"),
+      heroCompatibilityProof: route("heroCompatibilityProof"), runIsolatedSupabase: route("runIsolatedSupabase") };
+    const api = new Function(...Object.keys(ports), body + ";return {options,dispatchActualCli};")(...Object.values(ports)) as {
+      options(args: string[]): import("./lib/isolated-supabase.mts").IsolatedSupabaseOptions; dispatchActualCli(): Promise<void> };
+    await api.dispatchActualCli(); return { api, calls, stdout, stderr, exitCode: processPort.exitCode, handoff };
+  };
+  const output = path.join(root, ".tmp-qa", "controlled-cli-no-allocation");
+  const ordinary = await invoke(["--output", output, "--platform-only", "--pg-port", "56065", "--rest-port", "56066", "--storage-port", "56067", "--api-port", "56068"]);
+  assert.equal(ordinary.exitCode, 0); assert.equal(ordinary.stderr, ""); assert.equal(ordinary.calls.length, 1);
+  assert.equal(ordinary.calls[0]!.name, "runIsolatedSupabase");
+  const parsed = ordinary.calls[0]!.input as import("./lib/isolated-supabase.mts").IsolatedSupabaseOptions;
+  assert.equal(parsed.artifactDir, output); assert.equal(parsed.handoff, undefined); assert.equal(parsed.cleanupOnly, false);
+  assert.deepEqual([parsed.pgPort, parsed.restPort, parsed.storagePort, parsed.apiPort], [56065, 56066, 56067, 56068]);
+  const application = ordinary.api.options(["--output", output]); assert.equal(application.handoff, ordinary.handoff);
+  assert.equal(ordinary.api.options(["--output", output, "--platform-only", "--cleanup-only"]).cleanupOnly, true);
+  assert.equal(ordinary.api.options(["--output", output, "--inject-failure", "before-handoff"]).failureInjection, "before-handoff");
+  names.push("actual options preserve ordinary handoff platform cleanup and fixed port representations without invoking owners");
+  const routes = [["--connection-lifecycle-only", "connectionLifecycleProof"], ["--final-public-proof", "finalPublicProof"],
+    ["--build-contracts-proof", "buildContractsProof"], ["--media-upload-limit-proof", "mediaUploadLimitProof"],
+    ["--hero-compatibility-proof", "heroCompatibilityProof"]] as const;
+  for (const [flag, name] of routes) {
+    const args = ["--output", output, flag], result = await invoke(args);
+    assert.equal(result.exitCode, 0); assert.equal(result.stderr, "");
+    assert.deepEqual(result.calls, [{ name, input: ["--output", output] }]);
+    assert.deepEqual(JSON.parse(result.stdout), { controlledRoute: name }); names.push("actual dispatcher selects " + flag);
+  }
+  const invalid: Array<[string, string[], string]> = [
+    ["missing output", [], "OUTPUT_REQUIRED"], ["unknown argument", ["--output", output, "--unknown"], "INVALID_ARGUMENT"],
+    ["missing output value", ["--output"], "INVALID_ARGUMENT"], ["next flag is not a value", ["--output", "--platform-only"], "INVALID_ARGUMENT"],
+    ["duplicate output", ["--output", output, "--output", output], "INVALID_ARGUMENT"],
+    ["duplicate boolean", ["--output", output, "--platform-only", "--platform-only"], "DUPLICATE_ARGUMENT"],
+    ["unknown failure injection", ["--output", output, "--inject-failure", "unqualified"], "INVALID_FAILURE_INJECTION"],
+    ["retained proof outside its mode", ["--output", output, "--retained-proof", "unqualified"], "UNCLASSIFIED_FAILURE"],
+  ];
+  for (let left = 0; left < routes.length; left++) for (let right = left; right < routes.length; right++)
+    invalid.push(["duplicate or conflicting proof modes " + routes[left]![0] + " " + routes[right]![0],
+      ["--output", output, routes[left]![0], routes[right]![0]], "UNCLASSIFIED_FAILURE"]);
+  for (const [name, args, code] of invalid) {
+    const result = await invoke(args); assert.equal(result.exitCode, 1); assert.deepEqual(result.calls, []); assert.equal(result.stdout, "");
+    assert.deepEqual(JSON.parse(result.stderr), { status: "needs_attention", stage: "cli", code }); names.push(name + " rejects before every allocation/proof port");
+  }
+  assert.equal(readSource("scripts/qa-isolated-supabase.mts"), source);
+  cases.push(...names.map(name => "Actual CLI input: " + name));
+  return { status: "PASS", source: "scripts/qa-isolated-supabase.mts", sourceSha256: sha256(source), names,
+    actualParserAndDispatcher: true, actualResourceAllocations: 0, dockerExecuted: false, databaseCalls: 0 };
+}
+
 /** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */
 async function verifySharedChildControls() {
   const launchWindows = (options: Parameters<typeof spawnWindowsOwnedProcess>[0]) => {
@@ -3919,6 +4039,29 @@ async function verifySharedChildControls() {
     cases.push("shared owned child " + name);
   };
   try {
+    const lifecycleOwner = await import("./lib/isolated-supabase.mts");
+    runtimeProofs.push({ control: "actual_release_lock_input", ...verifyReleaseLockInputContracts(lifecycleOwner) });
+    runtimeProofs.push({ control: "actual_cli_parser_dispatcher", ...await verifyIsolatedCliInputContracts(lifecycleOwner.IsolatedSupabaseError) });
+    await control("actual registered transport QA leaf executes once with complete owned cleanup and no Docker dispatch", async () => {
+      const result = await run("transport-contracts", [path.join(root, "scripts/qa-isolated-supabase-transport.mjs")], undefined, 30_000);
+      assert.equal(result.code, 0); assert.deepEqual(result.rawExit, { code: 0, signal: null }); assert.equal(result.cleanup.status, "PASS");
+      assert.equal(result.cleanup.liveProcesses, 0); assert.equal(result.stderr, "");
+      const proof = JSON.parse(result.stdout) as { status: string; checks: number; cases: string[]; dockerExecuted: boolean; productionAccess: boolean; externalConnections: boolean };
+      assert.equal(proof.status, "PASS"); assert.ok(Array.isArray(proof.cases) && proof.cases.length > 0);
+      assert.equal(proof.checks, proof.cases.length); assert.equal(new Set(proof.cases).size, proof.cases.length);
+      assert.equal(proof.dockerExecuted, false); assert.equal(proof.productionAccess, false); assert.equal(proof.externalConnections, false);
+      runtimeProofs.push({ control: "actual_owned_transport_leaf", entry: "scripts/qa-isolated-supabase-transport.mjs", ...proof,
+        rawExit: result.rawExit, cleanup: result.cleanup, ownedLoopbackTrafficExecuted: true });
+    });
+    await control("actual registered CLI entry rejects missing output before any application allocation", async () => {
+      const result = await run("cli-missing-output", ["--experimental-strip-types", path.join(root, "scripts/qa-isolated-supabase.mts")], undefined, 30_000);
+      assert.equal(result.code, 1); assert.deepEqual(result.rawExit, { code: 1, signal: null }); assert.equal(result.stdout, "");
+      assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0);
+      const failures = result.stderr.split(/\r?\n/u).filter(line => line.trim().startsWith("{")).map(line => JSON.parse(line));
+      assert.deepEqual(failures, [{ status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" }]);
+      runtimeProofs.push({ control: "actual_cli_no_allocation_rejection", entry: "scripts/qa-isolated-supabase.mts", rawExit: result.rawExit,
+        failure: failures[0], stderrSha256: sha256(result.stderr), cleanup: result.cleanup, applicationOutputSupplied: false });
+    });
     await control("Full E cleanup qualification requires the current platform ownership capability", async () => {
       const verifyQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "ownedProcessCleanupQualification">) => {
         const qualification = ownerApi.ownedProcessCleanupQualification();
@@ -4398,7 +4541,8 @@ async function ownedChildControlsOnly() {
   const runtimeProofs = await verifySharedChildControls();
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, platform: process.platform,
     runtimeProofs, actualOwnedChildrenExecuted: true, tempFixtureCleanupVerified: true, browserExecuted: false, databaseCalls: 0,
-    dockerResourcesAllocated: 0, windowsExitedRootDescendantsQualified: process.platform === "win32", windowsNativeAcceptanceCases: process.platform === "win32" ? 12 : 0 }, null, 2));
+    dockerResourcesAllocated: 0, ownedLoopbackTransportExecuted: true, externalNetworkRequests: 0,
+    windowsExitedRootDescendantsQualified: process.platform === "win32", windowsNativeAcceptanceCases: process.platform === "win32" ? 12 : 0 }, null, 2));
 }
 
 async function verifyQualifiedSelectionControls() {
@@ -4786,7 +4930,7 @@ async function localRiskVerificationOnly() {
   await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); await verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, diagnosticPerformance: qualifiedFormDiagnosticCost,
-    browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: 0,
+    browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: null, externalNetworkRequests: 0, ownedLoopbackTransportExecuted: true,
     fullQualityGateExecuted: false, retainedPassUsedForAffectedChecks: false }, null, 2));
 }
 
@@ -5164,7 +5308,8 @@ async function main() {
 
   for (const filename of sources) assert.equal(sha256(readSource(filename)), hashes[filename], "Owner source changed during verification.");
   assert.equal(sha256(readSource("scripts/fixtures/isolated-supabase/stack.lock.json")), provenance.hash);
-  console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, sourceHashes: hashes, lockSha256: provenance.hash, dockerExecuted: false, networkRequests: 0, databaseCalls: 0, environmentLoaded: false, integrationReadinessClaimed: false }, null, 2));
+  console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, sourceHashes: hashes, lockSha256: provenance.hash, dockerExecuted: false,
+    networkRequests: null, externalNetworkRequests: 0, ownedLoopbackTransportExecuted: true, databaseCalls: 0, environmentLoaded: false, integrationReadinessClaimed: false }, null, 2));
 }
 
 async function cliDiagnosticsOnly() {
