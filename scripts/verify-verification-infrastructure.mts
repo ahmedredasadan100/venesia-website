@@ -236,7 +236,8 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
   assert.equal((artifact.if as string).replace(/\s+/gu, ""), "${{always()&&steps.qa-change-impact.outcome!='skipped'&&steps.qa-change-impact.outcome!=''}}", "Publish after success/failure/cancellation only when the source step started");
   assert.ok(!Object.hasOwn(artifact, "continue-on-error") || artifact["continue-on-error"] === false);
   assert.ok(record(artifact.with));
-  assert.equal(artifact.with.path, "${{ runner.temp }}/qa-change-impact.json", "Do not upload the source workspace, private files or unrelated proof");
+  assert.equal(artifact.with.path, "${{ runner.temp }}/qa-change-impact.json\n.tmp-qa/admission-qualification-*/**\n.tmp-qa/owned-process-controls-*/**\n", "Upload only the exact source report and owned qualification evidence; exclude the source workspace, private files and unrelated proof");
+  assert.equal(artifact.with["include-hidden-files"], true, "Preserve the explicitly selected owned evidence beneath .tmp-qa");
   assert.equal(artifact.with["if-no-files-found"], "error");
   assert.ok(!Object.hasOwn(artifact.with, "overwrite") || artifact.with.overwrite === false);
   const browser = exactly(step => step.run === "npx playwright install --with-deps chromium", "Preserve the existing browser installation");
@@ -275,6 +276,8 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
     ["success-only evidence", value => { artifact(value).if = "success()"; }],
     ["missing-report skip", value => { (artifact(value).with as Record<string, unknown>)["if-no-files-found"] = "ignore"; }],
     ["broad evidence upload", value => { (artifact(value).with as Record<string, unknown>).path = "."; }],
+    ["private or unrelated evidence upload", value => { (artifact(value).with as Record<string, unknown>).path = String((artifact(value).with as Record<string, unknown>).path) + ".tmp-qa/**\n.env.local\n"; }],
+    ["hidden qualification evidence omitted", value => { (artifact(value).with as Record<string, unknown>)["include-hidden-files"] = false; }],
     ["overwritten attempt", value => { (artifact(value).with as Record<string, unknown>).overwrite = true; }],
     ["late source inspection", value => { const selected = impact(value); primary(value).steps = primary(value).steps.filter(step => step !== selected); primary(value).steps.push(selected); }],
     ["missing full gate", value => { primary(value).steps = primary(value).steps.filter(step => step.run !== "npm run ci:check"); }],

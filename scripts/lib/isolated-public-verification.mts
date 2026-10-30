@@ -92,11 +92,43 @@ export type LocalVerificationInputs = {
   verificationNativeGate?: NonNullable<ReturnType<typeof adminAdoptionGate>>;
   /** Derived from the actual before/current sources. Discovery never confers behavioral PASS. */
   changeImpact?: LocalVerificationSourceImpact;
+  admissionQualification?: LocalVerificationAdmissionQualification;
 };
+
+/** An invocation receipt, not a reusable approval file or a second check registry. */
+export type LocalVerificationAdmissionQualification = {
+  schema: 1; kind: "owned-admission-qualification"; nonce: string; status: "PASS" | "BLOCKED";
+  baselineHead: string; finalHead: string; sourceSha256: string;
+  runtime: unknown; executions: readonly { entry: string; args: readonly string[]; result: unknown }[];
+  assertions: ReturnType<typeof validateLocalVerificationAssertionRelocations> | null;
+  inputs: ReturnType<typeof validateLocalVerificationInputObservations> | null;
+  artifacts: readonly { path: string; sha256: string }[]; failures: readonly string[];
+  runDirectory: string; durationMs: number; behavioralPass: false; releaseEvidence: false;
+};
+// Only this owner's completed, live invocation can grant admission. JSON, even with
+// a correct hash or nonce copied from a former run, cannot recreate this authority.
+const localVerificationAdmissionInvocations = new WeakMap<LocalVerificationAdmissionQualification,
+  { sha256: string; snapshot: () => { finalHead: string; sourceSha256: string; runtime: unknown };
+    sourceDiscoverySha256: string;
+    sourceDiscovery: { baselineHead: string; finalHead: string; sourceSha256: string; additionalSourceFiles: readonly string[];
+      changes: LocalVerificationInputs["changes"]; changeImpact: LocalVerificationSourceImpact } }>();
+
+/** Raw facts from the existing verifier; only this owner can qualify them. */
+export type LocalVerificationInputObservations = {
+  schema: 1; kind: "verification-input-observations"; nonce: string; entry: string; executionScope: "affected_input_controls";
+  sources: readonly { file: string; sha256: string }[];
+  sourceWitnesses: readonly Record<string, unknown>[];
+  observations: Record<string, unknown>;
+  artifacts: readonly { path: string; sha256: string }[];
+};
+
+/** One existing prefix budget, also used by its measured Adoption caller. */
+export function localVerificationQualityPrefixDeadlineMs(): number { return 1_800_000; }
 export type LocalVerificationSourceImpact = {
   proofBoundary: "source_discovery_only";
   sourceSha256: string; deltaSha256: string;
   ownerBindings?: readonly { owner: string; capability?: string; files: readonly string[]; manifest: string }[];
+  assertionRelocationDemand?: ReturnType<typeof localVerificationAssertionRelocationRequired>;
   changes: readonly { file: string; owners: readonly string[]; capabilities: readonly string[]; consumers: readonly string[];
     contracts: readonly string[]; candidateChecks: readonly string[]; unresolved: readonly string[];
     semanticChange: boolean; presentationOnly: boolean }[];
@@ -105,7 +137,8 @@ export type LocalVerificationSourceImpact = {
     semanticChange: boolean; assertionChanges: readonly { sha256: string; references: readonly string[]; contracts: readonly string[] }[];
     references: readonly string[]; dynamicCapabilityAxes: boolean }[];
   /** Conservative AST regressions only; this does not establish complete behavioral assertion equivalence. */
-  qaQuality?: readonly { file: string; assertionsBefore: number; assertionsAfter: number; failures: readonly string[] }[];
+  qaQuality?: readonly { file: string; assertionsBefore: number; assertionsAfter: number; failures: readonly string[];
+    rawFailures?: readonly string[]; qualifiedRelocation?: unknown }[];
 };
 export type LocalVerificationProtectionMaintenance = {
   file: string; contract: string; protectionFile: string; check: string;
@@ -115,7 +148,7 @@ export type LocalVerificationProtectionMaintenance = {
   assertionSha256?: string;
 };
 /** A reviewed batch evidence record, not an owner/dependency/test registry. */
-export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact"> & {
+export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact" | "admissionQualification"> & {
   changes: readonly LocalVerificationChange[];
   verificationEntries?: readonly { check: string; entry: string }[];
   protectionMaintenance?: readonly LocalVerificationProtectionMaintenance[];
@@ -163,6 +196,766 @@ export function localVerificationPresentationSource(file: string, source: string
   }]);
   try { return ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(transformed.transformed[0]); }
   finally { transformed.dispose(); }
+}
+
+/** Source-derived execution demand; this coarse detector never grants relocation authority. */
+export function localVerificationAssertionRelocationRequired(input: {
+  baselineSources: ReadonlyMap<string, string | Buffer>;
+  currentSources: ReadonlyMap<string, string | Buffer>;
+}) {
+  const files = new Set<string>(), providers = new Set<string>();
+  const parse = (file: string, value: string) => ts.createSourceFile(file, value, ts.ScriptTarget.Latest, true, /x$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const normalized = (file: string, value: string) => ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(parse(file, value));
+  const observedAdapter = (file: string, value: string | undefined) => {
+    if (!value?.includes("nativeAssert")) return false;
+    const tree = parse(file, value); let found = false;
+    const visit = (node: ts.Node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Proxy"
+        && node.arguments?.[0] && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === "nativeAssert") found = true;
+      ts.forEachChild(node, visit);
+    }; visit(tree); return found;
+  };
+  const observedProviders = new Set<string>(), changedProviders = new Set<string>();
+  for (const file of new Set([...input.baselineSources.keys(), ...input.currentSources.keys()])) {
+    const previous = input.baselineSources.get(file)?.toString(), current = input.currentSources.get(file)?.toString();
+    if (!(observedAdapter(file, previous) || observedAdapter(file, current))) continue;
+    observedProviders.add(file);
+    if (previous === undefined || current === undefined || normalized(file, previous) !== normalized(file, current)) {
+      changedProviders.add(file); providers.add(file); files.add(file);
+    }
+  }
+  const assertions = (tree: ts.SourceFile) => {
+    const scopes = new Map<string, { total: number; comparisons: number; shapes: string[] }>();
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) {
+        const names: string[] = [];
+        for (let parent = node.parent; parent; parent = parent.parent) if (ts.isFunctionDeclaration(parent) && parent.name) names.unshift(parent.name.text);
+        const scope = names.join("/"), value = scopes.get(scope) ?? { total: 0, comparisons: 0, shapes: [] };
+        value.total += 1;
+        if (/^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|notEqual|notStrictEqual|notDeepEqual|notDeepStrictEqual)$/u.test(node.expression.getText(tree))) value.comparisons += 1;
+        value.shapes.push(node.getText(tree)); scopes.set(scope, value);
+      } ts.forEachChild(node, visit);
+    }; visit(tree); return scopes;
+  };
+  for (const [file, before] of input.baselineSources) {
+    const current = input.currentSources.get(file);
+    if (!current || !/^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(file)) continue;
+    const oldTree = parse(file, before.toString()), nextTree = parse(file, current.toString()), previous = assertions(oldTree), next = assertions(nextTree);
+    const consumerChanged = normalized(file, before.toString()) !== normalized(file, current.toString());
+    if ([...previous].some(([scope, value]) => (next.get(scope)?.total ?? 0) < value.total || (next.get(scope)?.comparisons ?? 0) < value.comparisons)) files.add(file);
+    const delegates = new Set<string>();
+    const delegatedProviders = new Set<string>();
+    for (const tree of [oldTree, nextTree]) for (const statement of tree.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text.startsWith(".") && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)) {
+      const base = resolve(ROOT, dirname(file), statement.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+      const target = [base, base + ".mts", base + ".ts", base + ".tsx"].find(candidate => observedProviders.has(candidate));
+      if (target) {
+        delegatedProviders.add(target);
+        for (const element of statement.importClause.namedBindings.elements) if (!element.isTypeOnly) delegates.add(element.name.text);
+      }
+    }
+    if (delegates.size) {
+      let invoked = false;
+      const visit = (node: ts.Node, tree: ts.SourceFile) => { if (ts.isCallExpression(node) && delegates.has(node.expression.getText(tree))) invoked = true; ts.forEachChild(node, child => visit(child, tree)); }; visit(oldTree, oldTree); visit(nextTree, nextTree);
+      if (invoked && (consumerChanged || [...delegatedProviders].some(provider => changedProviders.has(provider)))) { files.add(file); for (const provider of delegatedProviders) providers.add(provider); }
+    }
+  }
+  return { required: files.size > 0, files: [...files].sort(), providers: [...providers].sort() };
+}
+
+/** Finite source correspondence plus actual native assertion observations. Unsupported source stays blocked. */
+export function validateLocalVerificationAssertionRelocations(input: {
+  baselineSources: ReadonlyMap<string, string | Buffer>;
+  currentSources: ReadonlyMap<string, string | Buffer>;
+  observations: readonly unknown[];
+}) {
+  type Value = string | number | boolean | null | undefined | Value[] | { [key: string]: Value };
+  type Environment = Map<string, Value>;
+  type Predicate = { operator: string; actual: Value; expected: Value; case: Value };
+  const failures: Array<{ file: string; scope: string; reason: string }> = [];
+  const obligations: Array<{ file: string; scope: string; site: number; predicate: string; cases: number }> = [];
+  const relocations: Array<{ file: string; scope: string; before: number; after: number; matched: number; beforeFingerprint: string; afterFingerprint: string }> = [];
+  const providerProofs = new Map<string, { file: string; sourceSha256: string; consumers: string[]; assertionSites: number }>();
+  const demand: (condition: unknown, message: string) => asserts condition = (condition, message) => { if (!condition) throw new Error(message); };
+  const record = (value: unknown): Record<string, unknown> => { demand(value !== null && typeof value === "object" && !Array.isArray(value), "Expected bounded observation object"); return value as Record<string, unknown>; };
+  const stable = (value: unknown): string => JSON.stringify(value, (_key, entry: unknown) => {
+    if (entry === undefined) return { $undefined: true };
+    if (entry !== null && typeof entry === "object" && !Array.isArray(entry)) return Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)));
+    return entry;
+  });
+  const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+  const source = (map: ReadonlyMap<string, string | Buffer>, file: string) => { const value = map.get(file); demand(value !== undefined, "Missing source closure member: " + file); return value.toString(); };
+  const parse = (file: string, value: string) => ts.createSourceFile(file, value, ts.ScriptTarget.Latest, true, /x$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const observedAdapter = (tree: ts.SourceFile) => {
+    let found = false;
+    const visit = (node: ts.Node) => { if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Proxy"
+      && node.arguments?.[0] && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === "nativeAssert") found = true; ts.forEachChild(node, visit); };
+    visit(tree); return found;
+  };
+  const key = (node: ts.Node, tree: ts.SourceFile) => {
+    const project = (part: ts.Node): unknown => {
+      if (ts.isParenthesizedExpression(part)) return project(part.expression);
+      if (ts.isIdentifier(part) || ts.isPrivateIdentifier(part) || ts.isStringLiteralLike(part) || ts.isNumericLiteral(part)
+        || ts.isBigIntLiteral(part) || ts.isRegularExpressionLiteral(part) || ts.isTemplateHead(part)
+        || ts.isTemplateMiddle(part) || ts.isTemplateTail(part) || ts.isJsxText(part)) return [part.kind, part.text];
+      const children: unknown[] = []; ts.forEachChild(part, child => { children.push(project(child)); });
+      const flags = ts.isVariableDeclarationList(part) ? part.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)
+        : ts.isPrefixUnaryExpression(part) || ts.isPostfixUnaryExpression(part) ? part.operator : null;
+      return [part.kind, flags, children];
+    };
+    // Parsing, rather than a context-free scanner, identifies template tails and
+    // regex literals. Literal values remain exact; only trivia is excluded.
+    demand(node.getSourceFile() === tree, "Predicate node belongs to another source closure");
+    return stable(project(node));
+  };
+  const namedScope = (node: ts.Node) => { const names: string[] = []; for (let parent = node.parent; parent; parent = parent.parent) if (ts.isFunctionDeclaration(parent) && parent.name) names.unshift(parent.name.text); return names.join("/"); };
+  const calls = (tree: ts.SourceFile) => {
+    const result: ts.CallExpression[] = [];
+    const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) result.push(node); ts.forEachChild(node, visit); };
+    visit(tree); return result;
+  };
+  const count = (nodes: readonly ts.CallExpression[], tree: ts.SourceFile) => ({ total: nodes.length,
+    comparisons: nodes.filter(node => /^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|notEqual|notStrictEqual|notDeepEqual|notDeepStrictEqual)$/u.test(node.expression.getText(tree))).length });
+  const lookupFunction = (tree: ts.SourceFile, name: string) => {
+    const found: ts.FunctionDeclaration[] = [];
+    const visit = (node: ts.Node) => { if (ts.isFunctionDeclaration(node) && node.name?.text === name) found.push(node); ts.forEachChild(node, visit); }; visit(tree);
+    demand(found.length === 1 && found[0].body, "Ambiguous or missing actual function: " + name); return found[0];
+  };
+  const beneath = (node: ts.Node, ancestor: ts.Node) => { for (let parent: ts.Node | undefined = node; parent; parent = parent.parent) if (parent === ancestor) return true; return false; };
+  const meaningful = (node: ts.Node, tree: ts.SourceFile) => key(node, tree);
+  const objectTerm = (value: Value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
+  const symbol = (kind: string, fields: { [key: string]: Value } = {}): Value => ({ $kind: kind, ...fields });
+  const truthy = (value: Value): boolean => {
+    const object = objectTerm(value);
+    if (object?.$kind === "not") return !truthy(object.value);
+    demand(!object?.$kind || ["react", "function"].includes(String(object.$kind)), "Symbolic/dynamic control cannot authorize an assertion case");
+    return Boolean(value);
+  };
+  const receipts = input.observations.filter(value => value !== null && typeof value === "object" && record(value).kind === "assertion-relocation-observations").map(record);
+  const changed = [...input.baselineSources].filter(([file, value]) => /^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(file) && input.currentSources.has(file) && value.toString() !== input.currentSources.get(file)!.toString());
+  for (const [file, oldSource] of changed) {
+    const oldTree = parse(file, oldSource.toString()), nextTree = parse(file, source(input.currentSources, file));
+    const oldCalls = calls(oldTree), nextCalls = calls(nextTree);
+    const observedImports = new Set<string>();
+    for (const tree of [oldTree, nextTree]) for (const statement of tree.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith(".")
+        || !statement.importClause?.namedBindings || !ts.isNamedImports(statement.importClause.namedBindings)) continue;
+      const base = resolve(ROOT, dirname(file), statement.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+      const target = [base, base + ".mts", base + ".ts", base + ".tsx"].find(candidate => [input.baselineSources, input.currentSources].some(map => {
+        const value = map.get(candidate); return value !== undefined && observedAdapter(parse(candidate, value.toString()));
+      }));
+      if (target) for (const imported of statement.importClause.namedBindings.elements) if (!imported.isTypeOnly) observedImports.add(imported.name.text);
+    }
+    if ((observedAdapter(oldTree) || observedAdapter(nextTree))
+      && ts.createPrinter({ removeComments: true }).printFile(oldTree) !== ts.createPrinter({ removeComments: true }).printFile(nextTree)) {
+      failures.push({ file, scope: "", reason: "Changed observed shared predicate/operator requires direct provider qualification; raw count inflation cannot authorize it" });
+    }
+    const scopes = new Set(oldCalls.map(namedScope));
+    for (const scope of scopes) {
+      const oldScopeCalls = oldCalls.filter(node => namedScope(node) === scope), nextScopeCalls = nextCalls.filter(node => namedScope(node) === scope);
+      const previousCount = count(oldScopeCalls, oldTree), nextCount = count(nextScopeCalls, nextTree);
+      const receipt = receipts.find(value => value.consumer === file && value.scope === scope);
+      let observedDelegation = false;
+      const inspectObserved = (node: ts.Node, tree: ts.SourceFile) => { if (ts.isCallExpression(node) && namedScope(node) === scope && observedImports.has(node.expression.getText(tree))) observedDelegation = true; ts.forEachChild(node, child => inspectObserved(child, tree)); }; inspectObserved(oldTree, oldTree); inspectObserved(nextTree, nextTree);
+      if (nextCount.total >= previousCount.total && nextCount.comparisons >= previousCount.comparisons && !receipt && !observedDelegation) continue;
+      try {
+        const scopeName = scope.split("/").at(-1)!;
+        const oldOwner = lookupFunction(oldTree, scopeName), nextOwner = lookupFunction(nextTree, scopeName);
+        const beforeFingerprint = hash(stable(oldScopeCalls.map(node => key(node, oldTree)))), afterFingerprint = hash(stable(nextScopeCalls.map(node => key(node, nextTree))));
+        // Command ownership changed extraction, rather than moving a Section predicate.
+        if (scopeName === "registeredVerificationNodeEntries") {
+          demand(oldScopeCalls.every(node => node.expression.getText(oldTree) === "assert.ok") && nextScopeCalls.every(node => node.expression.getText(nextTree) === "assert.ok"), "Registered-command assertion operators changed");
+          const currentBody = nextOwner.body!.getText(nextTree), oldBody = oldOwner.body!.getText(oldTree);
+          demand(oldBody.includes("active.has") && oldBody.includes("Object.hasOwn") && oldBody.includes("sourceIncluded") && currentBody.includes("localVerificationCommandSteps"), "Command parser origin is not the supported recursive ownership extraction");
+          const recursive = lookupFunction(nextTree, "localVerificationCommandSteps"), recursiveText = recursive.body!.getText(nextTree);
+          demand(/Object\.hasOwn\(scripts,\s*check\)/u.test(recursiveText) && /typeof scripts\[check\]\s*!==\s*["']string["']/u.test(recursiveText)
+            && recursiveText.includes("active.has(check)") && recursiveText.includes("[\\r\\n]") && recursiveText.includes("localVerificationCommandSteps(scripts, wrapper[1], next)"), "Recursive command owner lost an original boundary");
+          demand(currentBody.includes("Object.hasOwn(scripts, check)") && currentBody.includes("assert.ok(steps") && currentBody.includes("assert.ok(sourceIncluded(entry)"), "Entry owner must preserve its actual assertion operator and private source boundary");
+          const commandProofs: Record<string, unknown>[] = [];
+          for (const observation of input.observations) {
+            if (observation === null || typeof observation !== "object") continue;
+            const envelope = record(observation), raw = envelope.observations;
+            if (raw && typeof raw === "object") {
+              const runtime = record(raw).runtimeProofs;
+              if (Array.isArray(runtime)) for (const proof of runtime) if (proof && typeof proof === "object" && record(proof).control === "registered_node_entries") commandProofs.push(record(proof));
+            }
+            if (envelope.control === "registered_node_entries") commandProofs.push(envelope);
+          }
+          demand(commandProofs.length === 1, "Fresh actual registered-command positive/negative controls are required");
+          const proof = commandProofs[0];
+          demand(proof.actualSourceProjection === true && proof.sourceOwnerSha256 === hash(source(input.currentSources, file)), "Actual parser observations use stale or copied source");
+          const verifierFile = "scripts/verify-isolated-supabase.mts";
+          demand(proof.sourceVerifierSha256 === hash(source(input.currentSources, verifierFile)), "Actual parser controls do not bind the current registered verifier");
+          demand(Array.isArray(proof.events), "Actual parser API observations are missing");
+          const parserEvents = proof.events.map(record).filter(event => event.method === "registeredVerificationNodeEntries");
+          const positive = parserEvents.filter(event => event.outcome === "RETURNED"), negative = parserEvents.filter(event => event.outcome === "REJECTED");
+          demand(positive.length >= 2 && negative.length >= 12 && positive.every(event => Array.isArray(event.result) && event.result.length > 0), "Registered-command controls are incomplete");
+          const negativeNames = negative.map(value => String(value.case));
+          for (const family of ["inherit", "cycle", "newline", "private", "sibling"]) demand(negativeNames.some(name => name.includes(family)), "Missing command boundary family: " + family);
+          demand(negativeNames.some(name => /own string|type/u.test(name)), "Missing recursive own-string type boundary");
+          const mutant = record(proof.mutant);
+          demand(mutant.actualRejected === true && Array.isArray(mutant.removedGuardOutput) && mutant.removedGuardOutput.some(value => typeof value === "string" && value.includes("/../private/")), "Actual private-entry assertion removal must be detected");
+          obligations.push({ file, scope, site: oldOwner.getStart(oldTree), predicate: "recursive-own-literal-command-and-private-entry-boundaries", cases: negative.length + positive.length });
+          relocations.push({ file, scope, before: previousCount.total, after: nextCount.total, matched: previousCount.total, beforeFingerprint, afterFingerprint });
+          continue;
+        }
+        demand(receipt && receipt.schema === 1 && typeof receipt.nonce === "string" && /^[a-f0-9-]{36}$/iu.test(receipt.nonce), "Missing current native Section assertion observations");
+        const calleeFile = String(receipt.calleeFile), subjectFile = String(receipt.subjectFile);
+        demand(/^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(calleeFile) && /^src\/.+\.tsx$/u.test(subjectFile), "Unsupported actual callee/subject source");
+        const calleeSource = source(input.currentSources, calleeFile), subjectSource = source(input.currentSources, subjectFile);
+        demand(source(input.baselineSources, subjectFile) === subjectSource, "Changed subject owner cannot inherit a relocation-only proof");
+        const binding = record(receipt.sourceBindings);
+        demand(binding.consumerRawSha256 === hash(source(input.currentSources, file)) && binding.calleeRawSha256 === hash(calleeSource) && binding.subjectRawSha256 === hash(subjectSource), "Runtime source binding is stale");
+        const readSubject = binding.subjectReadMode === "raw-utf8" ? subjectSource : binding.subjectReadMode === "normalizeVerificationText" ? subjectSource.replace(/\r\n/gu, "\n") : undefined;
+        demand(readSubject !== undefined && binding.subjectReadSha256 === hash(readSubject), "Actual source read/normalization is not bound");
+        demand(typeof binding.canonicalSourcePath === "string" && binding.canonicalSourcePath.replaceAll("\\", "/").endsWith("/" + subjectFile), "Subject read changed owner");
+        const callee = record(binding.callee), exportName = String(callee.export);
+        const calleeTree = parse(calleeFile, calleeSource), calleeOwner = lookupFunction(calleeTree, exportName);
+        const imported = nextTree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier)
+          && resolve(dirname(file), node.moduleSpecifier.text).replaceAll("\\", "/") === resolve(calleeFile).replaceAll("\\", "/"));
+        demand(imported.length === 1 && imported[0].importClause?.namedBindings && ts.isNamedImports(imported[0].importClause.namedBindings)
+          && imported[0].importClause.namedBindings.elements.some(element => !element.propertyName && element.name.text === exportName && !element.isTypeOnly), "Actual helper must use one unshadowed direct canonical import");
+        const shadowedHelper: ts.Node[] = [];
+        const inspectShadow = (node: ts.Node) => {
+          if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name && ts.isIdentifier(node.name) && node.name.text === exportName) shadowedHelper.push(node);
+          ts.forEachChild(node, inspectShadow);
+        }; inspectShadow(nextOwner);
+        demand(shadowedHelper.length === 0, "A local or foreign binding shadows the actual imported helper");
+        const delegates: ts.CallExpression[] = [];
+        const inspectDelegate = (node: ts.Node) => { if (ts.isCallExpression(node) && node.expression.getText(nextTree) === exportName) delegates.push(node); ts.forEachChild(node, inspectDelegate); }; inspectDelegate(nextOwner);
+        demand(delegates.length === 1, "A consumer must invoke its actual helper exactly once");
+        const delegate = delegates[0];
+        demand(ts.isExpressionStatement(delegate.parent) && delegate.parent.parent === nextOwner.body, "Delegation must run directly in the consumer continuation, not a branch/thunk/catch");
+        const delegateIndex = nextOwner.body!.statements.indexOf(delegate.parent);
+        demand(!nextOwner.body!.statements.slice(0, delegateIndex).some(statement => ts.isReturnStatement(statement) || ts.isThrowStatement(statement) || ts.isTryStatement(statement)), "Delegation is unreachable or protected by unsupported control");
+        demand(delegate.arguments.length === 2 && ts.isObjectLiteralExpression(delegate.arguments[1]), "Actual helper ports must be explicit");
+        const ports = delegate.arguments[1], port = (name: string) => ports.properties.find(property => (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) && property.name.getText(nextTree) === name);
+        const loaderPort = port("loadSection"), observePort = port("observe");
+        demand(loaderPort && observePort && ts.isShorthandPropertyAssignment(loaderPort), "Actual source loader and observation ports are required");
+        const allVariables = (tree: ts.SourceFile) => { const result: ts.VariableDeclaration[] = []; const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node)) result.push(node); ts.forEachChild(node, visit); }; visit(tree); return result; };
+        const actualSections = allVariables(calleeTree).filter(node => ts.isIdentifier(node.name) && node.name.text === "Section" && beneath(node, calleeOwner));
+        demand(actualSections.length === 1 && actualSections[0].initializer && ts.isCallExpression(actualSections[0].initializer)
+          && actualSections[0].initializer.expression.getText(calleeTree) === "loadSection" && actualSections[0].initializer.arguments.length === 1
+          && actualSections[0].initializer.arguments[0].getText(calleeTree) === "candidate", "Shared predicates replaced or cached the actual loaded Section");
+        const currentVariables = allVariables(nextTree);
+        const loaderBinding = currentVariables.filter(node => ts.isIdentifier(node.name) && node.name.text === loaderPort.name.text && beneath(node, nextOwner));
+        demand(loaderBinding.length === 1 && loaderBinding[0].initializer && ts.isArrowFunction(loaderBinding[0].initializer), "Actual loader callback changed or is shadowed");
+        const loader = loaderBinding[0].initializer;
+        demand(loader.parameters.length === 1 && ts.isIdentifier(loader.parameters[0].name), "Unsupported loader parameter");
+        const loaderParameter = loader.parameters[0].name.text;
+        let loaderExpression: ts.Expression = loader.body as ts.Expression;
+        while (ts.isAsExpression(loaderExpression) || ts.isParenthesizedExpression(loaderExpression)) loaderExpression = loaderExpression.expression;
+        demand(ts.isPropertyAccessExpression(loaderExpression) && loaderExpression.name.text === "AdminFormSection" && ts.isCallExpression(loaderExpression.expression), "Actual loader must return the canonical compiled Section");
+        const compileCall = loaderExpression.expression;
+        demand(compileCall.arguments[0] && ts.isIdentifier(compileCall.arguments[0]) && compileCall.arguments[0].text === loaderParameter, "Loader ignores or replaces the actual mutant candidate");
+        const compilerName = compileCall.expression.getText(nextTree);
+        const oldSectionCalls: ts.CallExpression[] = [];
+        const inspectOldSection = (node: ts.Node) => {
+          if (ts.isVariableDeclaration(node) && node.initializer) {
+            let initializer = node.initializer;
+            while (ts.isAsExpression(initializer) || ts.isParenthesizedExpression(initializer)) initializer = initializer.expression;
+            if (ts.isObjectBindingPattern(node.name) && node.name.elements.some(element => element.name.getText(oldTree) === "Section" && element.propertyName?.getText(oldTree) === "AdminFormSection") && ts.isCallExpression(initializer)) oldSectionCalls.push(initializer);
+            if (ts.isIdentifier(node.name) && node.name.text === "Section" && ts.isPropertyAccessExpression(initializer) && initializer.name.text === "AdminFormSection" && ts.isCallExpression(initializer.expression)) oldSectionCalls.push(initializer.expression);
+          } ts.forEachChild(node, inspectOldSection);
+        }; inspectOldSection(oldOwner);
+        demand(oldSectionCalls.length === 1 && key(oldSectionCalls[0], oldTree) === key(compileCall, nextTree), "Actual consumer compiler arguments/dependencies changed from the original owner");
+        const argumentSource = delegate.arguments[0];
+        demand(ts.isIdentifier(argumentSource), "Actual consumer source must use its direct read binding");
+        const readBinding = currentVariables.filter(node => ts.isIdentifier(node.name) && node.name.text === argumentSource.text && beneath(node, nextOwner));
+        demand(readBinding.length === 1 && readBinding[0].initializer && ts.isCallExpression(readBinding[0].initializer)
+          && readBinding[0].initializer.expression.getText(nextTree) === "read" && readBinding[0].initializer.arguments.length === 1
+          && ts.isStringLiteral(readBinding[0].initializer.arguments[0]) && readBinding[0].initializer.arguments[0].text === subjectFile, "Actual shared subject read was replaced or cached");
+        const namedVariable = (tree: ts.SourceFile, name: string, within: ts.Node = tree) => { const found = allVariables(tree).filter(node => ts.isIdentifier(node.name) && node.name.text === name && beneath(node, within)); demand(found.length === 1 && found[0].initializer, "Ambiguous dependency/read binding: " + name); return found[0]; };
+        for (const name of ["read", "jiti"]) demand(key(namedVariable(oldTree, name), oldTree) === key(namedVariable(nextTree, name), nextTree), "Canonical read or installed module loader changed");
+        for (const tree of [oldTree, nextTree]) for (const [name, module] of [["createElement", "react"], ["isValidElement", "react"], ["renderToStaticMarkup", "react-dom/server"]]) demand(tree.statements.some(node => ts.isImportDeclaration(node)
+          && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+          && node.importClause.namedBindings.elements.some(element => !element.propertyName && element.name.text === name)), "Actual React assertion/render import changed owner");
+        if (compileCall.arguments.length === 2) {
+          const dependenciesName = compileCall.arguments[1].getText(nextTree), dependencyVariable = namedVariable(nextTree, dependenciesName, nextOwner);
+          const previousDependencyVariable = namedVariable(oldTree, dependenciesName, oldOwner);
+          demand(key(previousDependencyVariable, oldTree) === key(dependencyVariable, nextTree), "Actual dependency factory invocation changed");
+          let factoryCall = dependencyVariable.initializer!; if (ts.isAwaitExpression(factoryCall)) factoryCall = factoryCall.expression;
+          demand(ts.isCallExpression(factoryCall) && ts.isIdentifier(factoryCall.expression), "Unsupported dependency factory");
+          const factoryName = factoryCall.expression.text;
+          demand(key(lookupFunction(oldTree, factoryName), oldTree) === key(lookupFunction(nextTree, factoryName), nextTree), "Canonical dependency factory changed");
+        } else {
+          demand(compileCall.arguments.length === 3 && ts.isObjectLiteralExpression(compileCall.arguments[2]), "Unsupported compiler dependency ports");
+          const arrayFactories = (tree: ts.SourceFile) => allVariables(tree).filter(node => beneath(node, tree === oldTree ? oldOwner : nextOwner) && ts.isArrayBindingPattern(node.name) && node.name.elements.some(element => ts.isBindingElement(element) && element.name.getText(tree) === "styles"));
+          const previousFactories = arrayFactories(oldTree), currentFactories = arrayFactories(nextTree);
+          demand(previousFactories.length === 1 && currentFactories.length === 1 && key(previousFactories[0], oldTree) === key(currentFactories[0], nextTree), "Actual imported component/style factory changed");
+        }
+        const findCompiler = (tree: ts.SourceFile) => {
+          const declarations: ts.Node[] = [];
+          const visit = (node: ts.Node) => { if (ts.isFunctionDeclaration(node) && node.name?.text === compilerName || ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === compilerName && beneath(node, tree === oldTree ? oldOwner : nextOwner)) declarations.push(node); ts.forEachChild(node, visit); }; visit(tree);
+          demand(declarations.length === 1, "Ambiguous compiler closure"); return declarations[0];
+        };
+        demand(meaningful(findCompiler(oldTree), oldTree) === meaningful(findCompiler(nextTree), nextTree), "Canonical compiler closure changed; fresh different-loader qualification is required");
+        const compiler = record(binding.compiler), callback = record(binding.loaderCallback);
+        demand(compiler.binding === compilerName && typeof compiler.runtimeSource === "string" && compiler.runtimeSha256 === hash(compiler.runtimeSource)
+          && typeof callback.runtimeSource === "string" && callback.runtimeSha256 === hash(callback.runtimeSource), "Actual runtime compiler/callback identity is missing");
+        const runtimeKey = (value: string) => {
+          const tree = parse("runtime.mts", "const __proof = (" + value.replace(/^export\s+(?:default\s+)?/u, "") + ");");
+          const variable = tree.statements[0]; demand(ts.isVariableStatement(variable), "Runtime function source is not a function");
+          const initializer = variable.declarationList.declarations[0].initializer; demand(initializer, "Runtime function source is empty");
+          let expression = initializer; while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+          return key(expression, tree);
+        };
+        const emittedFunctionKey = (node: ts.Node, tree: ts.SourceFile) => {
+          let expression = node; if (ts.isVariableDeclaration(node)) { demand(node.initializer, "Compiler has no value"); expression = node.initializer; }
+          const text = expression.getText(tree).replace(/^export\s+(?:default\s+)?/u, "");
+          const emitted = ts.transpileModule("const __proof = (" + text + ");", { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, removeComments: true } }).outputText;
+          const output = parse("emitted.mts", emitted), statement = output.statements[0]; demand(ts.isVariableStatement(statement), "Unable to project actual runtime function");
+          let initializer = statement.declarationList.declarations[0].initializer!; while (ts.isParenthesizedExpression(initializer)) initializer = initializer.expression;
+          return key(initializer, output);
+        };
+        demand(runtimeKey(compiler.runtimeSource) === emittedFunctionKey(findCompiler(nextTree), nextTree)
+          && runtimeKey(callback.runtimeSource) === emittedFunctionKey(loader, nextTree), "Runtime compiler/callback does not execute its current source declaration");
+        demand(typeof callee.runtimeSource === "string" && callee.runtimeSha256 === hash(callee.runtimeSource)
+          && runtimeKey(callee.runtimeSource) === emittedFunctionKey(calleeOwner, calleeTree), "Runtime helper is not the current actual source function");
+        const subjectTree = parse(subjectFile, subjectSource);
+        const styleImports = subjectTree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+          && node.importClause.namedBindings.elements.some(element => (element.propertyName ?? element.name).text === "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME"));
+        demand(styleImports.length === 1 && ts.isStringLiteral(styleImports[0].moduleSpecifier), "Actual subject style authority is missing");
+        const styleBase = resolve(ROOT, dirname(subjectFile), styleImports[0].moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+        const styleFile = [styleBase, styleBase + ".ts", styleBase + ".tsx"].find(candidate => input.currentSources.has(candidate)); demand(styleFile, "Missing canonical style owner source");
+        demand(source(input.baselineSources, styleFile) === source(input.currentSources, styleFile), "Changed style authority cannot inherit original inputs");
+        const styleTree = parse(styleFile, source(input.currentSources, styleFile)), styleDeclaration = namedVariable(styleTree, "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME");
+        demand(styleDeclaration.initializer && ts.isStringLiteralLike(styleDeclaration.initializer), "Only the actual literal style authority is supported");
+        const premiumValue = styleDeclaration.initializer.text, premiumPort = port("premiumSurfaceClassName");
+        demand(premiumPort && ts.isPropertyAssignment(premiumPort), "Actual style port is missing");
+        const premiumPortExpression = premiumPort.initializer.getText(nextTree);
+        const dependencyBindings = record(binding.dependencyBindings);
+        demand(dependencyBindings.premiumSurfaceClassName === premiumValue, "Runtime style is not the authoritative current owner value");
+        const requiredDependencies = ["AdminCard", "AdminModuleSectionHeader", "adminFormHintClassName", "createElement", "transpileModule",
+          ...(compileCall.arguments.length === 2 ? ["adminFormLabelClassName"] : [])];
+        for (const name of requiredDependencies) demand(Object.hasOwn(dependencyBindings, name), "Missing actual compiler dependency observation: " + name);
+        if (compileCall.arguments.length === 2) demand(dependencyBindings.formStackClassName === "space-y-5", "Canonical compiled Form stack constant changed");
+        for (const [name, value] of Object.entries(dependencyBindings)) {
+          if (name === "premiumSurfaceClassName" || name === "formStackClassName") continue;
+          const dependency = record(value); demand(typeof dependency.runtimeSource === "string" && dependency.runtimeSha256 === hash(dependency.runtimeSource), "Actual dependency function evidence is malformed");
+        }
+        const componentImports = subjectTree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier)
+          && (node.importClause?.name?.text === "AdminCard" || node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+            && node.importClause.namedBindings.elements.some(element => element.name.text === "AdminModuleSectionHeader")));
+        demand(componentImports.length === 2, "Subject canonical component dependencies changed");
+        for (const imported of componentImports) {
+          demand(ts.isStringLiteral(imported.moduleSpecifier), "Nonliteral component dependency");
+          const base = resolve(ROOT, dirname(subjectFile), imported.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+          const dependency = [base, base + ".tsx", base + ".ts"].find(candidate => input.currentSources.has(candidate)); demand(dependency, "Missing actual component dependency");
+          demand(source(input.baselineSources, dependency) === source(input.currentSources, dependency), "Changed component dependency cannot inherit relocation proof");
+        }
+        const baselinePrelude = new Set(oldOwner.body!.statements.map(statement => key(statement, oldTree)));
+        for (const statement of nextOwner.body!.statements.slice(0, delegateIndex)) {
+          if (baselinePrelude.has(key(statement, nextTree))) continue;
+          if (ts.isVariableStatement(statement)) {
+            for (const declaration of statement.declarationList.declarations) {
+              demand(ts.isIdentifier(declaration.name) && ["observationEnabled", "nonce", "observations", loaderPort.name.text].includes(declaration.name.text), "Consumer added an effect before its actual helper");
+              if (declaration.name.text === "observations") demand(declaration.initializer && ts.isArrayLiteralExpression(declaration.initializer) && declaration.initializer.elements.length === 0, "Observation collector was prefilled or replaced");
+              if (declaration.name.text === "observationEnabled") demand(declaration.initializer?.getText(nextTree) === 'process.env.VENESIA_QA_ASSERTION_RELOCATION_RECEIPT === "1"', "Actual observation flag changed");
+              if (declaration.name.text === "nonce") demand(declaration.initializer?.getText(nextTree) === "process.env.VENESIA_QA_ASSERTION_RELOCATION_NONCE", "Current owner nonce binding changed");
+            } continue;
+          }
+          demand(ts.isIfStatement(statement) && ts.isThrowStatement(statement.thenStatement) && !statement.elseStatement
+            && statement.expression.getText(nextTree).includes("observationEnabled") && statement.expression.getText(nextTree).includes(".test(nonce"),
+          "Consumer has an unsupported control/effect before actual delegation");
+        }
+        // The evidence adapter must really delegate to node:assert, preserving the native exception.
+        demand(calleeTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "node:assert/strict" && node.importClause?.name?.text === "nativeAssert"), "Native assertion module changed");
+        const calleeText = calleeOwner.getText(calleeTree);
+        demand(calleeText.includes("new Proxy(nativeAssert") && calleeText.includes("Reflect.get(target, property, receiver)") && calleeText.includes("Reflect.apply(method, target, args)")
+          && calleeText.includes("throw error;") && calleeText.includes('outcome: "passed"') && calleeText.includes('outcome: "failed"'), "Native assertion delegation/exception path is unsupported");
+        for (const native of ["createElement", "isValidElement"]) demand(calleeTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+          && node.moduleSpecifier.text === "react" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+          && node.importClause.namedBindings.elements.some(element => !element.propertyName && element.name.text === native)), "React predicate/vector factory changed owner");
+        const forbiddenShadows = new Set(["Reflect", "Proxy", "Object", "Array", "JSON", "Buffer", "Error", "nativeAssert", "createElement", "renderToStaticMarkup", "isValidElement"]);
+        const shadowedNative: ts.Node[] = [];
+        const inspectNative = (node: ts.Node) => {
+          if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name && ts.isIdentifier(node.name) && forbiddenShadows.has(node.name.text)) shadowedNative.push(node);
+          ts.forEachChild(node, inspectNative);
+        }; inspectNative(calleeTree);
+        demand(shadowedNative.length === 0, "Actual assertion/factory native is shadowed");
+        const assertionBindings = currentVariables.filter(node => ts.isIdentifier(node.name) && node.name.text === "assert" && beneath(node, nextOwner));
+        demand(assertionBindings.length === 0, "Consumer native assertions are shadowed");
+        const adapterVariables = allVariables(calleeTree).filter(node => ts.isIdentifier(node.name) && node.name.text === "assert" && beneath(node, calleeOwner));
+        demand(adapterVariables.length === 1 && adapterVariables[0].initializer && ts.isConditionalExpression(adapterVariables[0].initializer), "Actual assertion adapter binding is missing");
+        const adapter = adapterVariables[0].initializer;
+        demand(adapter.condition.getText(calleeTree) === "observe" && adapter.whenFalse.getText(calleeTree) === "nativeAssert"
+          && ts.isNewExpression(adapter.whenTrue) && adapter.whenTrue.expression.getText(calleeTree) === "Proxy"
+          && adapter.whenTrue.arguments?.[0].getText(calleeTree) === "nativeAssert", "Actual assertions do not select the native delegate");
+        const proxyHandler = adapter.whenTrue.arguments?.[1];
+        demand(proxyHandler && ts.isObjectLiteralExpression(proxyHandler), "Native adapter has no explicit handler");
+        const getter = proxyHandler.properties.filter(ts.isMethodDeclaration).find(node => node.name.getText(calleeTree) === "get");
+        demand(getter?.body && getter.parameters.map(parameter => parameter.name.getText(calleeTree)).join(",") === "target,property,receiver", "Native operator receiver binding changed");
+        demand(getter.body.statements.length === 3 && ts.isVariableStatement(getter.body.statements[0])
+          && getter.body.statements[0].getText(calleeTree).replace(/\s+/gu, "") === "constmethod=Reflect.get(target,property,receiver);"
+          && ts.isIfStatement(getter.body.statements[1]) && ts.isReturnStatement(getter.body.statements[1].thenStatement)
+          && getter.body.statements[1].expression.getText(calleeTree).replace(/\s+/gu, "") === 'typeofproperty!=="string"||!["ok","equal","notEqual","throws"].includes(property)'
+          && getter.body.statements[1].thenStatement.expression?.getText(calleeTree) === "method" && !getter.body.statements[1].elseStatement,
+        "Native getter contains an unsupported effect or method substitution");
+        const returned = getter.body.statements.filter(ts.isReturnStatement);
+        demand(returned.length === 1 && returned[0].expression && ts.isArrowFunction(returned[0].expression) && ts.isBlock(returned[0].expression.body), "Native adapter must return its one actual operator wrapper");
+        demand(returned[0].expression.parameters.length === 1 && returned[0].expression.parameters[0].dotDotDotToken
+          && returned[0].expression.parameters[0].name.getText(calleeTree) === "args" && !returned[0].expression.parameters[0].initializer,
+        "Actual received native operands must use the unmodified rest-argument binding");
+        const operatorBody = returned[0].expression.body, operatorTries = operatorBody.statements.filter(ts.isTryStatement), finalReturns = operatorBody.statements.filter(ts.isReturnStatement);
+        demand(operatorBody.statements.length === 5 && ts.isVariableStatement(operatorBody.statements[0])
+          && operatorBody.statements[0].getText(calleeTree).replace(/\s+/gu, "") === "conststack=newError().stack,actualContext={...context};"
+          && ts.isVariableStatement(operatorBody.statements[1]) && operatorBody.statements[1].declarationList.declarations.length === 1
+          && operatorBody.statements[1].declarationList.declarations[0].name.getText(calleeTree) === "result"
+          && !operatorBody.statements[1].declarationList.declarations[0].initializer
+          && ts.isTryStatement(operatorBody.statements[2]) && ts.isExpressionStatement(operatorBody.statements[3])
+          && ts.isCallExpression(operatorBody.statements[3].expression) && operatorBody.statements[3].expression.expression.getText(calleeTree) === "emit"
+          && ts.isReturnStatement(operatorBody.statements[4]), "Native operator wrapper contains unsupported pre/post effects");
+        demand(operatorTries.length === 1 && operatorTries[0].tryBlock.statements.length === 1
+          && operatorTries[0].tryBlock.statements[0].getText(calleeTree).replace(/\s+/gu, "") === "result=Reflect.apply(method,target,args);"
+          && finalReturns.length === 1 && finalReturns[0].expression?.getText(calleeTree) === "result", "Observed pass is not produced by the actual native operator");
+        const nativeCatch = operatorTries[0].catchClause;
+        demand(nativeCatch?.variableDeclaration?.name.getText(calleeTree) === "error" && nativeCatch.block.statements.length === 2
+          && ts.isTryStatement(nativeCatch.block.statements[0]) && ts.isThrowStatement(nativeCatch.block.statements[1])
+          && nativeCatch.block.statements[1].expression?.getText(calleeTree) === "error", "Native failure identity or observation path changed");
+        const unsafeWrites: ts.Node[] = [], extraReturns: ts.Node[] = [];
+        const inspectOperator = (node: ts.Node) => {
+          if (node !== operatorBody && ts.isFunctionLike(node)) return;
+          if (ts.isReturnStatement(node) && node !== operatorBody.statements[4]) extraReturns.push(node);
+          if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+            && /^(?:args|method|target|property|actualContext)(?:\b|\[|\.)/u.test(node.left.getText(calleeTree))) unsafeWrites.push(node);
+          ts.forEachChild(node, inspectOperator);
+        }; inspectOperator(operatorBody);
+        demand(unsafeWrites.length === 0 && extraReturns.length === 0, "Received native operands/method/context were mutated or bypassed");
+        const events = receipt.events, loaders = receipt.loaders, vectors = receipt.vectors, mutants = receipt.mutants;
+        demand(Array.isArray(events) && events.length > 0 && events.length <= 4096 && Array.isArray(loaders) && Array.isArray(vectors) && Array.isArray(mutants), "Bounded actual execution observations are required");
+        const mutationLoops = calleeOwner.body!.statements.filter(ts.isForOfStatement).filter(loop => ts.isVariableDeclarationList(loop.initializer)
+          && loop.initializer.declarations.length === 1 && ts.isArrayBindingPattern(loop.initializer.declarations[0].name)
+          && loop.initializer.declarations[0].name.elements.map(element => element.getText(calleeTree)).join(",") === "label,from,to");
+        demand(mutationLoops.length === 1 && ts.isArrayLiteralExpression(mutationLoops[0].expression), "Actual mutation controls must use one finite source tuple vector");
+        const mutationCases = mutationLoops[0].expression.elements.map(element => {
+          demand(ts.isArrayLiteralExpression(element) && element.elements.length === 3 && element.elements.every(ts.isStringLiteralLike), "Mutation tuple has unsupported source syntax");
+          const [label, from, to] = element.elements.map(value => { demand(ts.isStringLiteralLike(value), "Mutation tuple members must be exact literals"); return value; });
+          return { label: label.text, from: from.text, to: to.text, candidateSha256: hash(readSubject.replaceAll(from.text, to.text)) };
+        });
+        demand(mutationCases.length > 0 && mutationCases.length <= 32 && new Set(mutationCases.map(value => value.label)).size === mutationCases.length
+          && new Set(mutationCases.map(value => value.candidateSha256)).size === mutationCases.length, "Mutation source vectors must be bounded and distinct");
+        const controlSites = calls(calleeTree).filter(node => beneath(node, mutationLoops[0]));
+        demand(controlSites.length === 2 && controlSites.some(node => node.expression.getText(calleeTree) === "assert.notEqual")
+          && controlSites.some(node => node.expression.getText(calleeTree) === "assert.throws"), "Actual mutation loop lost its change/rejection native assertions");
+        demand(mutants.length === mutationCases.length, "Actual mutant observations do not cover the complete source tuple vector");
+        for (const expected of mutationCases) {
+          demand(expected.candidateSha256 !== hash(readSubject), "An actual source mutation became vacuous");
+          const matching = mutants.map(record).filter(value => value.label === expected.label && value.candidateSha256 === expected.candidateSha256
+            && record(value.replacement).from === expected.from && record(value.replacement).to === expected.to);
+          demand(matching.length === 1, "Every effective source mutation requires one exact actual rejection receipt");
+          demand(loaders.map(record).filter(value => value.candidateKind === "mutant" && value.mutation === expected.label
+            && value.candidateSha256 === expected.candidateSha256).length === 1, "Every effective source mutation requires one exact actual loader invocation");
+          demand(events.map(record).filter(value => value.outcome === "failed" && record(value.context).phase === "predicate"
+            && record(value.context).candidateKind === "mutant" && record(value.context).mutation === expected.label
+            && record(value.context).candidateSha256 === expected.candidateSha256).length === 1, "Every effective source mutation requires its actual failed positive predicate");
+          for (const control of controlSites) demand(events.map(record).filter(value => value.outcome === "passed"
+            && value.operator === control.expression.getText(calleeTree) && record(value.context).phase === "control"
+            && record(value.context).mutation === expected.label && record(value.context).candidateSha256 === expected.candidateSha256).length === 1,
+          "Every effective source mutation requires both actual native control outcomes");
+        }
+        demand(loaders.length === mutants.length + 1 && mutants.length > 0, "Each actual mutation must call the actual loader");
+        const originalDigest = hash(readSubject);
+        demand(loaders.some(value => record(value).candidateSha256 === originalDigest && record(value).candidateKind === "original"), "Original actual source was not loaded");
+        const expectedSection = (candidate: string) => {
+          const tree = parse(subjectFile, candidate), section = lookupFunction(tree, "AdminFormSection");
+          const emitted = ts.transpileModule(section.getText(tree), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+          const output = parse("actual-section.js", emitted); return hash(lookupFunction(output, "AdminFormSection").getText(output));
+        };
+        for (const value of loaders) {
+          const observed = record(value);
+          const mutation = observed.candidateKind === "original" ? undefined : mutants.map(record).find(value => value.label === observed.mutation);
+          const replacement = mutation ? record(mutation.replacement) : undefined;
+          const candidate = replacement ? readSubject.replaceAll(String(replacement.from), String(replacement.to)) : readSubject;
+          demand(observed.candidateSha256 === hash(candidate) && observed.callbackSha256 === callback.runtimeSha256
+            && observed.actualSectionSha256 === expectedSection(candidate) && observed.actualSectionName === "AdminFormSection", "Actual compiled Section does not originate from the passed canonical candidate");
+        }
+        const locate = (event: Record<string, unknown>) => {
+          const location = record(event.site), url = String(location.file);
+          demand(url.startsWith("file:") && fileURLToPath(url).replaceAll("\\", "/").endsWith("/" + calleeFile), "Assertion came from a foreign helper");
+          demand(Number.isSafeInteger(location.line) && Number.isSafeInteger(location.column), "Invalid actual assertion source coordinates");
+          const position = calleeTree.getPositionOfLineAndCharacter(Number(location.line) - 1, Number(location.column) - 1);
+          const found = calls(calleeTree).filter(node => node.getStart(calleeTree) <= position && position < node.end);
+          demand(found.length === 1 && event.operator === found[0].expression.getText(calleeTree), "Actual assertion operator/site is not the bound AST call"); return found[0];
+        };
+        for (const value of events) { const event = record(value); locate(event); demand(event.outcome === "passed" || event.outcome === "failed", "Unknown native assertion outcome"); }
+        const allSharedSites = calls(calleeTree).filter(node => beneath(node, calleeOwner));
+        for (const site of allSharedSites) demand(events.some(value => { const event = record(value); return event.outcome === "passed" && locate(event) === site; }), "A current shared assertion site was not actually invoked successfully");
+        for (const value of mutants) {
+          const mutation = record(value), replacement = record(mutation.replacement);
+          demand(typeof replacement.from === "string" && typeof replacement.to === "string", "Actual source mutation is missing");
+          const candidate: string = readSubject.replaceAll(replacement.from, replacement.to);
+          demand(candidate !== readSubject && mutation.sourceSha256 === originalDigest && mutation.candidateSha256 === hash(candidate), "Mutation was vacuous or used another source");
+          const failed = record(mutation.failedPredicate), failedContext = record(failed.context);
+          demand(failedContext.phase === "predicate" && failedContext.candidateSha256 === mutation.candidateSha256, "Unrelated setup error cannot prove predicate rejection");
+          locate({ ...failed, outcome: "failed" });
+          demand(events.some(value => { const event = record(value); return event.outcome === "failed" && stable(event.site) === stable(failed.site) && stable(event.context) === stable(failed.context); }), "Missing actual failed positive predicate");
+        }
+        const buildProjector = (tree: ts.SourceFile, owner: ts.Node) => {
+          const variables = allVariables(tree);
+          const scopeOf = (node: ts.Node) => { let parent = node.parent; while (parent && !ts.isBlock(parent) && !ts.isForOfStatement(parent) && !ts.isFunctionLike(parent) && !ts.isSourceFile(parent)) parent = parent.parent; return parent ?? tree; };
+          const findVariable = (name: string, at: ts.Node) => {
+            const matching = variables.filter(node => ts.isIdentifier(node.name) && node.name.text === name && node.getStart(tree) < at.getStart(tree) && beneath(at, scopeOf(node)));
+            matching.sort((left, right) => right.getStart(tree) - left.getStart(tree)); return matching[0];
+          };
+          let work = 0;
+          const evaluate = (expression: ts.Expression, environment: Environment, seen = new Set<ts.Node>()): Value => {
+            demand(++work <= 500_000 && seen.size <= 64, "Finite predicate projection budget exceeded");
+            while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression) || ts.isNonNullExpression(expression) || ts.isSatisfiesExpression(expression)) expression = expression.expression;
+            if (ts.isStringLiteralLike(expression)) return expression.text;
+            if (ts.isNumericLiteral(expression)) return Number(expression.text);
+            if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+            if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+            if (expression.kind === ts.SyntaxKind.NullKeyword) return null;
+            if (ts.isRegularExpressionLiteral(expression)) { const literal = expression.text, last = literal.lastIndexOf("/"); return symbol("regex", { pattern: literal.slice(1, last), flags: literal.slice(last + 1) }); }
+            if (ts.isIdentifier(expression)) {
+              const name = expression.text;
+              if (environment.has(name)) return environment.get(name);
+              if (name === "undefined") return undefined;
+              if (name === "Section") return symbol("section-owner");
+              if (name === "premiumSurfaceClassName") return premiumValue;
+              const declaration = findVariable(name, expression);
+              if (declaration?.initializer) { demand(!seen.has(declaration), "Recursive value binding is unsupported"); return evaluate(declaration.initializer, environment, new Set([...seen, declaration])); }
+              if (["source", "candidate", "formSource"].includes(name)) return symbol("subject-source");
+              throw new Error("Unsupported finite identifier: " + name);
+            }
+            if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) return symbol("function", { body: key(expression.body, tree) });
+            if (ts.isArrayLiteralExpression(expression)) {
+              const values: Value[] = [];
+              for (const element of expression.elements) { if (ts.isSpreadElement(element)) { const spread = evaluate(element.expression, environment, seen); demand(Array.isArray(spread), "Only finite array spreads are supported"); values.push(...spread); } else { demand(!ts.isOmittedExpression(element), "Sparse vectors are unsupported"); values.push(evaluate(element, environment, seen)); } }
+              demand(values.length <= 32, "Finite vector array bound exceeded"); return values;
+            }
+            if (ts.isObjectLiteralExpression(expression)) {
+              const value: { [key: string]: Value } = {};
+              for (const property of expression.properties) {
+                if (ts.isSpreadAssignment(property)) { const spread = objectTerm(evaluate(property.expression, environment, seen)); demand(spread, "Only finite object spreads are supported"); Object.assign(value, spread); }
+                else { demand(ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property), "Unsupported vector member"); const name = property.name.getText(tree).replace(/^["']|["']$/gu, ""); demand(!name.startsWith("$"), "Reserved symbolic member"); value[name] = evaluate(ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer, environment, seen); }
+              } return value;
+            }
+            if (ts.isConditionalExpression(expression)) return evaluate(truthy(evaluate(expression.condition, environment, seen)) ? expression.whenTrue : expression.whenFalse, environment, seen);
+            if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) return symbol("not", { value: evaluate(expression.operand, environment, seen) });
+            if (ts.isBinaryExpression(expression)) {
+              const left = evaluate(expression.left, environment, seen);
+              if (expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) return left === undefined || left === null ? evaluate(expression.right, environment, seen) : left;
+              const right = evaluate(expression.right, environment, seen);
+              if (expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return symbol("and", { left, right });
+              if (expression.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken) return stable(left) === stable(right);
+              if (expression.operatorToken.kind === ts.SyntaxKind.BarBarToken) return truthy(left) ? left : right;
+              throw new Error("Unsupported predicate binary operator");
+            }
+            if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+              if (ts.isPropertyAccessExpression(expression) && expression.name.text === "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME") {
+                demand(expression.getText(tree) === premiumPortExpression, "A same-named style value came from a foreign binding"); return premiumValue;
+              }
+              const base = evaluate(expression.expression, environment, seen);
+              const member = ts.isPropertyAccessExpression(expression) ? expression.name.text : evaluate(expression.argumentExpression!, environment, seen);
+              demand(typeof member === "string" || typeof member === "number", "Dynamic property access is unsupported");
+              if (Array.isArray(base)) { if (member === "length") return base.length; return base[Number(member)]; }
+              const object = objectTerm(base); demand(object, "Unknown finite property receiver");
+              if (object.$kind === "component" || object.$kind === "output-property") return symbol("output-property", { element: object.$kind === "component" ? base : object.element,
+                path: [...(object.$kind === "output-property" ? object.path as Value[] : []), String(member)] });
+              if (object.$kind === "match" && member === "length") return symbol("match-count", { target: object.target, pattern: object.pattern });
+              if (object.$kind === "react" && member === "props") return object.props;
+              return object[String(member)];
+            }
+            if (ts.isCallExpression(expression)) {
+              const name = expression.expression.getText(tree);
+              if (name === "read") { demand(expression.arguments.length === 1 && ts.isStringLiteral(expression.arguments[0]) && expression.arguments[0].text === subjectFile, "Source path changed"); return symbol("subject-source"); }
+              if (name === "Section") { demand(expression.arguments.length === 1, "Unsupported Section invocation"); return symbol("component", { props: evaluate(expression.arguments[0], environment, seen) }); }
+              if (name === "createElement") {
+                const type = evaluate(expression.arguments[0], environment, seen), props = expression.arguments[1] ? evaluate(expression.arguments[1], environment, seen) : {};
+                const fields = objectTerm(props); demand(fields, "React vector props must be finite");
+                const properties = { ...fields }; if (expression.arguments.length === 3) properties.children = evaluate(expression.arguments[2], environment, seen); demand(expression.arguments.length <= 3, "Multiple React children are unsupported");
+                return objectTerm(type)?.$kind === "section-owner" ? symbol("component", { props: properties }) : symbol("react", { type, props: properties });
+              }
+              if (name === "renderToStaticMarkup") { const element = evaluate(expression.arguments[0], environment, seen); demand(objectTerm(element)?.$kind === "component", "Only canonical Section markup is projected"); return symbol("render", { element }); }
+              if (name === "isValidElement") return symbol("valid-element", { element: evaluate(expression.arguments[0], environment, seen) });
+              if (ts.isPropertyAccessExpression(expression.expression)) {
+                const receiver = evaluate(expression.expression.expression, environment, seen), member = expression.expression.name.text;
+                if (member === "entries") { demand(Array.isArray(receiver) && expression.arguments.length === 0, "Only literal vector entries are supported"); return receiver.map((value, index) => [index, value]); }
+                if (member === "includes" || member === "match") return symbol(member === "includes" ? "includes" : "match", { target: receiver, pattern: evaluate(expression.arguments[0], environment, seen) });
+                if (member === "replaceAll") return symbol("mutation", { target: receiver, from: evaluate(expression.arguments[0], environment, seen), to: evaluate(expression.arguments[1], environment, seen) });
+              }
+              throw new Error("Unsupported finite call: " + name);
+            }
+            throw new Error("Unsupported predicate syntax: " + ts.SyntaxKind[expression.kind]);
+          };
+          const contexts = (node: ts.Node) => {
+            const loops: ts.ForOfStatement[] = [];
+            for (let parent = node.parent; parent && beneath(parent, owner); parent = parent.parent) if (ts.isForOfStatement(parent)) loops.unshift(parent);
+            let environments: Environment[] = [new Map()];
+            for (const loop of loops) {
+              demand(ts.isVariableDeclarationList(loop.initializer) && loop.initializer.declarations.length === 1, "Finite loop binding required");
+              const pattern = loop.initializer.declarations[0].name, expanded: Environment[] = [];
+              for (const environment of environments) {
+                const values = evaluate(loop.expression, environment); demand(Array.isArray(values), "Only literal finite loop cases are supported");
+                for (const value of values) {
+                  const next = new Map(environment);
+                  if (ts.isIdentifier(pattern)) next.set(pattern.text, value);
+                  else { demand(ts.isArrayBindingPattern(pattern) && Array.isArray(value), "Unsupported finite loop destructuring"); pattern.elements.forEach((element, index) => { demand(ts.isBindingElement(element) && ts.isIdentifier(element.name), "Unsupported loop binding"); next.set(element.name.text, value[index]); }); }
+                  expanded.push(next);
+                }
+              } demand(expanded.length <= 256, "Finite case expansion bound exceeded"); environments = expanded;
+            }
+            return environments.filter(environment => {
+              for (let parent = node.parent; parent && beneath(parent, owner); parent = parent.parent) if (ts.isIfStatement(parent)) {
+                const selected = truthy(evaluate(parent.expression, environment));
+                if (beneath(node, parent.thenStatement) !== selected) return false;
+              } return true;
+            });
+          };
+          const canonical = (value: Value): Value => {
+            if (Array.isArray(value)) return value.map(canonical);
+            const object = objectTerm(value); if (!object) return value;
+            const normalized = Object.fromEntries(Object.entries(object).map(([name, entry]) => [name, canonical(entry)]));
+            return normalized;
+          };
+          const predicates = (node: ts.CallExpression, environment: Environment): Predicate[] => {
+            const operator = node.expression.getText(tree), args = node.arguments;
+            demand(args.length > 0, "Assertion has no tested argument");
+            const actual = evaluate(args[0], environment), expected = args[1] && !["assert.ok", "assert"].includes(operator) ? evaluate(args[1], environment) : true;
+            const result: Predicate[] = [];
+            const add = (value: Value, wanted: Value, nativeOperator: string) => {
+              const object = objectTerm(value);
+              if (object?.$kind === "and" && wanted === true) { add(object.left, true, nativeOperator); add(object.right, true, nativeOperator); return; }
+              if (object?.$kind === "not") { add(object.value, wanted === true ? false : wanted === false ? true : wanted, nativeOperator); return; }
+              result.push({ operator: ["assert", "assert.ok"].includes(nativeOperator) ? "truth" : nativeOperator, actual: canonical(value), expected: canonical(wanted), case: environment.has("profile") ? canonical(environment.get("profile")) : null });
+            }; add(actual, expected, operator); return result;
+          };
+          const dependencyFingerprint = (node: ts.CallExpression) => {
+            const fragments = new Set<string>(), visited = new Set<ts.Node>();
+            const visit = (part: ts.Node) => {
+              if (ts.isIdentifier(part) && !(ts.isPropertyAccessExpression(part.parent) && part.parent.name === part)
+                && !(ts.isPropertyAssignment(part.parent) && part.parent.name === part)) {
+                let declaration: ts.VariableDeclaration | undefined = findVariable(part.text, part);
+                if (!declaration) declaration = variables.find(candidate => ts.isObjectBindingPattern(candidate.name)
+                  && candidate.name.elements.some(element => ts.isIdentifier(element.name) && element.name.text === part.text)
+                  && candidate.getStart(tree) < part.getStart(tree) && beneath(part, scopeOf(candidate)));
+                if (declaration?.initializer && !visited.has(declaration)) {
+                  visited.add(declaration); demand(visited.size <= 64, "Finite dependency binding bound exceeded");
+                  fragments.add(key(declaration.initializer, tree)); visit(declaration.initializer);
+                }
+              } ts.forEachChild(part, visit);
+            };
+            for (const argument of node.arguments.slice(0, 2)) visit(argument);
+            const controls: string[] = [];
+            for (let parent = node.parent; parent && beneath(parent, owner); parent = parent.parent) {
+              if (ts.isIfStatement(parent)) controls.push("if:" + key(parent.expression, tree) + ":" + beneath(node, parent.thenStatement));
+              if (ts.isForOfStatement(parent)) controls.push("for:" + key(parent.expression, tree));
+            }
+            return stable({ fragments: [...fragments].sort(), controls });
+          };
+          return { evaluate, contexts, predicates, canonical, dependencyFingerprint };
+        };
+        const original = buildProjector(oldTree, oldOwner), shared = buildProjector(calleeTree, calleeOwner);
+        const passed = events.map(record).filter(event => event.outcome === "passed" && record(event.context).candidateKind === "original");
+        const witnesses: Array<{ node: ts.CallExpression; context: Record<string, unknown>; predicates: Predicate[] }> = [];
+        const decoded = (value: unknown): unknown => { const facts = record(value); if (facts.type === "undefined") return undefined; if (facts.type === "null") return null; return facts.value; };
+        for (const event of passed) {
+          const node = locate(event), context = record(event.context), cases = shared.contexts(node);
+          demand(context.phase === "predicate" && context.mutation === null && context.candidateSha256 === originalDigest, "Actual positive event has a foreign candidate/control origin");
+          const matching = cases.filter(environment => {
+            const profile = objectTerm(environment.get("profile")); if (!profile) return false;
+            const native = objectTerm(profile.nativeProps), header = environment.get("header"), headerElement = objectTerm(header);
+            const observedNative = record(context.nativeProps), observedHeader = record(context.header);
+            return environment.get("vector") === context.vector && native?.name === observedNative.name && native?.defaultValue === observedNative.defaultValue
+              && native?.required === observedNative.required && native?.disabled === observedNative.disabled && Object.hasOwn(native!, "onChange") === observedNative.hasOnChange
+              && profile.id === context.id && Object.hasOwn(profile, "eyebrow") && (profile.eyebrow !== undefined) === context.eyebrowPresent
+              && stable(profile.eyebrow) === stable(decoded(context.eyebrow)) && (profile.className !== undefined) === context.classNamePresent
+              && stable(profile.className) === stable(decoded(context.className)) && Boolean(headerElement) === observedHeader.present
+              && (!headerElement || headerElement.type === observedHeader.type && objectTerm(headerElement.props)?.children === observedHeader.text
+                && stable(Object.fromEntries(Object.entries(objectTerm(headerElement.props)!).filter(([name]) => name.startsWith("data-")))) === stable(observedHeader.markers))
+              && (environment.has("presentation") ? environment.get("presentation") ?? "undefined" : "omitted") === context.presentation
+              && (!environment.has("text") || environment.get("text") === context.metadataText);
+          });
+          demand(matching.length === 1, "Actual event does not identify one exact source-derived finite input case");
+          const predicates = shared.predicates(node, matching[0]);
+          const firstComponent = (value: Value): { [key: string]: Value } | undefined => {
+            if (Array.isArray(value)) { for (const entry of value) { const found = firstComponent(entry); if (found) return found; } return undefined; }
+            const object = objectTerm(value); if (!object) return undefined;
+            if (object.$kind === "component") return object;
+            for (const entry of Object.values(object)) { const found = firstComponent(entry); if (found) return found; } return undefined;
+          };
+          const component = firstComponent(predicates[0].actual), componentProps = component && objectTerm(component.props);
+          demand(componentProps && (Object.hasOwn(componentProps, "surface") ? componentProps.surface : "omitted") === context.surface
+            && (Object.hasOwn(componentProps, "presentation") ? componentProps.presentation ?? "undefined" : "omitted") === context.presentation, "Actual event changed its source-derived surface/presentation context");
+          demand(Array.isArray(event.arguments), "Native actual argument facts are missing");
+          const facts = event.arguments.map(record);
+          if (event.operator === "assert.ok") demand(facts[0].type === "boolean" && facts[0].value === true, "Truth assertion did not execute on a real true scalar");
+          else if (event.operator === "assert.equal") {
+            demand(facts.length >= 2, "Comparison did not execute both real operands");
+            if (facts[0].type === "react-element" || facts[1].type === "react-element") demand(facts[0].reference === facts[1].reference && facts[0].role === facts[1].role, "React identity was replaced by matching shapes");
+            else demand(stable(facts[0]) === stable(facts[1]), "Actual native equal operands differ");
+          }
+          witnesses.push({ node, context, predicates });
+        }
+        const paritySites = witnesses.filter(witness => {
+          const node = witness.node, first = node.arguments[0], second = node.arguments[1];
+          return node.expression.getText(calleeTree) === "assert.equal" && first && ts.isCallExpression(first) && first.expression.getText(calleeTree) === "renderToStaticMarkup"
+            && first.arguments[0] && ts.isCallExpression(first.arguments[0]) && first.arguments[0].expression.getText(calleeTree) === "createElement"
+            && first.arguments[0].arguments[0]?.getText(calleeTree) === "Section" && first.arguments[0].arguments[1]?.getText(calleeTree) === "props"
+            && second?.getText(calleeTree) === "panel";
+        });
+        const originalVectors = vectors.map(record).filter(vector => record(vector.context).candidateKind === "original");
+        demand(originalVectors.length > 0 && originalVectors.every(vector => paritySites.some(witness => witness.context.vector === record(vector.context).vector
+          && stable(witness.context.header) === stable(record(vector.context).header))), "Original React/direct invocation boundary lacks actual parity evidence");
+        const compatible = (old: Predicate, next: Predicate) => {
+          const equalTruth = (predicate: Predicate) => predicate.operator === "truth" || predicate.operator === "assert.equal" && typeof predicate.expected === "boolean";
+          if (stable(old.actual) === stable(next.actual) && stable(old.expected) === stable(next.expected) && (old.operator === next.operator || equalTruth(old) && equalTruth(next))) return true;
+          const actual = objectTerm(old.actual), stronger = objectTerm(next.actual);
+          if (equalTruth(old) && old.expected === true && actual?.$kind === "includes" && next.operator === "assert.equal" && next.expected === 1 && stronger?.$kind === "match-count") {
+            const regex = objectTerm(stronger.pattern);
+            return regex?.$kind === "regex" && /^[gu]*$/u.test(String(regex.flags)) && /^[a-zA-Z0-9_ ='"-]+$/u.test(String(regex.pattern))
+              && regex.pattern === actual.pattern && stable(stronger.target) === stable(actual.target);
+          } return false;
+        };
+        const retainedProjector = buildProjector(nextTree, nextOwner);
+        const currentKeys = new Map<string, ts.CallExpression[]>(); for (const node of nextScopeCalls) { const entry = key(node, nextTree); currentKeys.set(entry, [...(currentKeys.get(entry) ?? []), node]); }
+        let matched = 0;
+        for (const old of oldScopeCalls) {
+          const operator = old.expression.getText(oldTree);
+          const entry = key(old, oldTree), retained = currentKeys.get(entry) ?? [];
+          const negative = operator === "assert.notEqual" || operator === "assert.throws";
+          const originalDependencies = original.dependencyFingerprint(old);
+          // Equal assertion syntax can occur in distinct Section/Field loops.
+          // Consume only the matching dataflow/control site; another identical
+          // spelling remains available for its own original obligation.
+          const retainedIndex = retained.findIndex(next => negative || originalDependencies === retainedProjector.dependencyFingerprint(next));
+          if (retainedIndex >= 0) {
+            const next = retained.splice(retainedIndex, 1)[0];
+            if (negative && originalDependencies !== retainedProjector.dependencyFingerprint(next)) {
+              const oldCases = original.contexts(old), nextCases = retainedProjector.contexts(next);
+              for (const environment of oldCases) {
+                const from = environment.get("from"), to = environment.get("to");
+                demand(typeof from === "string" && typeof to === "string" && (nextCases.some(candidate => candidate.get("from") === from && candidate.get("to") === to)
+                  || mutants.some(value => { const replacement = record(record(value).replacement); return replacement.from === from && replacement.to === to; })), "A retained negative site lost an original input mutation");
+              }
+            } else demand(originalDependencies === retainedProjector.dependencyFingerprint(next), "A retained assertion changed its input, control or canonical dependency binding");
+            matched += 1; continue;
+          }
+          if (operator === "assert.notEqual" || operator === "assert.throws" || operator === "assert.ok" && old.arguments[0] && ts.isCallExpression(old.arguments[0]) && old.arguments[0].expression.getText(oldTree) === "rejects") {
+            const mutationCases = original.contexts(old);
+            for (const environment of mutationCases) {
+              const from = environment.get("from"), to = environment.get("to");
+              demand(typeof from === "string" && typeof to === "string" && mutants.some(value => { const mutation = record(value), replacement = record(mutation.replacement); return replacement.from === from && replacement.to === to; }), "An original actual-source negative case was lost");
+            }
+            obligations.push({ file, scope, site: old.getStart(oldTree), predicate: operator + ":actual-source-mutation-rejection", cases: mutationCases.length }); matched += 1; continue;
+          }
+          const cases = original.contexts(old);
+          demand(cases.length > 0, "Original assertion was not reachable in a finite case");
+          for (const environment of cases) for (const predicate of original.predicates(old, environment)) {
+            demand(witnesses.some(witness => witness.predicates.some(candidate => compatible(predicate, candidate))), "An original predicate/operator/input case has no actual canonical native execution witness");
+          }
+          obligations.push({ file, scope, site: old.getStart(oldTree), predicate: hash(stable(cases.map(environment => original.predicates(old, environment)))), cases: cases.length }); matched += 1;
+        }
+        demand(matched === oldScopeCalls.length, "A declining bucket contains an unmatched original assertion");
+        relocations.push({ file, scope, before: previousCount.total, after: nextCount.total, matched, beforeFingerprint, afterFingerprint });
+        const previousProvider = providerProofs.get(calleeFile);
+        providerProofs.set(calleeFile, { file: calleeFile, sourceSha256: hash(calleeSource), consumers: [...new Set([...(previousProvider?.consumers ?? []), file])].sort(), assertionSites: allSharedSites.length });
+      } catch (error) { failures.push({ file, scope, reason: error instanceof Error ? error.message : "Unsupported assertion relocation proof" }); }
+    }
+  }
+  return { status: failures.length ? "BLOCKED" as const : "PASS" as const, obligations, failures, relocations, providers: [...providerProofs.values()] };
 }
 
 /** Source-derived candidates, not a second registry and not proof that an assertion executed. */
@@ -550,6 +1343,8 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       contracts: unique([...obligations.filter(row => row.file === change.file).map(row => row.contract), ...registered.map(consumer => consumer.manifest)]),
       candidateChecks: unique([...covering.map(check => check.check), ...qualityChecks]), unresolved, semanticChange, presentationOnly };
   });
+  const assertionRelocationDemand = localVerificationAssertionRelocationRequired({ baselineSources: before, currentSources: current });
+  const demanded = new Set([...assertionRelocationDemand.files, ...assertionRelocationDemand.providers]);
   const qaQuality = changes.filter(change => /^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(change.file)).map(change => {
     const assertions = (source: string | undefined) => {
       const found: ts.CallExpression[] = [], coverage = new Map<string, number>(); if (source === undefined) return { found, coverage };
@@ -572,15 +1367,48 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       visit(tree); return { found, coverage };
     };
     const previous = assertions(text(before, change.file)), next = assertions(text(current, change.file));
+    const predicate = (call: ts.CallExpression) => JSON.stringify(call.arguments.slice(0,
+      /\.(?:ok|throws|rejects)$/u.test(call.expression.getText()) ? 1 : 2).map(argument => argument.getText()));
+    const identities = new WeakMap<ts.CallExpression, { operator: string; predicate: string; scope: string }>();
+    const identity = (call: ts.CallExpression) => {
+      const cached = identities.get(call); if (cached) return cached;
+      const scope: string[] = [];
+      for (let parent: ts.Node | undefined = call.parent; parent; parent = parent.parent)
+        if (ts.isFunctionDeclaration(parent) && parent.name) scope.unshift(parent.name.text);
+      const value = { operator: call.expression.getText(), predicate: predicate(call), scope: JSON.stringify(scope) }; identities.set(call, value); return value;
+    };
+    const original = new Map<string, number>(), currentOperators = new Map<string, Set<string>>();
+    for (const call of previous.found) { const value = identity(call), id = JSON.stringify(value); original.set(id, (original.get(id) ?? 0) + 1); }
+    for (const call of next.found) { const value = identity(call), id = value.scope + value.predicate;
+      const operators = currentOperators.get(id) ?? new Set<string>(); operators.add(value.operator); currentOperators.set(id, operators); }
+    const tautology = (call: ts.CallExpression) => {
+      const operator = call.expression.getText(), first = call.arguments[0], second = call.arguments[1];
+      if (!first) return true;
+      if (/^(?:assert(?:\.ok)?|expect)$/u.test(operator) && [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.StringLiteral,
+        ts.SyntaxKind.NumericLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral].includes(first.kind)) return true;
+      return /^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual)$/u.test(operator) && second !== undefined && first.getText() === second.getText();
+    };
+    let formal = false;
+    for (const call of next.found) if (tautology(call)) {
+      const id = JSON.stringify(identity(call)), count = original.get(id) ?? 0;
+      if (count === 0) formal = true; else original.set(id, count - 1);
+    }
+    const operatorChanged = previous.found.some(call => { const value = identity(call), operators = currentOperators.get(value.scope + value.predicate);
+      return operators !== undefined && !operators.has(value.operator); });
     return { file: change.file, assertionsBefore: previous.found.length, assertionsAfter: next.found.length,
-      failures: next.found.length < previous.found.length ? ["qa_assertion_count_decreased_requires_explicit_protection_review"]
+      failures: [...(next.found.length < previous.found.length ? ["qa_assertion_count_decreased_requires_explicit_protection_review"]
         : [...previous.coverage].some(([key, count]) => (next.coverage.get(key) ?? 0) < count)
-          ? ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"] : [] };
+          ? ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"] : []),
+        ...(formal ? ["qa_new_tautological_assertion_cannot_replace_protection"] : []),
+        ...(operatorChanged ? ["qa_predicate_operator_changed_requires_equivalence_proof"] : []),
+        ...(demanded.has(change.file) && next.found.length >= previous.found.length
+          && [...previous.coverage].every(([key, count]) => (next.coverage.get(key) ?? 0) >= count)
+          ? ["qa_assertion_relocation_requires_qualified_execution"] : [])] };
   });
   const sorted = <T extends { file: string }>(rows: readonly T[]) => [...rows].sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
   return { proofBoundary: "source_discovery_only", ownerBindings: [...new Map(owners.filter(owner => owner.current).map(owner => [JSON.stringify(owner), owner])).values()],
     sourceSha256: digest(JSON.stringify(sorted([...current].map(([file, source]) => ({ file, sha256: digest(source) }))))),
-    deltaSha256: digest(JSON.stringify(sorted(changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))))), changes: rows, obligations, protections, qaQuality };
+    deltaSha256: digest(JSON.stringify(sorted(changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))))), changes: rows, obligations, protections, qaQuality, assertionRelocationDemand };
 }
 
 /** Trusted event data identifies Git objects; no ref strings, network lookup or missing-history fallback is accepted. */
@@ -707,6 +1535,77 @@ export function deriveLocalVerificationSourceCoherence(scripts: Readonly<Record<
       ...qualityFailures.map(row => `file=${row.file}; owner=existing QA quality guards; contract=assertion preservation; ${row.reason}`)] };
 }
 
+/** Bounded Admission package bytes; optional/peer traversal is explicit, separate from the unchanged source-guard proof. */
+export function localVerificationInstalledRuntimePackages(packageNames: Iterable<string>, includeInstalledOptionalAndPeers = false) {
+  const packages: Array<{ root: string; files: number; bytes: number; sha256: string }> = [];
+  const seen = new Set<string>(), queue = [...packageNames].map(name => ({ name, from: join(ROOT, "package.json"), optional: false }));
+  let totalBytes = 0, totalFiles = 0;
+  while (queue.length) {
+    const request = queue.shift()!;
+    assert.ok(/^(?:@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+$/u.test(request.name)
+      && !request.name.split("/").some(part => part === "." || part === ".."), "Runtime dependencies require literal installed package names.");
+    const native = nodeModule.createRequire(request.from);
+    let directory: string;
+    try { directory = dirname(native.resolve(request.name)); }
+    catch (error) {
+      if (!includeInstalledOptionalAndPeers) throw error;
+      // Export-restricted packages can expose only a native/other subpath. The
+      // native resolver's own search directories still identify their manifest.
+      const manifest = (native.resolve.paths(request.name) ?? []).map(at => join(at, request.name, "package.json"))
+        .filter(file => file.startsWith(join(ROOT, "node_modules") + sep)).find(file => existsSync(file));
+      if (!manifest) {
+        if (request.optional && error && typeof error === "object" && "code" in error && error.code === "MODULE_NOT_FOUND") continue;
+        throw error;
+      }
+      directory = dirname(manifest);
+    }
+    while (directory !== dirname(directory) && (!existsSync(join(directory, "package.json"))
+      || JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).name !== request.name)) directory = dirname(directory);
+    const relative = directory.slice(ROOT.length + 1).replaceAll("\\", "/");
+    assert.ok(directory.startsWith(join(ROOT, "node_modules") + sep) && /^node_modules\//u.test(relative), "Runtime dependency escaped the installed project.");
+    if (includeInstalledOptionalAndPeers) assert.ok(lstatSync(directory).isDirectory() && !lstatSync(directory).isSymbolicLink()
+      && realpathSync(directory) === directory, "Runtime package root has an unqualified link.");
+    if (seen.has(relative)) continue; seen.add(relative);
+    const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name: string; dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>; peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> };
+    assert.equal(manifest.name, request.name);
+    const files: Array<{ file: string; sha256: string }> = []; let bytes = 0;
+    const walk = (at: string) => { for (const name of readdirSync(at).sort()) {
+      const file = join(at, name), stat = lstatSync(file); assert.equal(stat.isSymbolicLink(), false, "Runtime package contains an unqualified link.");
+      if (stat.isDirectory()) walk(file);
+      else { assert.ok(stat.isFile()); const content = readFileSync(file); bytes += content.length; totalBytes += content.length; totalFiles++;
+        assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+        files.push({ file: file.slice(directory.length + 1).replaceAll("\\", "/"), sha256: digest(content) }); }
+    } };
+    walk(directory); packages.push({ root: relative, files: files.length, bytes, sha256: digest(JSON.stringify(files)) });
+    const dependencies = manifest.dependencies ?? {}, optional = includeInstalledOptionalAndPeers ? manifest.optionalDependencies ?? {} : {};
+    const peers = includeInstalledOptionalAndPeers ? manifest.peerDependencies ?? {} : {};
+    for (const name of [...new Set([...Object.keys(dependencies), ...Object.keys(optional), ...Object.keys(peers)])].sort()) queue.push({ name,
+      from: join(directory, "package.json"), optional: Object.hasOwn(optional, name)
+        || !Object.hasOwn(dependencies, name) && Object.hasOwn(peers, name) && manifest.peerDependenciesMeta?.[name]?.optional === true });
+  }
+  return packages.sort((left, right) => left.root.localeCompare(right.root));
+}
+
+/** Actual installed/runtime identity; mismatch or an unresolved bounded package closure rejects qualification. */
+export function localVerificationAdmissionRuntimeIdentity(packageNames: Iterable<string>) {
+  const installedSource = readFileSync(join(ROOT, "node_modules/.package-lock.json"), "utf8"), projectSource = readFileSync(join(ROOT, "package-lock.json"), "utf8");
+  const installed = JSON.parse(installedSource).packages as Record<string, Record<string, unknown>>;
+  const locked = JSON.parse(projectSource).packages as Record<string, Record<string, unknown>>;
+  assert.ok(installed && locked && Object.hasOwn(installed, "node_modules/typescript"));
+  for (const [file, value] of Object.entries(installed)) for (const field of ["version", "resolved", "integrity", "link"])
+    assert.deepEqual(value[field], locked[file]?.[field], "Installed package differs from the current package lock.");
+  const packages = localVerificationInstalledRuntimePackages(packageNames, true);
+  for (const entry of packages) {
+    assert.ok(Object.hasOwn(installed, entry.root), "Runtime package is absent from the installed lock.");
+    const manifest = JSON.parse(readFileSync(join(ROOT, entry.root, "package.json"), "utf8")) as { version?: string };
+    assert.equal(manifest.version, installed[entry.root].version, "Actual runtime package version differs from the installed lock.");
+  }
+  return { node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+    executable: process.execPath, executableSha256: digest(readFileSync(process.execPath)), execArgv: [...process.execArgv],
+    installedLockSha256: digest(installedSource), projectLockSha256: digest(projectSource), installedDependenciesMatchProjectLock: true as const, packages };
+}
+
 /** Recompute the native eager executable closure from bound bytes; generated/unresolved execution is never qualified. */
 export function localVerificationSourceGuardEffects(entry: string, sources: ReadonlyMap<string, string | Buffer>, runtime: {
   node: string; v8: string; modules: string; platform: string; arch: string; executableSha256: string; installedLockSha256: string; execArgv: readonly string[];
@@ -732,7 +1631,7 @@ export function localVerificationSourceGuardEffects(entry: string, sources: Read
       // callee, temporary input, extraction predicate and controlled port wiring.
       // A renamed/added call or path is not renewed by merely recomputing a hash.
       const producers = new Map([
-        ["scripts/verify-verification-infrastructure.mts", "c9b10a1aa14295584edbbc5a0d1304981862605aea2b1d3ac166857c6bdc4f1c"],
+        ["scripts/verify-verification-infrastructure.mts", "55299aa79b97f9bebae2a8c5b538ac893cb76c0c3bbb7dea9287ade56fdcd3a8"],
         ["scripts/lib/verification-module-loader.mjs", "23b537191a2f7eafc6b15ac9631faa1f701bfa0b7858c8870eff19254532d9e4"],
         ["scripts/fixtures/verification-text-contract.mjs", "392c0e259233b4c8e67b03375c4e5f5eb66c9754a9843cfcaa64deb8778366e7"],
         ["scripts/fixtures/admin-core-query-presentation-plan.mjs", "0edabba8604f429fe2ce8ddf8738fc545c395ee559f851c086305e7153552001"],
@@ -920,7 +1819,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
   const sourceGuards = [
     { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", marker: "Executable governance PASS" },
-    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230", marker: "PASS verification infrastructure:" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2", marker: "PASS verification infrastructure:" },
   ];
   const qualityBlockers: string[] = [];
   const selections = [{ family: "admin-form-save-cache", selected: reasons.length > 0, qualified: targets.length > 0,
@@ -1141,10 +2040,29 @@ function readLocalVerificationInputs(context: Pick<PrivatePublicVerificationCont
   const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
   const verificationNativeGate = localVerificationNativeGate(request);
   if (previous) assert.deepEqual(verificationNativeGate, previous.verificationNativeGate, "Cached executable coverage cannot change its selected native tail.");
-  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest, request);
   const sourceSha256 = digest(JSON.stringify(manifest));
   if (previous) assert.equal(sourceSha256, previous.sourceSha256, "Cached source discovery cannot survive a changed source manifest.");
+  const admissionQualification = request.admissionQualification;
+  const qualifiedInvocation = admissionQualification ? assertLocalVerificationAdmissionQualification(admissionQualification,
+    { baselineHead: impact.baselineHead, finalHead, sourceSha256 }) : undefined;
+  if (qualifiedInvocation) {
+    assert.deepEqual(qualifiedInvocation.sourceDiscovery.additionalSourceFiles, [...additionalSourceFiles],
+      "Preallocation source discovery cannot change its explicit additional files even when their bytes are already tracked.");
+    assert.deepEqual(qualifiedInvocation.sourceDiscovery.changes, changes,
+      "Preallocation source discovery differs from the current exact Git and explicit-file delta.");
+  }
+  if (previous) assert.equal(admissionQualification, previous.admissionQualification, "Admission cannot change during an active verification.");
+  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest, request).map(row => ({
+    ...row, checks: [...new Set([...row.checks, ...(admissionQualification?.inputs?.coverage ?? [])
+      .filter(binding => binding.file === row.file && impact.changes.some(change => change.file === row.file && change.checks.includes(binding.check))
+        && registeredVerificationNodeEntries(scripts, binding.check).includes(binding.entry))
+      .map(binding => binding.check)])].sort(),
+  }));
   const changeImpact = previous?.changeImpact ?? (() => {
+    // Reuse only this owner's private, source-bound pure discovery. The current
+    // request's coverage/native descriptor and live evidence are checked above.
+    // Every returned discovery is cloned; a caller cannot mutate the private fact.
+    const discovery = qualifiedInvocation ? structuredClone(qualifiedInvocation.sourceDiscovery.changeImpact) : (() => {
     const currentSources = new Map(manifest.map(row => { const source = readFileSync(safeSourcePath(row.file)); assert.equal(digest(source), row.sha256,
       "Impact source differs from the bound manifest: " + row.file); return [row.file, source] as const; }));
     const baselineSources = new Map(currentSources);
@@ -1153,15 +2071,218 @@ function readLocalVerificationInputs(context: Pick<PrivatePublicVerificationCont
       else baselineSources.set(change.file, baselineBytes.get(change.file)!);
     }
     return deriveLocalVerificationSourceImpact(scripts, changes, currentSources, baselineSources);
+    })();
+    if (!admissionQualification) return discovery;
+    assert.equal(admissionQualification.assertions?.status, "PASS");
+    const relocations = admissionQualification.assertions.relocations;
+    return { ...discovery, qaQuality: discovery.qaQuality?.map(row => {
+      const proofs = relocations.filter(proof => proof.file === row.file);
+      const providers = admissionQualification.assertions!.providers.filter(proof => proof.file === row.file);
+      return proofs.length || providers.length ? { ...row, rawFailures: row.failures, failures: row.failures.filter(reason =>
+        !(proofs.length && ["qa_assertion_count_decreased_requires_explicit_protection_review", "qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"].includes(reason))
+        && reason !== "qa_assertion_relocation_requires_qualified_execution"),
+        qualifiedRelocation: { predicates: proofs, providers } } : row;
+    }) };
   })();
   return { baselineHead: impact.baselineHead, finalHead, sourceSha256, changes, verificationCoverage,
-    changeImpact,
+    changeImpact, ...(admissionQualification ? { admissionQualification } : {}),
     ...(verificationNativeGate ? { verificationNativeGate } : {}) };
+}
+
+/** Revalidation is deliberately separate from pure source discovery. */
+function assertLocalVerificationAdmissionQualification(value: LocalVerificationAdmissionQualification,
+  binding: { baselineHead: string; finalHead: string; sourceSha256: string }) {
+  const invocation = localVerificationAdmissionInvocations.get(value);
+  assert.ok(invocation, "Admission requires this owner's live qualified execution; serialized or old receipts cannot authorize it.");
+  assert.equal(value.status, "PASS");
+  assert.equal(digest(JSON.stringify(value)), invocation.sha256, "Admission receipt was altered after qualification.");
+  for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const) assert.equal(value[key], binding[key], "Admission receipt has a stale source or baseline.");
+  const current = invocation.snapshot();
+  assert.equal(current.finalHead, binding.finalHead); assert.equal(current.sourceSha256, binding.sourceSha256);
+  assert.deepEqual(current.runtime, value.runtime, "Admission runtime or dependency bytes changed.");
+  assert.ok(invocation.sourceDiscovery, "Live admission lacks its private preallocation source discovery; cold analysis on an active control connection is forbidden.");
+  assert.equal(digest(JSON.stringify(invocation.sourceDiscovery)), invocation.sourceDiscoverySha256,
+    "Private preallocation source discovery is missing or corrupt.");
+  for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const)
+    assert.equal(invocation.sourceDiscovery[key], binding[key], "Private preallocation source discovery has a stale binding.");
+  for (const artifact of value.artifacts) {
+    const file = resolve(ROOT, artifact.path);
+    assert.ok(artifact.path.startsWith(".tmp-qa/") && !artifact.path.split("/").some(part => part === ".." || !part)
+      && file.startsWith(resolve(ROOT, ".tmp-qa") + sep), "Admission artifact escaped owned evidence.");
+    assert.ok(lstatSync(file).isFile() && realpathSync(file) === file, "Admission artifact cannot traverse links.");
+    assert.equal(digest(readFileSync(file)), artifact.sha256, "Admission artifact is missing or corrupt.");
+  }
+  return invocation;
+}
+
+/** Execute only the existing finite consumer/input profiles under the existing child owner.
+ * No Docker, DB, Browser, release result or caller-supplied receipt is accepted here. */
+export async function qualifyLocalVerificationAdmission(options: { baselineHead?: string; additionalSourceFiles?: readonly string[];
+  ci?: { eventName: string; event: unknown; githubSha: string } }, signal: AbortSignal): Promise<LocalVerificationAdmissionQualification> {
+  signal.throwIfAborted();
+  const started = performance.now(), nonce = globalThis.crypto.randomUUID();
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"])
+    if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: environment, windowsHide: true,
+    timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
+  // Reuse immutable CI baseline selection. Its source-only DRIFT is diagnostic,
+  // never permission to omit the fresh behavioral qualification below.
+  const additional = [...(options.additionalSourceFiles ?? [])];
+  const initial = inspectLocalVerificationChangeImpact({ ...options, additionalSourceFiles: additional, automatic: true });
+  assert.ok("baselineHead" in initial && initial.baselineHead && initial.changeImpact,
+    "Admission qualification requires a resolved immutable baseline and source discovery.");
+  assert.ok("fast" in initial && initial.fast.correspondence.every(row => row.protected),
+    "Admission observations cannot repair missing source contract protection.");
+  const baselineHead = initial.baselineHead;
+  const sourceSnapshot = () => {
+    const manifest = selectSourceInventory(git("ls-files", "-z").toString("utf8").split("\0").filter(Boolean), additional).flatMap(file => {
+      const absolute = safeSourcePath(file); if (!existsSync(absolute)) return [];
+      assert.ok(lstatSync(absolute).isFile() && realpathSync(absolute) === absolute, "Admission source cannot traverse links.");
+      return [{ file, sha256: digest(readFileSync(absolute)) }];
+    });
+    return { finalHead: git("rev-parse", "HEAD").toString("utf8").trim(), sourceSha256: digest(JSON.stringify(manifest)), manifest };
+  };
+  const before = sourceSnapshot();
+  assert.equal(before.finalHead, initial.finalHead); assert.equal(before.sourceSha256, initial.sourceSha256);
+  const currentSources = new Map(before.manifest.map(row => {
+    const bytes = readFileSync(safeSourcePath(row.file)); assert.equal(digest(bytes), row.sha256); return [row.file, bytes] as const;
+  }));
+  const baselineSources = new Map(currentSources);
+  for (const change of initial.actualDelta) {
+    if (change.beforeSha256 === null) baselineSources.delete(change.file);
+    else { const bytes = git("show", baselineHead + ":" + change.file); assert.equal(digest(bytes), change.beforeSha256); baselineSources.set(change.file, bytes); }
+  }
+  const profiles = [
+    { entry: "scripts/verify-admin-form-system.mts", args: ["--field-row-composition"], receipt: "assertion-relocation-observations" },
+    { entry: "scripts/verify-page-block-editor-presentation.mts", args: ["--panel-composition"], receipt: "assertion-relocation-observations" },
+    { entry: "scripts/verify-isolated-supabase.mts", args: ["--admission-qualification-only"], receipt: "verification-input-observations" },
+  ];
+  assert.equal(new Set(profiles.map(profile => [profile.entry, ...profile.args].join(" "))).size, profiles.length, "Admission cannot execute a duplicate leaf.");
+  const scripts = JSON.parse(currentSources.get("package.json")!.toString()).scripts as Record<string, string>;
+  for (const profile of profiles) assert.ok(Object.keys(scripts).some(check => {
+    try { return registeredVerificationNodeEntries(scripts, check).includes(profile.entry); } catch { return false; }
+  }), "Admission profile must use an existing registered executable owner.");
+  const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: profiles.map(profile => profile.entry),
+    sourceOverrides: new Map([...currentSources].filter(([file]) => /\.[cm]?[jt]sx?$/u.test(file)).map(([file, bytes]) => [file, bytes.toString()])),
+    symbolAware: false, nativeEagerImports: true });
+  const packageNames = new Set<string>(["typescript", "react", "react-dom"]);
+  for (const tree of graph.values()) {
+    const visit = (node: ts.Node) => {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        const specifier = node.moduleSpecifier.text;
+        if (!specifier.startsWith(".") && !nodeModule.isBuiltin(specifier)) {
+          assert.ok(!/^(?:@\/|@src\/|file:|https?:|\/|[A-Za-z]:)/u.test(specifier), "Admission has an unresolved native module alias.");
+          const parts = specifier.split("/"); packageNames.add(parts[0].startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }; visit(tree);
+  }
+  const runtime = localVerificationAdmissionRuntimeIdentity(packageNames);
+  const snapshot = () => { const source = sourceSnapshot(); return { finalHead: source.finalHead, sourceSha256: source.sourceSha256,
+    runtime: localVerificationAdmissionRuntimeIdentity(packageNames) }; };
+  const assertSnapshot = () => assert.deepEqual(snapshot(), { finalHead: before.finalHead, sourceSha256: before.sourceSha256, runtime },
+    "Admission source, dependency or runtime closure changed during execution.");
+  const evidenceRoot = resolve(ROOT, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true });
+  assert.equal(realpathSync(evidenceRoot), evidenceRoot, "Admission evidence cannot traverse links.");
+  const runDirectory = realpathSync(mkdtempSync(join(evidenceRoot, "admission-qualification-")));
+  const context = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
+  const children = new Set<ChildProcess>(), executions: Array<LocalVerificationAdmissionQualification["executions"][number]> = [];
+  const assertionsRaw: unknown[] = [], artifacts = new Map<string, string>(), failures: string[] = [];
+  let inputRaw: LocalVerificationInputObservations | undefined;
+  let assertions: LocalVerificationAdmissionQualification["assertions"] = null, inputs: LocalVerificationAdmissionQualification["inputs"] = null;
+  const addArtifact = (absolute: string, expected?: string) => {
+    assert.ok(absolute.startsWith(evidenceRoot + sep) && lstatSync(absolute).isFile() && realpathSync(absolute) === absolute,
+      "Admission artifact is not an owned regular evidence file.");
+    const relative = absolute.slice(ROOT.length + 1).replaceAll("\\", "/"), sha256 = digest(readFileSync(absolute));
+    if (expected !== undefined) assert.equal(sha256, expected, "Admission raw artifact fingerprint differs.");
+    const prior = artifacts.get(relative); assert.ok(prior === undefined || prior === sha256, "Admission evidence changed before preservation.");
+    artifacts.set(relative, sha256);
+  };
+  const validateChild = (result: Awaited<ReturnType<typeof runOwnedVerificationChild>>) => {
+    assert.equal(result.code, 0); assert.deepEqual(result.rawExit, { code: 0, signal: null });
+    assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0); assert.equal(result.cleanup.processTreeVerified, true);
+    if (process.platform === "win32") {
+      const identity = result.nativeJobIdentity, native = result.nativeJobReceipt;
+      assert.ok(identity && native && result.nativeCapability);
+      assert.equal(identity.ownerJobAssignedBeforeResume, true); assert.equal(identity.jobHandleNonInheritable, true);
+      assert.equal(identity.effectiveLimitFlags, 0x2000); assert.ok(identity.jobBeforeResume.processIds.includes(identity.rootPid));
+      assert.equal(native.jobToken, identity.jobToken); assert.equal(native.rootPid, identity.rootPid);
+      assert.equal(native.status, "PASS"); assert.equal(native.reason, "completed"); assert.equal(native.rootExitCode, 0);
+      assert.deepEqual(result.helperExit, { code: 0, signal: null }); assert.equal(native.nativeFailure, null);
+      assert.equal(native.cleanup.activeProcessesAfterCleanup, 0); assert.deepEqual(native.cleanup.activeProcessIdsAfterCleanup, []);
+      assert.equal(native.cleanup.rootHandleExited, true); assert.equal(native.cleanup.jobHandleClosed, true);
+      assert.equal(result.nativeCapability.sourceSha256, digest(currentSources.get("scripts/lib/windows-owned-process.cs")!));
+    } else assert.equal(process.platform, "linux", "Admission cleanup is unqualified for this platform.");
+  };
+  try {
+    for (const [index, profile] of profiles.entries()) {
+      signal.throwIfAborted(); assertSnapshot();
+      const args = ["--experimental-strip-types", profile.entry, ...profile.args];
+      const env = { ...environment, VENESIA_QA_ASSERTION_RELOCATION_RECEIPT: "1", VENESIA_QA_ASSERTION_RELOCATION_NONCE: nonce,
+        VENESIA_QA_ADMISSION_NONCE: nonce };
+      const result = await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, args, env, "admission-" + (index + 1), 300_000);
+      executions.push({ entry: profile.entry, args, result }); validateChild(result); assertSnapshot();
+      let raw: unknown;
+      if (profile.receipt === "assertion-relocation-observations") {
+        const lines = result.stdout.split(/\r?\n/u).filter(line => line.startsWith("{")).flatMap(line => {
+          try { return [JSON.parse(line) as Record<string, unknown>]; } catch { return []; }
+        }).filter(value => value.kind === profile.receipt);
+        assert.equal(lines.length, 1, "The actual consumer must emit exactly one successful observation envelope."); raw = lines[0];
+        assert.equal((raw as Record<string, unknown>).consumer, profile.entry); assertionsRaw.push(raw);
+      } else {
+        const envelope = JSON.parse(result.stdout) as { status: unknown; rawObservations: LocalVerificationInputObservations };
+        assert.equal(envelope.status, "PASS"); inputRaw = envelope.rawObservations; raw = inputRaw;
+        assert.equal(inputRaw.entry, profile.entry);
+        for (const artifact of inputRaw.artifacts) addArtifact(resolve(ROOT, artifact.path), artifact.sha256);
+      }
+      assert.ok(raw && typeof raw === "object" && !Array.isArray(raw));
+      assert.equal((raw as Record<string, unknown>).schema, 1); assert.equal((raw as Record<string, unknown>).nonce, nonce,
+        "Missing or stale observations cannot prove this invocation.");
+    }
+    assertions = validateLocalVerificationAssertionRelocations({ baselineSources, currentSources, observations: [...assertionsRaw, inputRaw] });
+    inputs = validateLocalVerificationInputObservations({ sources: currentSources, observations: inputRaw });
+    assert.equal(assertions.status, "PASS", "Original predicates lack qualified source/execution correspondence.");
+    assert.equal(inputs.status, "PASS", "Four verification inputs lack qualified actual-consumer evidence.");
+    assertSnapshot();
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : "Admission qualification failed.");
+    if (error instanceof Error && "childResult" in error) executions.push({ entry: profiles[executions.length]?.entry ?? "unknown",
+      args: profiles[executions.length]?.args ?? [], result: error.childResult });
+  } finally {
+    for (const child of children) {
+      try { await stopChild(child, environment, "owner_shutdown"); children.delete(child); }
+      catch (error) { failures.push(error instanceof Error ? error.message : "Admission cleanup failed."); }
+    }
+    if (children.size) failures.push("Admission retained an undrained owned child.");
+  }
+  const collect = (directory: string) => {
+    for (const name of readdirSync(directory).sort()) {
+      const absolute = join(directory, name), stat = lstatSync(absolute);
+      assert.equal(stat.isSymbolicLink(), false, "Admission evidence contains an unqualified link.");
+      if (stat.isDirectory()) collect(absolute); else addArtifact(absolute);
+    }
+  };
+  try { collect(runDirectory); } catch (error) { failures.push(error instanceof Error ? error.message : "Admission evidence preservation failed."); }
+  const value: LocalVerificationAdmissionQualification = { schema: 1, kind: "owned-admission-qualification", nonce,
+    status: failures.length ? "BLOCKED" : "PASS", baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
+    runtime, executions, assertions, inputs, artifacts: [...artifacts].sort(([left], [right]) => left.localeCompare(right)).map(([path, sha256]) => ({ path, sha256 })),
+    failures, runDirectory, durationMs: performance.now() - started, behavioralPass: false, releaseEvidence: false };
+  receipt(context, "admission-result.json", value);
+  if (value.status === "PASS") {
+    const sourceDiscovery = structuredClone({ baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
+      additionalSourceFiles: [...additional], changes: initial.actualDelta, changeImpact: initial.changeImpact });
+    localVerificationAdmissionInvocations.set(value, { sha256: digest(JSON.stringify(value)), snapshot,
+      sourceDiscovery, sourceDiscoverySha256: digest(JSON.stringify(sourceDiscovery)) });
+  }
+  return value;
 }
 
 /** Read-only source consistency entry: no owned lifecycle, fixture, Browser, database or verification check starts. */
 export function inspectLocalVerificationChangeImpact(options: { baselineHead?: string; additionalSourceFiles?: readonly string[]; impact?: LocalVerificationImpact;
-  automatic?: boolean; ci?: { eventName: string; event: unknown; githubSha: string } }) {
+  automatic?: boolean; ci?: { eventName: string; event: unknown; githubSha: string }; admissionQualification?: LocalVerificationAdmissionQualification }) {
   const inspectionStarted = performance.now();
   const timings = { sourceSnapshotAndHashMs: 0, sourceDiscoveryMs: 0, contractCoherenceMs: 0, totalMs: 0 };
   const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
@@ -1215,13 +2336,15 @@ export function inspectLocalVerificationChangeImpact(options: { baselineHead?: s
   const impact = options.impact ?? { baselineHead, finalHead, sourceSha256, changes: [] };
   assert.equal(impact.baselineHead, baselineHead, "The reviewed impact baseline differs from the explicitly requested baseline.");
   const discoveryStarted = performance.now();
-  const actual = readLocalVerificationInputs(context, impact, manifest, additional, { additionalSourceFiles: additional });
+  const actual = readLocalVerificationInputs(context, impact, manifest, additional, { additionalSourceFiles: additional,
+    ...(options.admissionQualification ? { admissionQualification: options.admissionQualification } : {}) });
   timings.sourceDiscoveryMs = performance.now() - discoveryStarted;
   // Discovery includes Git binding, graph and assertion analysis; timing never authorizes coverage or changes its identity.
   const measuredTimings = () => ({ ...timings, totalMs: performance.now() - inspectionStarted });
   const base = { baselineHead: actual.baselineHead, finalHead: actual.finalHead, sourceSha256: actual.sourceSha256,
     actualDelta: actual.changes, changeImpact: actual.changeImpact, releaseEvidence: false as const,
-    proofBoundary: "source_discovery_only" as const, checksExecuted: 0, browserExecuted: false, databaseCalls: 0, networkRequests: 0 };
+    proofBoundary: "source_discovery_only" as const, checksExecuted: 0, browserExecuted: false, databaseCalls: 0, networkRequests: 0,
+    admissionQualification: actual.admissionQualification ?? null };
   if (options.automatic) {
     assert.equal(options.impact, undefined, "Automatic source coherence cannot replace reviewed local admission.");
     const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
@@ -1306,7 +2429,16 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
   const invocationId = "impact-" + globalThis.crypto.randomUUID();
   // Recompute the actual delta and existing manifest bindings here. A caller cannot supply a stale or altered selector.
   assert.deepEqual(Object.keys(options), ["baselineHead"], "Targeted execution accepts only an immutable baseline, never supplied impact analysis.");
-  const input = inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead, automatic: true });
+  let input = inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead, automatic: true });
+  if ("changeImpact" in input && input.changeImpact?.qaQuality?.some(row => row.failures.length)
+      && "fast" in input && input.fast.correspondence.every(row => row.protected)) {
+    const admissionQualification = await qualifyLocalVerificationAdmission({ baselineHead: options.baselineHead }, signal);
+    if (admissionQualification.status === "PASS") input = inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead,
+      automatic: true, admissionQualification });
+    else return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1,
+      results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0, browserExecuted: false,
+      durationMs: performance.now() - started, attempt: 0, retry: 0, fullGatesPreserved: true, admissionQualification };
+  }
   if (input.status !== "PASS_AUTOMATIC_SOURCE_PROTECTION" || input.exitCode !== 0 || !("qualifiedTargets" in input) || !input.changeImpact)
     return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1, results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0,
       browserExecuted: false, durationMs: performance.now() - started, attempt: 0, retry: 0, fullGatesPreserved: true };
@@ -1507,6 +2639,398 @@ export function registeredVerificationNodeEntries(scripts: Readonly<Record<strin
     assert.ok(sourceIncluded(entry), "A verification entry cannot include private or generated source.");
     return entry;
   }))];
+}
+
+/** Bounded four-input protocol only; orchestration owns nonce, outer cleanup and artifact byte verification. */
+export function validateLocalVerificationInputObservations(input: {
+  sources: ReadonlyMap<string, string | Buffer>; observations: unknown;
+}) {
+  const failures: string[] = [], entry = "scripts/verify-isolated-supabase.mts", check = "verify:isolated-supabase";
+  const coverage: Array<{ file: string; check: string; entry: string; evidence: Record<string, unknown> }> = [];
+  let stage = "envelope", nativeAcceptancePlatform: "win32" | "linux" | null = null;
+  const record = (value: unknown): Record<string, unknown> => {
+    assert.ok(value !== null && typeof value === "object" && !Array.isArray(value));
+    assert.ok([Object.prototype, null].includes(Object.getPrototypeOf(value))); return value as Record<string, unknown>;
+  };
+  const rows = (value: unknown) => { assert.ok(Array.isArray(value) && value.length <= 10_000); return value as unknown[]; };
+  const strings = (value: unknown) => { const result = rows(value); assert.ok(result.every(row => typeof row === "string"));
+    assert.equal(new Set(result).size, result.length); return result as string[]; };
+  const trees = new Map<string, ts.SourceFile>();
+  const source = (file: string) => { const bytes = input.sources.get(file); assert.ok(bytes !== undefined); return bytes.toString(); };
+  const tree = (file: string) => {
+    let parsed = trees.get(file); if (parsed) return parsed;
+    parsed = ts.createSourceFile(file, source(file), ts.ScriptTarget.Latest, true, /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+    assert.deepEqual((parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, []); trees.set(file, parsed); return parsed;
+  };
+  const nodes = (at: ts.Node) => { const result: ts.Node[] = []; const visit = (node: ts.Node) => { result.push(node); ts.forEachChild(node, visit); }; visit(at); return result; };
+  const declaration = (file: string, name: string) => {
+    const parsed = tree(file), found = name === "$module" ? [parsed] : name === "$dispatch" ? parsed.statements.filter(ts.isTryStatement)
+      : parsed.statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.equal(found.length, 1); return found[0]!;
+  };
+  // Structural expression identity retains literals and operators, rather than names or a source hash alone.
+  const keys = new WeakMap<ts.Node, string>();
+  const key = (node: ts.Node): string => {
+    const cached = keys.get(node); if (cached !== undefined) return cached;
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) || ts.isTypeAssertionExpression(node)) return key(node.expression);
+    const children: string[] = []; ts.forEachChild(node, child => { children.push(key(child)); });
+    const literal = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null;
+    const result = "[" + node.kind + ":" + JSON.stringify(literal) + ":" + children.join(",") + "]"; keys.set(node, result); return result;
+  };
+  const expression = (value: string) => {
+    const parsed = ts.createSourceFile("input-proof.ts", "(" + value + ")", ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    assert.deepEqual((parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, []);
+    const statement = parsed.statements[0]; assert.ok(statement && ts.isExpressionStatement(statement)); return statement.expression;
+  };
+  const has = (at: ts.Node, value: string) => { const expected = key(expression(value)); return nodes(at).some(node => key(node) === expected && live(node, at)); };
+  const requireExpressions = (at: ts.Node, expressions: string[]) => { for (const value of expressions) assert.ok(has(at, value), "Required behavioral expression absent."); };
+  const noTautologies = (at: ts.Node) => {
+    for (const node of nodes(at)) {
+      if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name)
+        assert.notEqual(node.name.getText(), "assert", "A local assertion receiver cannot qualify the imported guard.");
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "assert") {
+      if (node.expression.name.text === "ok" && node.arguments[0]) assert.ok(![ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword,
+        ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NumericLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral].includes(node.arguments[0].kind));
+      if (["equal", "deepEqual", "strictEqual", "deepStrictEqual"].includes(node.expression.name.text) && node.arguments.length >= 2)
+        assert.notEqual(key(node.arguments[0]!), key(node.arguments[1]!));
+      }
+    }
+  };
+  const directCall = (at: ts.Node, name: string) => nodes(at).filter((node): node is ts.CallExpression => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== name) return false;
+    for (let parent = node.parent; parent && parent !== at; parent = parent.parent)
+      if (ts.isFunctionLike(parent) || ts.isIfStatement(parent) || ts.isConditionalExpression(parent) || ts.isIterationStatement(parent, false)) return false;
+    return true;
+  });
+  const live = (candidate: ts.Node, at: ts.Node): boolean => {
+    const ownerName = ts.isFunctionDeclaration(at) ? at.name?.text : ts.isTryStatement(at) ? "$dispatch" : "$module";
+    const knownIf = (condition: ts.Expression) => {
+      if (ownerName === "verifyWindowsOwnedProcessContracts") return ['process.platform === "win32"', 'process.platform === "linux"'].some(value => key(condition) === key(expression(value)));
+      if (ownerName === "nativeBuild") return key(condition) === key(expression("build"));
+      if (ownerName !== "options") return false;
+      if (nodes(condition).some(node => node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)) return false;
+      return ["!output", 'key === "--platform-only" || key === "--cleanup-only"', "flags.has(key)", 'injection && injection !== "before-handoff"'].some(value => key(condition) === key(expression(value)))
+        || has(condition, "values.has(key)") && has(condition, 'argv[index + 1].startsWith("--")');
+    };
+    for (let part: ts.Node = candidate; part !== at; part = part.parent) {
+      const parent: ts.Node | undefined = part.parent; if (!parent) return false;
+      if (ts.isIfStatement(parent) && !knownIf(parent.expression)) return false;
+      if (ts.isConditionalExpression(parent)) {
+        if (ownerName !== "$dispatch" || !["--connection-lifecycle-only", "--final-public-proof", "--build-contracts-proof", "--media-upload-limit-proof", "--hero-compatibility-proof"]
+          .some(flag => key(parent.condition) === key(expression("args.includes(" + JSON.stringify(flag) + ")")))) return false;
+      }
+      if (ts.isIterationStatement(parent, false)) {
+        if (ownerName === "options" && ts.isForStatement(parent) && parent.condition && key(parent.condition) === key(expression("index < argv.length"))) continue;
+        if (ownerName === "$module" && ts.isForOfStatement(parent)
+          && key(parent.expression) === key(expression('["idle_timeout", "session_lifetime_timeout", "owner_shutdown", "peer_closed"]'))) continue;
+        if (!ts.isForOfStatement(parent) || !ts.isIdentifier(parent.expression)
+          || !(["negative", "routes", "invalid"].includes(parent.expression.text) && ["verifyReleaseLockInputContracts", "verifyIsolatedCliInputContracts"].includes(ownerName ?? ""))) return false;
+      }
+      if (ts.isFunctionLike(parent) && parent !== at) {
+        const holder = parent.parent;
+        if (ts.isCallExpression(holder) && holder.arguments.some(argument => argument === parent)
+          && (["control", "prove", "check", "assert.throws", "assert.rejects"].includes(holder.expression.getText())
+            || ownerName === "$module" && at.getSourceFile().fileName === "scripts/qa-isolated-supabase-transport.mjs"
+              && holder.expression.getText() === "transportSetupCase" && directCall(at, "transportSetupCase").includes(holder))) {
+          if (holder.expression.getText() === "control" && ownerName === "verifySharedChildControls"
+            && !directCall(at, "control").includes(holder)) return false;
+        } else if (ts.isVariableDeclaration(holder) && ts.isIdentifier(holder.name)
+          && ["read", "invoke"].includes(holder.name.text) && directCall(at, holder.name.text).length > 0) {
+          // Existing local helpers are invoked by the positive vector in this exact declaration.
+        } else if (ts.isFunctionDeclaration(parent) && parent.name && directCall(at, parent.name.text).length > 0) {
+          // Existing native contract helper; its returned observations are consumed by the caller.
+        } else return false;
+      }
+      if (ts.isBlock(parent)) {
+        const index = parent.statements.findIndex(statement => statement === part);
+        if (index >= 0) for (const previous of parent.statements.slice(0, index)) {
+          if (ts.isReturnStatement(previous) || ts.isThrowStatement(previous) || ts.isBreakStatement(previous) || ts.isContinueStatement(previous)) return false;
+          if (ts.isIfStatement(previous) && nodes(previous.thenStatement).some(node => ts.isReturnStatement(node) || ts.isThrowStatement(node)) && !knownIf(previous.expression)) return false;
+        }
+      }
+    }
+    return true;
+  };
+  try {
+    const raw = record(input.observations); assert.equal(raw.schema, 1); assert.equal(raw.kind, "verification-input-observations");
+    assert.equal(raw.entry, entry); assert.equal(raw.executionScope, "affected_input_controls");
+    assert.ok(typeof raw.nonce === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(raw.nonce));
+    const observedSources = new Map<string, string>();
+    for (const value of rows(raw.sources)) { const row = record(value); assert.ok(typeof row.file === "string" && typeof row.sha256 === "string");
+      assert.equal(observedSources.has(row.file), false); assert.equal(digest(source(row.file)), row.sha256); observedSources.set(row.file, row.sha256); }
+    const witnessed = new Set<string>();
+    for (const value of rows(raw.sourceWitnesses)) {
+      const witness = record(value); assert.ok(typeof witness.file === "string" && typeof witness.declaration === "string");
+      assert.ok(observedSources.has(witness.file)); const id = witness.file + "#" + witness.declaration; assert.equal(witnessed.has(id), false); witnessed.add(id);
+      const parsed = tree(witness.file), actual = declaration(witness.file, witness.declaration), calls: Array<{ expression: string; arguments: string[]; position: number }> = [];
+      for (const node of nodes(actual)) if (ts.isCallExpression(node)) calls.push({ expression: node.expression.getText(parsed),
+        arguments: node.arguments.map(argument => argument.getText(parsed)), position: node.getStart(parsed) });
+      assert.equal(witness.kind, ts.SyntaxKind[actual.kind]); assert.equal(witness.text, actual.getText(parsed));
+      assert.equal(witness.sha256, digest(actual.getText(parsed))); assert.deepEqual(witness.calls, calls);
+    }
+    const bound = (file: string, name: string) => { assert.ok(witnessed.has(file + "#" + name)); return declaration(file, name); };
+    const shared = bound(entry, "verifySharedChildControls"), json = bound(entry, "verifyReleaseLockInputContracts"), cli = bound(entry, "verifyIsolatedCliInputContracts");
+    const nativeControls = bound(entry, "verifyWindowsOwnedProcessContracts");
+    for (const node of [shared, json, cli, nativeControls, bound(entry, "readSource")]) noTautologies(node);
+    const admission = bound(entry, "admissionQualificationOnly");
+    requireExpressions(admission, ["verifySharedChildControls({ admissionOnly: true })"]);
+    assert.equal(directCall(admission, "verifySharedChildControls").length, 1);
+    requireExpressions(shared, ['import("./lib/isolated-supabase.mts")', "verifyIsolatedCliInputContracts(lifecycleOwner.IsolatedSupabaseError)",
+      'run("transport-contracts", [path.join(root, "scripts/qa-isolated-supabase-transport.mjs")], undefined, 30_000)',
+      'run("cli-missing-output", ["--experimental-strip-types", path.join(root, "scripts/qa-isolated-supabase.mts")], undefined, 30_000)',
+      'assert.deepEqual(result.rawExit, { code: 0, signal: null })', 'assert.deepEqual(result.rawExit, { code: 1, signal: null })',
+      'assert.equal(result.cleanup.liveProcesses, 0)', 'assert.deepEqual(failures, [{ status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" }])']);
+    const jsonCalls = directCall(shared, "verifyReleaseLockInputContracts"), cliCalls = directCall(shared, "verifyIsolatedCliInputContracts");
+    assert.equal(jsonCalls.length, 1); assert.equal(cliCalls.length, 1); assert.equal(directCall(shared, "verifyWindowsOwnedProcessContracts").length, 1);
+    assert.equal(key(jsonCalls[0]!.arguments[0]!), key(expression("lifecycleOwner"))); assert.equal(jsonCalls[0]!.arguments.length, 2);
+    assert.ok(ts.isArrowFunction(jsonCalls[0]!.arguments[1]!));
+    const lifecycleBindings = nodes(shared).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "lifecycleOwner");
+    assert.equal(lifecycleBindings.length, 1); assert.ok(lifecycleBindings[0]!.initializer);
+    assert.equal(key(lifecycleBindings[0]!.initializer!), key(expression('await import("./lib/isolated-supabase.mts")')));
+    for (const [at, names] of [[admission, ["verifySharedChildControls"]], [shared, ["verifyReleaseLockInputContracts", "verifyIsolatedCliInputContracts", "verifyWindowsOwnedProcessContracts"]]] as const)
+      for (const node of nodes(at)) if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name)
+        assert.ok(!(names as readonly string[]).includes(node.name.getText()), "A local alias cannot qualify an unused canonical helper.");
+    for (const file of [entry, "scripts/lib/windows-owned-process.mts"]) assert.ok(tree(file).statements.some(node => ts.isImportDeclaration(node)
+      && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "node:assert/strict" && node.importClause?.name?.text === "assert"));
+    const body = record(raw.observations); assert.equal(body.status, "PASS"); assert.equal(body.sourceInputsUnchanged, true);
+    const runtime = record(body.runtime); assert.ok(runtime.platform === "win32" || runtime.platform === "linux"); nativeAcceptancePlatform = runtime.platform;
+    for (const field of ["dockerExecuted", "unrelatedNativeLifecycleReexecuted", "automaticQualificationClaimed"]) assert.equal(body[field], false);
+    assert.equal(body.databaseCalls, 0); assert.equal(body.externalNetworkRequests, 0); assert.equal(body.originalFinallyExecuted, true);
+    const proofs = new Map<string, Record<string, unknown>>();
+    for (const value of rows(body.runtimeProofs)) { const proof = record(value); assert.ok(typeof proof.control === "string"); assert.equal(proofs.has(proof.control), false); proofs.set(proof.control, proof); }
+    const proof = (control: string) => { const value = proofs.get(control); assert.ok(value); return value; };
+    const artifacts = new Map<string, string>();
+    for (const value of rows(raw.artifacts)) { const row = record(value); assert.ok(typeof row.path === "string" && typeof row.sha256 === "string");
+      assert.match(row.path, /^\.tmp-qa\/[a-zA-Z0-9._/-]+$/u); assert.ok(!row.path.split("/").some(part => part === "." || part === ".."));
+      assert.match(row.sha256, /^[a-f0-9]{64}$/u); assert.equal(artifacts.has(row.path), false); artifacts.set(row.path, row.sha256); }
+    const archive = proof(nativeAcceptancePlatform === "win32" ? "windows_native_evidence_archive" : "owned_child_evidence_archive"); assert.ok(typeof archive.directory === "string");
+    const archiveRelative = archive.directory.replaceAll("\\", "/").split("/.tmp-qa/"); assert.equal(archiveRelative.length, 2);
+    assert.match(archiveRelative[1]!, /^owned-process-controls-[a-zA-Z0-9_-]+$/u); const archiveRoot = ".tmp-qa/" + archiveRelative[1] + "/";
+    const archived = new Map<string, string>();
+    for (const value of rows(archive.files)) { const row = record(value); assert.ok(typeof row.file === "string" && typeof row.sha256 === "string");
+      assert.equal(archived.has(row.file), false); assert.equal(artifacts.get(archiveRoot + row.file), row.sha256); archived.set(row.file, row.sha256); }
+    assert.ok(artifacts.has(archiveRoot + "evidence-index.json"));
+    stage = "json_read_parse_validation";
+    const lockFile = "scripts/fixtures/isolated-supabase/stack.lock.json", lockProof = proof("actual_release_lock_input");
+    assert.equal(lockProof.status, "PASS"); assert.equal(lockProof.input, lockFile); assert.equal(lockProof.sourceSha256, digest(source(lockFile)));
+    assert.equal(lockProof.actualOwnerReadParseValidation, true); assert.equal(lockProof.tempFixtureCleanupVerified, true);
+    requireExpressions(json, ['readSource("scripts/fixtures/isolated-supabase/stack.lock.json")', "JSON.parse(input)", "owner.readReleaseLock(file)",
+      "assert.deepEqual(actual, expected)", 'assert.throws(() => read("{"), SyntaxError)',
+      "assert.throws(() => read(JSON.stringify(changed)), error => error instanceof owner.IsolatedSupabaseError && error.code === code)",
+      "assert.equal(actual.compose.sha256, sha256(readSource(actual.compose.path)))", "assert.equal(actual.transport.sha256, sha256(readSource(actual.transport.path)))"]);
+    const negativeBindings = nodes(json).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "negative");
+    assert.equal(negativeBindings.length, 1); const negativeArray = negativeBindings[0]!.initializer; assert.ok(negativeArray && ts.isArrayLiteralExpression(negativeArray));
+    const negativeContracts = [
+      ["schema drift", "UNAPPROVED_RELEASE", 'value => { Object.assign(value, { schemaVersion: 2 }); }'],
+      ["release drift", "UNAPPROVED_RELEASE", 'value => { value.release.commit = "0".repeat(40); }'],
+      ["release source drift", "INCOMPLETE_RELEASE_LOCK", 'value => { value.release.sourceBaseUrl = "https://example.invalid/"; }'],
+      ["missing upstream inputs", "INCOMPLETE_RELEASE_LOCK", 'value => { value.files = []; }'],
+      ["duplicate upstream input", "DUPLICATE_LOCK_PATH", 'value => { value.files.push({ ...value.files[0]! }); }'],
+      ["unsafe upstream path", "UNSAFE_UPSTREAM_PATH", 'value => { value.files[0]!.path = "docker/../outside.sql"; }'],
+      ["upstream digest drift", "UNSAFE_UPSTREAM_PATH", 'value => { value.files[0]!.sha256 = "unqualified"; }'],
+      ["missing image", "INVALID_IMAGE_SET", 'value => { delete value.images.db; }'],
+      ["mutable image", "UNPINNED_IMAGE", 'value => { value.images.db!.reference = "supabase/postgres:latest"; }'],
+      ["image config drift", "UNPINNED_IMAGE", 'value => { value.images.db!.configDigest = "unqualified"; }'],
+      ["image manifest mismatch", "UNPINNED_IMAGE", 'value => { value.images.db!.manifestDigest = "sha256:" + "0".repeat(64); }'],
+      ["compose content drift", "SOURCE_HASH_MISMATCH", 'value => { value.compose.sha256 = "0".repeat(64); }'],
+      ["transport content drift", "TRANSPORT_SOURCE_HASH_MISMATCH", 'value => { value.transport.sha256 = "0".repeat(64); }'],
+      ["transport owner substitution", "TRANSPORT_SOURCE_HASH_MISMATCH", 'value => { value.transport.path = "scripts/qa-isolated-supabase-transport.mjs"; }'],
+    ];
+    assert.equal(negativeArray.elements.length, negativeContracts.length);
+    for (const [index, contract] of negativeContracts.entries()) { const tuple: ts.Expression | undefined = negativeArray.elements[index]; assert.ok(tuple && ts.isArrayLiteralExpression(tuple) && tuple.elements.length === 3);
+      for (const field of [0, 1]) { const value: ts.Expression | undefined = tuple.elements[field]; assert.ok(value && ts.isStringLiteral(value)); assert.equal(value.text, contract[field]); }
+      assert.equal(key(tuple.elements[2]!), key(expression(contract[2]!))); }
+    assert.deepEqual(strings(lockProof.names), ["actual current JSON bytes parse and validate through the existing release lock owner", ...negativeContracts.map(row => row[0]), "malformed JSON rejects before any lifecycle entry"]);
+    const lifecycle = "scripts/lib/isolated-supabase.mts", readLock = bound(lifecycle, "readReleaseLock");
+    requireExpressions(readLock, ['JSON.parse(readFileSync(lockPath, "utf8"))',
+      'requireThat(value.schemaVersion === 1 && object(value.release).commit === RELEASE_COMMIT, "UNAPPROVED_RELEASE", "provenance")']);
+    requireExpressions(bound(lifecycle, "runIsolatedSupabase"), ["readReleaseLock(lockPath)"]);
+    const jsonFiles = rows(lockProof.inputArtifacts); assert.equal(jsonFiles.length, 16);
+    for (let i = 0; i < jsonFiles.length; i++) { const row = record(jsonFiles[i]); assert.equal(row.file, "release-lock-inputs/lock-" + (i + 1) + ".json"); assert.equal(archived.get(String(row.file)), row.sha256); }
+    stage = "cli_actual_parser_dispatcher";
+    const cliProof = proof("actual_cli_parser_dispatcher"); assert.equal(cliProof.status, "PASS"); assert.equal(cliProof.source, "scripts/qa-isolated-supabase.mts");
+    assert.equal(cliProof.sourceSha256, digest(source("scripts/qa-isolated-supabase.mts"))); assert.equal(strings(cliProof.names).length, 29);
+    assert.equal(cliProof.actualParserAndDispatcher, true); assert.equal(cliProof.actualResourceAllocations, 0);
+    requireExpressions(cli, ["api.dispatchActualCli()", "assert.deepEqual(result.calls, [])", "assert.equal(result.exitCode, 1)",
+      'assert.deepEqual(JSON.parse(result.stderr), { status: "needs_attention", stage: "cli", code })',
+      'assert.deepEqual(result.calls, [{ name, input: ["--output", output] }])', "assert.equal(parsed.handoff, undefined)"]);
+    requireExpressions(cli, ['readSource("scripts/qa-isolated-supabase.mts")', 'options.getText(tree) + "\\nasync function dispatchActualCli(){" + dispatch[0]!.getText(tree) + "}"',
+      'new Function(...Object.keys(ports), body + ";return {options,dispatchActualCli};")(...Object.values(ports))']);
+    const cliFile = "scripts/qa-isolated-supabase.mts", options = bound(cliFile, "options"), dispatch = bound(cliFile, "$dispatch");
+    requireExpressions(options, ['new IsolatedSupabaseError("OUTPUT_REQUIRED", "cli")', 'new IsolatedSupabaseError("INVALID_ARGUMENT", "cli")',
+      "values.has(key)", 'argv[index + 1].startsWith("--")']);
+    requireExpressions(dispatch, ["proofModes.length <= 1", "options(args)", "runIsolatedSupabase(options(args))"]);
+    stage = "native_compiler_and_owned_execution";
+    const nativeProof = proof("windows_imported_type_and_source_contracts"), publication = record(nativeProof.nativeBuildPublication), integrity = record(nativeProof.nativeIntegrity);
+    assert.equal(nativeProof.status, "PASS"); assert.equal(publication.status, "PASS"); assert.equal(publication.checks, 10); assert.equal(strings(publication.cases).length, 10);
+    assert.equal(publication.actualNativeSourceInput, "scripts/lib/windows-owned-process.cs"); assert.equal(publication.actualNativeSourceSha256, digest(source("scripts/lib/windows-owned-process.cs")));
+    assert.equal(integrity.status, "PASS"); assert.equal(integrity.actualRootProcessesAllocated, 0);
+    requireExpressions(nativeControls, ['readSource("scripts/lib/windows-owned-process.cs")', "windowsOwnedProcessCapability()", "assert.equal(native.sourceSha256, sha256(nativeSource))",
+      'assert.equal(readFileSync(native.sourceSnapshot, "utf8"), nativeSource)', "assert.equal(provenance.flags.at(-1), native.sourceSnapshot)"]);
+    const nativeOwner = "scripts/lib/windows-owned-process.mts", build = bound(nativeOwner, "nativeBuild");
+    requireExpressions(build, ['join(ROOT, "scripts/lib/windows-owned-process.cs")', "readFileSync(source)", 'writeFileSync(sourceSnapshot, bytes, { flag: "wx", mode: 0o600 })',
+      'assert.equal(hash(readFileSync(source)), sourceSha256, "Native source changed during compilation.")',
+      'assert.equal(hash(readFileSync(compiler)), compilerSha256, "Native compiler changed during compilation.")',
+      'writeFileSync(provenance, provenanceBytes, { flag: "wx", mode: 0o600 })']);
+    assert.ok(nodes(build).some(node => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "execFileSync"
+      && node.arguments.length === 3 && key(node.arguments[0]!) === key(expression("compiler")) && key(node.arguments[1]!) === key(expression("flags"))));
+    assert.ok(ts.isFunctionDeclaration(build) && build.body); assert.equal(build.parameters.length, 0); noTautologies(build);
+    for (const node of nodes(build)) if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && node.name) assert.notEqual(node.name.getText(), "process");
+    for (const statement of tree(nativeOwner).statements) {
+      if (ts.isVariableStatement(statement)) for (const value of statement.declarationList.declarations) assert.notEqual(value.name.getText(), "process");
+      if (ts.isImportDeclaration(statement) && statement.importClause) {
+        assert.notEqual(statement.importClause.name?.text, "process"); const named = statement.importClause.namedBindings;
+        if (named && ts.isNamespaceImport(named)) assert.notEqual(named.name.text, "process");
+        if (named && ts.isNamedImports(named)) for (const value of named.elements) assert.notEqual(value.name.text, "process");
+      }
+    }
+    const first = build.body.statements[0];
+    assert.ok(first && ts.isExpressionStatement(first) && ts.isCallExpression(first.expression)); assert.equal(first.expression.expression.getText(), "assert.equal");
+    assert.equal(key(first.expression.arguments[0]!), key(expression("process.platform"))); assert.equal(key(first.expression.arguments[1]!), key(expression('"win32"')));
+    const flagBindings = nodes(build).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "flags");
+    assert.equal(flagBindings.length, 1); const flagArray = flagBindings[0]!.initializer; assert.ok(flagArray && ts.isArrayLiteralExpression(flagArray));
+    assert.equal(key(flagArray.elements.at(-1)!), key(expression("sourceSnapshot")));
+    const native = record(body.native); let built: Record<string, unknown> | null = null;
+    if (nativeAcceptancePlatform === "win32") {
+      assert.equal(native.status, "PASS"); built = record(native.native);
+      assert.equal(integrity.modifiedOwnedExecutableRejectedBeforeSpawn, true); assert.equal(integrity.originalExecutableRestored, true);
+      assert.equal(built.sourceSha256, digest(source("scripts/lib/windows-owned-process.cs"))); assert.equal(rows(built.frameworkReferences).length, 5);
+      assert.equal(integrity.executableSha256, built.executableSha256);
+      for (const field of ["sourceSnapshot", "provenance", "executable"]) { assert.ok(typeof built[field] === "string"); const relative: string[] = String(built[field]).replaceAll("\\", "/").split("/.tmp-qa/");
+        assert.equal(relative.length, 2); assert.match(relative[1]!, /^windows-native-build-[a-zA-Z0-9_-]+\/[^/]+$/u); assert.ok(artifacts.has(".tmp-qa/" + relative[1])); }
+    } else {
+      assert.equal(native.status, "BLOCKED"); assert.equal(native.native, undefined); assert.equal(native.missingProof, "windows_native_job_launch_unavailable");
+      assert.equal(integrity.scope, "non_windows_platform_rejection_before_compiler_or_spawn");
+      assert.equal(integrity.capabilityStatus, "BLOCKED"); assert.equal(integrity.platform, "linux"); assert.equal(integrity.nativeExecuted, false); assert.equal(integrity.compilerProcessesExecuted, 0);
+      requireExpressions(nativeControls, ['assert.equal(capability.status, "BLOCKED")']);
+    }
+    const owned = (control: string, file: string, exitCode: number) => {
+      const row = proof(control); assert.equal(row.entry, file); const result = record(row.actualResult); assert.equal(result.code, exitCode);
+      assert.deepEqual(result.rawExit, { code: exitCode, signal: null }); assert.deepEqual(row.rawExit, result.rawExit); assert.deepEqual(row.cleanup, result.cleanup);
+      const cleanup = record(result.cleanup); assert.equal(cleanup.status, "PASS"); assert.equal(cleanup.liveProcesses, 0); assert.equal(cleanup.processTreeVerified, true);
+      assert.equal(cleanup.platform, nativeAcceptancePlatform);
+      const prefix = control === "actual_owned_transport_leaf" ? "public-transport-contracts" : "public-cli-missing-output";
+      for (const stream of ["stdout", "stderr"] as const) {
+        assert.equal(typeof result[stream], "string");
+        assert.equal(archived.get(prefix + "." + stream + ".log"), digest(result[stream] as string), "Owned raw stream differs from its archived bytes.");
+      }
+      if (nativeAcceptancePlatform === "linux") {
+        assert.equal(cleanup.method, "linux-marker-and-process-identity"); assert.ok(Number.isSafeInteger(cleanup.observedProcesses) && Number(cleanup.observedProcesses) >= 1);
+        const identity = record(result.identity); assert.ok(Number.isSafeInteger(identity.pid) && Number(identity.pid) > 1);
+        assert.ok(result.nativeJobReceipt == null && result.nativeJobIdentity == null && result.nativeCapability == null);
+        const lifecycleOwner = bound("scripts/lib/isolated-public-verification.mts", "runOwnedVerificationChild");
+        assert.ok(nodes(lifecycleOwner).some(node => ts.isVariableDeclaration(node) && node.name.getText() === "markerKey" && node.initializer
+          && ts.isStringLiteral(node.initializer) && node.initializer.text === "VENESIA_QA_OWNED_CHILD"));
+        return { row, result };
+      }
+      assert.ok(built); assert.equal(cleanup.method, "windows-private-job");
+      const receipt = record(result.nativeJobReceipt), identity = record(result.nativeJobIdentity), capability = record(result.nativeCapability);
+      assert.equal(receipt.status, "PASS"); assert.equal(receipt.nativeFailure, null); assert.equal(receipt.rootExitCode, exitCode); assert.equal(receipt.rootSignal, null);
+      for (const field of ["jobToken", "helperPid", "rootPid", "rootCreationTimeFileTime"]) assert.deepEqual(receipt[field], identity[field]);
+      assert.equal(receipt.ownerJobAssignedBeforeResume, true); assert.equal(receipt.jobHandleNonInheritable, true); assert.equal(receipt.effectiveLimitFlags, 8192); assert.equal(receipt.resumeSucceeded, true);
+      const zero = record(receipt.cleanup); assert.equal(zero.status, "PASS"); assert.equal(zero.activeProcessesAfterCleanup, 0); assert.deepEqual(zero.activeProcessIdsAfterCleanup, []);
+      assert.equal(zero.rootHandleExited, true); assert.equal(zero.processTreeVerified, true); assert.equal(zero.jobHandleClosed, true);
+      for (const field of ["sourceSha256", "executableSha256", "compilerSha256", "provenance"]) assert.equal(capability[field], built[field]);
+      for (const suffix of [".native-identity.json", ".native-result.json"]) assert.ok(archived.has(prefix + suffix));
+      return { row, result };
+    };
+    stage = "transport_actual_entry";
+    const transport = owned("actual_owned_transport_leaf", "scripts/qa-isolated-supabase-transport.mjs", 0);
+    const transportModule = bound("scripts/qa-isolated-supabase-transport.mjs", "$module"); noTautologies(transportModule);
+    const registrations: Array<{ position: number; names: string[] }> = [], helperPushes = new Set<ts.Node>();
+    const caseBindings = nodes(transportModule).filter(node => (ts.isVariableDeclaration(node) || ts.isParameter(node)) && node.name.getText() === "cases");
+    assert.equal(caseBindings.length, 1); const caseBinding = caseBindings[0];
+    assert.ok(caseBinding && ts.isVariableDeclaration(caseBinding) && caseBinding.initializer && ts.isArrayLiteralExpression(caseBinding.initializer));
+    assert.equal(caseBinding.initializer.elements.length, 0);
+    for (const helperName of ["check", "protocolCase", "transportSetupCase"]) {
+      const helper = declaration("scripts/qa-isolated-supabase-transport.mjs", helperName); assert.ok(ts.isFunctionDeclaration(helper) && helper.body);
+      assert.equal(helper.parameters.length, 2); assert.equal(helper.parameters[0]!.name.getText(), "name");
+      const pushes = nodes(helper).filter((node): node is ts.CallExpression => ts.isCallExpression(node) && node.expression.getText() === "cases.push");
+      assert.equal(pushes.length, 1); assert.equal(pushes[0]!.arguments.length, 1); const pushedName = pushes[0]!.arguments[0];
+      assert.ok(pushedName && ts.isIdentifier(pushedName) && pushedName.text === "name");
+      assert.ok(live(pushes[0]!, helper)); helperPushes.add(pushes[0]!);
+      if (helperName !== "protocolCase") {
+        assert.equal(helper.parameters[1]!.name.getText(), "run"); assert.equal(helper.body.statements.length, 2);
+        const first = helper.body.statements[0]; assert.ok(first && ts.isExpressionStatement(first));
+        let action: ts.Expression = first.expression;
+        if (helperName === "transportSetupCase") { assert.ok(ts.isAwaitExpression(action)); action = action.expression; }
+        assert.equal(key(action), key(expression("run()"))); assert.equal(helper.body.statements[1]!.getText(), pushes[0]!.parent.getText());
+      }
+      const calls = directCall(transportModule, helperName); assert.ok(calls.length > 0);
+      assert.equal(nodes(transportModule).filter(node => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === helperName).length, calls.length,
+        "Conditional or indirect transport registrations are not qualified.");
+      for (const call of calls) {
+        assert.ok(live(call, transportModule)); assert.equal(call.arguments.length, 2); const label = call.arguments[0]; assert.ok(label && ts.isStringLiteral(label));
+        if (helperName !== "protocolCase") assert.ok(ts.isArrowFunction(call.arguments[1]!));
+        if (helperName !== "check") assert.ok(ts.isAwaitExpression(call.parent));
+        registrations.push({ position: call.getStart(), names: [label.text] });
+      }
+    }
+    for (const push of nodes(transportModule).filter((node): node is ts.CallExpression => ts.isCallExpression(node) && node.expression.getText() === "cases.push")) {
+      if (helperPushes.has(push)) continue;
+      assert.ok(live(push, transportModule)); assert.equal(push.arguments.length, 1); const label = push.arguments[0]!;
+      if (ts.isStringLiteral(label)) registrations.push({ position: push.getStart(), names: [label.text] });
+      else {
+        assert.ok(ts.isTemplateExpression(label) && label.templateSpans.length === 1);
+        let loop: ts.Node | undefined = push.parent; while (loop && loop !== transportModule && !ts.isForOfStatement(loop)) loop = loop.parent;
+        assert.ok(loop && ts.isForOfStatement(loop) && ts.isArrayLiteralExpression(loop.expression)
+          && ts.isVariableDeclarationList(loop.initializer) && loop.initializer.declarations.length === 1);
+        const binding = loop.initializer.declarations[0]!.name, span = label.templateSpans[0]!;
+        assert.ok(ts.isIdentifier(binding) && ts.isIdentifier(span.expression) && span.expression.text === binding.text);
+        // live() accepts only the existing literal four-reason loop here. No expression or callback is evaluated.
+        const names = loop.expression.elements.map(reason => { assert.ok(ts.isStringLiteral(reason)); return label.head.text + reason.text + span.literal.text; });
+        registrations.push({ position: push.getStart(), names });
+      }
+    }
+    const expectedCases = registrations.sort((a, b) => a.position - b.position).flatMap(row => row.names);
+    assert.ok(expectedCases.length > 0); assert.equal(new Set(expectedCases).size, expectedCases.length);
+    assert.equal(transport.row.status, "PASS"); assert.equal(transport.row.checks, expectedCases.length); assert.deepEqual(strings(transport.row.cases), expectedCases);
+    assert.equal(transport.result.stderr, ""); assert.ok(typeof transport.result.stdout === "string");
+    const terminal = record(JSON.parse(transport.result.stdout)); assert.equal(terminal.status, "PASS"); assert.equal(terminal.checks, expectedCases.length); assert.deepEqual(terminal.cases, expectedCases);
+    for (const field of ["dockerExecuted", "productionAccess", "externalConnections"]) assert.equal(terminal[field], false);
+    requireExpressions(transportModule, ["runContainerPipe('db', input, output)", "assert.equal(requestDigest, hash(request))",
+      "assert.equal(hash(Buffer.concat(chunks)), hash(reply))", "assert.equal(snapshot.active, 0)", "assert.equal(snapshot.localProcesses, 0)", "assert.equal(bridge.snapshot().listeners.length, 0)"]);
+    requireExpressions(transportModule, ["validateTransportOptions({ ...options, dockerHost: 'tcp://remote.invalid:2375' })",
+      "validateTransportOptions({ ...options, ports: { ...ports, extra: 56169 } })", "validateTransportOptions({ ...options, ports: { ...ports, rest: ports.db } })",
+      "runContainerPipe('https://external.invalid')"]);
+    requireExpressions(transportModule, ["assert.equal(setupTimers, 1)", "assert.equal(first, second)",
+      "assert.deepEqual(actual.snapshot().cleanup, { status: 'PASS', listeners: 0, pendingListenerCloses: 0, active: 0, localProcesses: 0, pendingSocketCloses: 0, setupTimerActive: false })",
+      "assert.equal(attempted, 1)", "assert.equal(failure.diagnostic.listenerIndex, 0)", "assert.equal(failure.cause.code, original.code)", "assert.equal(holder.listening, true)",
+      "assert.equal(attempted, 3)", "assert.equal(failure.diagnostic.listenerIndex, 2)",
+      "assert.deepEqual(failure.cause, { name: 'Error', code: 'EACCES', errno: -13, syscall: 'listen', address: '127.0.0.1', port: ports.rest, phase: 'listen' })",
+      "assert.equal(Object.isFrozen(failure.cause), true)", "assert.equal(Object.isFrozen(failure.diagnostic), true)",
+      "assert.ok(Object.getOwnPropertySymbols(failure).some(key => failure[key] === original))",
+      "assert.equal(JSON.stringify(failure).includes(secret), false)", "assert.equal(inspect(failure).includes(secret), false)",
+      "assert.equal(failure.cause.syscall, null)", "assert.equal(inspect(failure).includes('private unstructured failure'), false)",
+      "assert.equal(error.diagnostic.cleanup.status, 'NOT_STARTED')", "assert.equal(servers, 0)", "assert.equal(timers, 0)",
+      "assert.equal(getEventListeners(controller.signal, 'abort').length, 0)", "assert.equal(failure.code, 'QA_TRANSPORT_CANCELLED')",
+      "assert.equal(failure.code, 'QA_TRANSPORT_SETUP_TIMEOUT')", "assert.equal(failure.diagnostic.originalErrorRetainedPrivately, false)",
+      "assert.equal(snapshot.failure.code, 'QA_TRANSPORT_CANCELLED')", "assert.equal(snapshot.cleanup.pendingSocketCloses, 0)",
+      "assert.deepEqual(unhandled, [])", "assert.equal(actual.snapshot().failure.phase, 'active_listener')", "assert.equal(actual.snapshot().failure.causeCode, 'EIO')",
+      "assert.equal(failure.diagnostic.cleanup.status, 'FAIL')", "assert.equal(failure.cause.code, 'EACCES')",
+      "assert.rejects(closing, /QA_TRANSPORT_CLEANUP_INCOMPLETE/u)", "assert.equal(actual.snapshot().cleanup.pendingListenerCloses, 1)", "assert.equal(cleared, true)"]);
+    const setupCleanup = declaration("scripts/qa-isolated-supabase-transport.mjs", "setupCleanup");
+    requireExpressions(setupCleanup, ["assert.equal(error.diagnostic.cleanup.status, expected)", "assert.equal(error.diagnostic.cleanup.listeners, 0)",
+      "assert.equal(error.diagnostic.cleanup.active, 0)", "assert.equal(error.diagnostic.cleanup.localProcesses, 0)",
+      "assert.equal(error.diagnostic.cleanup.pendingSocketCloses, 0)", "assert.equal(error.diagnostic.cleanup.setupTimerActive, false)"]);
+    stage = "cli_actual_no_allocation_entry";
+    const rejected = owned("actual_cli_no_allocation_rejection", cliFile, 1); assert.equal(rejected.result.stdout, ""); assert.equal(rejected.row.applicationOutputSupplied, false);
+    assert.deepEqual(rejected.row.failure, { status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" });
+    assert.ok(typeof rejected.result.stderr === "string"); assert.equal(rejected.row.stderrSha256, digest(rejected.result.stderr));
+    assert.deepEqual(rejected.result.stderr.split(/\r?\n/u).filter(line => line.trim().startsWith("{")).map(line => JSON.parse(line)), [rejected.row.failure]);
+    for (const [file, role, control] of [[lockFile, "read_parse_validate_data", "actual_release_lock_input"], ["scripts/lib/windows-owned-process.cs", "compiled_native_owner", "windows_imported_type_and_source_contracts"],
+      ["scripts/qa-isolated-supabase-transport.mjs", "owned_executable_leaf", "actual_owned_transport_leaf"], [cliFile, "actual_parser_dispatcher_and_rejection", "actual_cli_parser_dispatcher"]])
+      coverage.push({ file: file!, check, entry, evidence: { kind: "qualified_input_control_observations",
+        role: file === "scripts/lib/windows-owned-process.cs" && nativeAcceptancePlatform === "linux" ? "platform_rejection_and_compiler_input_controls_only" : role,
+        control, nonce: raw.nonce, artifacts: [...artifacts.keys()] } });
+  } catch { failures.push("four_input_observations_invalid:" + stage); }
+  return { status: failures.length ? "BLOCKED" as const : "PASS" as const, failures, coverage: failures.length ? [] : coverage,
+    nativeAcceptancePlatform, nativeAcceptanceStatus: failures.length ? "BLOCKED" : nativeAcceptancePlatform === "win32" ? "ACTUAL_NATIVE_EXECUTION" : "PLATFORM_REJECTION_AND_SOURCE_CONTRACT_ONLY",
+    nativeExecuted: !failures.length && nativeAcceptancePlatform === "win32",
+    proofLimits: nativeAcceptancePlatform === "linux" ? ["C# compiler inputs use controlled ports; Windows capability rejects this platform before compiler/spawn.", "No Windows native build or lifecycle execution is established; this evidence cannot qualify Windows Full E."]
+      : ["Only the affected input controls execute; the unchanged broader native lifecycle matrix is not rerun.", "Full E admission additionally requires the owner's fresh nonce, outer cleanup and complete artifact/dependency/runtime closure."],
+    proofBoundary: "source_and_behavior_observations_only" as const, requiresOwnerNonceOuterReceiptAndArtifactClosure: true };
 }
 
 /** Positive executable proof only; dynamic/non-import fixture use cannot authorize a bounded gate. */
@@ -2923,6 +4447,8 @@ export async function loadRetainedFinalQualityAdmissionAsync(admissionSha256: st
 
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
+  /** Live proof from this owner's qualification, never a serialized approval record. */
+  admissionQualification?: LocalVerificationAdmissionQualification;
   /** Reviewed batch-local impact evidence; this creates no persistent impact registry. */
   localVerification?: LocalVerificationImpact;
   /** Full ci:check prefix, followed once by the existing build/Public/Admin gates. */
@@ -3284,7 +4810,7 @@ export function runOwnedVerificationChild(ports: {
   const started = performance.now();
   return new Promise((done, reject) => {
     signal.throwIfAborted();
-    assert.ok(Number.isFinite(limitMs) && limitMs > 0, "Owned child deadline must be finite and positive.");
+    assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Owned child deadline must be a finite timer-safe positive integer.");
     const stdoutPath = ownedPath(context, `public-${name}.stdout.log`), stderrPath = ownedPath(context, `public-${name}.stderr.log`);
     assert.equal(existsSync(stdoutPath) || existsSync(stderrPath), false, "Owned child evidence already exists; refuse duplicate execution.");
     if (process.platform === "linux") {
@@ -3591,6 +5117,9 @@ export async function verifyOwnedProcessReadiness(options: {
 }
 
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
+  if (request.localVerification && request.finalQualityGate === true)
+    assert.ok(request.admissionQualification,
+      "Final Quality source admission requires this owner's preallocation live qualification before an active database control connection.");
   if (request.finalQualityGate && !ownedProcessCleanupQualification().fullEProcessCleanupQualified) {
     const failure = new Error("Final quality requires qualified owned descendant cleanup after root exit.");
     Object.defineProperty(failure, "code", { value: "FINAL_QUALITY_PROCESS_CLEANUP_UNQUALIFIED" });
@@ -3829,7 +5358,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
       if (localPlan?.mode === "bounded") { await drainControlPulse(); verifySource(); assert.equal(localInputs!.finalHead, headSha); activeLocalVerifications.add(originalContext); }
     }
-    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 }));
+    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: localVerificationQualityPrefixDeadlineMs() }));
     const executionGates = heroCompatibility && request.finalQualityGate
       ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...qualityPrefix, ...GATES]
       : [...qualityPrefix, ...gates];

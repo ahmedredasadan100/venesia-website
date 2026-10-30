@@ -319,9 +319,20 @@ closed; there is no
 fetch, guessed baseline, shell interpolation of event values, or borrowed local
 approval record. Use the existing full-history checkout without persisted Git
 credentials. The source step blanks all three existing Supabase environment
-values before Node starts, executes no candidate command and has no Browser,
-database or fixture lifecycle. Its sanitized JSON report alone is retained as
-an attempt-specific artifact after success or failure; missing evidence fails.
+values before Node starts and executes no selected Product candidate command,
+Browser or database fixture lifecycle. When changed predicates or typed inputs
+need execution correspondence, the existing admission owner first runs the
+three registered affected-control profiles (Form, Page Block and isolated
+verification controls) with one fresh invocation nonce. Their source, installed
+dependency and runtime closure, original assertion/loader observations, raw
+exits and owned-process cleanup must qualify before source consistency can
+pass. A live invocation seal is required; saved JSON cannot grant admission.
+Unknown projection, stale inputs, lost predicates and incomplete evidence block
+the source step. The top-level report remains source consistency, not Product
+Behavioral PASS or release evidence. Preserve its sanitized JSON together with
+the referenced admission and affected-control artifacts after success or
+failure; missing evidence fails. This does not change canonical commands or
+authorize a parallel verification workflow.
 
 CI admission failure also retains a bounded `ciBinding` diagnostic from the
 original in-memory event: canonical SHA bindings, the original commit lookup
@@ -569,6 +580,34 @@ pg failure metadata. Cleanup closes owned transport and drains pending work
 before resource removal; a failed drain is retained, never recorded PASS.
 These controls and their targeted receipts do not alone prove long-running
 Environment Readiness, repair the historical V8 abort or satisfy Full Local E.
+
+Host bridge setup retains the first failed listener's ordered service/index,
+numeric loopback address/port, setup phase and sanitized native code/syscall in
+the existing transport diagnostic. The original Error is private; the public
+cause omits arbitrary messages, stacks, credentials and endpoints. Missing native
+fields remain unknown. One setup budget is bounded by the existing15-second
+connect limit, and cancellation uses the existing preparation/lifetime signal.
+Partial setup closes earlier listeners, pending sockets/processes and its setup
+timer before rejection; repeated close calls await the same cleanup result.
+The existing environment receipt retains this diagnostic and its safe cause;
+secondary evidence I/O must not replace the original setup failure. Expanded
+transport cases remain bound to the actual current registered leaf, original
+stdout/exit/native cleanup and complete source-derived case obligations, rather
+than changing a count-only admission threshold. A successful short bind test or
+cleaned Job does not prove continuous Application Client/PostgreSQL readiness.
+
+Cold source discovery must precede allocation for a Final Quality request with
+reviewed local impact. The existing live Admission invocation privately retains
+only its cloned, digest-bound raw discovery, exact Git delta and explicit files.
+The reader may reuse those facts only after validating the live invocation,
+receipt seal, current baseline/HEAD/source/runtime and physical artifacts; every
+returned discovery is cloned and current request coverage/native selection is
+derived again. Missing, corrupt or incompatible private facts reject without a
+cold-analysis fallback on the live control connection. Serialized receipts and
+caller-owned facts grant no authority. This is bounded reuse in the current
+owner, not a cache of gate success or a new registry. Bounded/default requests
+retain their existing prerequisites. No idle/lifetime or preparation timeout is
+raised and no worker, heartbeat timer or suspended PostgreSQL state is added.
 
 Contract correspondence is per exported contract/symbol and its actual
 assertion dependency, including lexically bound runtime aliases. An unrelated

@@ -865,14 +865,21 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     },
   });
   const transportCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "EACCES", "EPIPE", "ENOTFOUND", "DB_CONNECTION_TIMEOUT"]);
-  const ownerTransportCodes = new Set(["INVALID_QA_TRANSPORT", "INVALID_QA_TRANSPORT_PORTS", "QA_TRANSPORT_CLEANUP_INCOMPLETE", "QA_TRANSPORT_LISTEN_FAILED", "INVALID_QA_BOUNDARY_PORTS", "NON_LOOPBACK_EXPOSURE"]);
-  const asSafeError = (error: unknown, stage: string) => error instanceof IsolatedSupabaseError
+  const ownerTransportCodes = new Set(["INVALID_QA_TRANSPORT", "INVALID_QA_TRANSPORT_PORTS", "QA_TRANSPORT_CLEANUP_INCOMPLETE", "QA_TRANSPORT_LISTEN_FAILED", "QA_TRANSPORT_CANCELLED", "QA_TRANSPORT_SETUP_TIMEOUT", "INVALID_QA_BOUNDARY_PORTS", "NON_LOOPBACK_EXPOSURE"]);
+  const asSafeError = (error: unknown, stage: string) => {
+    const safe = error instanceof IsolatedSupabaseError
     ? error : error instanceof IsolatedSupabaseCliError ? new IsolatedSupabaseError(error.code, error.stage)
       : new IsolatedSupabaseError(typeof error === "object" && error !== null && "code" in error
       && typeof error.code === "string" && (/^[0-9A-Z]{5}$/.test(error.code) || transportCodes.has(error.code)) ? error.code
       : error instanceof Error && ownerTransportCodes.has(error.message) ? error.message
         : error instanceof Error && error.message === "Connection terminated due to connection timeout" ? "DB_CONNECTION_TIMEOUT"
           : stage === "database-connect" ? classifyOwnedPgConnectMessage(error)?.code ?? "PREREQUISITE_OR_OPERATION_FAILED" : "PREREQUISITE_OR_OPERATION_FAILED", stage);
+    // Only the transport owner's sanitized wrapper is retained, never arbitrary
+    // PostgreSQL messages or connection credentials.
+    if (safe !== error && error instanceof Error && ownerTransportCodes.has(error.message))
+      Object.defineProperty(safe, "cause", { value: error });
+    return safe;
+  };
 
   const inspect = async (kind: "container" | "volume" | "network", id: string): Promise<JsonObject> => {
     requireThat(kind === "volume" ? /^[a-zA-Z0-9_.-]+$/.test(id) : /^[a-f0-9]{64}$/.test(id), "INVALID_RESOURCE_ID", "inventory");
@@ -1266,12 +1273,39 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     safeRecord("network-denial-before-bootstrap", { externalRouteAbsent: true, reservedDestinationDenied: true, containers: SERVICES.length });
     currentStage = "postgres-platform"; preparation?.enter(currentStage);
     await startService("db");
-    hostBridge = await startHostAccessBridge({ dockerBinary, dockerHost, env: cleanChildEnvironment(),
-      ports: { db: run.pgPort, rest: run.restPort, storage: run.storagePort, "api-gw": run.apiPort },
-      assertOwnedTransport: async () => {
-        requireThat(!interrupted && !cleaning, "INACTIVE_TRANSPORT", "host-access");
-        const item = serviceResource("qa-transport"); await inspectCaptured(item); return item.identity.id;
-      } }) as HostBridge;
+    try {
+      hostBridge = await startHostAccessBridge({ dockerBinary, dockerHost, env: cleanChildEnvironment(),
+        signal: preparation?.signal ?? lifetimeAbort.signal,
+        ports: { db: run.pgPort, rest: run.restPort, storage: run.storagePort, "api-gw": run.apiPort },
+        assertOwnedTransport: async () => {
+          requireThat(!interrupted && !cleaning, "INACTIVE_TRANSPORT", "host-access");
+          const item = serviceResource("qa-transport"); await inspectCaptured(item); return item.identity.id;
+        } }) as HostBridge;
+    } catch (error) {
+      // Only the transport owner's bounded diagnostic is retained. Its private
+      // original Error is never serialized; missing native fields remain unknown.
+      try {
+        if (error instanceof Error && "diagnostic" in error && error.diagnostic && typeof error.diagnostic === "object") {
+          const diagnostic = object(error.diagnostic);
+          safeRecord("host-access-setup-failed", {
+            code: typeof diagnostic.code === "string" ? diagnostic.code : "UNKNOWN",
+            phase: typeof diagnostic.phase === "string" ? diagnostic.phase : "unknown",
+            service: typeof diagnostic.service === "string" ? diagnostic.service : "unknown",
+            listenerIndex: typeof diagnostic.listenerIndex === "number" ? diagnostic.listenerIndex : null,
+            listenerPort: typeof diagnostic.port === "number" ? diagnostic.port : null,
+            causeCode: typeof diagnostic.causeCode === "string" ? diagnostic.causeCode : "UNKNOWN",
+            metadataComplete: diagnostic.originalMetadataComplete === true,
+          });
+          recordFile("host-access-setup-failure.json", { schema: 1, diagnostic,
+            rawErrorRetained: false, originalErrorKeptByTransportOwner: diagnostic.originalErrorRetainedPrivately === true });
+        }
+      } catch {
+        // Secondary evidence I/O must not replace the first setup failure.
+        if (error instanceof Error && Object.isExtensible(error) && !Object.hasOwn(error, "receiptFailure"))
+          Object.defineProperty(error, "receiptFailure", { value: "RECEIPT_WRITE_FAILED" });
+      }
+      throw error;
+    }
     const hostAccessOpen = hostBridge.snapshot();
     requireThat(hostAccessOpen.listeners.length === ports.length
       && hostAccessOpen.listeners.every(listener => listener.host === "127.0.0.1")

@@ -17,6 +17,7 @@ import { selectSourceInventory, sourceIncluded } from "./lib/verification-source
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 import { windowsOwnedProcessCapability, spawnWindowsOwnedProcess, requestWindowsClosureCheckpoint,
   startWindowsClosureObservation, qualifyWindowsClosureEvidence } from "./lib/windows-owned-process.mts";
+import type { LocalVerificationInputObservations } from "./lib/isolated-public-verification.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -210,13 +211,15 @@ function verifyReleaseLock(): { lock: StackLock; hash: string } {
   return { lock, hash: sha256(lockSource) };
 }
 
-function verifyReleaseLockInputContracts(owner: Pick<typeof import("./lib/isolated-supabase.mts"), "readReleaseLock" | "IsolatedSupabaseError">) {
+function verifyReleaseLockInputContracts(owner: Pick<typeof import("./lib/isolated-supabase.mts"), "readReleaseLock" | "IsolatedSupabaseError">,
+  archiveInput?: (file: string, bytes: string) => void) {
   const input = readSource("scripts/fixtures/isolated-supabase/stack.lock.json"), expected = JSON.parse(input) as StackLock;
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-release-lock-inputs-"))), names: string[] = [];
   let serial = 0;
   const read = (bytes: string) => {
     const file = path.join(directory, "lock-" + ++serial + ".json");
     writeFileSync(file, bytes, { flag: "wx", mode: 0o600 });
+    archiveInput?.(file, bytes);
     return owner.readReleaseLock(file);
   };
   try {
@@ -1780,7 +1783,8 @@ function verifyFinalQualityGatePlan() {
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(file) === "GATES"));
   const planner = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "finalQualityScriptNames");
-  assert.ok(gates && planner);
+  const deadline = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "localVerificationQualityPrefixDeadlineMs");
+  assert.ok(gates && planner && deadline);
   const code = ts.transpileModule(gates.getText(file) + "\n" + planner.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const plan = new Function("assert", code + ";return finalQualityScriptNames;")(assert) as (scripts: Record<string, string>) => string[];
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
@@ -1801,7 +1805,7 @@ function verifyFinalQualityGatePlan() {
     const result = nodes.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
     assert.ok(result); return result.getText(file);
   };
-  const executionCode = ts.transpileModule([gates.getText(file), declaration("heroGate", run.body.statements),
+  const executionCode = ts.transpileModule([deadline.getText(file).replace(/^export /u, ""), gates.getText(file), declaration("heroGate", run.body.statements),
     declaration("qualityPrefix", body.tryBlock.statements), declaration("executionGates", body.tryBlock.statements)].join("\n"),
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   type Gate = { name: string; qualityScript?: string };
@@ -1816,9 +1820,102 @@ function verifyFinalQualityGatePlan() {
   cases.push("Hero prerequisite build and journey precede the complete unchanged canonical Quality prefix and Public tail");
 }
 
+/** Targeted negative proof over actual retained observations; it never grants a live admission seal. */
+export function verifyRetainedAssertionRelocationControls(api: Pick<typeof import("./lib/isolated-public-verification.mts"), "validateLocalVerificationAssertionRelocations">,
+  input: { baselineSources: ReadonlyMap<string, string | Buffer>; currentSources: ReadonlyMap<string, string | Buffer>; observations: readonly unknown[] }) {
+  const form = "scripts/verify-admin-form-system.mts", page = "scripts/verify-page-block-editor-presentation.mts", helper = "scripts/fixtures/admin-form-section-contract.mts";
+  const scopes = new Map([[form, "verifyUnifiedFormFields"], [page, "verifyBlockPanelComposition"]]);
+  const original = api.validateLocalVerificationAssertionRelocations(input);
+  for (const [file, scope] of scopes) assert.ok(original.relocations.some(row => row.file === file && row.scope === scope && row.matched === row.before), "The retained actual positive scope must qualify before its adversaries.");
+  assert.ok(original.failures.every(row => row.scope === "registeredVerificationNodeEntries"), "A separate absent parser proof cannot conceal another positive failure.");
+  type Observation = Record<string, unknown>;
+  const object = (value: unknown): Observation => { assert.ok(value && typeof value === "object" && !Array.isArray(value)); return value as Observation; };
+  const rows = (value: unknown): Observation[] => { assert.ok(Array.isArray(value)); return value.map(object); };
+  const results: Array<{ name: string; status: "BLOCKED"; failures: Array<{ file: string; scope: string; reason: string }> }> = [];
+  const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+  const reject = (name: string, affected: string, edit: (files: Map<string, string | Buffer>, observations: Observation[]) => void) => {
+    const currentSources = new Map(input.currentSources), observations = JSON.parse(JSON.stringify(input.observations)) as Observation[];
+    try {
+      edit(currentSources, observations);
+      const outcome = api.validateLocalVerificationAssertionRelocations({ baselineSources: input.baselineSources, currentSources, observations });
+      const failures = outcome.failures.filter(row => row.file === affected || affected === helper && (row.file === form || row.file === page || row.file === helper));
+      assert.equal(outcome.status, "BLOCKED", name); assert.ok(failures.length > 0, name + " must fail its changed source/receipt, independently of missing parser proof");
+      results.push({ name, status: "BLOCKED", failures });
+    } catch (error) {
+      if (error instanceof Error) Object.defineProperty(error, "controlProgress", { value: { completed: [...results], failedCase: name } });
+      throw error;
+    }
+  };
+  const replace = (files: Map<string, string | Buffer>, file: string, from: string, to: string) => {
+    const before = files.get(file)!.toString(); assert.equal(before.split(from).length, 2, "Mutation must select one actual source site");
+    files.set(file, before.replace(from, to));
+  };
+  const refresh = (files: Map<string, string | Buffer>, observations: Observation[], file: string) => {
+    for (const receipt of observations.filter(row => row.kind === "assertion-relocation-observations")) {
+      const bindings = object(receipt.sourceBindings);
+      if (receipt.consumer === file) bindings.consumerRawSha256 = digest(files.get(file)!);
+      if (receipt.calleeFile === file) {
+        bindings.calleeRawSha256 = digest(files.get(file)!);
+        const emitted = ts.transpileModule(files.get(file)!.toString(), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+        const tree = ts.createSourceFile(file + ".js", emitted, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+        const declaration = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === object(bindings.callee).export);
+        assert.ok(declaration); const runtimeSource = declaration.getText(tree).replace(/^export /u, "");
+        Object.assign(object(bindings.callee), { runtimeSource, runtimeSha256: digest(runtimeSource) });
+      }
+    }
+  };
+  const sourceMutation = (name: string, file: string, from: string, to: string) => reject(name, file, (files, observations) => { replace(files, file, from, to); refresh(files, observations, file); });
+  sourceMutation("actual predicate deletion with same-count tautological compensation", helper, "assert.ok(panel.includes(premiumSurfaceClassName));", "assert.ok(true);");
+  sourceMutation("actual predicate operator reversal", helper, 'assert.equal(neutral.type, "section");', 'assert.notEqual(neutral.type, "section");');
+  for (const file of [form, page]) {
+    const call = "verifyAdminFormSectionContract(" + (file === form ? "source" : "formSource") + ", {";
+    reject("unrelated retained scope deletion cannot borrow a qualified file relocation " + file, file, (files, observations) => {
+      const text = files.get(file)!.toString(), previous = input.baselineSources.get(file)!.toString();
+      const tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true), baseline = ts.createSourceFile(file, previous, ts.ScriptTarget.Latest, true);
+      const candidates: ts.CallExpression[] = [], prior = new Set<string>();
+      const scan = (node: ts.Node, parsed: ts.SourceFile, result: ts.CallExpression[] | Set<string>) => {
+        if (ts.isCallExpression(node) && /^assert(?:\.[A-Za-z]+)?$/u.test(node.expression.getText(parsed))) {
+          let owner: ts.Node | undefined = node.parent; while (owner && !ts.isFunctionDeclaration(owner)) owner = owner.parent;
+          if (owner && ts.isFunctionDeclaration(owner) && owner.name && owner.name.text !== scopes.get(file)) {
+            if (Array.isArray(result)) result.push(node); else result.add(node.getText(parsed));
+          }
+        } ts.forEachChild(node, child => scan(child, parsed, result));
+      }; scan(tree, tree, candidates); scan(baseline, baseline, prior);
+      const selected = candidates.find(node => prior.has(node.getText(tree)) && ts.isExpressionStatement(node.parent));
+      assert.ok(selected); files.set(file, text.slice(0, selected.getStart(tree)) + "void 0" + text.slice(selected.end)); refresh(files, observations, file);
+    });
+    sourceMutation("dead actual helper continuation " + file, file, call, "if (false) " + call);
+    reject("unused imported actual helper " + file, file, (files, observations) => {
+      const text = files.get(file)!.toString(), tree = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+      const owner = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === scopes.get(file));
+      assert.ok(owner?.body); const statement = owner.body.statements.find(node => ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) && node.expression.expression.getText(tree) === "verifyAdminFormSectionContract");
+      assert.ok(statement); files.set(file, text.slice(0, statement.getStart(tree)) + "void 0;" + text.slice(statement.end)); refresh(files, observations, file);
+    });
+    sourceMutation("shadowed imported actual helper " + file, file, call, "const verifyAdminFormSectionContract = () => true; " + call);
+    sourceMutation("foreign helper import " + file, file, 'from "./fixtures/admin-form-section-contract.mts"', 'from "./fixtures/unobserved-contract.mts"');
+  }
+  sourceMutation("cached source replaces actual Form candidate", form, "loadUnifiedFormOwners(candidate, dependencies).AdminFormSection", "loadUnifiedFormOwners(source, dependencies).AdminFormSection");
+  sourceMutation("shared loader ignores actual candidate", helper, "const Section = loadSection(candidate);", "const Section = loadSection(source);");
+  sourceMutation("native adapter changes only original candidate operands", helper, "let result: unknown;", 'if (actualContext.candidateKind === "original") { if (property === "ok") args[0] = true; else if (property === "equal") args[1] = args[0]; } let result: unknown;');
+  reject("missing actual mutant receipt", form, (_files, observations) => { const receipt = observations.find(row => row.consumer === form); assert.ok(receipt); rows(receipt.mutants); (receipt.mutants as unknown[]).pop(); });
+  reject("missing actual mutant, loader and candidate events together", form, (_files, observations) => {
+    const receipt = observations.find(row => row.consumer === form); assert.ok(receipt); const mutation = rows(receipt.mutants).at(-1)!;
+    receipt.mutants = rows(receipt.mutants).slice(0, -1); receipt.loaders = rows(receipt.loaders).filter(row => row.candidateSha256 !== mutation.candidateSha256);
+    receipt.events = rows(receipt.events).filter(row => object(row.context).candidateSha256 !== mutation.candidateSha256);
+  });
+  reject("changed observed runtime callback despite refreshed self digest", form, (_files, observations) => {
+    const receipt = observations.find(row => row.consumer === form); assert.ok(receipt); const callback = object(object(receipt.sourceBindings).loaderCallback);
+    callback.runtimeSource = "candidate => cachedSection"; callback.runtimeSha256 = digest(String(callback.runtimeSource));
+  });
+  reject("changed source consumer binding", form, (_files, observations) => { const receipt = observations.find(row => row.consumer === form); assert.ok(receipt); object(receipt.sourceBindings).consumerRawSha256 = "0".repeat(64); });
+  reject("missing source dependency binding", form, (_files, observations) => { const receipt = observations.find(row => row.consumer === form); assert.ok(receipt); delete object(object(receipt.sourceBindings).dependencyBindings).AdminCard; });
+  return { status: "PASS" as const, scope: "pure-current-source-over-retained-raw-adversaries", positiveRelocations: original.relocations,
+    cases: results, actualProfileExecutions: 0, liveAdmissionSeal: false, retainedPositiveObservations: true, syntheticNegativeMutations: true };
+}
+
 /** Execute source discovery and admission with in-memory source bytes, never Browser/DB transports. */
 function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated-public-verification.mts"),
-  "deriveLocalVerificationSourceImpact" | "localVerificationSemanticSource" | "localVerificationPresentationSource" | "assertLocalVerificationProtectionMaintenance"
+  "deriveLocalVerificationSourceImpact" | "localVerificationAssertionRelocationRequired" | "validateLocalVerificationAssertionRelocations" | "localVerificationSemanticSource" | "localVerificationPresentationSource" | "assertLocalVerificationProtectionMaintenance"
   | "planLocalVerification" | "assertLocalVerificationRequest" | "localVerificationCommandSteps"
   | "deriveLocalVerificationSourceCoherence" | "resolveLocalVerificationCiBaseline" | "localVerificationCiDiagnostic">,
   repositoryScripts: Record<string, string>) {
@@ -1918,7 +2015,8 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     assert.ok(ts.isArrayTypeNode(quality.type.type) && ts.isTypeLiteralNode(quality.type.type.elementType));
     const fields = quality.type.type.elementType.members.filter(ts.isPropertySignature);
     assert.deepEqual(fields.map(field => [field.name.getText(source), Boolean(field.questionToken), field.type?.getText(source)]),
-      [["file", false, "string"], ["assertionsBefore", false, "number"], ["assertionsAfter", false, "number"], ["failures", false, "readonly string[]"]]);
+      [["file", false, "string"], ["assertionsBefore", false, "number"], ["assertionsAfter", false, "number"], ["failures", false, "readonly string[]"],
+        ["rawFailures", true, "readonly string[]"], ["qualifiedRelocation", true, "unknown"]]);
   });
   check("unrelated added assertions cannot conceal lost owner or assertion-operator coverage", () => {
     const before = new Map(originals);
@@ -1929,10 +2027,52 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     ]) {
       const value = scenario([[entry, source]], before), row = value.actual.changeImpact!.qaQuality!.find(row => row.file === entry)!;
       assert.equal(row.assertionsBefore, row.assertionsAfter);
-      assert.deepEqual(row.failures, ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"]);
+      assert.deepEqual(row.failures, ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review",
+        ...(source.includes("assert.equal(other,other)") ? ["qa_new_tautological_assertion_cannot_replace_protection"] : [])]);
       assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
       assert.throws(() => plan(value), /QA assertion coverage decreased/u);
     }
+  });
+  check("equal assertion totals and comparison totals cannot authorize a new tautology or a reversed real predicate", () => {
+    const baseline = new Map(originals), before = 'import assert from "node:assert/strict"; export function protects(actual){assert.equal(actual.enabled,true);}';
+    baseline.set(entry, before);
+    for (const [source, reason] of [
+      [before.replace("assert.equal(actual.enabled,true)", "assert.equal(true,true)"), "qa_new_tautological_assertion_cannot_replace_protection"],
+      [before.replace("assert.equal(actual.enabled,true)", "assert.notEqual(actual.enabled,true)"), "qa_predicate_operator_changed_requires_equivalence_proof"],
+    ] as const) {
+      const value = scenario([[entry, source]], baseline), row = value.actual.changeImpact!.qaQuality!.find(row => row.file === entry)!;
+      assert.equal(row.assertionsBefore, row.assertionsAfter); assert.ok(row.failures.includes(reason));
+      const executable = ts.transpileModule(source.replace('import assert from "node:assert/strict";', "").replace("export function", "function"),
+        { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+      const invalid = new Function("assert", executable + ";return protects;")(assert) as (actual: { enabled: boolean }) => void;
+      assert.doesNotThrow(() => invalid({ enabled: false }), "The counterexample really lost its original rejection.");
+      assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
+      assert.throws(() => plan(value), /QA assertion coverage decreased/u);
+    }
+  });
+  check("observed assertion contracts demand fresh proof after adapter-only, loader or foreign consumer changes without a count drop", () => {
+    const provider = "scripts/fixtures/admin-form-section-contract.mts", caller = "scripts/verify-admin-form-system.mts";
+    const baseline = new Map([[provider, readSource(provider)], [caller, readSource(caller)]]);
+    assert.equal(api.localVerificationAssertionRelocationRequired({ baselineSources: baseline, currentSources: baseline }).required, false);
+    for (const [file, after] of [
+      [provider, baseline.get(provider)!.replace("Reflect.apply(method, target, args)", "Reflect.apply(method, target, [true])")],
+      [provider, baseline.get(provider)!.replace("new Proxy(nativeAssert", "new UnobservedProxy(nativeAssert")],
+      [caller, baseline.get(caller)!.replace('from "./fixtures/admin-form-section-contract.mts"', 'from "./fixtures/unobserved-contract.mts"')],
+      [caller, baseline.get(caller)!.replace("loadUnifiedFormOwners(candidate, dependencies).AdminFormSection", "loadUnifiedFormOwners(source, dependencies).AdminFormSection")],
+    ] as const) {
+      assert.notEqual(after, baseline.get(file));
+      const current = new Map(baseline); current.set(file, after);
+      const demand = api.localVerificationAssertionRelocationRequired({ baselineSources: baseline, currentSources: current });
+      assert.equal(demand.required, true); assert.ok(demand.files.includes(file));
+    }
+  });
+  check("finite relocation proof accepts no-change discovery but refuses unsupported lost predicates and missing native observations", () => {
+    const file = "scripts/proof-contract.mts", baseline = new Map([[file, 'import assert from "node:assert/strict";function protects(actual){assert.equal(actual.enabled,true);}']]);
+    const unchanged = api.validateLocalVerificationAssertionRelocations({ baselineSources: baseline, currentSources: baseline, observations: [] });
+    assert.equal(unchanged.status, "PASS"); assert.deepEqual(unchanged.relocations, []); assert.deepEqual(unchanged.providers, []);
+    const current = new Map([[file, 'import assert from "node:assert/strict";function protects(actual){}']]);
+    const missing = api.validateLocalVerificationAssertionRelocations({ baselineSources: baseline, currentSources: current, observations: [] });
+    assert.equal(missing.status, "BLOCKED"); assert.equal(missing.failures.length, 1); assert.deepEqual(missing.relocations, []);
   });
   check("preflight emits selected and not-selected source-bound rows without granting unexecuted behavior PASS", () => {
     const value = scenario([[owner, 'export function Phase03Owner() { return "preflight"; }']]);
@@ -2205,12 +2345,34 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     assert.ok(source.includes("assertionChanges: readonly { sha256: string; references: readonly string[]; contracts: readonly string[] }[]"));
   });
   check("reviewed QA input and maintenance records retain exact identity and source-discovery boundaries", () => {
-    const verificationOwnerTypeSource = readSource("scripts/lib/isolated-public-verification.mts").replaceAll("\r\n", "\n");
-    assert.ok(verificationOwnerTypeSource.includes("export type LocalVerificationInputs = {\n  baselineHead: string; finalHead: string; sourceSha256: string;"));
-    assert.ok(verificationOwnerTypeSource.includes("changeImpact?: LocalVerificationSourceImpact;"));
-    assert.ok(verificationOwnerTypeSource.includes("changeImpact?: LocalVerificationSourceImpact;\n};"));
-    assert.ok(verificationOwnerTypeSource.includes('export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact"> & {\n  changes: readonly LocalVerificationChange[];'));
-    assert.ok(verificationOwnerTypeSource.includes("export type LocalVerificationProtectionMaintenance = {\n  file: string; contract: string; protectionFile: string; check: string;\n  beforeSha256: string | null; afterSha256: string;"));
+    const tree = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const alias = (name: string) => {
+      const declarations = tree.statements.filter((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === name);
+      assert.equal(declarations.length, 1); return declarations[0].type;
+    };
+    const inputs = alias("LocalVerificationInputs"); assert.ok(ts.isTypeLiteralNode(inputs));
+    const members = inputs.members.filter(ts.isPropertySignature);
+    const property = (name: string) => { const found = members.filter(node => node.name.getText(tree) === name); assert.equal(found.length, 1); return found[0]; };
+    assert.deepEqual(["baselineHead", "finalHead", "sourceSha256"].map(name => { const node = property(name); return [name, Boolean(node.questionToken), node.type?.kind]; }),
+      [["baselineHead", false, ts.SyntaxKind.StringKeyword], ["finalHead", false, ts.SyntaxKind.StringKeyword], ["sourceSha256", false, ts.SyntaxKind.StringKeyword]]);
+    const discovery = property("changeImpact");
+    assert.ok(discovery.questionToken && discovery.type && ts.isTypeReferenceNode(discovery.type) && discovery.type.typeName.getText(tree) === "LocalVerificationSourceImpact");
+    const admission = property("admissionQualification");
+    assert.ok(admission.questionToken && admission.type && ts.isTypeReferenceNode(admission.type) && admission.type.typeName.getText(tree) === "LocalVerificationAdmissionQualification");
+    const impact = alias("LocalVerificationImpact"); assert.ok(ts.isIntersectionTypeNode(impact));
+    const omitted = impact.types.find(ts.isTypeReferenceNode), reviewed = impact.types.find(ts.isTypeLiteralNode);
+    assert.ok(omitted && omitted.typeName.getText(tree) === "Omit" && omitted.typeArguments?.length === 2
+      && ts.isTypeReferenceNode(omitted.typeArguments[0]) && omitted.typeArguments[0].typeName.getText(tree) === "LocalVerificationInputs"
+      && ts.isUnionTypeNode(omitted.typeArguments[1]));
+    assert.deepEqual(omitted.typeArguments[1].types.map(node => { assert.ok(ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal)); return node.literal.text; }).sort(),
+      ["changes", "verificationCoverage", "changeImpact", "admissionQualification"].sort());
+    const changes = reviewed?.members.filter(ts.isPropertySignature).find(node => node.name.getText(tree) === "changes");
+    assert.ok(changes && !changes.questionToken && changes.type && ts.isTypeOperatorNode(changes.type) && changes.type.operator === ts.SyntaxKind.ReadonlyKeyword
+      && ts.isArrayTypeNode(changes.type.type) && ts.isTypeReferenceNode(changes.type.type.elementType) && changes.type.type.elementType.typeName.getText(tree) === "LocalVerificationChange");
+    const maintenance = alias("LocalVerificationProtectionMaintenance"); assert.ok(ts.isTypeLiteralNode(maintenance));
+    const identity = maintenance.members.filter(ts.isPropertySignature).filter(node => ["file", "contract", "protectionFile", "check", "beforeSha256", "afterSha256"].includes(node.name.getText(tree)));
+    assert.deepEqual(identity.map(node => [node.name.getText(tree), Boolean(node.questionToken), node.type?.getText(tree)]),
+      [["file", false, "string"], ["contract", false, "string"], ["protectionFile", false, "string"], ["check", false, "string"], ["beforeSha256", false, "string | null"], ["afterSha256", false, "string"]]);
   });
   check("contract evidence data and approved presentation values remain semantic obligations", () => {
     const baseline = new Map(originals); baseline.set(contract, 'export const contractData={evidence:"required"};');
@@ -2303,17 +2465,29 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     const code = ts.transpileModule(declaration.getText(tree) + "\n" + inspector.getText(tree).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
     const controlledProcess = { env: { NODE_ENV: "production", SUPABASE_SERVICE_ROLE_KEY: "private-sentinel", ADMIN_SESSION_SECRET: "private-sentinel",
       PATH: "controlled-path", GIT_OPTIONAL_LOCKS: "1", GIT_CONFIG_COUNT: "99" } };
-    const readerApi = new Function("assert", "execFileSync", "ROOT", "digest", "safeSourcePath", "existsSync", "lstatSync", "realpathSync", "readFileSync", "localVerificationNativeGate", "localVerificationCoverage", "deriveLocalVerificationSourceImpact", "selectSourceInventory", "planLocalVerification", "process", code + ";return {readLocalVerificationInputs,inspectLocalVerificationChangeImpact};")(
+    const guard = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "assertLocalVerificationAdmissionQualification"); assert.ok(guard);
+    const seals = tree.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(tree) === "localVerificationAdmissionInvocations")); assert.ok(seals);
+    const rejectSerialized = new Function("assert", "digest", ts.transpileModule(seals.getText(tree) + "\n" + guard.getText(tree),
+      { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + ";return assertLocalVerificationAdmissionQualification;")(assert, sha256);
+    const readerApi = new Function("assert", "execFileSync", "ROOT", "digest", "safeSourcePath", "existsSync", "lstatSync", "realpathSync", "readFileSync", "localVerificationNativeGate", "localVerificationCoverage", "deriveLocalVerificationSourceImpact", "selectSourceInventory", "planLocalVerification", "process", "assertLocalVerificationAdmissionQualification", code + ";return {readLocalVerificationInputs,inspectLocalVerificationChangeImpact};")(
       assert, git, root, sha256, (file: string) => file, (file: string) => value.current.has(file), () => ({ isFile: () => true }), (file: string) => file, read,
       () => undefined, () => [], (...args: Parameters<typeof api.deriveLocalVerificationSourceImpact>) => { discoveries += 1; return api.deriveLocalVerificationSourceImpact(...args); },
-      selectSourceInventory, api.planLocalVerification, controlledProcess) as {
+      selectSourceInventory, api.planLocalVerification, controlledProcess, rejectSerialized) as {
         readLocalVerificationInputs(context: { cleanEnvironment(): object }, impact: Impact, manifest: Array<{ file: string; sha256: string }>, additional: string[], request: object, previous?: Actual): Actual;
         inspectLocalVerificationChangeImpact: typeof import("./lib/isolated-public-verification.mts").inspectLocalVerificationChangeImpact;
       };
     const reader = readerApi.readLocalVerificationInputs;
-    const context = { cleanEnvironment: () => ({}) }, first = reader(context, value.impact, manifest, [], {});
+    const context = { cleanEnvironment: () => ({}) };
+    const first: import("./lib/isolated-public-verification.mts").LocalVerificationInputs = reader(context, value.impact, manifest, [], {});
     assert.equal(first.sourceSha256, value.impact.sourceSha256); assert.equal(first.changeImpact!.proofBoundary, "source_discovery_only");
+    assert.equal(first.admissionQualification, undefined, "The actual default reader returns discovery without manufacturing qualified execution authority.");
     assert.equal(api.planLocalVerification(scripts, value.impact, first).mode, "bounded");
+    const serializedRequest: import("./lib/isolated-public-verification.mts").PublicGateRequest = {
+      additionalSourceFiles: [], admissionQualification: JSON.parse('{"schema":1,"kind":"owned-admission-qualification","status":"PASS"}'),
+    };
+    assert.ok(serializedRequest.admissionQualification);
+    assert.throws(() => reader(context, value.impact, manifest, [], serializedRequest), /live qualified execution/u,
+      "The actual Public request reader must reject a serialized admission object before granting coverage.");
     const second = reader(context, value.impact, manifest, [], {}, first);
     assert.equal(second.changeImpact, first.changeImpact); assert.equal(discoveries, 1);
     assert.throws(() => reader(context, value.impact, manifest.map(row => row.file === contract ? { ...row, sha256: "f".repeat(64) } : row), [], {}, first), /changed source manifest/u);
@@ -2554,7 +2728,7 @@ function verifyLocalRiskVerificationPlan() {
     assert.ok(found, `Missing canonical local verification declaration: ${name}`);
     return found.getText(file).replace(/^export /u, "");
   };
-  const declarations = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
+  const declarations = ["GATES", "localVerificationAssertionRelocationRequired", "validateLocalVerificationAssertionRelocations", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "assertLocalVerificationProtectionMaintenance", "localVerificationCommandSteps", "planLocalVerification", "assertLocalVerificationRequest", "registeredVerificationNodeEntries", "localVerificationCoverage"];
   const code = ts.transpileModule(adminAdoptionControlSource(file) + "\n" + declarations.map(statement).join("\n"), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -2565,13 +2739,15 @@ function verifyLocalRiskVerificationPlan() {
     changes: Array<Pick<Change, "file" | "beforeSha256" | "afterSha256">> };
   type Plan = ReturnType<typeof import("./lib/isolated-public-verification.mts").planLocalVerification>;
   type Request = import("./lib/isolated-public-verification.mts").PublicGateRequest;
-  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,deriveLocalVerificationSourceCoherence,resolveLocalVerificationCiBaseline,localVerificationCiDiagnostic,localVerificationSemanticSource,localVerificationPresentationSource,assertLocalVerificationProtectionMaintenance,localVerificationCommandSteps};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname) as {
+  const api = new Function("assert", "sourceIncluded", "collectExecutableSourceGraph", "ROOT", "readFileSync", "safeSourcePath", "digest", "ts", "resolve", "dirname", "createHash", "fileURLToPath", code + ";return {planLocalVerification,assertLocalVerificationRequest,registeredVerificationNodeEntries,localVerificationCoverage,adminAdoptionGate,deriveLocalVerificationSourceImpact,deriveLocalVerificationSourceCoherence,resolveLocalVerificationCiBaseline,localVerificationCiDiagnostic,localVerificationSemanticSource,localVerificationPresentationSource,assertLocalVerificationProtectionMaintenance,localVerificationCommandSteps,localVerificationAssertionRelocationRequired,validateLocalVerificationAssertionRelocations};")(assert, sourceIncluded, collectExecutableSourceGraph, root, readFileSync, (name: string) => path.join(root, name), sha256, ts, path.resolve, path.dirname, createHash, fileURLToPath) as {
     planLocalVerification: typeof import("./lib/isolated-public-verification.mts").planLocalVerification;
     assertLocalVerificationRequest(request: Record<string, unknown>, plan: Plan): void;
     registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[];
     localVerificationCoverage(scripts: Readonly<Record<string, string>>, impact: Impact, manifest: Array<{ file: string; sha256: string }>, request?: Request): NonNullable<Actual["verificationCoverage"]>;
     adminAdoptionGate(request: Request): ReturnType<typeof import("./lib/isolated-public-verification.mts").adminAdoptionGate>;
     deriveLocalVerificationSourceImpact: typeof import("./lib/isolated-public-verification.mts").deriveLocalVerificationSourceImpact;
+    localVerificationAssertionRelocationRequired: typeof import("./lib/isolated-public-verification.mts").localVerificationAssertionRelocationRequired;
+    validateLocalVerificationAssertionRelocations: typeof import("./lib/isolated-public-verification.mts").validateLocalVerificationAssertionRelocations;
     localVerificationSemanticSource: typeof import("./lib/isolated-public-verification.mts").localVerificationSemanticSource;
     localVerificationPresentationSource: typeof import("./lib/isolated-public-verification.mts").localVerificationPresentationSource;
     assertLocalVerificationProtectionMaintenance: typeof import("./lib/isolated-public-verification.mts").assertLocalVerificationProtectionMaintenance;
@@ -2993,6 +3169,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
   const end = gateStatements.findIndex(node => ts.isIfStatement(node) && node.expression.getText(file) === 'heroCompatibility && request.finalQualityGate && gate.name === "hero-compatibility"');
   assert.ok(begin >= 0 && end > begin);
   const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "GATES")); assert.ok(gates);
+  const deadline = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "localVerificationQualityPrefixDeadlineMs"); assert.ok(deadline);
   const compile = (value: string) => ts.transpileModule(value, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const factory = new Function("ports", compile(`return async () => {
     const { assert, join, sep, digest, context, runChild, receipt, children, retainedAdmission,
@@ -3000,6 +3177,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     const request = {}, heroCompatibility = false, measurement = undefined, ROOT = "controlled-root";
     const qualityScripts = ports.prefix, npmCli = "controlled-npm-cli", env = {};
     const reports = [], qualityReports = []; let buildIdSha256 = null, appPort = null, appFailed = false;
+    ${deadline.getText(file).replace(/^export /u, "")}
     ${gates.getText(file)}
     const gates = GATES;
     ${declaration("heroGate", run.body.statements)}
@@ -3591,6 +3769,10 @@ function verifyWindowsOwnedProcessContracts() {
     assert.deepEqual(readdirSync(directory).sort(), before); assert.equal(windowsOwnedProcessCapability().status, "PASS");
     nativeIntegrity = { status: "PASS", immutableBuildAndFrameworkReferences: true, modifiedOwnedExecutableRejectedBeforeSpawn: true,
       originalExecutableRestored: true, executableSha256: originalHash, actualRootProcessesAllocated: 0 };
+  } else if (process.platform === "linux") {
+    const capability = windowsOwnedProcessCapability(); assert.equal(capability.status, "BLOCKED");
+    nativeIntegrity = { status: "PASS", scope: "non_windows_platform_rejection_before_compiler_or_spawn", capabilityStatus: capability.status,
+      platform: process.platform, nativeExecuted: false, compilerProcessesExecuted: 0, actualRootProcessesAllocated: 0 };
   }
   return { status: "PASS", scope: "imported_type_value_vectors_and_source_contracts_only", nativeRootProcessesAllocated: 0,
     identityMemberVectors: 3, receiptNumberAndNullVectors: 2, compilerNegativeVectorsDeclared: 3, compilerNegativeProof: "requires actual TypeScript check",
@@ -3997,7 +4179,7 @@ async function verifyIsolatedCliInputContracts(errorType: typeof import("./lib/i
 }
 
 /** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */
-async function verifySharedChildControls() {
+async function verifySharedChildControls(options?: { admissionOnly?: boolean }) {
   const launchWindows = (options: Parameters<typeof spawnWindowsOwnedProcess>[0]) => {
     const launched = spawnWindowsOwnedProcess(options);
     const child = launched.child as ChildProcess & { verificationWindowsIdentity?: unknown; verificationWindowsReceipt?: unknown };
@@ -4040,7 +4222,157 @@ async function verifySharedChildControls() {
   };
   try {
     const lifecycleOwner = await import("./lib/isolated-supabase.mts");
-    runtimeProofs.push({ control: "actual_release_lock_input", ...verifyReleaseLockInputContracts(lifecycleOwner) });
+    const lifecycleSource = readSource("scripts/lib/isolated-supabase.mts");
+    const lifecycleTree = ts.createSourceFile("isolated-supabase.mts", lifecycleSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const lifecycleDeclaration = lifecycleTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "runIsolatedSupabase");
+    assert.ok(lifecycleDeclaration?.body);
+    const actualVariable = (statements: ts.NodeArray<ts.Statement>, name: string) => {
+      const matches = statements.filter((node): node is ts.VariableStatement => ts.isVariableStatement(node)
+        && node.declarationList.declarations.some(value => ts.isIdentifier(value.name) && value.name.text === name));
+      assert.equal(matches.length, 1, "The environment boundary requires its actual unique declaration: " + name);
+      return matches[0]!.getText(lifecycleTree);
+    };
+    const actualRequire = lifecycleTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "requireThat");
+    assert.ok(actualRequire);
+    const bridgeSetupStatements: ts.TryStatement[] = [];
+    const findBridgeSetup = (node: ts.Node) => {
+      if (ts.isTryStatement(node) && node.tryBlock.statements.some(statement => {
+        if (!ts.isExpressionStatement(statement) || !ts.isBinaryExpression(statement.expression)
+          || statement.expression.left.getText(lifecycleTree) !== "hostBridge") return false;
+        const right = ts.isAsExpression(statement.expression.right) ? statement.expression.right.expression : statement.expression.right;
+        return ts.isAwaitExpression(right) && ts.isCallExpression(right.expression)
+          && right.expression.expression.getText(lifecycleTree) === "startHostAccessBridge";
+      })) bridgeSetupStatements.push(node);
+      ts.forEachChild(node, findBridgeSetup);
+    };
+    findBridgeSetup(lifecycleDeclaration); assert.equal(bridgeSetupStatements.length, 1);
+    const bridgeBoundarySource = [actualVariable(lifecycleTree.statements, "fail"), actualRequire.getText(lifecycleTree),
+      actualVariable(lifecycleTree.statements, "object"), ...["transportCodes", "ownerTransportCodes", "asSafeError"]
+        .map(name => actualVariable(lifecycleDeclaration.body!.statements, name))].join("\n");
+    type SetupBridge = { close(): Promise<void>; snapshot(): Record<string, unknown> };
+    type SetupPorts = { signal?: AbortSignal; ports: Record<string, number>; env: NodeJS.ProcessEnv; dockerBinary: string; dockerHost: string;
+      assertOwnedTransport(): Promise<string> };
+    const buildBridgeBoundary = (ports: { start(options: SetupPorts): Promise<SetupBridge>; preparation?: { signal: AbortSignal };
+      lifetimeAbort: AbortController; safeRecord(stage: string, values: Record<string, unknown>): void; recordFile(name: string, value: unknown): void }) => {
+      const ownership: string[] = [], bridgeId = "a".repeat(64);
+      const body = ts.transpileModule(bridgeBoundarySource + "\nreturn {asSafeError, setup:async()=>{let hostBridge;"
+        + bridgeSetupStatements[0]!.getText(lifecycleTree) + ";return hostBridge;}};", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+      const projected = new Function("IsolatedSupabaseError", "IsolatedSupabaseCliError", "classifyOwnedPgConnectMessage", "startHostAccessBridge",
+        "cleanChildEnvironment", "safeRecord", "recordFile", "run", "dockerBinary", "dockerHost", "preparation", "lifetimeAbort",
+        "interrupted", "cleaning", "serviceResource", "inspectCaptured", body)(lifecycleOwner.IsolatedSupabaseError, class extends Error {},
+        () => { assert.fail("These actual adapter cases must not use a database-connect classifier."); }, ports.start,
+        () => ({ NODE_ENV: "test" }), ports.safeRecord, ports.recordFile,
+        { pgPort: 57641, restPort: 57642, storagePort: 57643, apiPort: 57644 }, "controlled-docker-never-executed", "npipe:////./pipe/dockerDesktopLinuxEngine",
+        ports.preparation, ports.lifetimeAbort, false, false,
+        (service: string) => { ownership.push(service); return { identity: { id: bridgeId } }; },
+        async (resource: { identity: { id: string } }) => { assert.equal(resource.identity.id, bridgeId); ownership.push("inspected"); }) as {
+          asSafeError(error: unknown, stage: string): InstanceType<typeof lifecycleOwner.IsolatedSupabaseError>;
+          setup(): Promise<SetupBridge>;
+        };
+      return { ...projected, ownership, bridgeId };
+    };
+    const noSetupEffects = () => buildBridgeBoundary({ lifetimeAbort: new AbortController(),
+      start: async () => { assert.fail("The error-classification control must not create a bridge."); },
+      safeRecord: () => { assert.fail("No setup receipt is expected."); }, recordFile: () => { assert.fail("No setup file is expected."); } });
+    const diagnostic = Object.freeze({ schema: 1, code: "QA_TRANSPORT_LISTEN_FAILED", phase: "listen", service: "rest", listenerIndex: 1,
+      address: "127.0.0.1", port: 57642, causeCode: "EADDRINUSE", syscall: "listen", originalMetadataComplete: true, originalErrorRetainedPrivately: true,
+      cause: Object.freeze({ code: "EADDRINUSE", syscall: "listen", address: "127.0.0.1", port: 57642, phase: "listen" }) });
+    const transportError = () => Object.assign(new Error("QA_TRANSPORT_LISTEN_FAILED", { cause: diagnostic.cause }), { diagnostic });
+    await control("actual environment adapter retains the exact sanitized transport wrapper as a nonenumerable cause", async () => {
+      const original = transportError(), actual = noSetupEffects().asSafeError(original, "postgres-platform");
+      assert.ok(actual instanceof lifecycleOwner.IsolatedSupabaseError); assert.equal(actual.code, "QA_TRANSPORT_LISTEN_FAILED");
+      assert.equal(actual.stage, "postgres-platform"); assert.equal(actual.cause, original); assert.equal((actual.cause as Error).cause, diagnostic.cause);
+      assert.equal(Object.getOwnPropertyDescriptor(actual, "cause")?.enumerable, false);
+      assert.equal(JSON.stringify(actual).includes("EADDRINUSE"), false);
+      assert.equal(noSetupEffects().asSafeError(actual, "another-stage"), actual);
+    });
+    await control("actual environment adapter keeps cancellation and setup deadline codes and original safe cause", async () => {
+      for (const code of ["QA_TRANSPORT_CANCELLED", "QA_TRANSPORT_SETUP_TIMEOUT"]) {
+        const original = new Error(code), actual = noSetupEffects().asSafeError(original, "postgres-platform");
+        assert.equal(actual.code, code); assert.equal(actual.cause, original);
+        assert.equal(Object.getOwnPropertyDescriptor(actual, "cause")?.enumerable, false);
+      }
+    });
+    await control("actual environment adapter never retains arbitrary PostgreSQL credential error details", async () => {
+      const original = Object.assign(new Error("postgres://private-user:private-password@private-host/private-database"), { code: "ECONNRESET" });
+      const actual = noSetupEffects().asSafeError(original, "application-query");
+      assert.equal(actual.code, "ECONNRESET"); assert.equal(Object.hasOwn(actual, "cause"), false);
+      assert.equal(JSON.stringify(actual).includes("private-"), false); assert.equal(actual.message.includes("private-"), false);
+    });
+    await control("actual bridge setup forwards preparation or lifetime signal and the original owned transport ports", async () => {
+      for (const withPreparation of [true, false]) {
+        const lifetimeAbort = new AbortController(), preparation = withPreparation ? { signal: new AbortController().signal } : undefined;
+        const bridge: SetupBridge = { close: async () => undefined, snapshot: () => ({ controlled: true }) };
+        const projected: ReturnType<typeof buildBridgeBoundary> = buildBridgeBoundary({ lifetimeAbort, preparation, start: async received => {
+          assert.equal(received.signal, preparation?.signal ?? lifetimeAbort.signal);
+          assert.deepEqual(received.ports, { db: 57641, rest: 57642, storage: 57643, "api-gw": 57644 });
+          assert.deepEqual(received.env, { NODE_ENV: "test" }); assert.equal(received.dockerBinary, "controlled-docker-never-executed");
+          assert.equal(received.dockerHost, "npipe:////./pipe/dockerDesktopLinuxEngine");
+          assert.equal(await received.assertOwnedTransport(), projected.bridgeId); return bridge;
+        }, safeRecord: () => { assert.fail("Successful bridge setup does not write the failure stage."); },
+        recordFile: () => { assert.fail("Successful bridge setup does not write a failure file."); } });
+        assert.equal(await projected.setup(), bridge); assert.deepEqual(projected.ownership, ["qa-transport", "inspected"]);
+      }
+    });
+    await control("actual bridge failure receipt retains first listener and bounded original native diagnostic", async () => {
+      const original = transportError(), receipts: Array<{ stage: string; values: Record<string, unknown> }> = [], files: Array<{ name: string; value: unknown }> = [];
+      const projected = buildBridgeBoundary({ lifetimeAbort: new AbortController(), start: async () => { throw original; },
+        safeRecord: (stage, values) => { receipts.push({ stage, values }); }, recordFile: (name, value) => { files.push({ name, value }); } });
+      await assert.rejects(projected.setup(), error => error === original);
+      assert.deepEqual(receipts, [{ stage: "host-access-setup-failed", values: { code: "QA_TRANSPORT_LISTEN_FAILED", phase: "listen", service: "rest",
+        listenerIndex: 1, listenerPort: 57642, causeCode: "EADDRINUSE", metadataComplete: true } }]);
+      assert.deepEqual(files, [{ name: "host-access-setup-failure.json", value: { schema: 1, diagnostic,
+        rawErrorRetained: false, originalErrorKeptByTransportOwner: true } }]);
+      assert.equal(original.cause, diagnostic.cause); assert.equal(Object.hasOwn(original, "receiptFailure"), false);
+    });
+    await control("actual bridge receipt never invents original native error retention when metadata is absent", async () => {
+      const absent = { code: "QA_TRANSPORT_SETUP_TIMEOUT", phase: "listen", service: "db", listenerIndex: 0, port: 57641 };
+      const original = Object.assign(new Error("QA_TRANSPORT_SETUP_TIMEOUT"), { diagnostic: absent });
+      const files: unknown[] = [];
+      const projected = buildBridgeBoundary({ lifetimeAbort: new AbortController(), start: async () => { throw original; },
+        safeRecord: (_stage, values) => { assert.equal(values.causeCode, "UNKNOWN"); assert.equal(values.metadataComplete, false); },
+        recordFile: (_name, value) => { files.push(value); } });
+      await assert.rejects(projected.setup(), error => error === original);
+      assert.deepEqual(files, [{ schema: 1, diagnostic: absent, rawErrorRetained: false, originalErrorKeptByTransportOwner: false }]);
+      assert.equal(Object.hasOwn(original, "cause"), false);
+    });
+    await control("actual bridge secondary receipt failure preserves frozen and already annotated original errors", async () => {
+      for (const variant of ["frozen", "already-annotated"] as const) {
+        const original = transportError();
+        if (variant === "frozen") Object.freeze(original);
+        else Object.defineProperty(original, "receiptFailure", { value: "EARLIER_RECEIPT_FAILURE" });
+        const projected = buildBridgeBoundary({ lifetimeAbort: new AbortController(), start: async () => { throw original; },
+          safeRecord: () => { throw Error("secondary write failure"); }, recordFile: () => { assert.fail("First receipt failure must stop later writes."); } });
+        await assert.rejects(projected.setup(), error => error === original);
+        assert.equal(original.cause, diagnostic.cause);
+        assert.equal(Object.getOwnPropertyDescriptor(original, "receiptFailure")?.value, variant === "frozen" ? undefined : "EARLIER_RECEIPT_FAILURE");
+        assert.equal(projected.asSafeError(original, "postgres-platform").cause, original);
+      }
+    });
+    for (const failedPort of ["safeRecord", "recordFile"] as const) await control("actual bridge original failure survives secondary " + failedPort + " fault", async () => {
+      const original = transportError(), secondary = Error("private secondary diagnostic must not be serialized"), writes: string[] = [];
+      const projected = buildBridgeBoundary({ lifetimeAbort: new AbortController(), start: async () => { throw original; },
+        safeRecord: () => { writes.push("safeRecord"); if (failedPort === "safeRecord") throw secondary; },
+        recordFile: () => { writes.push("recordFile"); if (failedPort === "recordFile") throw secondary; } });
+      await assert.rejects(projected.setup(), error => error === original);
+      assert.deepEqual(writes, failedPort === "safeRecord" ? ["safeRecord"] : ["safeRecord", "recordFile"]);
+      assert.equal(original.cause, diagnostic.cause); assert.equal(Object.getOwnPropertyDescriptor(original, "receiptFailure")?.value, "RECEIPT_WRITE_FAILED");
+      assert.equal(Object.getOwnPropertyDescriptor(original, "receiptFailure")?.enumerable, false);
+      assert.equal(JSON.stringify(original).includes(secondary.message), false);
+      assert.equal(projected.asSafeError(original, "postgres-platform").cause, original);
+    });
+    runtimeProofs.push({ control: "actual_environment_transport_adapter", sourceOwnerSha256: sha256(lifecycleSource),
+      actualSourceProjection: true, declarationSha256: sha256(bridgeBoundarySource), setupStatementSha256: sha256(bridgeSetupStatements[0]!.getText(lifecycleTree)),
+      sanitizedTransportCauseRetained: true, arbitraryPgErrorNotRetained: true, firstListenerDiagnosticRetained: true,
+      secondaryReceiptFaultsPreserveOriginal: ["safeRecord", "recordFile"], setupSignalsForwarded: ["preparation", "lifetime"],
+      controlledPortsOnly: true, dockerExecuted: false, databaseCalls: 0, operatingSystemAllocations: 0 });
+    const lockEvidenceDirectory = path.join(directory, "release-lock-inputs"); mkdirSync(lockEvidenceDirectory);
+    const inputArtifacts: Array<{ file: string; sha256: string }> = [];
+    runtimeProofs.push({ control: "actual_release_lock_input", ...verifyReleaseLockInputContracts(lifecycleOwner, (file, bytes) => {
+      const name = path.basename(file); assert.match(name, /^lock-[1-9][0-9]*\.json$/u);
+      const archived = path.join(lockEvidenceDirectory, name); writeFileSync(archived, bytes, { flag: "wx", mode: 0o600 });
+      assert.equal(sha256(readFileSync(archived)), sha256(bytes)); inputArtifacts.push({ file: "release-lock-inputs/" + name, sha256: sha256(bytes) });
+    }), inputArtifacts });
     runtimeProofs.push({ control: "actual_cli_parser_dispatcher", ...await verifyIsolatedCliInputContracts(lifecycleOwner.IsolatedSupabaseError) });
     await control("actual registered transport QA leaf executes once with complete owned cleanup and no Docker dispatch", async () => {
       const result = await run("transport-contracts", [path.join(root, "scripts/qa-isolated-supabase-transport.mjs")], undefined, 30_000);
@@ -4051,7 +4383,7 @@ async function verifySharedChildControls() {
       assert.equal(proof.checks, proof.cases.length); assert.equal(new Set(proof.cases).size, proof.cases.length);
       assert.equal(proof.dockerExecuted, false); assert.equal(proof.productionAccess, false); assert.equal(proof.externalConnections, false);
       runtimeProofs.push({ control: "actual_owned_transport_leaf", entry: "scripts/qa-isolated-supabase-transport.mjs", ...proof,
-        rawExit: result.rawExit, cleanup: result.cleanup, ownedLoopbackTrafficExecuted: true });
+        rawExit: result.rawExit, cleanup: result.cleanup, actualResult: result, ownedLoopbackTrafficExecuted: true });
     });
     await control("actual registered CLI entry rejects missing output before any application allocation", async () => {
       const result = await run("cli-missing-output", ["--experimental-strip-types", path.join(root, "scripts/qa-isolated-supabase.mts")], undefined, 30_000);
@@ -4060,8 +4392,9 @@ async function verifySharedChildControls() {
       const failures = result.stderr.split(/\r?\n/u).filter(line => line.trim().startsWith("{")).map(line => JSON.parse(line));
       assert.deepEqual(failures, [{ status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" }]);
       runtimeProofs.push({ control: "actual_cli_no_allocation_rejection", entry: "scripts/qa-isolated-supabase.mts", rawExit: result.rawExit,
-        failure: failures[0], stderrSha256: sha256(result.stderr), cleanup: result.cleanup, applicationOutputSupplied: false });
+        failure: failures[0], stderrSha256: sha256(result.stderr), cleanup: result.cleanup, actualResult: result, applicationOutputSupplied: false });
     });
+    if (!options?.admissionOnly) {
     await control("Full E cleanup qualification requires the current platform ownership capability", async () => {
       const verifyQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "ownedProcessCleanupQualification">) => {
         const qualification = ownerApi.ownedProcessCleanupQualification();
@@ -4131,7 +4464,7 @@ async function verifySharedChildControls() {
     });
     await control("invalid deadlines reject before process or evidence allocation", async () => {
       const before = readdirSync(directory).sort();
-      for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) await assert.rejects(run("invalid-deadline", ["-e", "throw Error('must not execute')"], new AbortController().signal, limit), /deadline must be finite and positive/u);
+      for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5, 2_147_483_648]) await assert.rejects(run("invalid-deadline", ["-e", "throw Error('must not execute')"], new AbortController().signal, limit), /deadline must be a finite timer-safe positive integer/u);
       assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
     });
     await control("ownership marker is fresh for the child and redacted from every retained log", async () => {
@@ -4511,9 +4844,10 @@ async function verifySharedChildControls() {
         assert.equal(processAlive(pid), false); assert.equal(children.size, 0);
       });
     }
+    }
   } finally {
     const stopped = await Promise.allSettled([...children].map(child => api.stop(child, environment)));
-    if (process.platform === "win32") {
+    if (process.platform === "win32" || options?.admissionOnly) {
       const evidenceRoot = path.join(root, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true }); assert.equal(realpathSync(evidenceRoot), evidenceRoot);
       const nativeEvidenceDirectory = realpathSync(mkdtempSync(path.join(evidenceRoot, "owned-process-controls-")));
       const evidence: Array<{ file: string; sha256: string; bytes: number }> = [];
@@ -4526,7 +4860,7 @@ async function verifySharedChildControls() {
       } };
       archive(directory); writeFileSync(path.join(nativeEvidenceDirectory, "evidence-index.json"), JSON.stringify({ schema: 1,
         originalNativeEvidenceRetained: true, finalCleanup: stopped.map(value => value.status), files: evidence }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
-      runtimeProofs.push({ control: "windows_native_evidence_archive", directory: nativeEvidenceDirectory, files: evidence });
+      runtimeProofs.push({ control: process.platform === "win32" ? "windows_native_evidence_archive" : "owned_child_evidence_archive", directory: nativeEvidenceDirectory, files: evidence });
       console.error(JSON.stringify({ ownedNativeEvidenceDirectory: nativeEvidenceDirectory, retainedFiles: evidence.length }));
     }
     assert.equal(realpathSync(directory), directory);
@@ -4537,12 +4871,704 @@ async function verifySharedChildControls() {
   return runtimeProofs;
 }
 
+/** Execute the existing planner's actual parser controls without copying or relocating their assertions. */
+function verifyRegisteredNodeEntryControls() {
+  const ownerFile = "scripts/lib/isolated-public-verification.mts", ownerSource = readSource(ownerFile);
+  const owner = ts.createSourceFile(ownerFile, ownerSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const statement = (name: string) => { const found = owner.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.ok(found?.body); return found.getText(owner).replace(/^export /u, ""); };
+  type Api = Pick<typeof import("./lib/isolated-public-verification.mts"), "localVerificationCommandSteps" | "registeredVerificationNodeEntries">;
+  const actual = new Function("assert", "sourceIncluded", ts.transpileModule(["localVerificationCommandSteps", "registeredVerificationNodeEntries"].map(statement).join("\n"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText + ";return {localVerificationCommandSteps,registeredVerificationNodeEntries};")(assert, sourceIncluded) as Api;
+  const verifierSource = readSource("scripts/verify-isolated-supabase.mts"), verifier = ts.createSourceFile("verify-isolated-supabase.mts", verifierSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const planner = verifier.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "verifyLocalRiskVerificationPlan"); assert.ok(planner?.body);
+  const calls = (at: ts.Node) => { const values: ts.CallExpression[] = []; const visit = (node: ts.Node) => { if (ts.isCallExpression(node)) values.push(node); ts.forEachChild(node, visit); }; visit(at); return values; };
+  const selected: ts.Statement[] = planner.body.statements.filter(node => {
+    if (!ts.isExpressionStatement(node) || !ts.isCallExpression(node.expression) || node.expression.expression.getText(verifier) !== "check") return false;
+    const expressions = calls(node).map(call => call.expression.getText(verifier));
+    return expressions.includes("api.localVerificationCommandSteps") && expressions.includes("api.registeredVerificationNodeEntries")
+      || expressions.includes("ts.transform") && expressions.includes("api.registeredVerificationNodeEntries");
+  });
+  assert.equal(selected.length, 4);
+  const declaration = (name: string) => { const found = planner.body!.statements.find(node => ts.isVariableStatement(node)
+    && node.declarationList.declarations.some(value => value.name.getText(verifier) === name)); assert.ok(found); return found; };
+  const unsafe = planner.body.statements.filter(node => ts.isForOfStatement(node) && node.expression.getText(verifier) === "unsafeChains"); assert.equal(unsafe.length, 1);
+  selected.push(declaration("coverageEntry"), declaration("unsafeChains"), unsafe[0]!);
+  selected.sort((left, right) => left.getStart(verifier) - right.getStart(verifier));
+  const events: Array<Record<string, unknown>> = [], completed: string[] = []; let activeCase = "";
+  let mutant: { actualRejected: boolean; removedGuardOutput: string[] } | null = null;
+  const capture = <T,>(method: string, commands: Readonly<Record<string, string>>, name: string, run: () => T): T => {
+    const observation = { case: activeCase, method, command: name, rootOwn: Object.hasOwn(commands, name), rootType: typeof commands[name] };
+    try { const result = run(); events.push({ ...observation, outcome: result === undefined ? "UNSUPPORTED" : "RETURNED", result: result ?? null }); return result; }
+    catch (error) { events.push({ ...observation, outcome: "REJECTED", errorName: error instanceof Error ? error.name : "NonError" }); throw error; }
+  };
+  const api: Api = {
+    localVerificationCommandSteps: (commands, name) => capture("localVerificationCommandSteps", commands, name, () => actual.localVerificationCommandSteps(commands, name)),
+    registeredVerificationNodeEntries: (commands, name) => capture("registeredVerificationNodeEntries", commands, name, () => actual.registeredVerificationNodeEntries(commands, name)),
+  };
+  const assertionPort = new Proxy(assert, { get(target, property, receiver) {
+    if (property !== "deepEqual") return Reflect.get(target, property, receiver);
+    return (observed: unknown, expected: unknown, message?: string) => {
+      assert.deepEqual(observed, expected, message);
+      if (activeCase.startsWith("removing the actual registered-entry assertion") && Array.isArray(observed)
+        && observed.length === 1 && observed[0] === "scripts/../private/coverage.mjs") mutant = { actualRejected: true, removedGuardOutput: [...observed] as string[] };
+    };
+  } });
+  const checkPort = (name: string, execute: () => void) => { activeCase = name; check(name, execute); completed.push(name); activeCase = ""; };
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const code = ts.transpileModule(selected.map(node => node.getText(verifier)).join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  new Function("assert", "ts", "api", "scripts", "statement", "sourceIncluded", "check", code)(assertionPort, ts, api, scripts, statement, sourceIncluded, checkPort);
+  assert.equal(completed.length, 23); assert.ok(mutant);
+  return { status: "PASS", sourceOwnerSha256: sha256(ownerSource), sourceVerifierSha256: sha256(verifierSource),
+    actualSourceProjection: true, originalPlannerAssertionsRetained: true, cases: completed, events, mutant,
+    selectedStatements: selected.map(node => ({ kind: ts.SyntaxKind[node.kind], text: node.getText(verifier), sha256: sha256(node.getText(verifier)) })),
+    operatingSystemAllocations: 0, copiedAssertionBodies: false };
+}
+
+/** Pure adversarial inputs to the actual public qualifier; no receipt or platform lifecycle is fabricated. */
+function verifyInputObservationValidationControls(raw: LocalVerificationInputObservations) {
+  const ownerFile = "scripts/lib/isolated-public-verification.mts", source = readSource(ownerFile);
+  const tree = ts.createSourceFile(ownerFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const node = tree.statements.find((value): value is ts.FunctionDeclaration => ts.isFunctionDeclaration(value) && value.name?.text === "validateLocalVerificationInputObservations"); assert.ok(node?.body);
+  const api: Pick<typeof import("./lib/isolated-public-verification.mts"), "validateLocalVerificationInputObservations"> = {
+    validateLocalVerificationInputObservations: new Function("assert", "ts", "digest", ts.transpileModule(node.getText(tree).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+      + ";return validateLocalVerificationInputObservations;")(assert, ts, sha256),
+  };
+  const validationOutcomes: Array<{ context: string; status: string; failures: string[]; coverageFiles: string[] }> = [];
+  const mutationWitnesses: Array<{ file: string; declaration: string; beforeSha256: string; afterSha256: string }> = [];
+  let validationContext = "actual_raw_positive";
+  const validate: typeof api.validateLocalVerificationInputObservations = input => { const result = api.validateLocalVerificationInputObservations(input);
+    validationOutcomes.push({ context: validationContext, status: result.status, failures: result.failures, coverageFiles: result.coverage.map(row => row.file) }); return result; };
+  try {
+  const sources = new Map(raw.sources.map(row => [row.file, readSource(row.file)]));
+  const actual = api.validateLocalVerificationInputObservations({ sources, observations: raw });
+  validationOutcomes.push({ context: validationContext, status: actual.status, failures: actual.failures, coverageFiles: actual.coverage.map(row => row.file) });
+  assert.equal(actual.status, "PASS"); assert.equal(actual.coverage.length, 4);
+  const names: string[] = [];
+  const reject = (name: string, mutate: (value: LocalVerificationInputObservations, files: Map<string, string>) => void) => {
+    const value = structuredClone(raw), files = new Map(sources); mutate(value, files);
+    // Renew integrity metadata deliberately: these negatives must fail semantics, not a stale hash.
+    value.sources = value.sources.map(row => ({ file: row.file, sha256: sha256(files.get(row.file)!) }));
+    value.sourceWitnesses = value.sourceWitnesses.map(witness => {
+      const file = witness.file as string, declaration = witness.declaration as string;
+      const parsed = ts.createSourceFile(file, files.get(file)!, ts.ScriptTarget.Latest, true, /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+      const actual = declaration === "$module" ? parsed : declaration === "$dispatch" ? parsed.statements.find(ts.isTryStatement)
+        : parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === declaration); assert.ok(actual);
+      const calls: Array<{ expression: string; arguments: string[]; position: number }> = [];
+      const visit = (node: ts.Node) => { if (ts.isCallExpression(node)) calls.push({ expression: node.expression.getText(parsed), arguments: node.arguments.map(argument => argument.getText(parsed)), position: node.getStart(parsed) }); ts.forEachChild(node, visit); };
+      visit(actual); return { file, declaration, kind: ts.SyntaxKind[actual.kind], text: actual.getText(parsed), sha256: sha256(actual.getText(parsed)), calls };
+    });
+    validationContext = name;
+    const result = validate({ sources: files, observations: value }); assert.equal(result.status, "BLOCKED", name); assert.deepEqual(result.coverage, []); names.push(name);
+  };
+  const edit = (files: Map<string, string>, file: string, before: string, after: string, declaration = "verifyReleaseLockInputContracts") => {
+    const source = files.get(file)!, parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const matches = declaration === "$module" ? [parsed] : declaration === "$dispatch" ? parsed.statements.filter(ts.isTryStatement)
+      : parsed.statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === declaration);
+    assert.equal(matches.length, 1); const target = matches[0]!, original = target.getText(parsed);
+    assert.equal(original.split(before).length, 2, "A negative must mutate one occurrence in its actual declaration.");
+    const changed = original.replace(before, after); assert.notEqual(changed, original);
+    files.set(file, source.slice(0, target.getStart(parsed)) + changed + source.slice(target.end));
+    mutationWitnesses.push({ file, declaration, beforeSha256: sha256(original), afterSha256: sha256(changed) });
+  };
+  const transportLeaf = "scripts/qa-isolated-supabase-transport.mjs";
+  const editTransportTerminal = (value: LocalVerificationInputObservations, mutate: (cases: string[]) => void) => {
+    const proofs = value.observations.runtimeProofs as Array<Record<string, unknown>>;
+    const proof = proofs.find(row => row.control === "actual_owned_transport_leaf")!;
+    const actual = proof.actualResult as Record<string, unknown>, terminal = JSON.parse(String(actual.stdout)) as { cases: string[]; checks: number };
+    mutate(terminal.cases); terminal.checks = terminal.cases.length; proof.cases = [...terminal.cases]; proof.checks = terminal.checks;
+    actual.stdout = JSON.stringify(terminal, null, 2) + "\n";
+    const digest = sha256(String(actual.stdout)), archive = proofs.find(row => row.control === "windows_native_evidence_archive" || row.control === "owned_child_evidence_archive")!;
+    const files = archive.files as Array<{ file: string; sha256: string }>, archived = files.filter(row => row.file === "public-transport-contracts.stdout.log");
+    assert.equal(archived.length, 1); archived[0]!.sha256 = digest;
+    const artifacts = value.artifacts.filter(row => row.path.endsWith("/public-transport-contracts.stdout.log"));
+    assert.equal(artifacts.length, 1); artifacts[0]!.sha256 = digest;
+  };
+  reject("owned raw stream cannot borrow an unchanged archive fingerprint", value => {
+    const proof = (value.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "actual_owned_transport_leaf")!;
+    const result = proof.actualResult as Record<string, unknown>; result.stdout = String(result.stdout) + " ";
+  });
+  reject("missing original transport case rejects after raw archive metadata is retied", value => editTransportTerminal(value, cases => { cases.splice(0, 1); }));
+  reject("duplicate transport case rejects after raw archive metadata is retied", value => editTransportTerminal(value, cases => { cases[1] = cases[0]!; }));
+  reject("reordered transport cases reject after raw archive metadata is retied", value => editTransportTerminal(value, cases => { [cases[0], cases[1]] = [cases[1]!, cases[0]!]; }));
+  reject("unregistered transport case rejects after raw archive metadata is retied", value => editTransportTerminal(value, cases => { cases.push("unregistered transport receipt case"); }));
+  reject("conditional transport registration cannot borrow live receipt evidence", (_value, files) => edit(files, transportLeaf,
+    "cases.push('cleanup releases every owned listener');", "if (false) cases.push('cleanup releases every owned listener');", "$module"));
+  reject("dynamic transport case emission cannot replace a literal registration", (_value, files) => edit(files, transportLeaf,
+    "cases.push('all four ports can be bound after cleanup');", "cases.push(String('all four ports can be bound after cleanup'));", "$module"));
+  reject("transport helper cannot record a case without executing its actual callback", (_value, files) => edit(files, transportLeaf,
+    "run();", "void run;", "check"));
+  reject("new transport helper cannot record an unexecuted asynchronous callback", (_value, files) => edit(files, transportLeaf,
+    "await run();", "void run;", "transportSetupCase"));
+  const transportStatement = (files: Map<string, string>, helper: string) => {
+    const source = files.get(transportLeaf)!, tree = ts.createSourceFile(transportLeaf, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const statement = tree.statements.find(node => ts.isExpressionStatement(node) && (() => {
+      const expression = ts.isAwaitExpression(node.expression) ? node.expression.expression : node.expression;
+      return ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) && expression.expression.text === helper;
+    })());
+    assert.ok(statement && ts.isExpressionStatement(statement));
+    const expression = ts.isAwaitExpression(statement.expression) ? statement.expression.expression : statement.expression;
+    assert.ok(ts.isCallExpression(expression)); const label = expression.arguments[0]; assert.ok(label && ts.isStringLiteral(label));
+    return { text: statement.getText(tree), name: label.text };
+  };
+  reject("missing new transport case rejects with renewed raw stdout and archive metadata", (value, files) => {
+    const target = transportStatement(files, "transportSetupCase"); editTransportTerminal(value, cases => {
+      const index = cases.indexOf(target.name); assert.ok(index >= 0); cases.splice(index, 1);
+    });
+  });
+  for (const helper of ["check", "transportSetupCase"]) reject("whole " + helper + " vector deletion cannot shrink its own transport obligations", (value, files) => {
+    const target = transportStatement(files, helper); edit(files, transportLeaf, target.text, "", "$module");
+    editTransportTerminal(value, cases => { const index = cases.indexOf(target.name); assert.ok(index >= 0); cases.splice(index, 1); });
+  });
+  const verifier = "scripts/verify-isolated-supabase.mts";
+  reject("genuine JSON assertion deletion with count replacement", (_value, files) => edit(files, verifier, "assert.deepEqual(actual, expected)", "assert.equal(true, true)"));
+  reject("same-count changed JSON assertion operator", (_value, files) => edit(files, verifier, "assert.deepEqual(actual, expected)", "assert.notDeepEqual(actual, expected)"));
+  reject("dead meaningful JSON assertion", (_value, files) => edit(files, verifier, "assert.deepEqual(actual, expected)", "if (false) assert.deepEqual(actual, expected)"));
+  reject("early return before meaningful JSON assertion", (_value, files) => edit(files, verifier, "const actual = read(input); assert.deepEqual(actual, expected)", "const actual = read(input); return {}; assert.deepEqual(actual, expected)"));
+  reject("swapped JSON mutation retains its old vector name and count", (_value, files) => edit(files, verifier, 'value.release.commit = "0".repeat(40)', 'value.release.sourceBaseUrl = "https://example.invalid/"'));
+  reject("dropped JSON mutation cannot be compensated by its retained label", (_value, files) => edit(files, verifier, "value.files = []", "Object.assign(value, {})"));
+  reject("JSON rejection operator contract cannot borrow another error code", (_value, files) => edit(files, verifier, '["schema drift", "UNAPPROVED_RELEASE"', '["schema drift", "INCOMPLETE_RELEASE_LOCK"'));
+  reject("uninvoked admission entry retains a helper name", (_value, files) => edit(files, verifier, "await verifySharedChildControls({ admissionOnly: true })", "await (false ? verifySharedChildControls({ admissionOnly: true }) : Promise.resolve([]))", "admissionQualificationOnly"));
+  reject("CLI loader substitutes cached source for actual options", (_value, files) => edit(files, verifier, "options.getText(tree) +", '"cached unrelated parser" +', "verifyIsolatedCliInputContracts"));
+  reject("changed actual CLI dispatcher cannot borrow old observations", (_value, files) => edit(files, "scripts/qa-isolated-supabase.mts", "runIsolatedSupabase(options(args))", "runIsolatedSupabase({})", "$dispatch"));
+  reject("C# compiler source snapshot substitution", (_value, files) => edit(files, "scripts/lib/windows-owned-process.mts", '"/r:" + reference.file), sourceSnapshot]', '"/r:" + reference.file), "unowned.cs"]', "nativeBuild"));
+  reject("corrupt actual child raw exit", value => { const proof = (value.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "actual_owned_transport_leaf")!;
+    (proof.actualResult as Record<string, unknown>).rawExit = { code: 9, signal: null }; });
+  reject("missing JSON negative artifact", value => { value.artifacts = value.artifacts.filter(row => !row.path.endsWith("release-lock-inputs/lock-2.json")); });
+  reject("native cleanup zero cannot be replaced by PID absence", value => { const proof = (value.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "actual_owned_transport_leaf")!;
+    const result = proof.actualResult as Record<string, unknown>, cleanup = result.cleanup as Record<string, unknown>; cleanup.processTreeVerified = false; });
+  const linux = structuredClone(raw), proofs = linux.observations.runtimeProofs as Array<Record<string, unknown>>;
+  (linux.observations.runtime as Record<string, unknown>).platform = "linux";
+  linux.observations.native = { status: "BLOCKED", missingProof: "windows_native_job_launch_unavailable" };
+  const native = proofs.find(row => row.control === "windows_imported_type_and_source_contracts")!;
+  native.nativeIntegrity = { status: "PASS", scope: "non_windows_platform_rejection_before_compiler_or_spawn", capabilityStatus: "BLOCKED", platform: "linux", nativeExecuted: false, compilerProcessesExecuted: 0, actualRootProcessesAllocated: 0 };
+  const archive = proofs.find(row => row.control === "windows_native_evidence_archive" || row.control === "owned_child_evidence_archive")!; archive.control = "owned_child_evidence_archive";
+  for (const proof of proofs.filter(row => row.control === "actual_owned_transport_leaf" || row.control === "actual_cli_no_allocation_rejection")) {
+    const result = proof.actualResult as Record<string, unknown>, cleanup: Record<string, unknown> = { ...(result.cleanup as Record<string, unknown>), platform: "linux", method: "linux-marker-and-process-identity", processTreeVerified: true };
+    delete cleanup.nativeJobReceipt; result.cleanup = cleanup; proof.cleanup = cleanup;
+    delete result.nativeJobReceipt; delete result.nativeJobIdentity; delete result.nativeCapability;
+  }
+  validationContext = "controlled_linux_platform_positive";
+  const linuxResult = validate({ sources, observations: linux }); assert.equal(linuxResult.status, "PASS"); assert.equal(linuxResult.nativeExecuted, false);
+  assert.equal(linuxResult.nativeAcceptanceStatus, "PLATFORM_REJECTION_AND_SOURCE_CONTRACT_ONLY");
+  const forged = structuredClone(linux); (forged.observations.native as Record<string, unknown>).status = "PASS";
+  validationContext = "controlled_linux_native_claim_rejected"; assert.equal(validate({ sources, observations: forged }).status, "BLOCKED");
+  const windowsWithoutNative = structuredClone(linux); (windowsWithoutNative.observations.runtime as Record<string, unknown>).platform = "win32";
+  validationContext = "windows_without_actual_native_rejected"; assert.equal(validate({ sources, observations: windowsWithoutNative }).status, "BLOCKED");
+  if (actual.nativeAcceptancePlatform === "win32") { assert.equal(actual.nativeExecuted, true); assert.equal(actual.nativeAcceptanceStatus, "ACTUAL_NATIVE_EXECUTION"); }
+  return { status: "PASS", sourceOwnerSha256: sha256(source), actualQualifierExecuted: true, actualPlatformPositive: actual.nativeAcceptancePlatform,
+    controlledLinuxPlatformOnlyPositive: true, controlledLinuxNativeClaimRejected: true, windowsWithoutActualNativeRejected: true, negatives: names, operatingSystemAllocations: 0,
+    controlledPlatformVectorsAreNotLifecycleEvidence: true, validationOutcomes, mutationWitnesses };
+  } catch (error) { if (error instanceof Error) Object.defineProperty(error, "inputValidationOutcomes", { value: validationOutcomes }); throw error; }
+}
+
+/** Raw observations only. The public execution owner independently qualifies these facts. */
+function verificationInputSourceObservations() {
+  const witnesses: Record<string, unknown>[] = [], observed = new Map<string, string>();
+  const declaration = (file: string, names: string[]) => {
+    const source = readSource(file); observed.set(file, source);
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+    assert.deepEqual((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, []);
+    for (const name of names) {
+      const matches = name === "$module" ? [tree] : name === "$dispatch" ? tree.statements.filter(ts.isTryStatement)
+        : tree.statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+      assert.equal(matches.length, 1, "Input observation requires one actual declaration: " + file + "#" + name);
+      const node = matches[0]!, calls: Array<{ expression: string; arguments: string[]; position: number }> = [];
+      const visit = (part: ts.Node) => { if (ts.isCallExpression(part)) calls.push({ expression: part.expression.getText(tree),
+        arguments: part.arguments.map(argument => argument.getText(tree)), position: part.getStart(tree) }); ts.forEachChild(part, visit); };
+      visit(node); const text = node.getText(tree);
+      witnesses.push({ file, declaration: name, kind: ts.SyntaxKind[node.kind], text, sha256: sha256(text), calls });
+    }
+  };
+  declaration("scripts/verify-isolated-supabase.mts", ["readSource", "verifyReleaseLockInputContracts", "verifyIsolatedCliInputContracts", "verifyWindowsOwnedProcessContracts",
+    "verifySharedChildControls", "verifyRegisteredNodeEntryControls", "verifyInputObservationValidationControls", "verifyAdoptionDeadlineControls", "admissionQualificationOnly"]);
+  declaration("scripts/lib/isolated-supabase.mts", ["sourcePath", "requireThat", "readReleaseLock", "runIsolatedSupabase"]);
+  declaration("scripts/lib/windows-owned-process.mts", ["nativeBuild", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess"]);
+  declaration("scripts/lib/isolated-public-verification.mts", ["localVerificationCommandSteps", "registeredVerificationNodeEntries", "localVerificationQualityPrefixDeadlineMs", "runOwnedVerificationChild", "stopChild"]);
+  declaration("scripts/qa-isolated-supabase.mts", ["options", "$dispatch"]);
+  declaration("scripts/qa-isolated-supabase-transport.mjs", ["$module"]);
+  const graph = collectExecutableSourceGraph({ root, entrySourceFiles: [...observed.keys()], symbolAware: false, nativeEagerImports: true });
+  // The existing graph caches parsed modules; raw evidence must reread every
+  // current dependency so its before/after check cannot reuse cached bytes.
+  for (const file of graph.keys()) observed.set(file, readSource(file));
+  const lockFile = "scripts/fixtures/isolated-supabase/stack.lock.json", lockSource = readSource(lockFile), lock = JSON.parse(lockSource) as StackLock;
+  observed.set(lockFile, lockSource);
+  for (const file of ["scripts/lib/windows-owned-process.cs", lock.compose.path, lock.transport.path, "package.json", "package-lock.json", "tsconfig.json"])
+    observed.set(file, readSource(file));
+  return { sourceWitnesses: witnesses, sources: [...observed].map(([file, source]) => ({ file, sha256: sha256(source) })).sort((left, right) => left.file.localeCompare(right.file)) };
+}
+
+async function admissionQualificationOnly() {
+  assert.deepEqual(process.argv.slice(2), ["--admission-qualification-only"], "Admission observations accept exactly their one registered-entry flag.");
+  const nonce = process.env.VENESIA_QA_ADMISSION_NONCE;
+  assert.ok(nonce && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(nonce), "Admission observations require their owner's fresh UUID nonce.");
+  const installedLock = path.join(root, "node_modules/.package-lock.json");
+  const runtimeSnapshot = () => ({ node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+    executable: process.execPath, executableSha256: sha256(readFileSync(process.execPath)), execArgv: process.execArgv,
+    installedLockSha256: existsSync(installedLock) ? sha256(readFileSync(installedLock)) : null });
+  const runtime = runtimeSnapshot();
+  const before = verificationInputSourceObservations();
+  const adoptionDeadline = await verifyAdoptionDeadlineControls();
+  const registeredEntries = verifyRegisteredNodeEntryControls();
+  const runtimeProofs = await verifySharedChildControls({ admissionOnly: true });
+  runtimeProofs.push({ control: "adoption_deadline", ...adoptionDeadline });
+  runtimeProofs.push({ control: "registered_node_entries", ...registeredEntries });
+  const after = verificationInputSourceObservations(); assert.deepEqual(after, before, "Input observation source closure changed during execution.");
+  const archived = runtimeProofs.find(row => row.control === "windows_native_evidence_archive" || row.control === "owned_child_evidence_archive") as {
+    directory: string; files: Array<{ file: string; sha256: string }> } | undefined;
+  const artifacts: Array<{ path: string; sha256: string }> = [];
+  const artifact = (absolute: string, expected?: string) => {
+    assert.equal(realpathSync(absolute), absolute); assert.equal(lstatSync(absolute).isFile(), true);
+    const relative = path.relative(root, absolute).replaceAll("\\", "/");
+    assert.ok(relative.startsWith(".tmp-qa/") && !relative.split("/").includes(".."));
+    const sha = sha256(readFileSync(absolute)); if (expected !== undefined) assert.equal(sha, expected);
+    assert.equal(artifacts.some(row => row.path === relative), false); artifacts.push({ path: relative, sha256: sha });
+  };
+  if (archived) {
+    for (const row of archived.files) artifact(path.join(archived.directory, row.file), row.sha256);
+    artifact(path.join(archived.directory, "evidence-index.json"));
+  }
+  const native = windowsOwnedProcessCapability();
+  if (native?.status === "PASS") for (const file of [native.native.sourceSnapshot, native.native.provenance, native.native.executable]) artifact(file);
+  assert.deepEqual(runtimeSnapshot(), runtime, "Input observation runtime inputs changed during execution.");
+  const raw: LocalVerificationInputObservations = { schema: 1, kind: "verification-input-observations", nonce,
+    entry: "scripts/verify-isolated-supabase.mts", executionScope: "affected_input_controls", sources: before.sources,
+    sourceWitnesses: before.sourceWitnesses, artifacts,
+    observations: { status: "PASS", checks: cases.length, cases, runtimeProofs, native,
+      runtime, runtimeInputsUnchanged: true,
+      actualOwnedChildrenExecuted: true, originalFinallyExecuted: true, sourceInputsUnchanged: true, dockerExecuted: false,
+      databaseCalls: 0, externalNetworkRequests: 0, ownedLoopbackTransportExecuted: true, unrelatedNativeLifecycleReexecuted: false,
+      automaticQualificationClaimed: false } };
+  assert.ok(archived, "Admission observations require their original owned evidence archive.");
+  writeFileSync(path.join(archived.directory, "input-observations-before-validation.json"), JSON.stringify(raw, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  try { raw.observations.qualificationValidatorControls = verifyInputObservationValidationControls(raw); }
+  catch (error) {
+    const controlled = error as { actual?: unknown; expected?: unknown; operator?: unknown; inputValidationOutcomes?: unknown };
+    const primitive = (value: unknown) => value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string" ? value : "<nonprimitive omitted>";
+    try { writeFileSync(path.join(archived.directory, "input-observations-validation-failure.json"), JSON.stringify({ schema: 1,
+      stage: "input_observation_validation_controls", originalFailurePreserved: true,
+      error: { name: error instanceof Error ? error.name : "NonError", message: error instanceof Error ? error.message : "Non-Error thrown value",
+        stack: error instanceof Error ? error.stack : null, actual: primitive(controlled.actual), expected: primitive(controlled.expected), operator: primitive(controlled.operator) },
+      validationOutcomes: controlled.inputValidationOutcomes ?? [] }, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
+    catch (evidenceError) { if (error instanceof Error) Object.defineProperty(error, "inputValidationEvidenceError", { value: evidenceError }); }
+    throw error;
+  }
+  if (archived) writeFileSync(path.join(archived.directory, "input-observations.json"), JSON.stringify(raw, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  console.log(JSON.stringify({ status: "PASS", rawObservations: raw }, null, 2));
+}
+
 async function ownedChildControlsOnly() {
   const runtimeProofs = await verifySharedChildControls();
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, platform: process.platform,
     runtimeProofs, actualOwnedChildrenExecuted: true, tempFixtureCleanupVerified: true, browserExecuted: false, databaseCalls: 0,
     dockerResourcesAllocated: 0, ownedLoopbackTransportExecuted: true, externalNetworkRequests: 0,
     windowsExitedRootDescendantsQualified: process.platform === "win32", windowsNativeAcceptanceCases: process.platform === "win32" ? 12 : 0 }, null, 2));
+}
+
+/** Execute the actual Admission data/authority declarations with bounded in-memory ports only. */
+async function verifyAdmissionQualificationControls() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const tree = ts.createSourceFile("owner.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = (name: string) => {
+    const node = tree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
+      || ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(tree) === name));
+    assert.ok(node, "Missing actual Admission declaration: " + name); return node.getText(tree).replace(/^export /u, "");
+  };
+  const compile = (text: string) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const memoryRoot = path.join(root, ".tmp-qa", "controlled-admission-no-files");
+  const memory = (files: Map<string, Buffer>, links = new Set<string>()) => {
+    const directories = new Set<string>();
+    let indexedSize = -1;
+    const refresh = () => { if (indexedSize === files.size) return; indexedSize = files.size;
+      for (const file of files.keys()) for (let at = path.dirname(file); at !== path.dirname(at); at = path.dirname(at)) directories.add(at); };
+    const missing = (file: string) => Object.assign(Error("Missing controlled file: " + file), { code: "ENOENT" });
+    return {
+      exists(file: string) { refresh(); return files.has(file) || directories.has(file); },
+      read(file: string, encoding?: string) { const value = files.get(file); if (!value) throw missing(file); return encoding ? value.toString("utf8") : value; },
+      write(file: string, value: string | Buffer) { files.set(file, Buffer.isBuffer(value) ? value : Buffer.from(value)); },
+      list(directory: string) { refresh(); const prefix = directory + path.sep;
+        return [...new Set([...files.keys(), ...directories].filter(file => file.startsWith(prefix)).map(file => file.slice(prefix.length).split(path.sep)[0]!))]; },
+      stat(file: string) { refresh(); if (!files.has(file) && !directories.has(file)) throw missing(file);
+        return { isFile: () => files.has(file), isDirectory: () => directories.has(file), isSymbolicLink: () => links.has(file) }; },
+      real(file: string) { return links.has(file) ? path.join(memoryRoot, "outside", path.basename(file)) : file; },
+      mkdir(directory: string) { directories.add(directory); },
+    };
+  };
+  type RuntimeApi = Pick<typeof import("./lib/isolated-public-verification.mts"), "localVerificationInstalledRuntimePackages" | "localVerificationAdmissionRuntimeIdentity">;
+  const runtimeCode = compile(declaration("localVerificationInstalledRuntimePackages") + "\n" + declaration("localVerificationAdmissionRuntimeIdentity"));
+  const runtimeFixture = () => {
+    const files = new Map<string, Buffer>(), links = new Set<string>(), fs = memory(files, links), directory = path.join(memoryRoot, "node_modules");
+    const put = (file: string, value: unknown) => files.set(file, Buffer.from(typeof value === "string" ? value : JSON.stringify(value)));
+    const manifests: Record<string, object> = { typescript: {}, pkg: { dependencies: { dep: "1" }, optionalDependencies: { "@img/addon": "1", absent: "1" },
+      peerDependencies: { peer: "1", optionalPeer: "1" }, peerDependenciesMeta: { optionalPeer: { optional: true } } }, dep: {}, peer: {}, "@img/addon": { exports: { "./native": "./addon.node" } } };
+    const installed: Record<string, Record<string, unknown>> = {};
+    for (const [name, fields] of Object.entries(manifests)) {
+      put(path.join(directory, name, "package.json"), { name, version: "1.0.0", ...fields }); put(path.join(directory, name, name === "@img/addon" ? "addon.node" : "index.js"), "controlled bytes " + name);
+      installed["node_modules/" + name] = { version: "1.0.0", resolved: "https://registry.invalid/" + name, integrity: "controlled-integrity" };
+    }
+    put(path.join(directory, ".package-lock.json"), { packages: installed }); put(path.join(memoryRoot, "package-lock.json"), { packages: installed });
+    const executable = path.join(memoryRoot, "node.exe"); put(executable, "controlled-node-1");
+    let outside = false;
+    const resolver = Object.assign((name: string) => {
+      if (outside) return path.join(memoryRoot, "outside", name, "index.js");
+      if (name === "@img/addon") throw Object.assign(Error("Root export is restricted"), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
+      const entry = path.join(directory, name, "index.js"); if (!files.has(entry)) throw Object.assign(Error("Missing optional controlled package"), { code: "MODULE_NOT_FOUND" }); return entry;
+    }, { paths: () => [directory] });
+    const api = new Function("assert", "ROOT", "join", "dirname", "sep", "nodeModule", "existsSync", "readFileSync", "readdirSync", "lstatSync", "realpathSync", "digest", "process",
+      runtimeCode + ";return {localVerificationInstalledRuntimePackages,localVerificationAdmissionRuntimeIdentity};")(
+      assert, memoryRoot, path.join, path.dirname, path.sep, { createRequire: () => ({ resolve: resolver }) }, fs.exists, fs.read, fs.list, fs.stat, fs.real, sha256,
+      { version: "controlled-node-version", versions: { v8: "controlled-v8", modules: "controlled-abi" }, platform: "win32", arch: "x64", execPath: executable, execArgv: ["--experimental-strip-types"] }) as RuntimeApi;
+    return { api, files, links, installed, directory, executable, put, fs, outside: () => { outside = true; } };
+  };
+  const verifyRuntime = (api: RuntimeApi) => {
+    const original = api.localVerificationInstalledRuntimePackages(["pkg"]);
+    assert.deepEqual(original.map(row => row.root), ["node_modules/dep", "node_modules/pkg"]);
+    const expanded = api.localVerificationInstalledRuntimePackages(["pkg"], true);
+    assert.deepEqual(expanded.map(row => row.root), ["node_modules/@img/addon", "node_modules/dep", "node_modules/peer", "node_modules/pkg"]);
+    assert.ok(expanded.every(row => row.files > 0 && row.bytes > 0 && /^[a-f0-9]{64}$/u.test(row.sha256)));
+    const identity = api.localVerificationAdmissionRuntimeIdentity(["pkg", "typescript"]);
+    assert.equal(identity.node, "controlled-node-version"); assert.equal(identity.v8, "controlled-v8"); assert.equal(identity.modules, "controlled-abi");
+    assert.equal(identity.installedDependenciesMatchProjectLock, true); assert.equal(identity.packages.length, 5);
+    assert.deepEqual(identity.execArgv, ["--experimental-strip-types"]); assert.match(identity.executableSha256, /^[a-f0-9]{64}$/u);
+    return identity;
+  };
+  check("actual Admission runtime closure preserves dependency-only policy and binds installed optional/native-subpath and peer bytes", () => verifyRuntime(runtimeFixture().api));
+  check("actual Admission runtime fingerprint changes for package and executable bytes", () => {
+    const fixture = runtimeFixture(), before = verifyRuntime(fixture.api);
+    fixture.put(path.join(fixture.directory, "pkg", "index.js"), "changed package bytes");
+    const changed = fixture.api.localVerificationAdmissionRuntimeIdentity(["pkg", "typescript"]); assert.notDeepEqual(changed.packages, before.packages);
+    fixture.put(fixture.executable, "controlled-node-2"); assert.notEqual(fixture.api.localVerificationAdmissionRuntimeIdentity(["pkg", "typescript"]).executableSha256, before.executableSha256);
+  });
+  check("actual Admission runtime closure rejects missing required peers links outside roots and byte-budget overflow", () => {
+    const missing = runtimeFixture(); for (const file of [...missing.files.keys()]) if (file.startsWith(path.join(missing.directory, "peer") + path.sep)) missing.files.delete(file);
+    assert.throws(() => missing.api.localVerificationInstalledRuntimePackages(["pkg"], true), (error: unknown) => error instanceof Error && "code" in error && error.code === "MODULE_NOT_FOUND");
+    for (const target of ["pkg", path.join("pkg", "index.js")]) { const fixture = runtimeFixture(); fixture.links.add(path.join(fixture.directory, target));
+      assert.throws(() => fixture.api.localVerificationInstalledRuntimePackages(["pkg"], true), /unqualified link/u); }
+    const escaped = runtimeFixture(); escaped.outside(); assert.throws(() => escaped.api.localVerificationInstalledRuntimePackages(["pkg"], true), /escaped the installed project/u);
+    assert.throws(() => escaped.api.localVerificationInstalledRuntimePackages(["../foreign"], true), /literal installed package names/u);
+    const tooLarge = runtimeFixture(); tooLarge.files.set(path.join(tooLarge.directory, "pkg", "oversized.bin"), { length: 96 * 1024 * 1024 + 1 } as Buffer);
+    assert.throws(() => tooLarge.api.localVerificationInstalledRuntimePackages(["pkg"], true), /bounded read budget/u);
+    const tooMany = runtimeFixture(), empty = Buffer.alloc(0);
+    for (let index = 0; index <= 10_000; index++) tooMany.files.set(path.join(tooMany.directory, "pkg", "entry-" + index + ".js"), empty);
+    assert.throws(() => tooMany.api.localVerificationInstalledRuntimePackages(["pkg"], true), /bounded read budget/u);
+  });
+  check("actual Admission runtime identity rejects absent and mismatched installed project or package metadata", () => {
+    const missing = runtimeFixture(); missing.files.delete(path.join(missing.directory, ".package-lock.json")); assert.throws(() => missing.api.localVerificationAdmissionRuntimeIdentity(["pkg"]), /Missing controlled file/u);
+    const absent = runtimeFixture(); delete absent.installed["node_modules/typescript"]; absent.put(path.join(absent.directory, ".package-lock.json"), { packages: absent.installed });
+    assert.throws(() => absent.api.localVerificationAdmissionRuntimeIdentity(["pkg"]), assert.AssertionError);
+    const mismatch = runtimeFixture(); mismatch.put(path.join(memoryRoot, "package-lock.json"), { packages: {} });
+    assert.throws(() => mismatch.api.localVerificationAdmissionRuntimeIdentity(["pkg"]), /differs from the current package lock/u);
+    const version = runtimeFixture(); version.put(path.join(version.directory, "pkg", "package.json"), { name: "pkg", version: "9.0.0" });
+    assert.throws(() => version.api.localVerificationAdmissionRuntimeIdentity(["pkg"]), /version differs from the installed lock/u);
+  });
+  type Qualification = import("./lib/isolated-public-verification.mts").LocalVerificationAdmissionQualification;
+  type Binding = { baselineHead: string; finalHead: string; sourceSha256: string };
+  type Inputs = import("./lib/isolated-public-verification.mts").LocalVerificationInputs;
+  type InputRequest = import("./lib/isolated-public-verification.mts").PublicGateRequest;
+  type InputImpact = import("./lib/isolated-public-verification.mts").LocalVerificationImpact;
+  type PrivateDiscovery = Binding & { additionalSourceFiles: readonly string[]; changes: Inputs["changes"]; changeImpact: NonNullable<Inputs["changeImpact"]> };
+  type ControlledInvocation = { sourceDiscovery?: PrivateDiscovery; sourceDiscoverySha256: string };
+  const executorCode = compile(["localVerificationAdmissionInvocations", "localVerificationCommandSteps", "registeredVerificationNodeEntries",
+    "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission", "readLocalVerificationInputs"].map(declaration).join("\n"));
+  const executorFixture = (options: { raw?: "wrong-nonce" | "missing-schema" | "corrupt"; nonzero?: boolean; nativeFailure?: boolean; validatorFailure?: boolean;
+    childFailure?: boolean; cleanupFailure?: boolean; mutateAdditional?: () => void } = {}) => {
+    const files = new Map<string, Buffer>(), links = new Set<string>(), fs = memory(files, links), baselineHead = "a".repeat(40);
+    const entries = ["scripts/verify-admin-form-system.mts", "scripts/verify-page-block-editor-presentation.mts", "scripts/verify-isolated-supabase.mts"];
+    const sources = new Map<string, Buffer>(entries.map(entry => [entry, Buffer.from('import value from "jiti"; export const controlled = value;')]));
+    sources.set("scripts/lib/windows-owned-process.cs", Buffer.from("controlled native source"));
+    sources.set("package.json", Buffer.from(JSON.stringify({ scripts: Object.fromEntries(entries.map((entry, index) => ["verify:controlled-" + index, "node --experimental-strip-types " + entry])) })));
+    for (const [file, bytes] of sources) files.set(path.join(memoryRoot, file), bytes);
+    const selected = [...sources.keys()].sort(), runtime = { node: "controlled-node", dependencySha256: "d".repeat(64) };
+    let head = "b".repeat(40), inspections = 0, coldDiscoveries = 0;
+    const changedFiles: string[] = [], coverageRequests: string[] = [];
+    const sourceSha = () => sha256(JSON.stringify(selected.map(file => ({ file, sha256: sha256(files.get(path.join(memoryRoot, file))!) }))));
+    const binding = (): Binding => ({ baselineHead, finalHead: head, sourceSha256: sourceSha() });
+    const discovered: NonNullable<Inputs["changeImpact"]> = { proofBoundary: "source_discovery_only", sourceSha256: sourceSha(), deltaSha256: sha256("[]"),
+      changes: [], obligations: [], protections: [], qaQuality: [] };
+    const launches: Array<{ args: string[]; limitMs: number }> = [], stops: string[] = [], observedPackages: string[][] = [];
+    const nativePath = path.join(memoryRoot, ".tmp-qa", "admission-qualification-controlled", "input.native-result.json");
+    const api = new Function("assert", "ROOT", "digest", "process", "execFileSync", "inspectLocalVerificationChangeImpact", "selectSourceInventory", "sourceIncluded", "safeSourcePath",
+      "existsSync", "lstatSync", "realpathSync", "readFileSync", "collectExecutableSourceGraph", "ts", "nodeModule", "localVerificationAdmissionRuntimeIdentity", "resolve", "join", "sep",
+      "mkdirSync", "mkdtempSync", "runOwnedVerificationChild", "validateLocalVerificationAssertionRelocations", "validateLocalVerificationInputObservations", "stopChild", "readdirSync", "receipt",
+      "localVerificationNativeGate", "localVerificationCoverage", "deriveLocalVerificationSourceImpact",
+      executorCode + ";return {qualifyLocalVerificationAdmission,assertQualified:assertLocalVerificationAdmissionQualification,readInputs:readLocalVerificationInputs,privateInvocation:value=>localVerificationAdmissionInvocations.get(value)};")(
+      assert, memoryRoot, sha256, { platform: "win32", env: {} }, (_command: string, args: string[]) => {
+        if (args[0] === "ls-files") return Buffer.from(selected.join("\0") + "\0");
+        if (args[0] === "rev-parse") return Buffer.from(args.includes("--verify") ? baselineHead : head);
+        if (args[0] === "merge-base") return Buffer.alloc(0);
+        if (args[0] === "ls-tree") return Buffer.from(selected.join("\0") + "\0");
+        if (args[0] === "diff") return Buffer.from(changedFiles.length ? changedFiles.join("\0") + "\0" : "");
+        if (args[0] === "show") { const bytes = sources.get(args[1]!.slice(41)); assert.ok(bytes); return bytes; }
+        throw Error("Unexpected controlled Git operation.");
+      }, () => { inspections++; return { ...binding(), changeImpact: discovered, fast: { correspondence: [{ protected: true }] }, actualDelta: [] }; },
+      () => selected, (file: string) => entries.includes(file), (file: string) => path.join(memoryRoot, file), fs.exists, fs.stat, fs.real, fs.read,
+      () => new Map(entries.map(entry => [entry, ts.createSourceFile(entry, sources.get(entry)!.toString(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)])),
+      ts, { isBuiltin }, (names: Iterable<string>) => { observedPackages.push([...names].sort()); return { ...runtime }; }, path.resolve, path.join, path.sep,
+      fs.mkdir, (prefix: string) => { const directory = prefix + "controlled"; fs.mkdir(directory); return directory; },
+      async (ports: { children: Set<ChildProcess> }, args: string[], env: Record<string, string>, name: string, limitMs: number) => {
+        launches.push({ args, limitMs }); const entry = args[1]!, nonce = options.raw === "wrong-nonce" ? "old-nonce" : env.VENESIA_QA_ADMISSION_NONCE;
+        if (launches.length === 1) options.mutateAdditional?.();
+        const raw = { schema: options.raw === "missing-schema" ? undefined : 1, kind: entry === entries[2] ? "verification-input-observations" : "assertion-relocation-observations",
+          nonce, consumer: entry, entry, artifacts: [] as Array<{ path: string; sha256: string }> };
+        files.set(nativePath, Buffer.from("controlled native cleanup PASS"));
+        if (entry === entries[2]) raw.artifacts.push({ path: path.relative(memoryRoot, nativePath).replaceAll("\\", "/"), sha256: sha256(files.get(nativePath)!) });
+        const stdout = options.raw === "corrupt" ? "{bad-json" : entry === entries[2] ? JSON.stringify({ status: "PASS", rawObservations: raw }) : JSON.stringify(raw) + "\n";
+        const code = options.nonzero || options.childFailure ? 7 : 0;
+        const native = { jobToken: "controlled-job", rootPid: 42, status: "PASS", reason: "completed", rootExitCode: code, nativeFailure: null,
+          cleanup: { activeProcessesAfterCleanup: options.nativeFailure ? 1 : 0, activeProcessIdsAfterCleanup: options.nativeFailure ? [42] : [], rootHandleExited: true, jobHandleClosed: true } };
+        const value = { code, rawExit: { code, signal: null }, stdout, stderr: "", cleanup: { status: "PASS", liveProcesses: 0, processTreeVerified: true }, helperExit: { code: 0, signal: null },
+          nativeJobIdentity: { rootPid: 42, jobToken: "controlled-job", ownerJobAssignedBeforeResume: true, jobHandleNonInheritable: true, effectiveLimitFlags: 0x2000, jobBeforeResume: { processIds: [42] } },
+          nativeJobReceipt: native, nativeCapability: { sourceSha256: sha256(sources.get("scripts/lib/windows-owned-process.cs")!) } };
+        for (const [extension, bytes] of [["stdout.log", stdout], ["stderr.log", ""], ["native-result.json", JSON.stringify(native)]] as const)
+          files.set(path.join(memoryRoot, ".tmp-qa", "admission-qualification-controlled", "public-" + name + "." + extension), Buffer.from(bytes));
+        if (options.childFailure) {
+          ports.children.add(new EventEmitter() as ChildProcess);
+          throw Object.assign(Error("Controlled owned-child failure"), { childResult: value });
+        }
+        return value;
+      }, () => ({ status: options.validatorFailure ? "BLOCKED" : "PASS", relocations: [], providers: [] }), () => ({ status: "PASS", coverage: [] }),
+      async (_child: unknown, _env: unknown, reason: string) => { stops.push(reason); if (options.cleanupFailure) throw Error("Controlled owned-child cleanup failure"); }, fs.list,
+      (context: { runDirectory: string }, name: string, value: unknown) => fs.write(path.join(context.runDirectory, name), JSON.stringify(value)),
+      (request: InputRequest) => request.selection === "admin-adoption" ? { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: [], limitMs: 900_000 } : undefined,
+      (_scripts: unknown, _impact: unknown, _manifest: unknown, request: InputRequest) => { coverageRequests.push(request.selection ?? "default"); return []; },
+      () => { coldDiscoveries++; return structuredClone(discovered); }) as {
+        qualifyLocalVerificationAdmission: typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationAdmission;
+        assertQualified(value: Qualification, binding: Binding): void;
+        readInputs(context: { cleanEnvironment(): NodeJS.ProcessEnv }, impact: InputImpact, manifest: Array<{ file: string; sha256: string }>, additional: readonly string[], request: InputRequest, previous?: Inputs): Inputs;
+        privateInvocation(value: Qualification): ControlledInvocation;
+      };
+    const manifest = () => selected.map(file => ({ file, sha256: sha256(files.get(path.join(memoryRoot, file))!) }));
+    const readQualified = (value: Qualification, additional: string[] = [], request: Partial<InputRequest> = {}, previous?: Inputs) =>
+      api.readInputs({ cleanEnvironment: () => ({ NODE_ENV: "test" }) }, { ...binding(), changes: [] }, manifest(), additional,
+        { additionalSourceFiles: additional, admissionQualification: value, ...request }, previous);
+    return { api, binding, files, links, nativePath, runtime, launches, stops, observedPackages, discovered, changedFiles, selected, manifest, readQualified,
+      coverageRequests, coldDiscoveries: () => coldDiscoveries, head: (value: string) => { head = value; }, inspections: () => inspections };
+  };
+  const qualify = (api: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationAdmission">, signal = new AbortController().signal) =>
+    api.qualifyLocalVerificationAdmission({ baselineHead: "a".repeat(40) }, signal);
+  const control = async (name: string, run: () => Promise<void>) => { try { await run(); } catch (error) { console.error("FAIL " + name); throw error; } cases.push(name); };
+  await control("actual Admission executor seals only its unique completed source-bound profiles and live authority", async () => {
+    const fixture = executorFixture(), value = await qualify(fixture.api); assert.equal(value.status, "PASS"); fixture.api.assertQualified(value, fixture.binding());
+    assert.equal(fixture.launches.length, 3); assert.equal(new Set(fixture.launches.map(row => row.args.join(" "))).size, 3);
+    assert.ok(fixture.launches.every(row => Number.isSafeInteger(row.limitMs) && row.limitMs > 0 && row.limitMs <= 2_147_483_647));
+    assert.ok(fixture.observedPackages.every(names => ["typescript", "react", "react-dom", "jiti"].every(name => names.includes(name))));
+    assert.equal(value.behavioralPass, false); assert.equal(value.releaseEvidence, false); assert.equal(value.failures.length, 0);
+    assert.throws(() => fixture.api.assertQualified(JSON.parse(JSON.stringify(value)) as Qualification, fixture.binding()), /live qualified execution/u);
+  });
+  await control("actual Admission authority rejects mutated receipts stale bindings runtime dependencies and altered native artifacts", async () => {
+    const fixture = executorFixture(), value = await qualify(fixture.api); assert.equal(value.status, "PASS");
+    for (const key of ["nonce", "sourceSha256", "baselineHead", "finalHead"] as const) {
+      const prior = value[key]; value[key] = "altered"; assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /altered after qualification/u); value[key] = prior;
+    }
+    for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const) assert.throws(() => fixture.api.assertQualified(value, { ...fixture.binding(), [key]: "0".repeat(key === "sourceSha256" ? 64 : 40) }), /stale source or baseline/u);
+    fixture.runtime.dependencySha256 = "e".repeat(64); assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /runtime or dependency bytes changed/u); fixture.runtime.dependencySha256 = "d".repeat(64);
+    fixture.runtime.node = "other-node"; assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /runtime or dependency bytes changed/u); fixture.runtime.node = "controlled-node";
+    fixture.head("c".repeat(40)); assert.throws(() => fixture.api.assertQualified(value, { ...fixture.binding(), finalHead: "b".repeat(40) })); fixture.head("b".repeat(40));
+    const raw = fixture.files.get(fixture.nativePath)!; fixture.files.set(fixture.nativePath, Buffer.from("altered native cleanup"));
+    assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /missing or corrupt/u); fixture.files.set(fixture.nativePath, raw);
+    fixture.files.delete(fixture.nativePath); assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /Missing controlled file/u); fixture.files.set(fixture.nativePath, raw);
+    fixture.links.add(fixture.nativePath); assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /cannot traverse links/u);
+  });
+  await control("actual reader reuses only privately cloned preallocation facts while deriving current request coverage and native selection", async () => {
+    const fixture = executorFixture(), value = await qualify(fixture.api); assert.equal(value.status, "PASS");
+    fixture.discovered.deltaSha256 = "e".repeat(64);
+    const first = fixture.readQualified(value);
+    assert.equal(first.changeImpact!.deltaSha256, sha256("[]"), "Mutation of the inspector's returned object cannot alter the private clone.");
+    (first.changeImpact as { deltaSha256: string }).deltaSha256 = "f".repeat(64);
+    const second = fixture.readQualified(value, [], { selection: "admin-adoption" });
+    assert.equal(second.changeImpact!.deltaSha256, sha256("[]"), "Mutation of a returned reader fact cannot alter the private clone.");
+    assert.equal(first.verificationNativeGate, undefined); assert.equal(second.verificationNativeGate?.name, "admin-adoption");
+    assert.deepEqual(fixture.coverageRequests, ["default", "admin-adoption"]); assert.equal(fixture.coldDiscoveries(), 0);
+    assert.throws(() => fixture.readQualified(value, [], { selection: "admin-adoption" }, first), /selected native tail/u);
+    assert.throws(() => fixture.readQualified(JSON.parse(JSON.stringify(value)) as Qualification), /live qualified execution/u);
+    assert.equal(fixture.coldDiscoveries(), 0);
+  });
+  await control("actual reader rejects missing corrupt and mismatched private discovery without falling back to cold analysis", async () => {
+    for (const failure of ["missing", "corrupt", "baselineHead", "finalHead", "sourceSha256"] as const) {
+      const fixture = executorFixture(), value = await qualify(fixture.api), invocation = fixture.api.privateInvocation(value);
+      assert.ok(invocation.sourceDiscovery);
+      if (failure === "missing") delete invocation.sourceDiscovery;
+      else if (failure === "corrupt") invocation.sourceDiscovery.changeImpact.deltaSha256 = "f".repeat(64);
+      else {
+        invocation.sourceDiscovery[failure] = "f".repeat(failure === "sourceSha256" ? 64 : 40);
+        invocation.sourceDiscoverySha256 = sha256(JSON.stringify(invocation.sourceDiscovery));
+      }
+      assert.throws(() => fixture.readQualified(value), /private preallocation source discovery/iu);
+      assert.equal(fixture.coldDiscoveries(), 0); assert.equal(fixture.coverageRequests.length, 0);
+    }
+  });
+  await control("actual reader rejects explicit tracked-file and exact Git delta changes under an otherwise identical manifest", async () => {
+    const fixture = executorFixture(), value = await qualify(fixture.api), manifestBefore = fixture.manifest();
+    assert.throws(() => fixture.readQualified(value, [fixture.selected[0]!]), /explicit additional files/u);
+    assert.deepEqual(fixture.manifest(), manifestBefore);
+    fixture.changedFiles.push(fixture.selected[0]!);
+    assert.throws(() => fixture.readQualified(value), /exact Git and explicit-file delta/u);
+    assert.equal(fixture.coldDiscoveries(), 0); assert.equal(fixture.coverageRequests.length, 0);
+  });
+  await control("actual Admission snapshots explicit input identity before asynchronous profile execution", async () => {
+    const additional: string[] = [];
+    const fixture = executorFixture({ mutateAdditional: () => { additional.push("scripts/verify-admin-form-system.mts"); } });
+    const value = await fixture.api.qualifyLocalVerificationAdmission({ baselineHead: "a".repeat(40), additionalSourceFiles: additional }, new AbortController().signal);
+    assert.equal(value.status, "PASS"); assert.equal(additional.length, 1);
+    assert.deepEqual(fixture.api.privateInvocation(value).sourceDiscovery?.additionalSourceFiles, []);
+    assert.equal(fixture.readQualified(value).changeImpact?.proofBoundary, "source_discovery_only");
+    assert.throws(() => fixture.readQualified(value, additional), /explicit additional files/u);
+    assert.equal(fixture.coldDiscoveries(), 0);
+  });
+  await control("actual live Final Quality admission rejects absent preallocation qualification without adding a bounded-source gate", async () => {
+    let ownershipReads = 0;
+    const stop = Error("Controlled ownership boundary; no resource allocation");
+    const run = new Function("assert", "ownedProcessCleanupQualification", compile(declaration("runOwnedPublicVerification")) + ";return runOwnedPublicVerification;")(
+      assert, () => ({ fullEProcessCleanupQualified: true })) as typeof import("./lib/isolated-public-verification.mts").runOwnedPublicVerification;
+    const context: Parameters<typeof run>[0] = { runDirectory: root, apiPort: 57100,
+      anonKey: "controlled-anon", serviceKey: "controlled-service",
+      cleanEnvironment: () => ({ NODE_ENV: "test" }), sanitize: value => value,
+      record: () => { throw stop; }, assertOwned: async () => { ownershipReads++; throw stop; } };
+    const invoke = (request: Partial<InputRequest>) => run(context, { additionalSourceFiles: [], localVerification: {} as InputImpact, ...request }, new AbortController().signal, async () => undefined);
+    await assert.rejects(invoke({ finalQualityGate: true }), /preallocation live qualification/u); assert.equal(ownershipReads, 0);
+    await assert.rejects(invoke({}), error => error === stop); assert.equal(ownershipReads, 1);
+  });
+  await control("actual Admission executor retains missing corrupt stale nonzero and undrained-native failures without sealing", async () => {
+    for (const options of [{ raw: "wrong-nonce" }, { raw: "missing-schema" }, { raw: "corrupt" }, { nonzero: true }, { nativeFailure: true }, { validatorFailure: true },
+      { childFailure: true }, { childFailure: true, cleanupFailure: true }] as const) {
+      const fixture = executorFixture(options), value = await qualify(fixture.api); assert.equal(value.status, "BLOCKED"); assert.ok(value.failures.length > 0);
+      assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /live qualified execution/u);
+      if ("validatorFailure" in options) assert.equal(fixture.launches.length, 3); else assert.equal(fixture.launches.length, 1);
+      if ("nonzero" in options) assert.equal((value.executions[0]!.result as { rawExit: { code: number } }).rawExit.code, 7);
+      if ("childFailure" in options) { assert.deepEqual(fixture.stops, ["owner_shutdown"]); assert.equal((value.executions[0]!.result as { rawExit: { code: number } }).rawExit.code, 7); }
+      if ("cleanupFailure" in options) assert.ok(value.failures.some(failure => failure.includes("cleanup failure")) && value.failures.some(failure => failure.includes("undrained")));
+    }
+    const fixture = executorFixture(), controller = new AbortController(), original = Error("Pre-aborted Admission"); controller.abort(original);
+    await assert.rejects(qualify(fixture.api, controller.signal), error => error === original); assert.equal(fixture.inspections(), 0); assert.equal(fixture.launches.length, 0);
+  });
+  return { status: "PASS", actualOsProcessesExecuted: false, actualFilesWritten: false, sourceOwnerSha256: sha256(source) };
+}
+
+/** Actual deadline/child declarations with controlled ports; no native process or filesystem allocation. */
+async function verifyAdoptionDeadlineControls() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = (name: string) => {
+    const node = file.statements.find((entry): entry is ts.FunctionDeclaration => ts.isFunctionDeclaration(entry) && entry.name?.text === name);
+    assert.ok(node?.body, "Missing actual deadline owner declaration: " + name); return node;
+  };
+  const budgetNode = declaration("localVerificationQualityPrefixDeadlineMs");
+  const compile = (text: string) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const loadBudget = (text = budgetNode.getText(file)) => new Function(compile(text.replace(/^export /u, ""))
+    + ";return localVerificationQualityPrefixDeadlineMs;")() as () => number;
+  const budgetApi = { localVerificationQualityPrefixDeadlineMs: loadBudget() };
+  const requireActualBudget = (api: Pick<typeof import("./lib/isolated-public-verification.mts"), "localVerificationQualityPrefixDeadlineMs">) => {
+    const value = api.localVerificationQualityPrefixDeadlineMs();
+    assert.equal(value, 1_800_000, "Adoption consumes the unchanged canonical quality-prefix budget.");
+    assert.ok(Number.isSafeInteger(value) && value >= 1 && value <= 2_147_483_647);
+    return value;
+  };
+  check("actual Adoption deadline is the finite timer-safe existing quality-prefix budget", () => {
+    requireActualBudget(budgetApi);
+    const returned = budgetNode.body!.statements.find(ts.isReturnStatement); assert.ok(returned?.expression);
+    const original = budgetNode.getText(file), offset = returned.expression.getStart(file) - budgetNode.getStart(file);
+    for (const replacement of ["180_000", "Number.POSITIVE_INFINITY", "0.5"]) {
+      const mutant = original.slice(0, offset) + replacement + original.slice(offset + returned.expression.getWidth(file));
+      assert.notEqual(mutant, original);
+      assert.throws(() => requireActualBudget({ localVerificationQualityPrefixDeadlineMs: loadBudget(mutant) }), assert.AssertionError);
+    }
+  });
+  check("actual canonical quality-prefix projection invokes its owner budget for every existing check", () => {
+    const run = declaration("runOwnedPublicVerification"), body = run.body!.statements.find(ts.isTryStatement); assert.ok(body);
+    const prefix = body.tryBlock.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
+      .find(node => node.name.getText(file) === "qualityPrefix"); assert.ok(prefix?.initializer);
+    let calls = 0;
+    const project = new Function("qualityScripts", "localVerificationQualityPrefixDeadlineMs", compile("return (" + prefix.initializer.getText(file) + ");")) as
+      (checks: string[], budget: () => number) => Array<{ qualityScript: string; limitMs: number }>;
+    const checks = ["verify:consumer-capability-adoption", "verify:executable-governance"];
+    const rows = project(checks, () => { calls++; return requireActualBudget(budgetApi); });
+    assert.deepEqual(rows.map(row => row.qualityScript), checks); assert.equal(calls, checks.length);
+    assert.ok(rows.every(row => row.limitMs === budgetApi.localVerificationQualityPrefixDeadlineMs()));
+    const custom = project(checks, () => 731); assert.ok(custom.every(row => row.limitMs === 731), "The actual projection consumes its supplied owner port, not a duplicated literal.");
+  });
+  type ControlledChild = EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; pid: number; exitCode: number | null; signalCode: NodeJS.Signals | null };
+  const code = compile(["ownedPath", "runOwnedVerificationChild"].map(name => declaration(name).getText(file).replace(/^export /u, "")).join("\n"));
+  const proofs: Array<Record<string, unknown>> = [];
+  const fixture = () => {
+    const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), pid: 701,
+      exitCode: null as number | null, signalCode: null as NodeJS.Signals | null }) as ControlledChild;
+    const writes = new Map<string, string>(), children = new Set<ChildProcess>(), scheduled: Array<{ callback: () => void; delay: number }> = [];
+    const cleared: unknown[] = [], stopped: Array<string | null> = [], launches: Array<Record<string, unknown>> = [];
+    const nativeState = { reason: "completed", rootExitCode: 0 };
+    const cleanup = { status: "PASS" as const, platform: "controlled-native-port", method: "controlled-owned-cleanup",
+      processTreeVerified: true, forcedTermination: false, observedProcesses: 1, liveProcesses: 0, residualProcessesAfterExit: 0 };
+    const forbidden = () => assert.fail("Controlled deadline declaration must not allocate an OS resource.");
+    const run = new Function("assert", "isAbsolute", "resolve", "sep", "existsSync", "spawn", "spawnWindowsOwnedProcess", "stopChild",
+      "writeFileSync", "setTimeout", "clearTimeout", "process", code + ";return runOwnedVerificationChild;")(
+      assert, path.isAbsolute, path.resolve, path.sep, () => false, forbidden,
+      (options: Record<string, unknown>) => { launches.push(options); return { child,
+        readIdentity: () => ({ rootPid: 702, rootPpid: child.pid, rootCreationTimeUtc: "2026-10-30T00:00:00.0000000Z" }),
+        readReceipt: () => ({ ...nativeState }), native: { executable: "controlled-no-native-executable" } }; },
+      async (_child: unknown, _environment: unknown, reason?: string) => { assert.equal(_child, child); stopped.push(reason ?? null); return cleanup; },
+      (name: string, text: string) => { assert.equal(writes.has(name), false); writes.set(name, text); },
+      (callback: () => void, delay: number) => { const timer = { callback, delay }; scheduled.push(timer); return timer; },
+      (timer: unknown) => cleared.push(timer), { platform: "win32", pid: process.pid }) as typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
+    const context = { runDirectory: path.join(root, ".tmp-qa", "controlled-deadline-no-files"), sanitize: (value: string) => value,
+      cleanEnvironment: (): NodeJS.ProcessEnv => ({ NODE_ENV: "test" }) };
+    const invoke = (signal = new AbortController().signal, limitMs = requireActualBudget(budgetApi)) => run({ sourceDirectory: root, context, children, signal },
+      ["--experimental-strip-types", "scripts/verify-admin-row-actions-capability.mts", "--consumer-capability-audit"], { NODE_ENV: "test" }, "controlled-adoption", limitMs);
+    const close = (rootCode: number, reason = "completed") => { nativeState.rootExitCode = rootCode; nativeState.reason = reason;
+      child.exitCode = 0; child.emit("close", 0); };
+    return { invoke, close, child, writes, children, scheduled, cleared, stopped, launches };
+  };
+  const bounded = async <T,>(pending: Promise<T>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { return await Promise.race([pending, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error("Controlled deadline promise exceeded its test bound.")), 1_000); })]); }
+    finally { if (timer) clearTimeout(timer); }
+  };
+  const control = async (name: string, execute: () => Promise<void>) => {
+    try { await execute(); } catch (error) { console.error("FAIL " + name); throw error; } cases.push(name);
+  };
+  await control("actual child receives the Adoption budget in both native and JS timer ports without profiling", async () => {
+    const value = fixture(), pending = value.invoke();
+    assert.equal(value.launches.length, 1); assert.equal(value.launches[0]!.limitMs, requireActualBudget(budgetApi));
+    assert.equal(value.scheduled.length, 1); assert.equal(value.scheduled[0]!.delay, requireActualBudget(budgetApi));
+    assert.deepEqual(value.launches[0]!.args, ["--experimental-strip-types", "scripts/verify-admin-row-actions-capability.mts", "--consumer-capability-audit"]);
+    value.child.stdout.emit("data", "controlled source audit PASS"); value.close(0);
+    const result = await bounded(pending); assert.equal(result.code, 0); assert.deepEqual(result.rawExit, { code: 0, signal: null });
+    assert.equal(value.children.size, 0); assert.deepEqual(value.cleared, [value.scheduled[0]]); assert.equal(value.writes.size, 2);
+    proofs.push({ control: "adoption_owner_budget_ports", deadlineMs: value.scheduled[0]!.delay, nativeDeadlineMs: value.launches[0]!.limitMs,
+      rawExit: result.rawExit, helperExit: result.helperExit, cleanup: result.cleanup, actualNativeProcessExecuted: false });
+  });
+  await control("actual child preserves a nonzero test exit independently of deadline and cancellation", async () => {
+    const value = fixture(), pending = value.invoke(); value.child.stderr.emit("data", "AssertionError: controlled test failure"); value.close(7);
+    const result = await bounded(pending); assert.equal(result.code, 7); assert.deepEqual(result.rawExit, { code: 7, signal: null });
+    assert.equal(result.stderr, "AssertionError: controlled test failure"); assert.deepEqual(value.stopped, [null]); assert.equal(value.children.size, 0);
+    proofs.push({ control: "nonzero_is_not_timeout", rawExit: result.rawExit, helperExit: result.helperExit, cleanup: result.cleanup });
+  });
+  for (const reason of ["timeout", "cancelled"] as const) await control("actual child retains " + reason + " plus original root exit and complete controlled cleanup", async () => {
+    const value = fixture(), controller = new AbortController(), pending = value.invoke(controller.signal);
+    const rejected = bounded(pending).then(() => assert.fail("Termination must remain a rejected failure."), error => error as Error & {
+      childResult: { code: number | null; signal: NodeJS.Signals | null; reason: string; cleanup: { status: string; liveProcesses: number }; helperExit: { code: number | null; signal: NodeJS.Signals | null } } });
+    if (reason === "timeout") value.scheduled[0]!.callback(); else controller.abort(Error("Controlled deadline cancellation"));
+    value.close(37, reason); const error = await rejected;
+    assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+    assert.equal(error.childResult.reason, reason); assert.equal(error.childResult.code, 37); assert.equal(error.childResult.signal, null);
+    assert.deepEqual(error.childResult.helperExit, { code: 0, signal: null }); assert.equal(error.childResult.cleanup.status, "PASS"); assert.equal(error.childResult.cleanup.liveProcesses, 0);
+    assert.deepEqual(value.stopped, [reason]); assert.equal(value.children.size, 0); assert.deepEqual(value.cleared, [value.scheduled[0]]);
+    proofs.push({ control: "owned_" + reason, originalRootExit: { code: error.childResult.code, signal: error.childResult.signal },
+      helperExit: error.childResult.helperExit, cleanup: error.childResult.cleanup, actualNativeProcessExecuted: false });
+  });
+  await control("actual child rejects pre-cancellation and every timer-unsafe budget before allocation", async () => {
+    const preaborted = fixture(), controller = new AbortController(), original = Error("Controlled pre-cancelled Adoption"); controller.abort(original);
+    await assert.rejects(bounded(preaborted.invoke(controller.signal)), error => error === original);
+    const noAllocation = (value: ReturnType<typeof fixture>) => {
+      assert.equal(value.launches.length, 0); assert.equal(value.scheduled.length, 0); assert.equal(value.writes.size, 0); assert.equal(value.stopped.length, 0); assert.equal(value.children.size, 0);
+    };
+    noAllocation(preaborted);
+    for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5, 2_147_483_648]) {
+      const value = fixture();
+      await assert.rejects(bounded(value.invoke(undefined, limit)), /deadline must be a finite timer-safe positive integer/u); noAllocation(value);
+    }
+    proofs.push({ control: "before_allocation_rejection", preCancelled: true, invalidBudgetCount: 6, childAllocations: 0, evidenceWrites: 0, timerAllocations: 0 });
+  });
+  return { status: "PASS", deadlineMs: requireActualBudget(budgetApi), proofs, actualNativeProcessExecuted: false, sourceOwnerSha256: sha256(source) };
 }
 
 async function verifyQualifiedSelectionControls() {
@@ -4555,12 +5581,12 @@ async function verifyQualifiedSelectionControls() {
     const expression = ts.isAsExpression(declaration.initializer) ? declaration.initializer.expression : declaration.initializer;
     assert.ok(ts.isCallExpression(expression) && ts.isNewExpression(expression.expression));
     const constructor = expression.expression; assert.ok(constructor.arguments);
-    const code = "function inspectLocalVerificationChangeImpact(){return windowsOwnedProcessCapability();} function executeLocalVerificationTargets(input){return spawnWindowsOwnedProcess(input);}";
+    const code = "function inspectLocalVerificationChangeImpact(){return windowsOwnedProcessCapability();} function executeLocalVerificationTargets(input){return spawnWindowsOwnedProcess(input);} function qualifyLocalVerificationAdmission(){return windowsOwnedProcessCapability();}";
     let forbiddenCalls = 0, capabilityCalls = 0, nativeLaunchCalls = 0;
     const forbidden = () => { forbiddenCalls++; throw Error("Canonical factory probe reached an allocation or external operation."); };
     const capability = Object.freeze({ status: "PASS", probe: "actual_factory_capability_binding" }), native = Object.freeze({ probe: "actual_factory_launch_binding_no_process" });
     const input = Object.freeze({ args: [], controlledNoAllocationProbe: true });
-    const bindings = { assert, root, code, ts, path, sha256: forbidden, execFileSync: forbidden, selectSourceInventory: forbidden, sourceIncluded: forbidden,
+    const bindings = { assert, root, code, ts, path, createHash, fileURLToPath, sha256: forbidden, execFileSync: forbidden, selectSourceInventory: forbidden, sourceIncluded: forbidden,
       existsSync: forbidden, lstatSync: forbidden, realpathSync: forbidden, readFileSync: forbidden, collectExecutableSourceGraph: forbidden,
       spawn: forbidden, mkdtempSync: forbidden, mkdirSync: forbidden, writeFileSync: forbidden, rmSync: forbidden, readdirSync: forbidden,
       createRequire: forbidden, isBuiltin: forbidden,
@@ -4651,7 +5677,7 @@ async function verifyQualifiedSelectionControls() {
   };
   const verifyActualSourceGuardQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationTargets">) => {
   const nativePortEffects = { ...sourceGuardHashes,
-    "scripts/verify-verification-infrastructure.mts": "6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230" };
+    "scripts/verify-verification-infrastructure.mts": "b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2" };
   const nativePortAnalysis = (file: string, semanticChange = true): Analysis => {
     const value = qualityAnalysis(); value.changes = [{ ...value.changes[0]!, file, semanticChange }]; return value;
   };
@@ -4717,12 +5743,17 @@ async function verifyQualifiedSelectionControls() {
     assert.ok(redirected.blocking.includes("missing_exact_registered_source_guard:scripts/verify-executable-governance.mts"));
   });
   check("both reviewed direct quality leaves qualify once while invented hashes and markers leave Infrastructure blocked", () => {
-    const actual = { ...sourceGuardHashes, "scripts/verify-verification-infrastructure.mts": "6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230" };
+    const actual = { ...sourceGuardHashes, "scripts/verify-verification-infrastructure.mts": "b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2" };
     const selected = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, actual);
     assert.equal(selected.targets.length, 2); assert.deepEqual(selected.blocking, []);
     assert.equal(new Set(selected.targets.map(target => target.step)).size, 2);
     assert.ok(selected.targets.every(target => target.kind === "source_guard" && target.proofLevel === "source_guard_execution"
       && target.nativePersistenceVerified === false && target.businessConsumerAdoptionVerified === false));
+    const previousEffect = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash,
+      { ...actual, "scripts/verify-verification-infrastructure.mts": "6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230" });
+    assert.equal(previousEffect.targets.some(target => target.entry === "scripts/verify-verification-infrastructure.mts"), false);
+    assert.ok(previousEffect.selections.some(row => row.family === "scripts/verify-verification-infrastructure.mts" && row.selected && !row.qualified));
+    assert.ok(previousEffect.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:scripts/verify-verification-infrastructure.mts"));
     for (const invented of ["UNQUALIFIED_DYNAMIC_EXECUTION_CLOSURE", "PASS verification infrastructure:", "a".repeat(64)]) {
       const rejected = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash,
         { ...actual, "scripts/verify-verification-infrastructure.mts": invented });
@@ -4927,7 +5958,7 @@ async function verifyQualifiedSelectionControls() {
 
 async function localRiskVerificationOnly() {
   verifyFinalQualityGatePlan(); const plan = verifyLocalRiskVerificationPlan(); await verifyLocalRiskExecutionControls(plan.prefix);
-  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); await verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
+  await verifyLocalRiskControlLeaseAdmission(); await verifyQualifiedFormHarnessControls(); await verifySharedChildControls(); await verifyAdoptionDeadlineControls(); await verifyAdmissionQualificationControls(); await verifyQualifiedSelectionControls(); verifyQualifiedResultControls(); verifyAdminMeasurementRestartPolicy();
   console.log(JSON.stringify({ status: "PASS", scope: "local-risk-verification-only", checks: cases.length, cases,
     canonicalPlannerExecuted: true, diagnosticPerformance: qualifiedFormDiagnosticCost,
     browserExecuted: false, dockerExecuted: false, databaseCalls: 0, networkRequests: null, externalNetworkRequests: 0, ownedLoopbackTransportExecuted: true,
@@ -5048,7 +6079,9 @@ async function changeImpactOnly() {
       ci = { eventName, event, githubSha };
     }
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "localVerificationSourceGuardEffects", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
+    const names = ["GATES", "localVerificationAdmissionInvocations", "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission",
+      "localVerificationAssertionRelocationRequired", "validateLocalVerificationAssertionRelocations", "validateLocalVerificationInputObservations", "localVerificationInstalledRuntimePackages", "localVerificationAdmissionRuntimeIdentity",
+      "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "localVerificationSourceGuardEffects", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",
       "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"];
     const declarations = names.map(name => {
@@ -5058,10 +6091,10 @@ async function changeImpactOnly() {
     });
     const code = ts.transpileModule(adminAdoptionControlSource(parsed) + "\n" + declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
     const api = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph",
-      "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", "nodeModule", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets};")(
+      "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", "nodeModule", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", "fileURLToPath", "createHash", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets,qualifyLocalVerificationAdmission};")(
       assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph,
-      spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep, { createRequire, isBuiltin }, windowsOwnedProcessCapability, spawnWindowsOwnedProcess) as
-      Pick<typeof import("./lib/isolated-public-verification.mts"), "inspectLocalVerificationChangeImpact" | "executeLocalVerificationTargets">;
+      spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep, { createRequire, isBuiltin }, windowsOwnedProcessCapability, spawnWindowsOwnedProcess, fileURLToPath, createHash) as
+      Pick<typeof import("./lib/isolated-public-verification.mts"), "inspectLocalVerificationChangeImpact" | "executeLocalVerificationTargets" | "qualifyLocalVerificationAdmission">;
     if (executeMode) {
       const { sourceReport: report, ...targetedExecution } = await api.executeLocalVerificationTargets({ baselineHead: baselineHead! }, new AbortController().signal);
       const combined = { ...report, sourceStatus: report.status, status: targetedExecution.status, targetedExecution,
@@ -5070,9 +6103,14 @@ async function changeImpactOnly() {
         exitCode: targetedExecution.exitCode, behavioralPass: false, releaseEvidence: false };
       console.log(JSON.stringify(combined, null, 2)); process.exitCode = combined.exitCode; return;
     }
+    const discovery = ciMode ? api.inspectLocalVerificationChangeImpact({ automatic: true, ci }) : undefined;
+    const qualificationNeeded = discovery && "changeImpact" in discovery && discovery.changeImpact?.qaQuality?.some(row => row.failures.length);
+    const admissionQualification = qualificationNeeded ? await api.qualifyLocalVerificationAdmission({ ci }, new AbortController().signal) : undefined;
     const report = api.inspectLocalVerificationChangeImpact({ baselineHead, impact, automatic: ciMode, ci,
+      ...(admissionQualification?.status === "PASS" ? { admissionQualification } : {}),
       additionalSourceFiles: args.filter(argument => argument.startsWith("--additional-source=")).map(argument => argument.slice("--additional-source=".length)) });
-    console.log(JSON.stringify(report, null, 2)); process.exitCode = report.exitCode;
+    const combined = admissionQualification?.status === "BLOCKED" ? { ...report, status: "BLOCKED_ADMISSION_QUALIFICATION", exitCode: 1, admissionQualification } : report;
+    console.log(JSON.stringify(combined, null, 2)); process.exitCode = combined.exitCode;
   } catch (error) {
     console.log(JSON.stringify({ status: "BLOCKED_SOURCE_CONSISTENCY", releaseEvidence: false, checksExecuted: 0, browserExecuted: false,
       databaseCalls: 0, networkRequests: 0, diagnostic: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid impact inspection input." }, null, 2));
@@ -5169,6 +6207,8 @@ async function main() {
   await verifyLocalRiskControlLeaseAdmission();
   await verifyQualifiedFormHarnessControls();
   await verifySharedChildControls();
+  await verifyAdoptionDeadlineControls();
+  await verifyAdmissionQualificationControls();
   await verifyQualifiedSelectionControls();
   verifyQualifiedResultControls();
   await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
@@ -6019,5 +7059,6 @@ async function retainedFinalQualityOnly() {
 }
 
 const verification = process.argv.includes("--ci-change-impact") || process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
-const selectedVerification = process.argv.includes("--owned-child-controls-only") ? ownedChildControlsOnly : verification;
+const selectedVerification = process.argv.includes("--admission-qualification-only") ? admissionQualificationOnly
+  : process.argv.includes("--owned-child-controls-only") ? ownedChildControlsOnly : verification;
 (process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : selectedVerification)().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });

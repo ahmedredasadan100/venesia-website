@@ -47,6 +47,10 @@ export function validateTransportOptions(options) {
   if (new Set(ports).size !== ports.length || ports.some(port => !Number.isInteger(port) || port <= 1024 || port > 65535)) {
     throw new Error('INVALID_QA_TRANSPORT_PORTS');
   }
+  if (options.setupTimeoutMs !== undefined && (!Number.isInteger(options.setupTimeoutMs) || options.setupTimeoutMs < 1 || options.setupTimeoutMs > CONNECT_MS)) {
+    throw new Error('INVALID_QA_TRANSPORT_SETUP_TIMEOUT');
+  }
+  if (options.signal !== undefined && !(options.signal instanceof AbortSignal)) throw new Error('INVALID_QA_TRANSPORT_SIGNAL');
 }
 
 /** Wait before opening a new owned PG socket; never retry a dispatched connection. */
@@ -70,12 +74,62 @@ export async function startHostAccessBridge(options) {
   const sessions = new Set();
   const processes = new Map();
   const servers = [];
+  const socketClosures = new Set();
   const counts = { accepted: 0, rejected: 0, failed: 0, closed: 0 };
   // First observed host close boundary only; these counters do not diagnose a remote root cause.
   const closeReasons = Object.fromEntries(['peer_closed', 'idle_timeout', 'session_lifetime_timeout', 'ownership_timeout',
     'ownership_rejected', 'pipe_start_failed', 'pipe_input_error', 'pipe_output_error', 'pipe_nonzero_exit', 'pipe_eof',
     'owner_shutdown', 'unclassified'].map(reason => [reason, 0]));
-  let stopping = false;
+  let stopping = false, closePromise, setupTimer, rejectPendingSetup, firstFailure, currentListener;
+  let setupPhase = 'before_listener_setup';
+  let setupComplete = false, setupTimerActive = false, cleanupStatus = 'NOT_STARTED';
+  const setupTimeoutMs = options.setupTimeoutMs ?? CONNECT_MS, setupStarted = performance.now(), setupWallStarted = Date.now();
+  const setupController = new AbortController();
+  const originalFailure = Symbol('qa-transport-original-error');
+  const cleanupEvidence = () => ({ status: cleanupStatus, listeners: servers.filter(record => record.server.listening).length,
+    pendingListenerCloses: servers.filter(record => !record.closed).length, active: sessions.size, localProcesses: processes.size,
+    pendingSocketCloses: socketClosures.size, setupTimerActive });
+  function transportFailure(original, code, phase, record) {
+    // Keep the exact Error privately; neither its message/stack nor arbitrary
+    // custom properties are copied to printable diagnostics or Error.cause.
+    const field = name => original && typeof original === 'object' ? Object.getOwnPropertyDescriptor(original, name)?.value : undefined;
+    const originalCode = field('code'), syscall = field('syscall'), address = field('address'), port = field('port'), errno = field('errno');
+    const cause = Object.freeze({ name: 'Error',
+      code: typeof originalCode === 'string' && /^(?:E[A-Z0-9_]{1,62}|ERR_[A-Z0-9_]{1,59}|ABORT_ERR|UNKNOWN)$/u.test(originalCode) ? originalCode : null,
+      errno: Number.isInteger(errno) && errno >= -2147483648 && errno <= 2147483647 ? errno : null,
+      syscall: ['listen', 'bind'].includes(syscall) ? syscall : null,
+      address: address === '127.0.0.1' ? address : null,
+      port: record && port === options.ports[record.service] ? port : null, phase });
+    const error = Object.assign(new Error(code, { cause }), { code, phase });
+    Object.defineProperty(error, originalFailure, { value: original, enumerable: false });
+    error.diagnostic = Object.freeze({ schema: 1, code, phase, service: record?.service ?? null, listenerIndex: record?.index ?? null,
+      address: record ? '127.0.0.1' : null, port: record ? options.ports[record.service] : null, causeCode: cause.code, syscall: cause.syscall,
+      cause, originalMetadataComplete: cause.code !== null && cause.syscall !== null && cause.address !== null && cause.port !== null,
+      originalErrorRetainedPrivately: original instanceof Error, setupTimeoutMs, cleanup: Object.freeze(cleanupEvidence()) });
+    return error;
+  }
+  function failSetup(original, code, phase, record) {
+    firstFailure ??= transportFailure(original, code, phase, record);
+    rejectPendingSetup?.(firstFailure);
+    setupController.abort();
+  }
+  function checkSetup(record) {
+    if (firstFailure) throw firstFailure;
+    if (options.signal?.aborted) {
+      failSetup(options.signal.reason, 'QA_TRANSPORT_CANCELLED', 'listener_setup', record); throw firstFailure;
+    }
+    if (Date.now() < setupWallStarted || performance.now() - setupStarted >= setupTimeoutMs || Date.now() - setupWallStarted >= setupTimeoutMs) {
+      failSetup(undefined, 'QA_TRANSPORT_SETUP_TIMEOUT', 'listener_setup', record); throw firstFailure;
+    }
+  }
+  const abort = () => {
+    if (!setupComplete) failSetup(options.signal.reason, 'QA_TRANSPORT_CANCELLED', 'listener_setup', servers.at(-1));
+    else {
+      firstFailure ??= transportFailure(options.signal.reason, 'QA_TRANSPORT_CANCELLED', 'active_bridge', null);
+      void close().catch(() => undefined);
+    }
+  };
+  if (options.signal?.aborted) throw transportFailure(options.signal.reason, 'QA_TRANSPORT_CANCELLED', 'before_listener_setup', null);
 
   async function open(client, service) {
     client.on('error', () => undefined);
@@ -87,6 +141,9 @@ export async function startHostAccessBridge(options) {
     }
     const session = { client, child: null, released: false };
     sessions.add(session);
+    let socketClosed;
+    const socketClosure = new Promise(done => { socketClosed = done; });
+    socketClosures.add(socketClosure);
     counts.accepted++;
     client.pause();
     let lifetime;
@@ -96,6 +153,7 @@ export async function startHostAccessBridge(options) {
       session.released = true;
       clearTimeout(lifetime);
       clearTimeout(ownershipTimer);
+      client.setTimeout(0);
       if (failed) counts.failed++;
       counts.closed++;
       closeReasons[Object.hasOwn(closeReasons, reason) ? reason : 'unclassified']++;
@@ -105,7 +163,7 @@ export async function startHostAccessBridge(options) {
       if (!client.destroyed) client.destroy();
     }
     session.release = release;
-    client.once('close', () => release());
+    client.once('close', () => { socketClosures.delete(socketClosure); socketClosed(); release(); });
     client.setTimeout(IDLE_MS, () => release(true, 'idle_timeout'));
     lifetime = setTimeout(() => release(true, 'session_lifetime_timeout'), LIFETIME_MS);
     try {
@@ -143,48 +201,90 @@ export async function startHostAccessBridge(options) {
     } catch (error) { release(true, error instanceof Error && error.message === 'OWNERSHIP_TIMEOUT' ? 'ownership_timeout' : 'ownership_rejected'); }
   }
 
-  async function close() {
-    if (stopping) return;
+  function close() {
+    if (closePromise) return closePromise;
     stopping = true;
-    for (const session of sessions) {
-      session.release(false, 'owner_shutdown');
-    }
-    await Promise.all(servers.map(server => new Promise(done => {
-      if (!server.listening) done();
-      else server.close(() => done());
-    })));
-    let deadline;
-    try {
-      await Promise.race([
-        Promise.all([...processes.values()]),
-        new Promise((_, reject) => {
-          deadline = setTimeout(() => reject(new Error('QA_TRANSPORT_CLEANUP_INCOMPLETE')), 5000);
-        }),
-      ]);
-    } finally { clearTimeout(deadline); }
-    if (sessions.size || processes.size) throw new Error('QA_TRANSPORT_CLEANUP_INCOMPLETE');
+    cleanupStatus = 'PENDING';
+    clearTimeout(setupTimer); setupTimerActive = false;
+    options.signal?.removeEventListener('abort', abort);
+    // Publish one promise before any close can synchronously emit an error.
+    closePromise = Promise.resolve().then(async () => {
+      setupController.abort();
+      for (const session of sessions) session.release(false, 'owner_shutdown');
+      let deadline;
+      try {
+        const closed = await Promise.race([
+          Promise.allSettled([...servers.map(record => new Promise((done, reject) => {
+            try { record.server.close(error => {
+              if (error && error.code !== 'ERR_SERVER_NOT_RUNNING') return reject(error);
+              record.closed = true; done();
+            }); } catch (error) {
+              if (error.code !== 'ERR_SERVER_NOT_RUNNING') return reject(error);
+              record.closed = true; done();
+            }
+          })), ...processes.values(), ...socketClosures]),
+          new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error('QA_TRANSPORT_CLEANUP_INCOMPLETE')), 5000); }),
+        ]);
+        if (closed.some(result => result.status === 'rejected')) throw new Error('QA_TRANSPORT_CLEANUP_INCOMPLETE');
+        if (sessions.size || processes.size || socketClosures.size || servers.some(record => record.server.listening || !record.closed)) throw new Error('QA_TRANSPORT_CLEANUP_INCOMPLETE');
+        cleanupStatus = 'PASS';
+      } catch {
+        cleanupStatus = 'FAIL'; throw new Error('QA_TRANSPORT_CLEANUP_INCOMPLETE');
+      } finally {
+        clearTimeout(deadline);
+        if (firstFailure) firstFailure.diagnostic = Object.freeze({ ...firstFailure.diagnostic, cleanup: Object.freeze(cleanupEvidence()) });
+      }
+    });
+    // Event-driven close must never introduce an unhandled rejection. Explicit
+    // callers still receive this same rejected promise and FAIL evidence.
+    void closePromise.catch(() => undefined);
+    return closePromise;
   }
 
+  options.signal?.addEventListener('abort', abort, { once: true });
+  setupTimer = setTimeout(() => failSetup(undefined, 'QA_TRANSPORT_SETUP_TIMEOUT', 'listener_setup', servers.at(-1)), setupTimeoutMs);
+  setupTimerActive = true;
   try {
-    for (const service of Object.keys(TARGETS)) {
+    for (const [index, service] of Object.keys(TARGETS).entries()) {
+      const record = { service, index, server: null, closed: false };
+      currentListener = record; setupPhase = 'create_server';
+      checkSetup(record);
       const server = net.createServer({ allowHalfOpen: true }, client => void open(client, service));
-      servers.push(server);
+      record.server = server; servers.push(record);
+      setupPhase = 'listen';
       await new Promise((done, reject) => {
-        server.once('error', reject);
-        server.listen({ host: '127.0.0.1', port: options.ports[service], exclusive: true }, done);
+        rejectPendingSetup = reject;
+        server.on('error', error => {
+          if (!setupComplete) failSetup(error, 'QA_TRANSPORT_LISTEN_FAILED', 'listen', record);
+          else {
+            firstFailure ??= transportFailure(error, 'QA_TRANSPORT_LISTEN_FAILED', 'active_listener', record);
+            void close().catch(() => undefined);
+          }
+        });
+        try {
+          checkSetup(record);
+          server.listen({ host: '127.0.0.1', port: options.ports[service], exclusive: true, signal: setupController.signal }, () => {
+            rejectPendingSetup = undefined;
+            try { checkSetup(record); done(); } catch (error) { reject(error); }
+          });
+        } catch (error) { failSetup(error, 'QA_TRANSPORT_LISTEN_FAILED', 'listen', record); }
       });
-      server.on('error', () => { void close(); });
     }
-  } catch {
-    await close();
-    throw new Error('QA_TRANSPORT_LISTEN_FAILED');
+    checkSetup(servers.at(-1)); setupComplete = true;
+    clearTimeout(setupTimer); setupTimerActive = false;
+  } catch (error) {
+    firstFailure ??= transportFailure(error, 'QA_TRANSPORT_LISTEN_FAILED', setupPhase, currentListener);
+    try { await close(); } catch { /* The original setup failure remains primary; cleanup FAIL stays explicit. */ }
+    firstFailure.diagnostic = Object.freeze({ ...firstFailure.diagnostic, cleanup: Object.freeze(cleanupEvidence()) });
+    throw firstFailure;
   }
   return Object.freeze({
     close,
     snapshot: () => ({ ...counts, closeReasons: { ...closeReasons }, closeReasonBoundary: 'first_observed_host_boundary',
       active: sessions.size, localProcesses: processes.size, stopping,
-      listeners: servers.filter(server => server.listening).map(server => {
-        const address = server.address();
+      cleanup: cleanupEvidence(), failure: firstFailure ? structuredClone(firstFailure.diagnostic) : null,
+      listeners: servers.filter(record => record.server.listening).map(record => {
+        const address = record.server.address();
         return { host: address.address, port: address.port };
       }),
     }),
