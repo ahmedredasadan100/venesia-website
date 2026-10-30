@@ -378,7 +378,11 @@ reviewed fixture fingerprint uses canonical LF text for the effect contract,
 while the complete source snapshot remains bound to raw file bytes. The current
 execution pilot supports `win32` and `linux` only after their source-bound
 qualification receipts. Other platforms return `BLOCKED` before starting the
-leaf. Windows retains the existing taskkill process-tree boundary. Linux uses
+leaf. The qualified Windows path uses a private native Job Object through the
+existing owned-child lifecycle. The root must be created suspended, assigned
+before resume, and retain a held process identity; child/root exit alone cannot
+prove cleanup. Native job membership must reach zero before PASS or evidence/TEMP
+removal. Linux uses
 an inherited, redacted ownership marker plus same-UID PID/starttime identities
 to discover detached Chromium descendants and reparented children. It verifies
 identity before signaling, bounds discovery, attempts TERM, freezes remaining
@@ -491,15 +495,32 @@ hashes/source binding cover this evidence. Broader consumers and native
 persistence are not qualified by the thirteen controlled scenarios.
 
 Before Docker allocation, the existing isolated lifecycle invokes the existing
-owned-child process owner to qualify creation and live-tree cancellation in
-the actual caller context. A denied tree-kill remains BLOCKED even if its
-finite self-owned probe subsequently expires cleanly. Windows root exit alone
-does not prove detached descendants absent. The canonical process owner exposes
-that missing capability separately from the live-tree permission probe. Known
-Full Quality intent rejects before CLI resource allocation when that prerequisite
-is unqualified; a direct public handoff rejects before gates, without claiming
-to know its future request before initial allocation. Finite detached probes
-ending by self-expiry do not establish general cleanup qualification.
+owned-child process owner to qualify creation and cancellation in the actual
+caller context. The approved Windows creation/handle capability is implemented
+by `windows-owned-process.mts` and its tracked C# source; policy, selection,
+deadlines, logs and admission remain in the existing public verification owner.
+The native helper owns the private job, receives the owner's control pipe and
+passes the root's stdout/stderr through; the root receives NUL stdin. Owner-pipe
+EOF and the independent native deadline require cleanup, including after root
+exit. The job handle is verified noninheritable. A bounded helper watchdog may
+end a stalled helper; kernel handle-close containment without a final native
+zero-membership receipt still fails qualification. Assignment, identity, resume or final zero-membership receipt failure
+rejects qualification; finite descendants ending by self-expiry are insufficient.
+The original root exit is distinct from the helper/capability outcome. Normal
+and abnormal root exit, cancellation, timeout, detached descendants, owner loss
+and unrelated-process preservation need actual scoped controls.
+
+Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
+builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory
+once per Node invocation. Source, compiler, binary hashes and compiler flags are
+retained as provenance; source and binary bytes are rechecked before each launch.
+No committed executable, cross-invocation binary cache, downloaded dependency,
+global setting, new pipeline or alternate canonical command is introduced.
+Unavailable native build/launch capability or a denied actual-context probe stays
+BLOCKED. Known Full Quality intent rejects before CLI resource allocation when
+that prerequisite is unqualified; a direct public handoff rejects before gates,
+without claiming to know its future request before initial allocation. Native
+capability availability alone is not actual process/environment qualification.
 Preparation has a 600-second phase
 budget and 1800-second cumulative budget, excluding gate execution, with age
 observation and rejection before the pinned 600-second control-connection

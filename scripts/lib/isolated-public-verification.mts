@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
 import { selectSourceInventory, sourceIncluded } from "./verification-source-inventory.mts";
 import { collectExecutableSourceGraph } from "./typescript-executable-graph.mts";
+import { spawnWindowsOwnedProcess, windowsOwnedProcessCapability, type WindowsJobIdentity, type WindowsJobReceipt, type WindowsStopReason } from "./windows-owned-process.mts";
 import type { TopicSeoSource } from "../../src/lib/admin/seo/entity-seo-persistence.ts";
 import type { OwnedLocalHandle } from "./isolated-supabase.mts";
 
@@ -893,9 +894,12 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   const fixtureApproved = fixtureSha256 === "26d296745885d0d590e03bf1e0db37d6484871d8c26ba9545ed38eba8f133142";
   const bindings = (analysis.ownerBindings ?? []).filter(binding => binding.capability === "form_runtime");
   const commands = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(step)).sort();
-  const reasons = analysis.changes.filter(change => change.semanticChange && !change.presentationOnly && commands.some(check => change.candidateChecks.includes(check))
-    && (change.file === entry || change.file === "src/lib/admin/form-system/adoption-manifest.ts" || bindings.some(binding => binding.files.includes(change.file))
-      || change.capabilities.includes("form_runtime") || change.contracts.some(contract => bindings.some(binding => contract.startsWith(binding.manifest)))));
+  // This exact native port executes the existing Browser leaf. A QA lifecycle
+  // change needs that consumer proof even when Product/fixture bytes are unchanged.
+  const nativePort = (file: string) => ["scripts/lib/windows-owned-process.mts", "scripts/lib/windows-owned-process.cs"].includes(file);
+  const reasons = analysis.changes.filter(change => change.semanticChange && !change.presentationOnly && (nativePort(change.file)
+    || commands.some(check => change.candidateChecks.includes(check)) && (change.file === entry || change.file === "src/lib/admin/form-system/adoption-manifest.ts" || bindings.some(binding => binding.files.includes(change.file))
+      || change.capabilities.includes("form_runtime") || change.contracts.some(contract => bindings.some(binding => contract.startsWith(binding.manifest))))));
   const blockers = [
     ...(!fixtureApproved ? ["qualified_fixture_bytes_changed_review_effect_contract"] : []),
     ...(!bindings.length ? ["missing_current_manifest_form_runtime_owner"] : []),
@@ -903,7 +907,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
     ...(analysis.changes.some(change => ["package.json", "package-lock.json"].includes(change.file) && change.semanticChange) ? ["dependency_or_command_contract_changed"] : []),
   ];
   const targets = reasons.length && !blockers.length ? [{ kind: "browser_behavior" as "browser_behavior" | "source_guard", family: "admin-form-save-cache", entry, step,
-    canonicalChecks: commands.filter(check => reasons.some(change => change.candidateChecks.includes(check))),
+    canonicalChecks: commands.filter(check => reasons.some(change => nativePort(change.file) || change.candidateChecks.includes(check))),
     owners: [...new Set(bindings.map(binding => binding.owner))].sort(), capabilities: [...new Set(bindings.flatMap(binding => binding.capability ? [binding.capability] : []))].sort(),
     contracts: [...new Set([...bindings.map(binding => binding.manifest), ...reasons.flatMap(change => change.contracts)])].sort(),
     consumers: [...new Set(reasons.flatMap(change => change.consumers))].sort(),
@@ -3209,7 +3213,12 @@ async function gitHead(context: PrivatePublicVerificationContext) {
   });
 }
 
-async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
+async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv, reason: WindowsStopReason = "owner_shutdown") {
+  const windows = (child as ChildProcess & { verificationWindowsCleanup?: (reason: WindowsStopReason) => Promise<{
+    status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null; nativeJobReceipt: WindowsJobReceipt | null;
+  }> }).verificationWindowsCleanup;
+  if (process.platform === "win32" && windows) return windows(reason);
   const owned = (child as ChildProcess & { verificationLinuxCleanup?: () => Promise<{
     status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
     observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null;
@@ -3263,7 +3272,11 @@ export function runOwnedVerificationChild(ports: {
 }, args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number): Promise<{ code: number; stdout: string; stderr: string; durationMs: number;
   rawExit: { code: number | null; signal: NodeJS.Signals | null }; identity: { pid: number | null; ppid: number; spawnedAtUtc: string };
   cleanup: { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
-    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null } }> {
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null };
+  nativeJobIdentity?: WindowsJobIdentity | null; nativeJobReceipt?: WindowsJobReceipt | null;
+  nativeCapability?: { executable: string; executableSha256: string; sourceSha256: string; compilerSha256: string; provenance: string };
+  helperExit?: { code: number | null; signal: NodeJS.Signals | null };
+  helperIdentity?: { pid: number | null; ppid: number } }> {
   const { sourceDirectory, context, children, signal } = ports;
   const started = performance.now();
   return new Promise((done, reject) => {
@@ -3279,7 +3292,9 @@ export function runOwnedVerificationChild(ports: {
     // Linux discovery never retains environment contents and excludes every process older than this owned root.
     const markerKey = "VENESIA_QA_OWNED_CHILD", marker = globalThis.crypto.randomUUID();
     const spawnedAtUtc = new Date().toISOString();
-    const child = spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...env, [markerKey]: marker },
+    const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args, cwd: sourceDirectory, env: { ...env, [markerKey]: marker },
+      identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs }) : undefined;
+    const child = windows?.child ?? spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...env, [markerKey]: marker },
       detached: process.platform === "linux", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     children.add(child); let stdout = "", stderr = "", failed = false;
     let processFailure: Error | undefined;
@@ -3391,7 +3406,7 @@ export function runOwnedVerificationChild(ports: {
     const abort = (reason: "timeout" | "cancelled" | "output_limit") => {
       if (failed) return;
       failed = true; failureReason = reason;
-      cleanupPromise = stopChild(child, context.cleanEnvironment());
+      cleanupPromise = stopChild(child, context.cleanEnvironment(), reason);
       // The close handler retains the original failure and writes the final cleanup/evidence result before settling.
       void cleanupPromise.catch(error => { void settle(child.exitCode, error).catch(reject); });
     };
@@ -3412,6 +3427,21 @@ export function runOwnedVerificationChild(ports: {
       let cleanup: Cleanup | undefined, cleanupFailure: unknown = knownCleanupFailure;
       try { cleanup = await (cleanupPromise ?? stopChild(child, context.cleanEnvironment())); children.delete(child); }
       catch (error) { cleanupFailure = error; }
+      let nativeJobIdentity: WindowsJobIdentity | null = null, nativeJobReceipt: WindowsJobReceipt | null = null;
+      try { nativeJobIdentity = windows?.readIdentity() ?? null; nativeJobReceipt = windows?.readReceipt() ?? null; }
+      catch (error) { cleanupFailure ??= error; }
+      if (windows && nativeJobReceipt && nativeJobReceipt.reason !== "completed") {
+        failed = true;
+        failureReason ??= nativeJobReceipt.reason === "timeout" ? "timeout"
+          : ["cancelled", "owner_lost", "owner_shutdown"].includes(nativeJobReceipt.reason) ? "cancelled"
+          : nativeJobReceipt.reason === "output_limit" ? "output_limit" : "process_failure";
+      }
+      const rootCode = windows ? nativeJobReceipt?.rootExitCode ?? null : code;
+      const rootSignal = windows ? null : child.signalCode;
+      const identity = windows ? { pid: nativeJobIdentity?.rootPid ?? null, ppid: nativeJobIdentity?.rootPpid ?? child.pid ?? process.pid,
+        spawnedAtUtc: nativeJobIdentity?.rootCreationTimeUtc ?? spawnedAtUtc } : { pid: child.pid ?? null, ppid: process.pid, spawnedAtUtc };
+      const nativeProof = windows ? { nativeJobIdentity, nativeJobReceipt, nativeCapability: windows.native, helperIdentity: { pid: child.pid ?? null, ppid: process.pid },
+        helperExit: { code, signal: child.signalCode } } : {};
       let cleanOutput: string | null = null, cleanErrors: string | null = null, evidenceFailure: unknown;
       try {
         cleanOutput = context.sanitize(stdout.replaceAll(marker, "[REDACTED_CHILD_OWNERSHIP]"));
@@ -3419,9 +3449,9 @@ export function runOwnedVerificationChild(ports: {
         writeFileSync(stdoutPath, cleanOutput, { mode: 0o600, flag: "wx" });
         writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
       } catch (error) { evidenceFailure = error; }
-      const childResult = { code: code ?? null, signal: child.signalCode,
-        identity: { pid: child.pid ?? null, ppid: process.pid, spawnedAtUtc }, durationMs: performance.now() - started,
-        reason: failureReason ?? (code ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
+      const childResult = { code: rootCode ?? null, signal: rootSignal,
+        identity, ...nativeProof, durationMs: performance.now() - started,
+        reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
         cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
           forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
         cleanupFailure: cleanupFailure instanceof Error && cleanupFailure.cause && typeof cleanupFailure.cause === "object" ? {
@@ -3432,8 +3462,8 @@ export function runOwnedVerificationChild(ports: {
       const error = failed ? new Error(`Public ${name} was aborted or exceeded its bound.`, { cause: cleanupFailure ?? evidenceFailure })
         : processFailure ?? (cleanupFailure ? new Error(`Public ${name} cleanup failed.`, { cause: cleanupFailure }) : evidenceFailure);
       if (error) { if (error instanceof Error) Object.defineProperty(error, "childResult", { value: childResult, enumerable: true }); reject(error); }
-      else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: code ?? -1, rawExit: { code, signal: child.signalCode },
-        identity: childResult.identity, stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
+      else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: rootCode ?? -1, rawExit: { code: rootCode, signal: rootSignal },
+        identity: childResult.identity, ...nativeProof, stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
     };
     child.once("close", code => { void settle(code).catch(reject); });
   });
@@ -3441,10 +3471,10 @@ export function runOwnedVerificationChild(ports: {
 
 /** Owner capability prerequisite only; it never replaces the actual caller-context process probe. */
 export function ownedProcessCleanupQualification() {
-  const rootExitQualified = process.platform === "linux";
+  const rootExitQualified = process.platform === "linux" || (process.platform === "win32" && windowsOwnedProcessCapability().status === "PASS");
   return { status: rootExitQualified ? "PASS" as const : "BLOCKED" as const,
     missingProof: rootExitQualified ? null : process.platform === "win32"
-      ? "windows_exited_root_descendant_ownership" : "unsupported_process_cleanup_platform",
+      ? "windows_native_job_launch_unavailable" : "unsupported_process_cleanup_platform",
     fullEProcessCleanupQualified: rootExitQualified };
 }
 
@@ -3498,7 +3528,8 @@ export async function verifyOwnedProcessReadiness(options: {
       child.stdout!.on("data", data); child.once("close", closed); controller.signal.addEventListener("abort", aborted, { once: true });
       if (controller.signal.aborted) aborted();
     });
-    assert.equal(identities.root.pid, child.pid); assert.equal(identities.root.ppid, process.pid);
+    const nativeIdentity = (child as ChildProcess & { verificationWindowsIdentity?: () => WindowsJobIdentity | null }).verificationWindowsIdentity?.();
+    assert.equal(identities.root.pid, nativeIdentity?.rootPid ?? child.pid); assert.equal(identities.root.ppid, nativeIdentity?.rootPpid ?? process.pid);
     assert.ok(Number.isSafeInteger(identities.leaf.pid) && identities.leaf.pid > 1 && identities.leaf.pid !== identities.root.pid);
     assert.equal(identities.leaf.ppid, identities.root.pid);
     knownPids.add(identities.leaf.pid);
@@ -3517,7 +3548,7 @@ export async function verifyOwnedProcessReadiness(options: {
       rawExit: { code: retained.code, signal: retained.signal }, cleanup: retained.cleanup,
       cleanupQualification: { ...cleanupQualification, liveRootTreeProved: true,
         rootExitTreeSupported: cleanupQualification.fullEProcessCleanupQualified },
-      limitations: process.platform === "win32" ? ["Already-exited Windows roots have unverified descendant cleanup; this live-tree probe does not qualify that path."]
+      limitations: process.platform === "win32" ? ["Task-private native Job contains cooperative CreateProcess descendants; broker/service-created processes are outside this qualification."]
         : ["Detached descendants that clear the inherited ownership marker remain outside qualification."] };
     receipt(context, "process-readiness.json", readinessReceipt); return readinessReceipt;
   } catch (error) {

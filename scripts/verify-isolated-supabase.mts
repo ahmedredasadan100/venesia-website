@@ -15,6 +15,7 @@ import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application
 import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
 import { selectSourceInventory, sourceIncluded } from "./lib/verification-source-inventory.mts";
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
+import { windowsOwnedProcessCapability, spawnWindowsOwnedProcess } from "./lib/windows-owned-process.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -3320,8 +3321,83 @@ async function verifyQualifiedFormHarnessControls() {
   });
 }
 
+/** Real imported compiler contracts plus source-bound union/member checks, not native execution evidence. */
+function verifyWindowsOwnedProcessContracts() {
+  const identity: import("./lib/windows-owned-process.mts").WindowsJobIdentity = {
+    jobToken: "00000000-0000-4000-8000-000000000000", helperPid: 11, rootPid: 12, rootPpid: 11,
+    rootCreationTimeFileTime: "1", rootCreationTimeUtc: "2000-01-01T00:00:00.000Z",
+    ownerJobAssignedBeforeResume: true, effectiveLimitFlags: 0x2000, jobHandleNonInheritable: true,
+    jobBeforeResume: { totalProcesses: 1, activeProcesses: 1, processIds: [12] },
+  };
+  const identityPid = (value: import("./lib/windows-owned-process.mts").WindowsJobIdentity) => value.rootPid;
+  assert.equal(identityPid(identity), 12); assert.equal(identity.ownerJobAssignedBeforeResume, true); assert.equal(identity.jobHandleNonInheritable, true);
+  const receipt: import("./lib/windows-owned-process.mts").WindowsJobReceipt = { ...identity, status: "PASS", reason: "completed", rootExitCode: 9,
+    resumeSucceeded: true, nativeFailure: null, cleanup: { status: "PASS", method: "windows-private-job", rootExitedBeforeCleanup: true,
+      forcedTermination: false, activeProcessesBeforeCleanup: 0, activeProcessesAfterCleanup: 0, activeProcessIdsBeforeCleanup: [],
+      activeProcessIdsAfterCleanup: [], totalProcesses: 1, rootHandleExited: true, processTreeVerified: true, jobHandleClosed: true } };
+  const receiptCode = (value: import("./lib/windows-owned-process.mts").WindowsJobReceipt) => value.rootExitCode;
+  assert.equal(receiptCode(receipt), 9); assert.equal(receiptCode({ ...receipt, rootPid: null, rootExitCode: null, resumeSucceeded: false }), null);
+  const stopReasons: import("./lib/windows-owned-process.mts").WindowsStopReason[] = ["cancelled", "timeout", "output_limit", "owner_shutdown"];
+  const compileOnly = false as boolean;
+  if (compileOnly) {
+    // @ts-expect-error Process identities retain the imported owner's numeric PID contract.
+    identityPid({ ...identity, rootPid: "12" });
+    // @ts-expect-error The original native DWORD/null exit cannot be replaced by a string.
+    receiptCode({ ...receipt, rootExitCode: "9" });
+    // @ts-expect-error Unknown control reasons do not enter the native cancellation protocol.
+    const invalidReason: import("./lib/windows-owned-process.mts").WindowsStopReason = "arbitrary_shutdown";
+    void invalidReason;
+  }
+  const file = "scripts/lib/windows-owned-process.mts", source = ts.createSourceFile(file, readSource(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = (name: string) => { const node = source.statements.find((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === name); assert.ok(node); return node; };
+  const receiptType = declaration("WindowsJobReceipt"); assert.ok(ts.isIntersectionTypeNode(receiptType.type));
+  const receiptBody = receiptType.type.types.find(ts.isTypeLiteralNode); assert.ok(receiptBody);
+  const exitMember = receiptBody.members.find((node): node is ts.PropertySignature => ts.isPropertySignature(node) && node.name.getText(source) === "rootExitCode");
+  assert.ok(exitMember?.type && ts.isUnionTypeNode(exitMember.type));
+  assert.deepEqual(exitMember.type.types.map(node => node.kind === ts.SyntaxKind.NumberKeyword ? "number"
+    : ts.isLiteralTypeNode(node) && node.literal.kind === ts.SyntaxKind.NullKeyword ? "null" : "unreviewed").sort(), ["null", "number"]);
+  const stopType = declaration("WindowsStopReason"); assert.ok(ts.isUnionTypeNode(stopType.type));
+  assert.deepEqual(stopType.type.types.map(node => { assert.ok(ts.isLiteralTypeNode(node) && ts.isStringLiteral(node.literal)); return node.literal.text; }), stopReasons);
+  let nativeIntegrity: Record<string, unknown> = { status: "NOT_APPLICABLE", platform: process.platform };
+  if (process.platform === "win32") {
+    const capability = windowsOwnedProcessCapability(); assert.ok(capability.status === "PASS");
+    const native = capability.native, directory = path.dirname(native.executable), evidenceRoot = realpathSync(path.join(root, ".tmp-qa"));
+    assert.equal(path.dirname(directory), evidenceRoot); assert.ok(path.basename(directory).startsWith("windows-native-build-"));
+    assert.equal(realpathSync(native.executable), native.executable); assert.equal(lstatSync(native.executable).isFile(), true);
+    assert.equal(Object.isFrozen(native), true); assert.equal(Object.isFrozen(native.frameworkReferences), true);
+    assert.ok(native.frameworkReferences.length > 0 && native.frameworkReferences.every(reference => Object.isFrozen(reference)));
+    const original = readFileSync(native.executable), originalHash = sha256(original), before = readdirSync(directory).sort();
+    assert.equal(originalHash, native.executableSha256); assert.ok(original.length > 0);
+    const changed = Buffer.from(original); changed[changed.length - 1] = changed[changed.length - 1]! ^ 1;
+    let unexpected: ReturnType<typeof spawnWindowsOwnedProcess> | undefined;
+    try {
+      writeFileSync(native.executable, changed, { flag: "r+" });
+      assert.throws(() => { unexpected = spawnWindowsOwnedProcess({ args: ["-e", "throw Error('integrity rejection must precede execution')"], cwd: directory,
+        env: { NODE_ENV: "test" }, identityPath: path.join(directory, "integrity-must-not-start.identity.json"),
+        receiptPath: path.join(directory, "integrity-must-not-start.receipt.json"), limitMs: 2_000 }); }, /Native executable changed during this invocation/u);
+    } finally {
+      writeFileSync(native.executable, original, { flag: "r+" });
+      // An unexpected launch is a test failure; containment uses its retained helper handle only.
+      if (unexpected && unexpected.child.exitCode === null && unexpected.child.signalCode === null) unexpected.child.kill();
+    }
+    assert.equal(unexpected, undefined); assert.deepEqual(readFileSync(native.executable), original); assert.equal(sha256(readFileSync(native.executable)), originalHash);
+    assert.deepEqual(readdirSync(directory).sort(), before); assert.equal(windowsOwnedProcessCapability().status, "PASS");
+    nativeIntegrity = { status: "PASS", immutableBuildAndFrameworkReferences: true, modifiedOwnedExecutableRejectedBeforeSpawn: true,
+      originalExecutableRestored: true, executableSha256: originalHash, actualRootProcessesAllocated: 0 };
+  }
+  return { status: "PASS", scope: "imported_type_value_vectors_and_source_contracts_only", nativeRootProcessesAllocated: 0,
+    identityMemberVectors: 3, receiptNumberAndNullVectors: 2, compilerNegativeVectorsDeclared: 3, compilerNegativeProof: "requires actual TypeScript check",
+    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity };
+}
+
 /** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */
 async function verifySharedChildControls() {
+  const launchWindows = (options: Parameters<typeof spawnWindowsOwnedProcess>[0]) => {
+    const launched = spawnWindowsOwnedProcess(options);
+    const child = launched.child as ChildProcess & { verificationWindowsIdentity?: unknown; verificationWindowsReceipt?: unknown };
+    assert.equal(child.verificationWindowsIdentity, launched.readIdentity); assert.equal(child.verificationWindowsReceipt, launched.readReceipt);
+    assert.equal(typeof launched.native.executableSha256, "string"); assert.equal(typeof launched.native.sourceSha256, "string"); return launched;
+  };
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const declarations = ["ownedPath", "receipt", "stopChild", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"].map(name => {
@@ -3329,14 +3405,14 @@ async function verifySharedChildControls() {
     assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
   });
   const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild,verifyOwnedProcessReadiness,ownedProcessCleanupQualification};")(
-    assert, path.isAbsolute, path.resolve, path.sep, launch, write, existsSync, readFileSync, readdirSync, lstatSync) as {
+  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", code + ";return {run:runOwnedVerificationChild,stop:stopChild,verifyOwnedProcessReadiness,ownedProcessCleanupQualification};")(
+    assert, path.isAbsolute, path.resolve, path.sep, launch, write, existsSync, readFileSync, readdirSync, lstatSync, windowsOwnedProcessCapability, launchWindows) as {
       run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
       verifyOwnedProcessReadiness: typeof import("./lib/isolated-public-verification.mts").verifyOwnedProcessReadiness;
       ownedProcessCleanupQualification: typeof import("./lib/isolated-public-verification.mts").ownedProcessCleanupQualification;
       stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<Awaited<ReturnType<typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild>>["cleanup"]>;
     };
-  const api = buildApi(), runtimeProofs: Array<Record<string, unknown>> = [];
+  const api = buildApi(), runtimeProofs: Array<Record<string, unknown>> = [{ control: "windows_imported_type_and_source_contracts", ...verifyWindowsOwnedProcessContracts() }];
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-child-controls-"))), children = new Set<ChildProcess>();
   const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
@@ -3344,16 +3420,25 @@ async function verifySharedChildControls() {
   const run = (name: string, args: string[], signal = new AbortController().signal, limitMs = 10_000, sourceDirectory = directory) =>
     api.run({ sourceDirectory, context, children, signal }, args, { ...environment }, name, limitMs);
   const control = async (name: string, execute: () => Promise<void>) => {
-    try { await execute(); } catch (error) { console.error("FAIL shared owned child " + name); throw error; }
+    try { await execute(); } catch (error) {
+      const assertion = error as { actual?: unknown; expected?: unknown; operator?: unknown };
+      const primitive = (value: unknown) => value === null || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value) ? value
+        : typeof value === "string" && value.length <= 256 ? context.sanitize(value) : "<nonprimitive or oversized value omitted>";
+      try { writeFileSync(path.join(directory, "control-failure.json"), JSON.stringify({ schema: 1, control: name,
+        errorName: error instanceof Error ? error.name : "UnknownThrownValue", message: error instanceof Error ? context.sanitize(error.message).slice(0, 512) : "Non-Error failure",
+        operator: primitive(assertion?.operator), actual: primitive(assertion?.actual), expected: primitive(assertion?.expected), originalFailurePreserved: true }, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
+      catch (evidenceError) { if (error instanceof Error) Object.defineProperty(error, "controlFailureEvidenceError", { value: evidenceError }); }
+      console.error("FAIL shared owned child " + name); throw error;
+    }
     cases.push("shared owned child " + name);
   };
   try {
-    await control("Full E cleanup qualification stays fail-closed while the Windows exited-root path is unproved", async () => {
+    await control("Full E cleanup qualification requires the current platform ownership capability", async () => {
       const verifyQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "ownedProcessCleanupQualification">) => {
         const qualification = ownerApi.ownedProcessCleanupQualification();
-        assert.equal(qualification.fullEProcessCleanupQualified, process.platform === "linux");
-        assert.equal(qualification.status, process.platform === "linux" ? "PASS" : "BLOCKED");
-        if (process.platform === "win32") assert.equal(qualification.missingProof, "windows_exited_root_descendant_ownership");
+        assert.equal(qualification.fullEProcessCleanupQualified, process.platform === "linux" || process.platform === "win32");
+        assert.equal(qualification.status, process.platform === "linux" || process.platform === "win32" ? "PASS" : "BLOCKED");
+        if (process.platform === "win32") assert.equal(windowsOwnedProcessCapability().status, "PASS");
       };
       verifyQualification(api);
     });
@@ -3362,8 +3447,8 @@ async function verifySharedChildControls() {
       const direct = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification");
       assert.ok(qualification && direct);
       const compile = (text: string) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-      const project = (platform: string) => new Function("process", compile(qualification.getText(file).replace(/^export /u, ""))
-        + ";return ownedProcessCleanupQualification;")({ platform }) as typeof api.ownedProcessCleanupQualification;
+      const project = (platform: string) => new Function("process", "windowsOwnedProcessCapability", compile(qualification.getText(file).replace(/^export /u, ""))
+        + ";return ownedProcessCleanupQualification;")({ platform }, () => ({ status: "BLOCKED", missingProof: "controlled_native_capability_unavailable" })) as typeof api.ownedProcessCleanupQualification;
       const windows = project("win32"), supported = project("linux"), finalHead = "b".repeat(40);
       const cliTree = ts.createSourceFile("qa-isolated-supabase.mts", readSource("scripts/qa-isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
       const cli = cliTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "heroCompatibilityProof");
@@ -3399,10 +3484,14 @@ async function verifySharedChildControls() {
       assert.equal(readFileSync(path.join(directory, "public-success.stdout.log"), "utf8"), result.stdout);
       assert.equal(readFileSync(path.join(directory, "public-success.stderr.log"), "utf8"), result.stderr);
       assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0);
-      assert.equal(result.cleanup.processTreeVerified, process.platform === "linux");
-      assert.deepEqual(result.rawExit, { code: 0, signal: null }); assert.equal(result.identity.ppid, process.pid);
+      assert.equal(result.cleanup.processTreeVerified, process.platform === "linux" || process.platform === "win32");
+      assert.deepEqual(result.rawExit, { code: 0, signal: null });
+      assert.equal(result.identity.ppid, process.platform === "win32" ? result.helperIdentity?.pid : process.pid);
       assert.ok(Number.isSafeInteger(result.identity.pid) && Number.isFinite(Date.parse(result.identity.spawnedAtUtc)));
-      if (process.platform === "win32") assert.equal(result.cleanup.residualProcessesAfterExit, null, "Exited Windows roots cannot prove descendant absence.");
+      if (process.platform === "win32") {
+        assert.equal(result.cleanup.method, "windows-private-job"); assert.equal(result.cleanup.residualProcessesAfterExit, 0);
+        assert.equal(result.nativeJobReceipt?.cleanup.activeProcessesAfterCleanup, 0);
+      }
     });
     await control("duplicate evidence names reject before execution and preserve both original logs", async () => {
       const before = readdirSync(directory).sort(), output = readFileSync(path.join(directory, "public-success.stdout.log")), errors = readFileSync(path.join(directory, "public-success.stderr.log"));
@@ -3456,16 +3545,25 @@ async function verifySharedChildControls() {
       const failure = new Error("Secondary sanitizer failure");
       const failingContext = { ...context, sanitize: (): string => { throw failure; } };
       await assert.rejects(api.run({ sourceDirectory: directory, context: failingContext, children, signal: new AbortController().signal },
-        ["-e", "setInterval(()=>{},1000)"], { ...environment }, "timeout-sanitize-failure", 100),
+        ["-e", "setInterval(()=>{},1000)"], { ...environment }, "timeout-sanitize-failure", process.platform === "win32" ? 1_500 : 100),
       (error: unknown) => error instanceof Error && /aborted or exceeded its bound/u.test(error.message) && error.cause === failure);
       assert.equal(children.size, 0);
     });
     await control("timeout rejects and removes the owned process", async () => {
-      await assert.rejects(run("timeout", ["-e", "setInterval(()=>{},1000)"], new AbortController().signal, 100), (error: unknown) => {
+      const deadlineMs = process.platform === "win32" ? 1_500 : 100;
+      await assert.rejects(run("timeout", ["-e", "setInterval(()=>{},1000)"], new AbortController().signal, deadlineMs), (error: unknown) => {
         assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
-        const retained = (error as Error & { childResult: { reason: string; durationMs: number; cleanup: { status: string; liveProcesses: number } } }).childResult;
-        assert.equal(retained.reason, "timeout"); assert.ok(retained.durationMs >= 100);
-        assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.liveProcesses, 0); return true;
+        const retained = (error as Error & { childResult: { reason: string; durationMs: number;
+          nativeJobReceipt?: import("./lib/windows-owned-process.mts").WindowsJobReceipt | null; cleanup: { status: string; liveProcesses: number } } }).childResult;
+        assert.equal(retained.reason, "timeout"); assert.ok(retained.durationMs >= deadlineMs);
+        assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.liveProcesses, 0);
+        if (process.platform === "win32") {
+          assert.equal(retained.nativeJobReceipt?.resumeSucceeded, true); assert.equal(retained.nativeJobReceipt?.cleanup.activeProcessesAfterCleanup, 0);
+          runtimeProofs.push({ control: "windows_native_timeout_fixture_budget", priorDeadlineMs: 100, deadlineMs,
+            reason: "allow managed-helper startup while still proving an actually resumed root times out", originalReason: retained.reason,
+            nativeJobReceipt: retained.nativeJobReceipt, automaticRetries: 0 });
+        }
+        return true;
       });
       assert.equal(children.size, 0); assert.ok(existsSync(path.join(directory, "public-timeout.stdout.log")));
       assert.ok(existsSync(path.join(directory, "public-timeout.stderr.log")));
@@ -3492,12 +3590,14 @@ async function verifySharedChildControls() {
       await control("process readiness proves actual live-tree cancellation and preserves identities and exclusive evidence", async () => {
         const result = await ownerApi.verifyOwnedProcessReadiness({ sourceDirectory: directory, context, signal: new AbortController().signal });
         assert.equal(result.status, "PASS"); assert.equal(result.scope, "self-owned-live-tree-cancellation");
-        assert.equal(result.rootIdentity.ppid, process.pid); assert.equal(result.descendantIdentity.ppid, result.rootIdentity.pid);
+        if (process.platform === "linux") assert.equal(result.rootIdentity.ppid, process.pid);
+        else assert.ok(Number.isSafeInteger(result.rootIdentity.ppid) && result.rootIdentity.ppid > 0);
+        assert.equal(result.descendantIdentity.ppid, result.rootIdentity.pid);
         assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true); assert.equal(result.cleanup.liveProcesses, 0);
         assert.ok(result.durationMs > 0 && result.limitations.length > 0);
-        assert.equal(result.cleanupQualification.status, process.platform === "win32" ? "BLOCKED" : "PASS");
-        assert.equal(result.cleanupQualification.rootExitTreeSupported, process.platform === "linux");
-        assert.equal(result.cleanupQualification.fullEProcessCleanupQualified, process.platform === "linux");
+        assert.equal(result.cleanupQualification.status, "PASS");
+        assert.equal(result.cleanupQualification.rootExitTreeSupported, process.platform === "linux" || process.platform === "win32");
+        assert.equal(result.cleanupQualification.fullEProcessCleanupQualified, process.platform === "linux" || process.platform === "win32");
         runtimeProofs.push({ ...result, control: "preallocation_readiness" });
         assert.equal(JSON.parse(readFileSync(path.join(directory, "process-readiness.json"), "utf8")).status, "PASS");
         const original = readFileSync(path.join(directory, "public-process-readiness.stdout.log"));
@@ -3532,78 +3632,195 @@ async function verifySharedChildControls() {
       assert.equal(existsSync(path.join(directory, "public-spawn-write-failure.stdout.log")), false);
     });
     if (process.platform === "win32") {
-      await control("denied Windows tree termination remains BLOCKED and the finite self-owned probe expires without orphans", async () => {
-        const runDirectory = realpathSync(mkdtempSync(path.join(directory, "denied-readiness-")));
-        const deniedLaunch = ((binary: string, args: string[], options: Parameters<typeof spawn>[2]) => binary === "taskkill.exe"
-          ? spawn(process.execPath, ["-e", "process.exit(5)"], options) : spawn(binary, args, options)) as typeof spawn;
-        const rejectActualDeniedReadiness = async (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "verifyOwnedProcessReadiness">) =>
-          assert.rejects(ownerApi.verifyOwnedProcessReadiness({ sourceDirectory: directory,
-            context: { ...context, runDirectory }, signal: new AbortController().signal }), /did not prove live-tree termination/u);
-        await rejectActualDeniedReadiness(buildApi(writeFileSync, deniedLaunch));
-        const blocked = JSON.parse(readFileSync(path.join(runDirectory, "process-readiness.json"), "utf8"));
-        assert.equal(blocked.status, "BLOCKED"); assert.equal(blocked.cleanup.status, "FAIL");
-        assert.equal(blocked.cleanupFailure.exitCode, 5);
-        assert.equal(blocked.knownOwnedProcessesAbsent, true); assert.equal(blocked.knownIdentities, 2); assert.equal(blocked.finiteSelfExpiryMs, 12_000);
-        runtimeProofs.push({ control: "denied_taskkill_finite_self_expiry", ...blocked });
-      });
       const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; } };
-      for (const exitCode of [0, 9]) await control(`Windows exited root ${exitCode} keeps detached descendant ownership unqualified and finite probes leave no survivors`, async () => {
-        const expiresAt = Date.now() + 6_000, known = new Set<number>();
-        const expiry = `setTimeout(()=>process.exit(0),Math.max(1,${expiresAt}-Date.now()));`;
-        const last = expiry + "process.stdout.write(JSON.stringify({pid:process.pid,ppid:process.ppid}));setInterval(()=>{},1000);";
-        const detached = expiry + `const {spawn}=require('node:child_process');const leaf=spawn(process.execPath,['-e',${JSON.stringify(last)}],{detached:true,windowsHide:true,stdio:['ignore','pipe','ignore']});leaf.stdout.once('data',data=>{process.stdout.write(JSON.stringify({middle:{pid:process.pid,ppid:process.ppid},leaf:JSON.parse(String(data))}));leaf.stdout.destroy();leaf.unref();});setInterval(()=>{},1000);`;
-        const root = expiry + `const {spawn}=require('node:child_process');const middle=spawn(process.execPath,['-e',${JSON.stringify(detached)}],{detached:true,windowsHide:true,stdio:['ignore','pipe','ignore']});middle.stdout.once('data',data=>{process.stdout.write(JSON.stringify({root:{pid:process.pid,ppid:process.ppid},...JSON.parse(String(data))}),()=>process.exit(${exitCode}));middle.stdout.destroy();middle.unref();});setInterval(()=>{},1000);`;
-        let observed: Record<string, unknown> | undefined;
-        try {
-          const result = await run(`windows-exited-root-${exitCode}`, ["-e", root]);
-          const identities = JSON.parse(result.stdout) as { root: { pid: number; ppid: number }; middle: { pid: number; ppid: number }; leaf: { pid: number; ppid: number } };
-          assert.equal(result.code, exitCode); assert.equal(result.rawExit.code, exitCode); assert.equal(result.identity.pid, identities.root.pid);
-          assert.equal(identities.root.ppid, process.pid); assert.equal(identities.middle.ppid, identities.root.pid); assert.equal(identities.leaf.ppid, identities.middle.pid);
-          assert.equal(alive(identities.root.pid), false);
-          known.add(identities.middle.pid); known.add(identities.leaf.pid);
-          assert.ok([...known].every(alive), "The actual detached descendants must still be live to demonstrate the ownership gap.");
-          assert.equal(result.cleanup.processTreeVerified, false); assert.equal(result.cleanup.residualProcessesAfterExit, null);
-          observed = { control: "windows_exited_root_descendants", rootExitCode: exitCode, identities, rawExit: result.rawExit,
-            cleanup: result.cleanup, cleanupQualification: "BLOCKED", descendantsObservedLiveAfterRootExit: known.size,
-            reparentingSemantics: "not_claimed_on_Windows", finiteSelfExpiryMs: 6_000, foreignProcessesSignaled: 0 };
-        } finally {
-          // Only these disposable scripts have a fixed self-expiry. No PID inferred from ancestry is killed.
-          const deadline = performance.now() + 8_000;
-          while ([...known].some(alive) && performance.now() < deadline) await new Promise<void>(done => setTimeout(done, 50));
-          assert.ok([...known].every(pid => !alive(pid)), "A finite detached probe is still live.");
-          if (observed) runtimeProofs.push({ ...observed, knownOwnedProcessesAbsentAfterSelfExpiry: true });
+      type NativeIdentity = import("./lib/windows-owned-process.mts").WindowsJobIdentity;
+      type NativeReceipt = import("./lib/windows-owned-process.mts").WindowsJobReceipt;
+      type Tree = { root: { pid: number; ppid: number }; middle: { pid: number; ppid: number }; leaf: { pid: number; ppid: number } };
+      type NativeChild = ChildProcess & { verificationWindowsIdentity?(): NativeIdentity | null; verificationWindowsReceipt?(): NativeReceipt | null };
+      const ready = (child: ChildProcess, prefix = "tree:") => new Promise<string>((done, reject) => {
+        let output = "";
+        const finish = (error?: Error, line?: string) => { clearTimeout(timer); child.stdout!.off("data", data); child.off("error", failed); child.off("close", closed); if (error) reject(error); else done(line!); };
+        const data = (value: Buffer) => { output += String(value); const line = output.split("\n").find(row => row.startsWith(prefix)); if (line !== undefined) finish(undefined, line.slice(prefix.length)); };
+        const failed = () => finish(Error("Owned Windows fixture failed before readiness."));
+        const closed = () => finish(Error("Owned Windows fixture closed before readiness."));
+        const timer = setTimeout(() => finish(Error("Owned Windows fixture readiness exceeded its bound.")), 8_000);
+        child.stdout!.on("data", data); child.once("error", failed); child.once("close", closed);
+      });
+      const absent = async (pids: readonly number[]) => {
+        const deadline = performance.now() + 8_000;
+        while (pids.some(alive) && performance.now() < deadline) await new Promise<void>(done => setTimeout(done, 20));
+        assert.ok(pids.every(pid => !alive(pid)), "Native ownership left a known contained process live.");
+      };
+      const native = (value: { nativeJobIdentity?: NativeIdentity | null; nativeJobReceipt?: NativeReceipt | null;
+        cleanup: { status: string; method: string; processTreeVerified: boolean; liveProcesses: number | null } }, reason: string, allowUnresumed = false) => {
+        const identity = value.nativeJobIdentity, receipt = value.nativeJobReceipt;
+        assert.ok(identity && receipt); assert.equal(identity.ownerJobAssignedBeforeResume, true); assert.equal(identity.effectiveLimitFlags, 0x2000);
+        assert.equal((identity as NativeIdentity & { jobHandleNonInheritable: boolean }).jobHandleNonInheritable, true);
+        assert.equal(receipt.jobToken, identity.jobToken); assert.equal(receipt.helperPid, identity.helperPid); assert.equal(receipt.rootPid, identity.rootPid);
+        assert.equal(identity.rootPpid, identity.helperPid); assert.equal(receipt.status, "PASS"); assert.equal(receipt.reason, reason);
+        if (!allowUnresumed) assert.equal(receipt.resumeSucceeded, true);
+        assert.equal(receipt.nativeFailure, null); assert.equal(receipt.cleanup.rootHandleExited, true); assert.equal(receipt.cleanup.jobHandleClosed, true);
+        assert.equal(receipt.cleanup.processTreeVerified, true); assert.equal(receipt.cleanup.activeProcessesAfterCleanup, 0);
+        assert.deepEqual(receipt.cleanup.activeProcessIdsAfterCleanup, []); assert.equal(value.cleanup.status, "PASS");
+        assert.equal(value.cleanup.method, "windows-private-job"); assert.equal(value.cleanup.processTreeVerified, true); assert.equal(value.cleanup.liveProcesses, 0);
+        return { identity, receipt };
+      };
+      const tree = (onReady = "") => {
+        const expiresAt = Date.now() + 25_000, expiry = `setTimeout(()=>process.exit(0),Math.max(1,${expiresAt}-Date.now()));`;
+        const leaf = expiry + "process.stdout.write(JSON.stringify({pid:process.pid,ppid:process.ppid})+'\\n');setInterval(()=>{},1000);";
+        const middle = expiry + `const {spawn}=require('node:child_process');const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{detached:true,windowsHide:true,stdio:['ignore','pipe','ignore']});leaf.stdout.once('data',data=>{process.stdout.write(JSON.stringify({middle:{pid:process.pid,ppid:process.ppid},leaf:JSON.parse(String(data))})+'\\n');leaf.stdout.destroy();leaf.unref();});setInterval(()=>{},1000);`;
+        return expiry + `const {spawn}=require('node:child_process');const middle=spawn(process.execPath,['-e',${JSON.stringify(middle)}],{detached:true,windowsHide:true,stdio:['ignore','pipe','ignore']});middle.stdout.once('data',data=>{process.stdout.write('tree:'+JSON.stringify({root:{pid:process.pid,ppid:process.ppid},...JSON.parse(String(data))})+'\\n',()=>{${onReady}});middle.stdout.destroy();middle.unref();});setInterval(()=>{},1000);`;
+      };
+      const treeProof = async (identities: Tree, identity: NativeIdentity) => {
+        assert.equal(identities.root.pid, identity.rootPid); assert.equal(identities.root.ppid, identity.helperPid);
+        assert.equal(identities.middle.ppid, identities.root.pid); assert.equal(identities.leaf.ppid, identities.middle.pid);
+        await absent([identities.root.pid, identities.middle.pid, identities.leaf.pid]);
+      };
+      const failedResult = async (outcome: Promise<unknown>, reason: string) => {
+        const error = await outcome; assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+        const retained = (error as Error & { childResult: { reason: string; code: number | null; signal: NodeJS.Signals | null;
+          nativeJobIdentity?: NativeIdentity | null; nativeJobReceipt?: NativeReceipt | null;
+          cleanup: { status: string; method: string; processTreeVerified: boolean; liveProcesses: number | null } } }).childResult;
+        assert.equal(retained.reason, reason); const proof = native(retained, reason); assert.equal(retained.code, proof.receipt.rootExitCode);
+        assert.equal(retained.signal, null); return { retained, ...proof };
+      };
+      for (const exitCode of [0, 9]) await control(`Windows native exited root ${exitCode} drains detached child and grandchild`, async () => {
+        const result = await run(`windows-native-exit-${exitCode}`, ["-e", tree(`process.exit(${exitCode});`)]);
+        const identities = JSON.parse(result.stdout.trim().slice("tree:".length)) as Tree, proof = native(result, "completed");
+        assert.equal(result.code, exitCode); assert.deepEqual(result.rawExit, { code: exitCode, signal: null }); assert.equal(proof.receipt.rootExitCode, exitCode);
+        assert.equal(proof.receipt.cleanup.rootExitedBeforeCleanup, true); assert.ok(proof.receipt.cleanup.totalProcesses >= 3);
+        assert.ok(proof.receipt.cleanup.activeProcessesBeforeCleanup >= 2); assert.equal(proof.receipt.cleanup.forcedTermination, true);
+        await treeProof(identities, proof.identity); assert.equal(children.size, 0);
+        runtimeProofs.push({ control: "windows_native_exited_root", exitCode, identities, result });
+      });
+      await control("Windows native abnormal root crash preserves DWORD exit and cleans detached descendants", async () => {
+        const result = await run("windows-native-crash", ["-e", tree("process.abort();")]);
+        const identities = JSON.parse(result.stdout.trim().slice("tree:".length)) as Tree, proof = native(result, "completed");
+        assert.ok(result.code > 0 && result.code !== 9); assert.equal(result.rawExit.code, result.code); assert.equal(result.rawExit.signal, null);
+        assert.equal(proof.receipt.rootExitCode, result.code); assert.match(result.stderr, /abort|native stack|assertion/iu);
+        await treeProof(identities, proof.identity); runtimeProofs.push({ control: "windows_native_abnormal_crash", identities, result });
+      });
+      for (const reason of ["timeout", "cancelled"] as const) await control(`Windows native ${reason} drains an actual detached three-process tree`, async () => {
+        const controller = new AbortController(), pending = run(`windows-native-${reason}`, ["-e", tree()], controller.signal, reason === "timeout" ? 3_000 : 15_000);
+        const child = [...children][0]; assert.ok(child); const outcome = pending.then(value => value, (error: unknown) => error);
+        const identities = JSON.parse(await ready(child)) as Tree;
+        assert.ok([identities.root.pid, identities.middle.pid, identities.leaf.pid].every(alive));
+        if (reason === "cancelled") controller.abort(Error("Controlled native job cancellation"));
+        const proof = await failedResult(outcome, reason); await treeProof(identities, proof.identity); assert.equal(children.size, 0);
+        runtimeProofs.push({ control: "windows_native_" + reason, identities, result: proof.retained });
+      });
+      await control("Windows native immediate cancellation preserves setup-race evidence and zero active members", async () => {
+        const controller = new AbortController(), pending = run("windows-native-early-cancel", ["-e", tree()], controller.signal, 15_000);
+        const outcome = pending.then(value => value, (error: unknown) => error); controller.abort(Error("Controlled cancellation immediately after native launch"));
+        const error = await outcome; assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+        const retained = (error as Error & { childResult: { reason: string; code: number | null; signal: NodeJS.Signals | null;
+          nativeJobIdentity: NativeIdentity | null; nativeJobReceipt: NativeReceipt | null;
+          cleanup: { status: string; method: string; processTreeVerified: boolean; observedProcesses: number; liveProcesses: number } } }).childResult;
+        assert.equal(retained.reason, "cancelled"); assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.liveProcesses, 0);
+        if (retained.nativeJobIdentity) native(retained, "cancelled", true);
+        else {
+          const receipt = retained.nativeJobReceipt; assert.ok(receipt); assert.equal(receipt.status, "PASS"); assert.equal(receipt.reason, "cancelled");
+          assert.equal(receipt.nativeFailure, null); assert.equal(receipt.rootPid, null); assert.equal(receipt.rootExitCode, null); assert.equal(receipt.resumeSucceeded, false);
+          assert.equal(receipt.cleanup.activeProcessesAfterCleanup, 0); assert.deepEqual(receipt.cleanup.activeProcessIdsAfterCleanup, []);
+          assert.equal(receipt.cleanup.totalProcesses, 0); assert.equal(retained.code, null); assert.equal(retained.signal, null);
+          assert.equal(retained.cleanup.method, "windows-private-job-no-root"); assert.equal(retained.cleanup.processTreeVerified, false); assert.equal(retained.cleanup.observedProcesses, 0);
         }
+        assert.equal(children.size, 0); runtimeProofs.push({ control: "windows_native_early_cancel", result: retained });
       });
-      const ready = (child: ChildProcess) => new Promise<string>((done, reject) => {
-        const timer = setTimeout(() => reject(Error("Owned Windows tree did not become ready.")), 8_000);
-        child.stdout!.once("data", value => { clearTimeout(timer); done(String(value)); });
-        child.once("error", () => { clearTimeout(timer); reject(Error("Owned Windows tree failed before readiness.")); });
+      await control("Windows native setup failure preserves original spawn error and leaves no contained root", async () => {
+        const before = [...children];
+        const pending = run("windows-native-setup-failure", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "missing-native-cwd"));
+        const outcome = pending.then(value => value, (error: unknown) => error), launched = [...children].find(child => !before.includes(child));
+        const error = await outcome; assert.ok(error instanceof Error); assert.match(error.message, /process failed|cleanup failed/u);
+        const retained = (error as Error & { childResult: { code: number | null; cleanup: { status: string }; nativeJobIdentity: NativeIdentity | null; nativeJobReceipt: NativeReceipt | null } }).childResult;
+        assert.ok(retained); assert.deepEqual(error.cause, { code: "ENOENT" }); assert.equal(retained.code, null); assert.equal(retained.nativeJobIdentity, null); assert.equal(retained.nativeJobReceipt, null);
+        assert.equal(retained.cleanup.status, "PASS"); if (launched) assert.equal(launched.pid, undefined);
+        assert.equal(children.size, 0); runtimeProofs.push({ control: "windows_native_setup_failure", result: retained, allocatedRoot: false });
       });
-      const leaf = "process.stdout.write(JSON.stringify({pid:process.pid,ppid:process.ppid}));setInterval(()=>{},1000);";
-      const tree = `const {spawn}=require('node:child_process');const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{windowsHide:true,stdio:['ignore','pipe','pipe']});leaf.stdout.once('data',data=>process.stdout.write(JSON.stringify({root:{pid:process.pid,ppid:process.ppid},leaf:JSON.parse(String(data))})));setInterval(()=>{},1000);`;
-      for (const kind of ["timeout", "cancelled"] as const) await control(`Windows ${kind} removes a known live tree and preserves an unrelated child`, async () => {
-        let sentinel: ChildProcess | undefined;
+      await control("Windows native owner death closes the control pipe and drains its private job", async () => {
+        const runDirectory = realpathSync(mkdtempSync(path.join(directory, "owner-death-"))), ownerSource = new URL("./lib/isolated-public-verification.mts", import.meta.url).href;
+        const ownerCode = `const {runOwnedVerificationChild}=await import(${JSON.stringify(ownerSource)});const children=new Set();const env=${JSON.stringify(environment)};const pending=runOwnedVerificationChild({sourceDirectory:${JSON.stringify(directory)},context:{runDirectory:${JSON.stringify(runDirectory)},sanitize:value=>value,cleanEnvironment:()=>({...env})},children,signal:new AbortController().signal},['-e',${JSON.stringify(tree())}],env,'owner-death',20000);pending.catch(()=>{});const child=[...children][0];child.stdout.on('data',value=>process.stdout.write(value));setTimeout(()=>process.exit(17),22000);`;
+        const owner = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", ownerCode], { cwd: root, env: { ...environment }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+        const closed = new Promise<void>(done => owner.once("close", () => done()));
         try {
-          const controller = new AbortController(), pending = run(`windows-tree-${kind}`, ["-e", tree], controller.signal, kind === "timeout" ? 3_000 : 15_000);
-          const child = [...children][0]; assert.ok(child);
-          const outcome = pending.then(() => assert.fail("A terminated owned tree cannot PASS."), (error: unknown) => error);
-          const identities = JSON.parse(await ready(child)) as { root: { pid: number; ppid: number }; leaf: { pid: number; ppid: number } };
-          assert.equal(identities.root.pid, child.pid); assert.equal(identities.root.ppid, process.pid); assert.equal(identities.leaf.ppid, child.pid);
-          assert.ok(alive(identities.root.pid) && alive(identities.leaf.pid));
-          sentinel = spawn(process.execPath, ["-e", "process.stdout.write('sentinel');setInterval(()=>{},1000)"], { env: { ...environment }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-          await ready(sentinel); assert.ok(sentinel.pid && alive(sentinel.pid));
-          if (kind === "cancelled") controller.abort(Error("Controlled Windows tree cancellation"));
-          const error = await outcome;
-          assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
-          const retained = (error as Error & { childResult: { code: number | null; signal: NodeJS.Signals | null; reason: string;
-            identity: { pid: number; ppid: number }; cleanup: { status: string; processTreeVerified: boolean; liveProcesses: number } } }).childResult;
-          assert.equal(retained.reason, kind); assert.equal(retained.identity.pid, identities.root.pid); assert.equal(retained.identity.ppid, process.pid);
-          assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.processTreeVerified, true); assert.equal(retained.cleanup.liveProcesses, 0);
-          assert.equal(alive(identities.root.pid), false); assert.equal(alive(identities.leaf.pid), false); assert.equal(children.size, 0);
-          assert.equal(alive(sentinel.pid), true, "Owned Windows cleanup must preserve unrelated children.");
-          runtimeProofs.push({ scope: kind, identities, result: retained, unrelatedProcessPreserved: true, knownOwnedProcessesAbsent: true });
-        } finally { if (sentinel) await api.stop(sentinel, environment); }
+          const identities = JSON.parse(await ready(owner)) as Tree;
+          const identity = JSON.parse(readFileSync(path.join(runDirectory, "public-owner-death.native-identity.json"), "utf8")) as NativeIdentity;
+          assert.ok(owner.pid && alive(owner.pid)); assert.ok(alive(identity.helperPid)); assert.equal(identity.ownerJobAssignedBeforeResume, true);
+          assert.equal((identity as NativeIdentity & { jobHandleNonInheritable: boolean }).jobHandleNonInheritable, true);
+          assert.equal(owner.kill(), true); await closed;
+          const receiptPath = path.join(runDirectory, "public-owner-death.native-result.json"), deadline = performance.now() + 12_000;
+          while (!existsSync(receiptPath) && alive(identity.helperPid) && performance.now() < deadline) await new Promise<void>(done => setTimeout(done, 20));
+          let receipt: NativeReceipt | null = null;
+          if (existsSync(receiptPath)) { try { receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as NativeReceipt; } catch { /* Abrupt helper death cannot qualify a partial receipt. Original bytes are archived. */ } }
+          if (receipt) native({ nativeJobIdentity: identity, nativeJobReceipt: receipt,
+            cleanup: { status: receipt.cleanup.status, method: receipt.cleanup.method, processTreeVerified: receipt.cleanup.processTreeVerified, liveProcesses: receipt.cleanup.activeProcessesAfterCleanup } }, "owner_lost");
+          else {
+            assert.equal(alive(identity.helperPid), false, "Missing receipt cannot substitute for a still-live native owner.");
+            assert.equal(identity.effectiveLimitFlags, 0x2000); assert.equal(identity.rootPpid, identity.helperPid);
+          }
+          await treeProof(identities, identity); await absent([identity.helperPid]);
+          runtimeProofs.push({ control: "windows_native_owner_death", ownerPid: owner.pid, identities, nativeJobIdentity: identity, nativeJobReceipt: receipt,
+            proofBoundary: receipt ? "native_eof_zero_membership_receipt" : "kernel_last_handle_close_known_contained_process_absence",
+            zeroMembershipReceiptAvailable: receipt !== null, knownContainedProcessesAbsent: true });
+        } finally { if (owner.exitCode === null && owner.signalCode === null) { owner.kill(); await closed; } }
       });
+      await control("Windows native last job handle close contains descendants and missing receipt stays failure", async () => {
+        const pending = run("windows-native-last-close", ["-e", tree()], new AbortController().signal, 15_000);
+        const helper = [...children][0] as NativeChild; assert.ok(helper); const outcome = pending.then(value => value, (error: unknown) => error);
+        const identities = JSON.parse(await ready(helper)) as Tree, identity = helper.verificationWindowsIdentity?.(); assert.ok(identity);
+        assert.equal(identity.ownerJobAssignedBeforeResume, true); assert.equal(identity.effectiveLimitFlags, 0x2000);
+        assert.equal((identity as NativeIdentity & { jobHandleNonInheritable: boolean }).jobHandleNonInheritable, true);
+        assert.equal(helper.kill(), true); const error = await outcome; assert.ok(error instanceof Error && /cleanup failed/u.test(error.message));
+        const retained = (error as Error & { childResult: { code: number | null; signal: NodeJS.Signals | null;
+          helperExit: { code: number | null; signal: NodeJS.Signals | null }; nativeJobReceipt: NativeReceipt | null; cleanup: { status: string } } }).childResult;
+        assert.equal(retained.nativeJobReceipt, null); assert.equal(retained.cleanup.status, "FAIL");
+        assert.deepEqual(retained.helperExit, { code: helper.exitCode, signal: helper.signalCode });
+        assert.equal(retained.code, null); assert.equal(retained.signal, null); await treeProof(identities, identity);
+        await absent([identity.helperPid]); children.delete(helper);
+        runtimeProofs.push({ control: "windows_native_last_handle_close", identities, nativeJobIdentity: identity, result: retained,
+          knownContainedProcessesAbsent: true, zeroMembershipReceiptAvailable: false, expectedMissingReceiptRejected: true });
+      });
+      await control("Windows native job cleanup preserves an unrelated live retained child", async () => {
+        const sentinel = spawn(process.execPath, ["-e", "process.stdout.write('sentinel\\n');setTimeout(()=>process.exit(0),20000);setInterval(()=>{},1000)"], { env: { ...environment }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+        const closed = new Promise<void>(done => sentinel.once("close", () => done()));
+        try {
+          await ready(sentinel, "sentinel"); assert.ok(sentinel.pid && alive(sentinel.pid));
+          const result = await run("windows-native-sentinel-isolation", ["-e", tree("process.exit(0);")]), proof = native(result, "completed");
+          await treeProof(JSON.parse(result.stdout.trim().slice("tree:".length)) as Tree, proof.identity);
+          assert.equal(alive(sentinel.pid), true); runtimeProofs.push({ control: "windows_native_unrelated_sentinel", sentinelPid: sentinel.pid, unrelatedProcessPreserved: true, result });
+        } finally { if (sentinel.exitCode === null && sentinel.signalCode === null) sentinel.kill(); await closed; }
+      });
+      await control("Windows native concurrent jobs retain independent handles and cancellation boundaries", async () => {
+        const first = new AbortController(), second = new AbortController();
+        const pendingA = run("windows-native-concurrent-a", ["-e", tree()], first.signal, 15_000), helperA = [...children][0]; assert.ok(helperA);
+        const outcomeA = pendingA.then(value => value, (error: unknown) => error), readyA = ready(helperA);
+        const pendingB = run("windows-native-concurrent-b", ["-e", tree()], second.signal, 15_000), helperB = [...children].find(child => child !== helperA); assert.ok(helperB);
+        const outcomeB = pendingB.then(value => value, (error: unknown) => error);
+        const [identitiesA, identitiesB] = await Promise.all([readyA, ready(helperB)]).then(values => values.map(value => JSON.parse(value) as Tree));
+        assert.ok(identitiesA && identitiesB); first.abort(Error("Cancel only first private job"));
+        const proofA = await failedResult(outcomeA, "cancelled"); await treeProof(identitiesA, proofA.identity);
+        assert.ok([identitiesB.root.pid, identitiesB.middle.pid, identitiesB.leaf.pid].every(alive));
+        second.abort(Error("Final cleanup second private job")); const proofB = await failedResult(outcomeB, "cancelled"); await treeProof(identitiesB, proofB.identity);
+        assert.notEqual(proofA.identity.jobToken, proofB.identity.jobToken); assert.notEqual(proofA.identity.helperPid, proofB.identity.helperPid); assert.equal(children.size, 0);
+        runtimeProofs.push({ control: "windows_native_concurrent_jobs", independentlyCancelled: true, first: proofA.retained, second: proofB.retained });
+      });
+      await control("Windows native immediate root exit retains assignment-before-resume and zero active job evidence", async () => {
+        const result = await run("windows-native-fast-exit", ["-e", "process.exit(0)"]), proof = native(result, "completed");
+        assert.deepEqual(result.rawExit, { code: 0, signal: null });
+        assert.deepEqual(proof.identity.jobBeforeResume, { totalProcesses: 1, activeProcesses: 1, processIds: [proof.identity.rootPid] });
+        assert.deepEqual(proof.receipt.jobBeforeResume, proof.identity.jobBeforeResume);
+        assert.ok(proof.receipt.cleanup.totalProcesses >= proof.identity.jobBeforeResume.totalProcesses);
+        assert.equal(proof.receipt.cleanup.activeProcessesAfterCleanup, 0); assert.equal(proof.receipt.cleanup.rootExitedBeforeCleanup, true);
+        assert.equal(children.size, 0); runtimeProofs.push({ control: "windows_native_fast_exit_zero_job", result });
+      });
+      const nativeEvidence: Array<{ file: string; sha256: string; rawJson: string; validJson: boolean }> = [];
+      const collect = (at: string) => { for (const name of readdirSync(at)) { const file = path.join(at, name), stat = lstatSync(file);
+        assert.equal(stat.isSymbolicLink(), false); if (stat.isDirectory()) collect(file);
+        else if (/\.native-(?:identity|result)\.json$/u.test(name)) { const rawJson = readFileSync(file, "utf8"); let validJson = true;
+          try { JSON.parse(rawJson); } catch { validJson = false; }
+          nativeEvidence.push({ file: path.relative(directory, file).replaceAll("\\", "/"), sha256: sha256(rawJson), rawJson, validJson }); }
+      } };
+      collect(directory); assert.ok(nativeEvidence.length >= 24); runtimeProofs.push({ control: "windows_native_original_evidence", files: nativeEvidence });
     }
     if (process.platform === "linux") {
       await control("Linux immediate zero-exit child retains an inspectable root identity and leaves no live process", async () => {
@@ -3666,6 +3883,22 @@ async function verifySharedChildControls() {
     }
   } finally {
     const stopped = await Promise.allSettled([...children].map(child => api.stop(child, environment)));
+    if (process.platform === "win32") {
+      const evidenceRoot = path.join(root, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true }); assert.equal(realpathSync(evidenceRoot), evidenceRoot);
+      const nativeEvidenceDirectory = realpathSync(mkdtempSync(path.join(evidenceRoot, "owned-process-controls-")));
+      const evidence: Array<{ file: string; sha256: string; bytes: number }> = [];
+      const archive = (at: string) => { for (const name of readdirSync(at)) { const file = path.join(at, name), stat = lstatSync(file);
+        assert.equal(stat.isSymbolicLink(), false); if (stat.isDirectory()) archive(file);
+        else { assert.ok(stat.isFile()); const relative = path.relative(directory, file); assert.ok(!relative.startsWith("..") && !path.isAbsolute(relative));
+          const target = path.join(nativeEvidenceDirectory, relative); mkdirSync(path.dirname(target), { recursive: true });
+          const bytes = readFileSync(file); writeFileSync(target, bytes, { flag: "wx", mode: 0o600 });
+          evidence.push({ file: relative.replaceAll("\\", "/"), sha256: sha256(bytes), bytes: bytes.length }); }
+      } };
+      archive(directory); writeFileSync(path.join(nativeEvidenceDirectory, "evidence-index.json"), JSON.stringify({ schema: 1,
+        originalNativeEvidenceRetained: true, finalCleanup: stopped.map(value => value.status), files: evidence }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+      runtimeProofs.push({ control: "windows_native_evidence_archive", directory: nativeEvidenceDirectory, files: evidence });
+      console.error(JSON.stringify({ ownedNativeEvidenceDirectory: nativeEvidenceDirectory, retainedFiles: evidence.length }));
+    }
     assert.equal(realpathSync(directory), directory);
     assert.ok(path.basename(directory).startsWith("venisia-owned-child-controls-") && path.dirname(directory) === realpathSync(tmpdir()));
     rmSync(directory, { recursive: true, force: true });
@@ -3678,7 +3911,7 @@ async function ownedChildControlsOnly() {
   const runtimeProofs = await verifySharedChildControls();
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, platform: process.platform,
     runtimeProofs, actualOwnedChildrenExecuted: true, tempFixtureCleanupVerified: true, browserExecuted: false, databaseCalls: 0,
-    dockerResourcesAllocated: 0, windowsExitedRootDescendantsQualified: false }, null, 2));
+    dockerResourcesAllocated: 0, windowsExitedRootDescendantsQualified: process.platform === "win32", windowsNativeAcceptanceCases: process.platform === "win32" ? 12 : 0 }, null, 2));
 }
 
 async function verifyQualifiedSelectionControls() {
@@ -3749,6 +3982,45 @@ async function verifyQualifiedSelectionControls() {
     return value;
   };
   const verifyActualSourceGuardQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationTargets">) => {
+  const nativePortEffects = { ...sourceGuardHashes,
+    "scripts/verify-verification-infrastructure.mts": "6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230" };
+  const nativePortAnalysis = (file: string, semanticChange = true): Analysis => {
+    const value = qualityAnalysis(); value.changes = [{ ...value.changes[0]!, file, semanticChange }]; return value;
+  };
+  for (const file of ["scripts/lib/windows-owned-process.mts", "scripts/lib/windows-owned-process.cs"]) {
+    check("actual native execution port " + file + " selects Form and both quality guards once", () => {
+      const result = ownerApi.qualifyLocalVerificationTargets(scripts, nativePortAnalysis(file), fixtureHash, nativePortEffects);
+      assert.deepEqual(result.blocking, []); assert.equal(result.targets.length, 3); assert.equal(result.selections.filter(row => row.selected).length, 3);
+      assert.equal(result.targets.filter(target => target.kind === "browser_behavior").length, 1);
+      const form = result.targets.find(target => target.entry === entry); assert.ok(form); assert.equal(form.step, step);
+      assert.ok(form.canonicalChecks.length > 0); assert.deepEqual(form.reasons.map(reason => reason.file), [file]);
+      assert.equal(form.nativePersistenceVerified, false); assert.equal(form.businessConsumerAdoptionVerified, false);
+      assert.equal(new Set(result.targets.map(target => target.step)).size, 3); assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+    });
+  }
+  check("native filename lookalikes unrelated documentation and nonsemantic deltas cannot borrow Form execution", () => {
+    for (const file of ["docs/windows-owned-process.cs.md", "scripts/fixtures/windows-owned-process.cs", "src/lib/windows-owned-process.mts"]) {
+      const result = ownerApi.qualifyLocalVerificationTargets(scripts, nativePortAnalysis(file), fixtureHash, nativePortEffects);
+      assert.equal(result.targets.some(target => target.entry === entry), false);
+      assert.equal(result.selections.find(row => row.family === "admin-form-save-cache")?.selected, false);
+      assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+    }
+    const unchanged = ownerApi.qualifyLocalVerificationTargets(scripts, nativePortAnalysis("scripts/lib/windows-owned-process.mts", false), fixtureHash, nativePortEffects);
+    assert.deepEqual(unchanged.targets, []); assert.equal(unchanged.applicable, false);
+  });
+  check("native execution deltas retain stale-fingerprint rejection and overlapping-leaf deduplication", () => {
+    const value = nativePortAnalysis("scripts/lib/windows-owned-process.cs");
+    const staleFixture = ownerApi.qualifyLocalVerificationTargets(scripts, value, "f".repeat(64), nativePortEffects);
+    assert.equal(staleFixture.targets.some(target => target.entry === entry), false);
+    assert.ok(staleFixture.selections.some(row => row.family === "admin-form-save-cache" && row.selected && !row.qualified));
+    assert.ok(staleFixture.blocking.includes("qualified_fixture_bytes_changed_review_effect_contract"));
+    const staleEffect = ownerApi.qualifyLocalVerificationTargets(scripts, value, fixtureHash,
+      { ...nativePortEffects, "scripts/verify-executable-governance.mts": "f".repeat(64) });
+    assert.ok(staleEffect.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:scripts/verify-executable-governance.mts"));
+    assert.equal(staleEffect.targets.some(target => target.entry === "scripts/verify-executable-governance.mts"), false);
+    const overlap = ownerApi.qualifyLocalVerificationTargets({ ...scripts, "qa:native-owned-form-overlap": step + " && " + step }, value, fixtureHash, nativePortEffects);
+    assert.equal(overlap.targets.length, 3); assert.equal(new Set(overlap.targets.map(target => target.step)).size, 3);
+  });
   check("QA quality qualification preserves two required selections while executing only the reviewed complete closure", () => {
     const value = qualityAnalysis(), result = ownerApi.qualifyLocalVerificationTargets(scripts, value, fixtureHash, sourceGuardHashes);
     assert.equal(result.selections.filter(row => row.selected).length, 2); assert.equal(result.targets.length, 1);
