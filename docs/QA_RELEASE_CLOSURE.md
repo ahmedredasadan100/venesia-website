@@ -494,7 +494,14 @@ Environment Readiness, repair the historical V8 abort or satisfy Full Local E.
 Contract correspondence is per exported contract/symbol and its actual
 assertion dependency, including lexically bound runtime aliases. An unrelated
 export, message-only change, file length/hash check or unrelated vector cannot
-maintain another changed contract. Explicit changed expectations remain human
+maintain another changed contract. AST declaration kinds keep callback-bearing
+interfaces/types distinct from executable exports. An assertion reading an
+actually changed top-level member can bind its exact imported type through a
+direct receiver type or unshadowed built-in Pick; nested/foreign types,
+shadowed bindings, unchanged members and bare export names grant no credit.
+Applicable compile-time negative cases still require the actual TypeScript
+check; source correspondence alone does not execute the compiler.
+Explicit changed expectations remain human
 reviewed; source correspondence never proves arbitrary assertion semantics,
 behavioral equivalence or Owner approval. Existing dynamic capability-axis
 coverage and approved geometry/presentation requirements remain protected.

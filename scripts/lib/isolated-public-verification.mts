@@ -312,23 +312,66 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
     && keyExpression.arguments[0].getText(authorityTree) === keyDeriver.parameters[0].name.getText(authorityTree));
   // File reachability does not establish that an assertion protects this changed export.
   // Compare explicit test inputs with declared shapes; never manufacture expected values.
+  const exportedKinds = (file: string, source: string | undefined) => {
+    const kinds = new Map<string, { runtime: boolean; members: ReadonlyMap<string, string> }>();
+    if (source === undefined) return kinds;
+    const tree = parse(file, semanticSource(file, source));
+    for (const node of tree.statements) {
+      if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+      if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
+        const members = ts.isInterfaceDeclaration(node) ? node.members : ts.isTypeLiteralNode(node.type) ? node.type.members : [];
+        kinds.set(node.name.text, { runtime: false, members: new Map(members.flatMap(member => member.name
+          ? [[name(member.name), member.getText(tree)] as const] : [])) });
+      } else if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) {
+        if (node.name) kinds.set(node.name.text, { runtime: true, members: new Map() });
+      } else if (ts.isVariableStatement(node)) for (const declaration of node.declarationList.declarations)
+        kinds.set(declaration.name.getText(tree), { runtime: true, members: new Map() });
+    }
+    return kinds;
+  };
   const contractShapeFiles = new Map(unique(obligations.map(obligation => obligation.file)).map(file => [file, {
     previous: exportedShapes(file, text(before, file)), next: exportedShapes(file, text(current, file)),
+    previousKinds: exportedKinds(file, text(before, file)), nextKinds: exportedKinds(file, text(current, file)),
   }]));
   const compactShape = (value: string) => value.replace(/\s+/gu, "").replace(/;(?=\})/gu, "");
   const obligationShapes = obligations.map(obligation => {
     const key = obligation.contract.slice(obligation.file.length + 1);
-    const { previous, next } = contractShapeFiles.get(obligation.file)!;
+    const { previous, next, previousKinds, nextKinds } = contractShapeFiles.get(obligation.file)!;
+    const declaration = nextKinds.get(key) ?? previousKinds.get(key);
     return { ...obligation, key, previous: previous.get(key) ?? "", next: next.get(key) ?? "",
       siblings: [...previous, ...next].filter(([name]) => name !== key).map(([, shape]) => shape),
-      runtime: /\bfunction\b|=>/u.test((next.get(key) ?? previous.get(key)) ?? ""),
-      valueExport: key !== "manifest-obligations" && !/^\s*export\s+(?:type|interface)\b/u.test((next.get(key) ?? previous.get(key)) ?? "") };
+      runtime: declaration?.runtime === true, valueExport: declaration?.runtime === true,
+      changedTypeMembers: declaration?.runtime === false ? new Set(unique([
+        ...(previousKinds.get(key)?.members.keys() ?? []), ...(nextKinds.get(key)?.members.keys() ?? []),
+      ]).filter(member => previousKinds.get(key)?.members.get(member) !== nextKinds.get(key)?.members.get(member))) : new Set<string>() };
   });
   const assertionShapes = (file: string, source: string | undefined) => {
     const shapes = new Map<string, { references: string[]; contracts: string[] }>(); if (source === undefined) return shapes;
     const tree = parse(file, semanticSource(file, source));
     const bindings = new Map<string, ts.Node[]>(), imports = new Map<string, string>(), importedNames = new Map<string, string>();
-    const bindingScopes = new Map<ts.Node, ts.Node>(), typedApiBindings = new Map<string, Array<{ target: string; scope: ts.Node }>>();
+    const bindingScopes = new Map<ts.Node, ts.Node>(), typedApiBindings = new Map<string, Array<{ target: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
+    const typedValueBindings = new Map<string, Array<{ target: string; typeName: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
+    let shadowedPick = false;
+    const detectPick = (node: ts.Node) => {
+      if ((ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)
+        || ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node) || ts.isTypeParameterDeclaration(node) || ts.isImportSpecifier(node)
+        || ts.isImportClause(node) || ts.isNamespaceImport(node) || ts.isImportEqualsDeclaration(node)) && node.name?.getText(tree) === "Pick") shadowedPick = true;
+      ts.forEachChild(node, detectPick);
+    };
+    detectPick(tree);
+    // Bind only the receiver's actual imported type, or an unshadowed built-in Pick of it.
+    // A nested generic/object type does not type its outer receiver as the imported owner.
+    const receiverImport = (type: ts.TypeNode): { imported: ts.ImportTypeNode; members: ReadonlySet<string> | null } | undefined => {
+      while (ts.isParenthesizedTypeNode(type)) type = type.type;
+      if (ts.isImportTypeNode(type)) return { imported: type, members: null };
+      if (!shadowedPick && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === "Pick"
+        && type.typeArguments?.length === 2 && ts.isImportTypeNode(type.typeArguments[0])) {
+        const selector = type.typeArguments[1], keys = ts.isUnionTypeNode(selector) ? selector.types : [selector];
+        if (keys.every(key => ts.isLiteralTypeNode(key) && ts.isStringLiteral(key.literal)))
+          return { imported: type.typeArguments[0], members: new Set(keys.map(key => ((key as ts.LiteralTypeNode).literal as ts.StringLiteral).text)) };
+      }
+      return undefined;
+    };
     const moduleTarget = (specifier: string) => {
       if (!specifier.startsWith(".")) return undefined;
       const base = resolve(ROOT, dirname(file), specifier).slice(ROOT.length + 1).replaceAll("\\", "/");
@@ -353,16 +396,16 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) register(node.name.text, node.initializer, node);
       if (ts.isFunctionDeclaration(node) && node.name && node.body) register(node.name.text, node.body, node);
       if (ts.isParameter(node) && ts.isIdentifier(node.name)) register(node.name.text, node.initializer ?? node, node);
-      if (ts.isParameter(node) && ts.isIdentifier(node.name) && node.type) {
+      if ((ts.isParameter(node) || ts.isVariableDeclaration(node)) && ts.isIdentifier(node.name) && node.type) {
         const parameterName = node.name.text;
-        const typeImports = (part: ts.Node) => {
-          if (ts.isImportTypeNode(part) && ts.isLiteralTypeNode(part.argument) && ts.isStringLiteral(part.argument.literal)) {
-            const target = moduleTarget(part.argument.literal.text);
-            if (target) typedApiBindings.set(parameterName, [...(typedApiBindings.get(parameterName) ?? []), { target, scope: declarationScope(node) }]);
-          }
-          ts.forEachChild(part, typeImports);
-        };
-        typeImports(node.type);
+        const receiver = receiverImport(node.type), imported = receiver?.imported;
+        if (imported && ts.isLiteralTypeNode(imported.argument) && ts.isStringLiteral(imported.argument.literal)) {
+          const target = moduleTarget(imported.argument.literal.text), members = receiver!.members;
+          if (target && !imported.isTypeOf && imported.qualifier && ts.isIdentifier(imported.qualifier)) typedValueBindings.set(parameterName,
+            [...(typedValueBindings.get(parameterName) ?? []), { target, typeName: imported.qualifier.text, scope: declarationScope(node), members }]);
+          else if (target && imported.isTypeOf && !imported.qualifier) typedApiBindings.set(parameterName,
+            [...(typedApiBindings.get(parameterName) ?? []), { target, scope: declarationScope(node), members }]);
+        }
       }
       if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith(".")) {
         const target = moduleTarget(node.moduleSpecifier.text);
@@ -377,19 +420,33 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       ts.forEachChild(node, declarations);
     };
     declarations(tree);
-    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, tested = true): string[] => {
+    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, testedTypeMembers: Set<string>, tested = true): string[] => {
       const targets = sourcePaths(node);
       const visit = (part: ts.Node) => {
         if (tested && ts.isStringLiteralLike(part)) fragments.add(part.text.replace(/\s+/gu, ""));
         if (tested && ts.isPropertyAssignment(part) && (ts.isIdentifier(part.name) || ts.isStringLiteralLike(part.name))) fragments.add(part.name.text);
+        if (tested && ts.isPropertyAccessExpression(part) && ts.isIdentifier(part.expression)) {
+          const local = nearest(part, bindings.get(part.expression.text) ?? [], binding => bindingScopes.get(binding)!);
+          const typed = local.length === 1 ? nearest(part, typedValueBindings.get(part.expression.text) ?? [], binding => binding.scope)
+            .filter(binding => binding.scope === bindingScopes.get(local[0])) : [];
+          if (typed.length === 1) {
+            const binding = typed[0], contract = binding.target + "#" + binding.typeName;
+            if ((!binding.members || binding.members.has(part.name.text))
+              && obligationShapes.some(obligation => obligation.contract === contract && obligation.changedTypeMembers.has(part.name.text))) {
+              targets.add(binding.target); testedTypeMembers.add(contract);
+            }
+          }
+        }
         if (tested && ts.isCallExpression(part) && !/^(?:assert|check|expect)(?:\.|$)/u.test(part.expression.getText(tree))) {
           if (ts.isIdentifier(part.expression)) {
             const shadowed = nearest(part, bindings.get(part.expression.text) ?? [], binding => bindingScopes.get(binding)!);
             const target = shadowed.length ? undefined : imports.get(part.expression.text), symbol = importedNames.get(part.expression.text);
             if (target && symbol) calls.add(target + "#" + symbol);
           } else if (ts.isPropertyAccessExpression(part.expression)) {
-            const receiver = part.expression.expression, typed = ts.isIdentifier(receiver) ? typedApiBindings.get(receiver.text) : undefined;
-            const typedTargets = new Set(nearest(part, typed ?? [], binding => binding.scope).map(binding => binding.target));
+            const receiver = part.expression.expression, member = part.expression.name.text, typed = ts.isIdentifier(receiver) ? typedApiBindings.get(receiver.text) : undefined;
+            const local = ts.isIdentifier(receiver) ? nearest(part, bindings.get(receiver.text) ?? [], binding => bindingScopes.get(binding)!) : [];
+            const typedTargets = new Set((local.length === 1 ? nearest(part, typed ?? [], binding => binding.scope)
+              .filter(binding => binding.scope === bindingScopes.get(local[0]) && (!binding.members || binding.members.has(member))) : []).map(binding => binding.target));
             if (typedTargets.size === 1) for (const target of typedTargets) { targets.add(target); calls.add(target + "#" + part.expression.name.text); }
             else if (!typed?.length) calls.add(part.expression.name.text);
           }
@@ -404,7 +461,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
           const importedName = importedNames.get(part.text); if (tested && imported && importedName) testedExports.add(imported + "#" + importedName);
           if (candidates?.length === 1) {
             if (!ts.isBlock(candidates[0]) && !ts.isParameter(candidates[0])) closure.add(candidates[0].getText(tree));
-            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, tested && !ts.isBlock(candidates[0]))) targets.add(target);
+            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, testedTypeMembers, tested && !ts.isBlock(candidates[0]))) targets.add(target);
           }
         }
         ts.forEachChild(part, visit);
@@ -417,14 +474,15 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
         const argumentsUnderTest = callee === "check" ? node.arguments.slice(1, 2) : /^(?:assert|assert\.ok|expect)$/u.test(callee) ? node.arguments.slice(0, 1) : node.arguments.slice(0, 2);
         // Callback-based check wrappers have their assertions inspected independently.
         if (!argumentsUnderTest.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) || callee !== "check") {
-          const closure = new Set<string>(), fragments = new Set<string>(), calls = new Set<string>(), testedExports = new Set<string>();
-          const references = unique(argumentsUnderTest.flatMap(argument => dependencyPaths(argument, new Set(), closure, fragments, calls, testedExports)));
+          const closure = new Set<string>(), fragments = new Set<string>(), calls = new Set<string>(), testedExports = new Set<string>(), testedTypeMembers = new Set<string>();
+          const references = unique(argumentsUnderTest.flatMap(argument => dependencyPaths(argument, new Set(), closure, fragments, calls, testedExports, testedTypeMembers)));
           const contracts = obligationShapes.filter(obligation => references.includes(obligation.file) && (obligation.valueExport && testedExports.has(obligation.contract)
+            || testedTypeMembers.has(obligation.contract)
             || obligation.runtime && (calls.has(obligation.contract) || calls.has(obligation.key)) || [...fragments].some(fragment => {
             if (fragment.length < 2 || /^(?:true|false|null|undefined|number|string|boolean|object|function|any|unknown|void|never|readonly|export|type|const|interface|\d+)$/u.test(fragment)) return false;
             const previous = compactShape(obligation.previous), next = compactShape(obligation.next), expected = compactShape(fragment);
-            // A runtime export name proves availability only, not applicable contract protection.
-            if (obligation.runtime && expected === obligation.key) return false;
+            // An export name proves availability only, not applicable contract protection.
+            if (expected === obligation.key) return false;
             return previous.includes(expected) !== next.includes(expected)
               && !obligation.siblings.some(shape => compactShape(shape).includes(expected));
           }))).map(obligation => obligation.contract);

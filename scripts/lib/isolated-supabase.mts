@@ -61,11 +61,15 @@ export function observeApplicationClient(client: Pick<PgConnection, "on">, recor
   const watch = (watched: Pick<PgConnection,"on">) => watched.on("error", (error: unknown) => {
     if (failure) return;
     failure = new IsolatedSupabaseError("APPLICATION_CLIENT_DISCONNECTED", "application-handoff");
+    Object.defineProperty(failure, "cause", { value: error, enumerable: false });
     // A failed receipt write must also remain inside the awaited failure path.
     const pgCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
       && /^(?:[0-9A-Z]{5}|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENETUNREACH|EHOSTUNREACH)$/u.test(error.code) ? error.code : null;
-    try { recordFailure({ pgCode, pgMessageClass: classifyOwnedPgConnectMessage(error)?.messageClass ?? "unclassified" }); } catch {
+    try { recordFailure({ pgCode, pgMessageClass: classifyOwnedPgConnectMessage(error)?.messageClass ?? "unclassified" }); } catch (receiptError) {
+      const originalDisconnect = failure;
       failure = new IsolatedSupabaseError("APPLICATION_CLIENT_RECEIPT_FAILED", "application-handoff");
+      Object.defineProperty(failure, "cause", { value: originalDisconnect, enumerable: false });
+      Object.defineProperty(failure, "receiptCause", { value: receiptError, enumerable: false });
     }
     rejectFailure(failure);
   });

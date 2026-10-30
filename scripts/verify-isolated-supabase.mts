@@ -639,6 +639,7 @@ async function networkBoundaryOnly() {
 }
 
 async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/isolated-supabase.mts")) {
+  await verifyPreparationCancellationContracts(owner);
   await verifyOwnedPreparationLifecycle(owner);
   await verifyPublicSourceHeartbeatBoundary(owner);
   const cliControl = await verifyIsolatedApplicationCliPulse();
@@ -754,6 +755,79 @@ async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/is
     assert.equal(t.connections(), 0);
     cases.push("explicit idle phase preserves the existing lease deadline without reconnecting an expired control socket");
   }
+}
+
+async function verifyPreparationCancellationContracts(api: Pick<typeof import("./lib/isolated-supabase.mts"), "observeApplicationClient">) {
+  const compileOnly = false as boolean;
+  const contextSignal = (context: Pick<import("./lib/isolated-supabase-cli.mts").ApplicationMigrationCliContext, "signal">) => {
+    if (compileOnly) {
+      // @ts-expect-error A private CLI context cannot replace its caller's readonly cancellation binding.
+      context.signal = new AbortController().signal;
+    }
+    return context.signal;
+  };
+  const optionSignal = (options: Pick<import("./lib/isolated-supabase.mts").IsolatedSupabaseOptions, "signal">) => options.signal;
+  const cancellation = new AbortController();
+  assert.equal(contextSignal({}), undefined, "CLI lifecycle cancellation remains optional for existing contexts.");
+  assert.equal(optionSignal({}), undefined, "An existing lifecycle caller can omit external cancellation.");
+  assert.equal(contextSignal({ signal: cancellation.signal }), cancellation.signal);
+  assert.equal(optionSignal({ signal: cancellation.signal }), cancellation.signal);
+  if (compileOnly) {
+    // @ts-expect-error CLI cancellation accepts AbortSignal rather than an arbitrary lookalike payload.
+    contextSignal({ signal: "cancel" });
+    // @ts-expect-error Lifecycle options cannot accept a boolean as a cancellation signal.
+    optionSignal({ signal: true });
+  }
+  cancellation.abort(new Error("Controlled external preparation cancellation"));
+  assert.throws(() => contextSignal({ signal: cancellation.signal })!.throwIfAborted(), error => error === cancellation.signal.reason);
+  assert.throws(() => optionSignal({ signal: cancellation.signal })!.throwIfAborted(), error => error === cancellation.signal.reason);
+  cases.push("actual imported CLI/lifecycle option types preserve optional AbortSignal identity, caller abort reason and readonly CLI cancellation binding");
+  for (const vector of [
+    { error: Object.assign(new Error("Connection terminated unexpectedly"), { code: "ECONNRESET" }), expected: { pgCode: "ECONNRESET", pgMessageClass: "pg_unexpected_end" } },
+    { error: new Error("timeout expired"), expected: { pgCode: null, pgMessageClass: "pg_timeout_expired" } },
+    { error: Object.assign(new Error("private password must stay unrecorded"), { code: "private-token" }), expected: { pgCode: null, pgMessageClass: "unclassified" } },
+  ]) {
+    const client = new EventEmitter(), facts: Array<{ pgCode: string | null; pgMessageClass: string }> = [];
+    const observer = api.observeApplicationClient(client, row => facts.push(row));
+    const pending = observer.run(() => new Promise<void>(() => undefined));
+    client.emit("error", vector.error);
+    await assert.rejects(pending, /APPLICATION_CLIENT_DISCONNECTED/u);
+    await assert.rejects(pending, error => {
+      assert.ok(error instanceof Error); assert.equal(error.cause, vector.error);
+      assert.equal(Object.getOwnPropertyDescriptor(error, "cause")?.enumerable, false);
+      assert.equal(JSON.stringify(error).includes("private"), false);
+      return true;
+    });
+    assert.deepEqual(facts, [vector.expected]);
+    assert.equal(JSON.stringify(facts).includes("private"), false, "Only bounded code/class facts leave the observer.");
+    client.emit("error", new Error("later failure")); assert.equal(facts.length, 1, "The first disconnect remains authoritative.");
+    assert.throws(() => observer.assertHealthy(), /APPLICATION_CLIENT_DISCONNECTED/u);
+  }
+  {
+    const client = new EventEmitter();
+    const pgError = Object.assign(new Error("Connection terminated"), { code: "ECONNRESET" });
+    const receiptError = new Error("Secondary private receipt failure");
+    const observer = api.observeApplicationClient(client, () => { throw receiptError; });
+    const pending = observer.run(() => new Promise<void>(() => undefined));
+    client.emit("error", pgError);
+    await assert.rejects(pending, /APPLICATION_CLIENT_RECEIPT_FAILED/u);
+    assert.throws(() => observer.assertHealthy(), /APPLICATION_CLIENT_RECEIPT_FAILED/u);
+    await assert.rejects(pending, error => {
+      assert.ok(error instanceof Error);
+      const originalDisconnect = error.cause;
+      assert.ok(originalDisconnect instanceof Error);
+      assert.equal((originalDisconnect as Error & { code: string }).code, "APPLICATION_CLIENT_DISCONNECTED");
+      assert.equal(originalDisconnect.cause, pgError);
+      assert.equal((error as Error & { receiptCause: unknown }).receiptCause, receiptError);
+      for (const [object, property] of [[error, "cause"], [error, "receiptCause"], [originalDisconnect, "cause"]] as const)
+        assert.equal(Object.getOwnPropertyDescriptor(object, property)?.enumerable, false);
+      assert.equal(JSON.stringify(error).includes("private"), false);
+      client.emit("error", new Error("later private transport failure"));
+      assert.throws(() => observer.assertHealthy(), retained => retained === error);
+      return true;
+    });
+  }
+  cases.push("canonical pg observer retains safe code/message class, refuses raw error payloads, preserves first disconnect and fails closed on receipt failure");
 }
 
 async function verifyOwnedPreparationLifecycle(owner: typeof import("./lib/isolated-supabase.mts")) {
@@ -2009,6 +2083,65 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     const unrelated = scenario([[contract, next], [entry, oldGuard.replace('api.saveRecord("other")', 'api.saveRecord("other",true)')]], baseline);
     maintain(unrelated); assert.throws(() => plan(unrelated), /real verification-source change/u);
   });
+  check("type-only callback contracts bind actual changed imported members without borrowing sibling names", () => {
+    const oldGuard = guardSource + '\nconst read=(value:import("../' + contract
+      + '").RecordContract)=>value.value; assert.equal(read({value:"before",stop:()=>undefined}),"before");';
+    const signalGuard = guardSource + '\nconst signal=new AbortController().signal; ';
+    for (const declaration of [
+      'export type RecordContract = { value: string; stop: () => void };',
+      'export interface RecordContract { value: string; stop(): void }',
+    ]) {
+      const baseline = new Map(originals), sibling = ' export type OtherContract = { signal?: AbortSignal; stop: () => void };';
+      baseline.set(contract, declaration + sibling); baseline.set(entry, oldGuard);
+      const next = declaration.replace("value: string;", "value: string; signal?: AbortSignal;") + sibling;
+      for (const nextGuard of [
+        signalGuard + 'const read=(value:import("../' + contract + '").RecordContract)=>value.signal; assert.equal(read({value:"after",signal,stop:()=>undefined}),signal);',
+        signalGuard + 'const read=(value:Pick<import("../' + contract + '").RecordContract,"signal">)=>value.signal; assert.equal(read({signal}),signal);',
+        signalGuard + 'const input:Pick<import("../' + contract + '").RecordContract,"signal">={signal}; assert.equal(input.signal,signal);',
+      ]) {
+        const valid = scenario([[contract, next], [entry, nextGuard]], baseline);
+        const binding = valid.actual.changeImpact!.protections[0].assertionChanges.find(row => row.contracts.includes(contract + "#RecordContract"));
+        assert.ok(binding, "The changed imported member is asserted through its exact lexical type.");
+        maintain(valid); assert.equal(plan(valid).mode, "full");
+        const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...valid.actual, sourceSha256: valid.actual.changeImpact!.sourceSha256 });
+        assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+      }
+    }
+  });
+  check("new type and interface export names alone cannot satisfy changed member protection", () => {
+    for (const added of ['export type NewCancellationContract={signal?:AbortSignal;onEnd:()=>void};',
+      'export interface NewCancellationContract {signal?:AbortSignal;onEnd():void}']) {
+      const value = scenario([[contract, 'export type RecordContract={value:string}; ' + added],
+        [entry, guardSource + '\nassert.ok(value.includes("NewCancellationContract"));']]);
+      const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+      assert.equal(result.status, "DRIFT"); assert.equal(result.fast.correspondence.find(row => row.contract.endsWith("#NewCancellationContract"))?.protected, false);
+      maintain(value); assert.throws(() => plan(value), /real verification-source change/u);
+    }
+  });
+  check("typed member correspondence rejects unchanged members foreign types shadowed names and nested wrappers", () => {
+    const baseline = new Map(originals), declaration = 'export type RecordContract = { value: string; stop: () => void };',
+      sibling = ' export type OtherContract = { signal?: AbortSignal; stop: () => void };';
+    baseline.set(contract, declaration + sibling);
+    baseline.set("src/lib/admin/phase03/foreign-pick.ts", 'export default interface ForeignPick<T,K> { signal: AbortSignal }');
+    const prefix = guardSource + '\nconst signal=new AbortController().signal; ';
+    for (const [label, body] of [
+      ["unchanged member", 'const read=(value:import("../' + contract + '").RecordContract)=>value.value; assert.equal(read({value:"local",stop:()=>undefined}),"local");'],
+      ["foreign sibling type", 'const read=(value:import("../' + contract + '").OtherContract)=>value.signal; assert.equal(read({signal,stop:()=>undefined}),signal);'],
+      ["type name only", 'const input=undefined as import("../' + contract + '").RecordContract|undefined; assert.equal(typeof input,"undefined");'],
+      ["closer untyped shadow", 'function read(value:import("../' + contract + '").RecordContract){{const value={signal}; assert.equal(value.signal,signal);}} read({value:"local",stop:()=>undefined});'],
+      ["closer foreign typed shadow", 'function read(value:import("../' + contract + '").RecordContract){{const value:import("../' + contract + '").OtherContract={signal,stop:()=>undefined}; assert.equal(value.signal,signal);}} read({value:"local",stop:()=>undefined});'],
+      ["nested imported object", 'const read=(value:{nested:import("../' + contract + '").RecordContract;signal:AbortSignal})=>value.signal; assert.equal(read({nested:{value:"local",stop:()=>undefined},signal}),signal);'],
+      ["unselected Pick member", 'const read=(value:Pick<import("../' + contract + '").RecordContract,"value">)=>value.signal; assert.equal(read({value:"local"}),signal);'],
+      ["shadowed Pick utility", 'type Pick<T,K>={signal:AbortSignal}; const read=(value:Pick<import("../' + contract + '").RecordContract,"signal">)=>value.signal; assert.equal(read({signal}),signal);'],
+      ["default imported Pick utility", 'import type Pick from "../src/lib/admin/phase03/foreign-pick"; const read=(value:Pick<import("../' + contract + '").RecordContract,"signal">)=>value.signal; assert.equal(read({signal}),signal);'],
+    ]) {
+      const value = scenario([[contract, declaration.replace("value: string;", "value: string; signal?: AbortSignal;") + sibling], [entry, prefix + body]], baseline);
+      assert.ok(value.actual.changeImpact!.protections.every(protection => protection.assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#RecordContract"))), label);
+      maintain(value); assert.throws(() => plan(value), /real verification-source change/u, label);
+      const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+      assert.equal(result.status, "DRIFT", label); assert.equal(result.behavioralPass, false);
+    }
+  });
   check("explicit removed-field rejection remains valid source correspondence and cannot establish behavioral PASS", () => {
     const baseline = new Map(originals); baseline.set(contract, "export type RecordContract = { value: string; obsolete: number };");
     const value = scenario([[contract, "export type RecordContract = { value: string };"], [entry, guardSource + '\nassert.equal(value.includes("obsolete: number"),false);']], baseline);
@@ -3134,10 +3267,10 @@ async function verifySharedChildControls() {
     assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
   });
   const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild,readiness:verifyOwnedProcessReadiness};")(
+  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild,verifyOwnedProcessReadiness};")(
     assert, path.isAbsolute, path.resolve, path.sep, launch, write, existsSync, readFileSync, readdirSync, lstatSync) as {
       run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
-      readiness: typeof import("./lib/isolated-public-verification.mts").verifyOwnedProcessReadiness;
+      verifyOwnedProcessReadiness: typeof import("./lib/isolated-public-verification.mts").verifyOwnedProcessReadiness;
       stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<Awaited<ReturnType<typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild>>["cleanup"]>;
     };
   const api = buildApi(), runtimeProofs: Array<Record<string, unknown>> = [];
@@ -3248,24 +3381,27 @@ async function verifySharedChildControls() {
       await assert.rejects(run("pre-aborted", ["-e", "throw Error('must not execute')"], controller.signal), /Pre-aborted control/u);
       assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
     });
-    await control("process readiness proves actual live-tree cancellation and preserves identities and exclusive evidence", async () => {
-      const result = await api.readiness({ sourceDirectory: directory, context, signal: new AbortController().signal });
-      assert.equal(result.status, "PASS"); assert.equal(result.scope, "self-owned-live-tree-cancellation");
-      assert.equal(result.rootIdentity.ppid, process.pid); assert.equal(result.descendantIdentity.ppid, result.rootIdentity.pid);
-      assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true); assert.equal(result.cleanup.liveProcesses, 0);
-      assert.ok(result.durationMs > 0 && result.limitations.length > 0);
-      runtimeProofs.push({ ...result, control: "preallocation_readiness" });
-      assert.equal(JSON.parse(readFileSync(path.join(directory, "process-readiness.json"), "utf8")).status, "PASS");
-      const original = readFileSync(path.join(directory, "public-process-readiness.stdout.log"));
-      await assert.rejects(api.readiness({ sourceDirectory: directory, context, signal: new AbortController().signal }), /did not start its child/u);
-      assert.deepEqual(readFileSync(path.join(directory, "public-process-readiness.stdout.log")), original);
-    });
-    await control("pre-aborted readiness starts no probe and writes no evidence", async () => {
-      const controller = new AbortController(); controller.abort(Error("Pre-aborted readiness control"));
-      const before = readdirSync(directory).sort();
-      await assert.rejects(api.readiness({ sourceDirectory: directory, context, signal: controller.signal }), /Pre-aborted readiness control/u);
-      assert.deepEqual(readdirSync(directory).sort(), before);
-    });
+    const verifyActualReadiness = async (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "verifyOwnedProcessReadiness">) => {
+      await control("process readiness proves actual live-tree cancellation and preserves identities and exclusive evidence", async () => {
+        const result = await ownerApi.verifyOwnedProcessReadiness({ sourceDirectory: directory, context, signal: new AbortController().signal });
+        assert.equal(result.status, "PASS"); assert.equal(result.scope, "self-owned-live-tree-cancellation");
+        assert.equal(result.rootIdentity.ppid, process.pid); assert.equal(result.descendantIdentity.ppid, result.rootIdentity.pid);
+        assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true); assert.equal(result.cleanup.liveProcesses, 0);
+        assert.ok(result.durationMs > 0 && result.limitations.length > 0);
+        runtimeProofs.push({ ...result, control: "preallocation_readiness" });
+        assert.equal(JSON.parse(readFileSync(path.join(directory, "process-readiness.json"), "utf8")).status, "PASS");
+        const original = readFileSync(path.join(directory, "public-process-readiness.stdout.log"));
+        await assert.rejects(ownerApi.verifyOwnedProcessReadiness({ sourceDirectory: directory, context, signal: new AbortController().signal }), /did not start its child/u);
+        assert.deepEqual(readFileSync(path.join(directory, "public-process-readiness.stdout.log")), original);
+      });
+      await control("pre-aborted readiness starts no probe and writes no evidence", async () => {
+        const controller = new AbortController(); controller.abort(Error("Pre-aborted readiness control"));
+        const before = readdirSync(directory).sort();
+        await assert.rejects(ownerApi.verifyOwnedProcessReadiness({ sourceDirectory: directory, context, signal: controller.signal }), /Pre-aborted readiness control/u);
+        assert.deepEqual(readdirSync(directory).sort(), before);
+      });
+    };
+    await verifyActualReadiness(api);
     await control("spawn failure rejects and drains its owned child registration", async () => {
       const pending = run("spawn-error", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "absent-owned-cwd"));
       const child = [...children][0]; assert.ok(child);
@@ -3290,8 +3426,10 @@ async function verifySharedChildControls() {
         const runDirectory = realpathSync(mkdtempSync(path.join(directory, "denied-readiness-")));
         const deniedLaunch = ((binary: string, args: string[], options: Parameters<typeof spawn>[2]) => binary === "taskkill.exe"
           ? spawn(process.execPath, ["-e", "process.exit(5)"], options) : spawn(binary, args, options)) as typeof spawn;
-        await assert.rejects(buildApi(writeFileSync, deniedLaunch).readiness({ sourceDirectory: directory,
-          context: { ...context, runDirectory }, signal: new AbortController().signal }), /did not prove live-tree termination/u);
+        const rejectActualDeniedReadiness = async (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "verifyOwnedProcessReadiness">) =>
+          assert.rejects(ownerApi.verifyOwnedProcessReadiness({ sourceDirectory: directory,
+            context: { ...context, runDirectory }, signal: new AbortController().signal }), /did not prove live-tree termination/u);
+        await rejectActualDeniedReadiness(buildApi(writeFileSync, deniedLaunch));
         const blocked = JSON.parse(readFileSync(path.join(runDirectory, "process-readiness.json"), "utf8"));
         assert.equal(blocked.status, "BLOCKED"); assert.equal(blocked.cleanup.status, "FAIL");
         assert.equal(blocked.cleanupFailure.exitCode, 5);
@@ -3412,12 +3550,12 @@ async function verifyQualifiedSelectionControls() {
     const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
     assert.ok(node); return node.getText(file).replace(/^export /u, "");
   });
-  const { qualify, effects } = new Function("assert", "collectExecutableSourceGraph", "ROOT", "digest", "ts", "process", "readFileSync", "existsSync", "join",
+  const { qualifyLocalVerificationTargets: qualify, localVerificationSourceGuardEffects: effects } = new Function("assert", "collectExecutableSourceGraph", "ROOT", "digest", "ts", "process", "readFileSync", "existsSync", "join",
     ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-    + ";return {qualify:qualifyLocalVerificationTargets,effects:localVerificationSourceGuardEffects};")(
+    + ";return {qualifyLocalVerificationTargets,localVerificationSourceGuardEffects};")(
     assert, collectExecutableSourceGraph, root, sha256, ts, process, readFileSync, existsSync, path.join) as {
-      qualify: typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets;
-      effects: typeof import("./lib/isolated-public-verification.mts").localVerificationSourceGuardEffects;
+      qualifyLocalVerificationTargets: typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets;
+      localVerificationSourceGuardEffects: typeof import("./lib/isolated-public-verification.mts").localVerificationSourceGuardEffects;
     };
   type Analysis = import("./lib/isolated-public-verification.mts").LocalVerificationSourceImpact;
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
@@ -3472,8 +3610,9 @@ async function verifyQualifiedSelectionControls() {
       capabilities: [], consumers: [], contracts: [], candidateChecks: ["verify:executable-governance", "verify:verification-infrastructure"] }];
     return value;
   };
+  const verifyActualSourceGuardQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationTargets">) => {
   check("QA quality qualification preserves two required selections while executing only the reviewed complete closure", () => {
-    const value = qualityAnalysis(), result = qualify(scripts, value, fixtureHash, sourceGuardHashes);
+    const value = qualityAnalysis(), result = ownerApi.qualifyLocalVerificationTargets(scripts, value, fixtureHash, sourceGuardHashes);
     assert.equal(result.selections.filter(row => row.selected).length, 2); assert.equal(result.targets.length, 1);
     assert.ok(result.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:scripts/verify-verification-infrastructure.mts"));
     assert.equal(new Set(result.targets.map(target => target.step)).size, 1);
@@ -3484,21 +3623,23 @@ async function verifyQualifiedSelectionControls() {
       assert.equal(target.nativePersistenceVerified, false); assert.equal(target.businessConsumerAdoptionVerified, false);
     }
     assert.equal(result.unqualifiedRemainUnderExistingGates, true);
-    const repeated = qualify({ ...scripts, "verify:phase06-source-alias": scripts["verify:executable-governance"] }, value, fixtureHash, sourceGuardHashes);
+    const repeated = ownerApi.qualifyLocalVerificationTargets({ ...scripts, "verify:phase06-source-alias": scripts["verify:executable-governance"] }, value, fixtureHash, sourceGuardHashes);
     assert.equal(repeated.selections.filter(row => row.selected).length, 2, "Both required quality guards remain selected.");
     assert.equal(repeated.targets.length, 1, "Wrapper overlap must not execute any source leaf again.");
   });
   check("stale source guard effect bytes and changed helper dependencies block automatic source execution", () => {
-    const stale = qualify(scripts, qualityAnalysis(), fixtureHash,
+    const stale = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash,
       { ...sourceGuardHashes, "scripts/verify-executable-governance.mts": "f".repeat(64) });
     assert.ok(stale.blocking.some(reason => reason.startsWith("qualified_source_guard_bytes_changed_review_effect_contract:")));
     const dependency = qualityAnalysis(); dependency.changes = [...dependency.changes,
       { ...dependency.changes[0]!, file: "scripts/lib/verification-module-loader.mjs" }];
-    const changed = qualify(scripts, dependency, fixtureHash, { ...sourceGuardHashes, "scripts/verify-executable-governance.mts": "e".repeat(64) });
+    const changed = ownerApi.qualifyLocalVerificationTargets(scripts, dependency, fixtureHash, { ...sourceGuardHashes, "scripts/verify-executable-governance.mts": "e".repeat(64) });
     assert.equal(changed.targets.length, 0); assert.ok(changed.blocking.some(reason => reason.startsWith("qualified_source_guard_bytes_changed_review_effect_contract:")));
-    const redirected = qualify({ ...scripts, "verify:executable-governance": "node scripts/unqualified-quality.mjs" }, qualityAnalysis(), fixtureHash, sourceGuardHashes);
+    const redirected = ownerApi.qualifyLocalVerificationTargets({ ...scripts, "verify:executable-governance": "node scripts/unqualified-quality.mjs" }, qualityAnalysis(), fixtureHash, sourceGuardHashes);
     assert.ok(redirected.blocking.includes("missing_exact_registered_source_guard:scripts/verify-executable-governance.mts"));
   });
+  };
+  verifyActualSourceGuardQualification({ qualifyLocalVerificationTargets: qualify });
   check("complete native closure includes unused eager imports re-exports and transitive owners while preserving default graph behavior", () => {
     const entry = "scripts/phase06-effect-entry.mts", hidden = "scripts/fixtures/phase06-effect-unused.mts", side = "scripts/fixtures/phase06-effect-side.mts",
       nested = "scripts/fixtures/phase06-effect-nested.mts", forwarded = "scripts/fixtures/phase06-effect-export.mts";
