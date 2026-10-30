@@ -54,6 +54,7 @@ export type ApplicationMigrationCliContext = {
   readonly sourceBinary: string;
   readonly generatorDocker: Readonly<{ binary: string; host: string; databaseContainerId: string }>;
   readonly assertOwned: () => Promise<void>;
+  readonly signal?: AbortSignal;
 };
 type Request = { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage };
 type CanonicalFile = { file: string; sourceSha256: string; sql: string };
@@ -240,10 +241,11 @@ function prepare(context: ApplicationMigrationCliContext): Prepared {
 
 type ApplicationCliControl = Readonly<{ signal: AbortSignal; pulse(): Promise<void> }>;
 
-async function run(binary: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, control?: ApplicationCliControl): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+async function run(binary: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, control?: ApplicationCliControl, signal?: AbortSignal): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
   // Only db push supplies this private control binding. Other CLI jobs retain
   // their existing timeout/output contract without a heartbeat or new lease.
   try {
+    check(!signal?.aborted, "CLI_ABORTED");
     if (control) {
       check(!control.signal.aborted, "CLI_ABORTED");
       await control.pulse();
@@ -291,13 +293,13 @@ async function run(binary: string, args: string[], cwd: string, env: NodeJS.Proc
           } catch (error) {
             reject(failure ?? (error instanceof IsolatedSupabaseCliError ? error : new IsolatedSupabaseCliError("CLI_CONTROL_PULSE_FAILED")));
           } finally {
-            control?.signal.removeEventListener("abort", abort);
+            (control?.signal ?? signal)?.removeEventListener("abort", abort);
             for (const buffer of [...stdout, ...stderr]) buffer.fill(0);
           }
         })();
       });
-      control?.signal.addEventListener("abort", abort, { once: true });
-      if (control?.signal.aborted) abort();
+      (control?.signal ?? signal)?.addEventListener("abort", abort, { once: true });
+      if ((control?.signal ?? signal)?.aborted) abort();
     });
   } finally { env.PGPASSWORD = ""; }
 }
@@ -418,7 +420,9 @@ export async function generateOwnedDatabaseTypes(context: ApplicationMigrationCl
       // do not widen host bindings, use another DB, or claim host CLI execution.
       const docker = context.generatorDocker;
       check(HASH.test(docker.databaseContainerId) && ["npipe:////./pipe/dockerDesktopLinuxEngine", "npipe:////./pipe/docker_engine"].includes(docker.host), "INVALID_TYPES_DOCKER_TARGET");
-      const invoke = (args: string[], env = environment()) => run(docker.binary, ["--host", docker.host, ...args], workdir, env);
+      let generating = true;
+      const invoke = (args: string[], env = environment()) => run(docker.binary, ["--host", docker.host, ...args], workdir, env, undefined,
+        generating ? context.signal : undefined);
       const image = await invoke(["image", "inspect", TYPE_GENERATOR_IMAGE]);
       check(image.exitCode === 0, "TYPE_GENERATOR_IMAGE_MISSING");
       const identity = JSON.parse(image.stdout)[0];
@@ -439,6 +443,7 @@ export async function generateOwnedDatabaseTypes(context: ApplicationMigrationCl
           ...Object.keys(env).filter(key => key.startsWith("PG_META_") || key === "PG_CONN_TIMEOUT_SECS" || key === "PG_QUERY_TIMEOUT_SECS").flatMap(key => ["--env", key]),
           TYPE_GENERATOR_IMAGE, "node", "dist/server/server.js"], env);
       } finally {
+        generating = false; // Identity-checked cleanup remains permitted after preparation cancellation.
         env.PG_META_DB_URL = "";
         if (existsSync(cidPath)) {
           const id = readFileSync(cidPath, "utf8").trim(); check(HASH.test(id), "INVALID_TYPE_GENERATOR_ID");
@@ -459,7 +464,7 @@ export async function generateOwnedDatabaseTypes(context: ApplicationMigrationCl
       }
     } else {
       result = await run(state.binary, ["gen", "types", "typescript", "--db-url",
-        `postgresql://postgres@127.0.0.1:${context.port}/postgres`, "--schema", "public", "--workdir", workdir], workdir, environment());
+        `postgresql://postgres@127.0.0.1:${context.port}/postgres`, "--schema", "public", "--workdir", workdir], workdir, environment(), undefined, context.signal);
     }
     await context.assertOwned();
     if (result.exitCode !== 0) {

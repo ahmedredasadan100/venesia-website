@@ -1987,7 +1987,10 @@ export function collectExecutableSourceGraph(input: {
   sourceOverrides?: SourceOverrides;
   traversalBoundarySourceFiles?: readonly string[];
   symbolAware?: boolean;
+  /** Native modules execute every non-type eager import/re-export, including unused bindings. */
+  nativeEagerImports?: boolean;
 }) {
+  if (input.nativeEagerImports && input.symbolAware !== false) throw new Error("Native eager import traversal requires the complete module graph.");
   if (input.symbolAware !== false) {
     return collectSymbolAwareExecutableSourceGraph(input);
   }
@@ -2020,7 +2023,7 @@ export function collectExecutableSourceGraph(input: {
       if (
         ts.isImportDeclaration(statement) &&
         ts.isStringLiteral(statement.moduleSpecifier) &&
-        importIsExecutable(parsed, statement)
+        (input.nativeEagerImports ? !statement.importClause?.isTypeOnly : importIsExecutable(parsed, statement))
       ) {
         const dependency = resolveModule(
           input.root,
@@ -2028,6 +2031,8 @@ export function collectExecutableSourceGraph(input: {
           statement.moduleSpecifier.text,
           input.sourceOverrides,
         );
+        if (input.nativeEagerImports && statement.moduleSpecifier.text.startsWith(".") && !dependency)
+          throw new Error(`${sourceFile}: unresolved native eager import ${statement.moduleSpecifier.text}`);
         if (dependency) {
           if (!graph.has(dependency)) queue.push(dependency);
           for (const imported of runtimeImports(statement, parsed)) {
@@ -2042,6 +2047,13 @@ export function collectExecutableSourceGraph(input: {
           }
         }
       }
+      if (input.nativeEagerImports && ts.isExportDeclaration(statement) && !statement.isTypeOnly
+        && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+        const dependency = resolveModule(input.root, sourceFile, statement.moduleSpecifier.text, input.sourceOverrides);
+        if (statement.moduleSpecifier.text.startsWith(".") && !dependency)
+          throw new Error(`${sourceFile}: unresolved native eager re-export ${statement.moduleSpecifier.text}`);
+        if (dependency && !graph.has(dependency)) queue.push(dependency);
+      }
       for (const moduleSpecifier of dynamicImportSpecifiers(statement, parsed)) {
         const dependency = resolveModule(
           input.root,
@@ -2049,6 +2061,8 @@ export function collectExecutableSourceGraph(input: {
           moduleSpecifier,
           input.sourceOverrides,
         );
+        if (input.nativeEagerImports && moduleSpecifier.startsWith(".") && !dependency)
+          throw new Error(`${sourceFile}: unresolved native dynamic import ${moduleSpecifier}`);
         if (dependency && !graph.has(dependency)) queue.push(dependency);
       }
     }

@@ -103,6 +103,8 @@ export type LocalVerificationSourceImpact = {
   protections: readonly { file: string; check: string; beforeSha256: string | null; afterSha256: string;
     semanticChange: boolean; assertionChanges: readonly { sha256: string; references: readonly string[]; contracts: readonly string[] }[];
     references: readonly string[]; dynamicCapabilityAxes: boolean }[];
+  /** Conservative AST regressions only; this does not establish complete behavioral assertion equivalence. */
+  qaQuality?: readonly { file: string; assertionsBefore: number; assertionsAfter: number; failures: readonly string[] }[];
 };
 export type LocalVerificationProtectionMaintenance = {
   file: string; contract: string; protectionFile: string; check: string;
@@ -475,6 +477,8 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
     const matched = owners.filter(owner => owner.files.includes(change.file));
     const registered = consumers.filter(consumer => consumer.files.includes(change.file) || matched.some(owner => consumer.files.some(entry =>
       [...references(entry)].some(target => owner.files.includes(target)))));
+    const qualityChecks = /^(?:scripts|tests)\//u.test(change.file)
+      ? ["verify:executable-governance", "verify:verification-infrastructure"].filter(check => Object.hasOwn(scripts, check)) : [];
     const covering = checks.filter(check => check.references.has(change.file));
     const unresolved = unique([...(matched.length ? unresolvedAuthorities : []), ...(covering.length ? [] : ["no_positive_source_protection_relationship"]),
       ...registered.flatMap(consumer => consumer.files.flatMap(entry => graphProblems.has(entry) ? [graphProblems.get(entry)!] : []))]);
@@ -485,12 +489,39 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
     return { file: change.file, owners: matched.length ? unique(matched.map(owner => owner.owner)) : [change.file], capabilities: unique(matched.flatMap(owner => owner.capability ? [owner.capability] : [])),
       consumers: unique(registered.map(consumer => consumer.manifest + "#" + consumer.id)),
       contracts: unique([...obligations.filter(row => row.file === change.file).map(row => row.contract), ...registered.map(consumer => consumer.manifest)]),
-      candidateChecks: unique(covering.map(check => check.check)), unresolved, semanticChange, presentationOnly };
+      candidateChecks: unique([...covering.map(check => check.check), ...qualityChecks]), unresolved, semanticChange, presentationOnly };
+  });
+  const qaQuality = changes.filter(change => /^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(change.file)).map(change => {
+    const assertions = (source: string | undefined) => {
+      const found: ts.CallExpression[] = [], coverage = new Map<string, number>(); if (source === undefined) return { found, coverage };
+      const tree = parse(change.file, semanticSource(change.file, source));
+      const visit = (node: ts.Node) => {
+        if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) {
+          found.push(node);
+          const scope: string[] = [];
+          for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent)
+            if (ts.isFunctionDeclaration(parent) && parent.name) scope.unshift(parent.name.text);
+          const key = JSON.stringify([scope, "assertion_count"]);
+          coverage.set(key, (coverage.get(key) ?? 0) + 1);
+          if (/^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|notEqual|notStrictEqual|notDeepEqual|notDeepStrictEqual)$/u.test(node.expression.getText(tree))) {
+            const strict = JSON.stringify([scope, "comparison_count"]);
+            coverage.set(strict, (coverage.get(strict) ?? 0) + 1);
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(tree); return { found, coverage };
+    };
+    const previous = assertions(text(before, change.file)), next = assertions(text(current, change.file));
+    return { file: change.file, assertionsBefore: previous.found.length, assertionsAfter: next.found.length,
+      failures: next.found.length < previous.found.length ? ["qa_assertion_count_decreased_requires_explicit_protection_review"]
+        : [...previous.coverage].some(([key, count]) => (next.coverage.get(key) ?? 0) < count)
+          ? ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"] : [] };
   });
   const sorted = <T extends { file: string }>(rows: readonly T[]) => [...rows].sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
   return { proofBoundary: "source_discovery_only", ownerBindings: [...new Map(owners.filter(owner => owner.current).map(owner => [JSON.stringify(owner), owner])).values()],
     sourceSha256: digest(JSON.stringify(sorted([...current].map(([file, source]) => ({ file, sha256: digest(source) }))))),
-    deltaSha256: digest(JSON.stringify(sorted(changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))))), changes: rows, obligations, protections };
+    deltaSha256: digest(JSON.stringify(sorted(changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))))), changes: rows, obligations, protections, qaQuality };
 }
 
 /** Trusted event data identifies Git objects; no ref strings, network lookup or missing-history fallback is accepted. */
@@ -592,21 +623,91 @@ export function deriveLocalVerificationSourceCoherence(scripts: Readonly<Record<
       proofLevel: "unexecuted_source_candidate" as const, effects: ["unknown"], executionAllowed: false };
   });
   const failures = correspondence.filter(row => !row.protected);
-  return { status: failures.length ? "DRIFT" : "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: failures.length ? 2 : 0,
+  const qualityFailures = (analysis.qaQuality ?? []).flatMap(row => row.failures.map(reason => ({ file: row.file, reason })));
+  const preflight = Object.keys(scripts).filter(check => /^(?:lint|typecheck|(?:verify|qa):[a-zA-Z0-9:_-]+)$/u.test(check)).sort().map(check => {
+    const selected = names.includes(check) || check === "lint" || check === "typecheck";
+    const affected = analysis.changes.filter(change => change.candidateChecks.includes(check));
+    let owner: string[];
+    try { owner = registeredVerificationNodeEntries(scripts, check); }
+    catch { owner = ["package.json#scripts." + check]; }
+    return { check, selected, reason: check === "lint" || check === "typecheck" ? "mandatory_source_floor"
+      : selected ? "affected_source_or_required_qa_quality_guard" : "no_positive_source_relationship_not_an_unaffected_behavior_claim",
+      owner, affectedOwners: [...new Set(affected.flatMap(change => change.owners))].sort(),
+      contract: [...new Set(affected.flatMap(change => change.contracts))].sort(), command: scripts[check],
+      durationMs: 0, result: "NOT RUN" as const, evidence: null, sourceSha256: actual.sourceSha256,
+      proofBoundary: "source_discovery_only" as const };
+  });
+  return { status: failures.length || qualityFailures.length ? "DRIFT" : "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: failures.length || qualityFailures.length ? 2 : 0,
     sourceSha256: actual.sourceSha256, automatic: true, ownerReviewSatisfied: false, behavioralPass: false, releaseEvidence: false,
     fast: { profile: "fast_source", checksExecuted: 4 + correspondence.length, candidateCommandsExecuted: 0, browserExecuted: false, databaseCalls: 0,
       checks: ["actual_snapshot_binding", "complete_changed_file_binding", "current_contract_projection", "applicable_source_protection_correspondence"], correspondence },
-    targeted, functionalEvidenceRequired: functional.map(change => ({ file: change.file, owners: change.owners, consumers: change.consumers,
+    targeted, preflight, qaQuality: analysis.qaQuality ?? [], functionalEvidenceRequired: functional.map(change => ({ file: change.file, owners: change.owners, consumers: change.consumers,
       required: ["functional_behavior", "affected_native_integration_or_readback"], sourceChecksAdequate: false })),
     fullRequired: functional.length > 0 || unknowns.length > 0, fullCommand: "ci:check", unknowns,
-    diagnostics: failures.map(row => `file=${row.file}; owner=${row.owner}; contract=${row.contract}; consumers=${row.consumers.join(",") || "unresolved"}; missing applicable assertion/vector protection.`) };
+    diagnostics: [...failures.map(row => `file=${row.file}; owner=${row.owner}; contract=${row.contract}; consumers=${row.consumers.join(",") || "unresolved"}; missing applicable assertion/vector protection.`),
+      ...qualityFailures.map(row => `file=${row.file}; owner=existing QA quality guards; contract=assertion preservation; ${row.reason}`)] };
+}
+
+/** Recompute the native eager executable closure from bound bytes; generated/unresolved execution is never qualified. */
+export function localVerificationSourceGuardEffects(entry: string, sources: ReadonlyMap<string, string | Buffer>, runtime: {
+  node: string; v8: string; modules: string; platform: string; arch: string; executableSha256: string; installedLockSha256: string; execArgv: readonly string[];
+} = { node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+  executableSha256: digest(readFileSync(process.execPath)), installedLockSha256: existsSync(join(ROOT, "node_modules/.package-lock.json"))
+    ? digest(readFileSync(join(ROOT, "node_modules/.package-lock.json"))) : "", execArgv: process.execArgv },
+  installedLockSource = existsSync(join(ROOT, "node_modules/.package-lock.json")) ? readFileSync(join(ROOT, "node_modules/.package-lock.json"), "utf8") : "") {
+  const unresolved: string[] = [];
+  const overrides = new Proxy(new Map([...sources].map(([file, source]) => [file, source.toString()])), {
+    get(target, property) {
+      if (property === "get") return (file: string) => { assert.ok(target.has(file), "Executable closure dependency is outside the bound snapshot: " + file); return target.get(file); };
+      const value: unknown = Reflect.get(target, property, target); return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const closure: Array<{ file: string; sha256: string }> = [];
+  try {
+    assert.ok(sources.has(entry), "Missing source guard entry.");
+    const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], sourceOverrides: overrides, symbolAware: false, nativeEagerImports: true });
+    for (const [file, tree] of graph) {
+      const bytes = sources.get(file); assert.ok(bytes !== undefined, "Executable closure escaped its immutable source snapshot.");
+      closure.push({ file, sha256: digest(bytes.toString().replaceAll("\r\n", "\n")) });
+      const dynamicLoaders = new Set(["require", "createRequire", "eval", "Function"]);
+      for (const statement of tree.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+        && statement.moduleSpecifier.text === "node:module" && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings))
+        for (const binding of statement.importClause.namedBindings.elements) if ((binding.propertyName ?? binding.name).text === "createRequire") dynamicLoaders.add(binding.name.text);
+      const visit = (node: ts.Node) => {
+        if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
+          && /^(?:@\/|@src\/|file:|https?:|\/|[A-Za-z]:)/u.test(node.moduleSpecifier.text)) unresolved.push(file + ":unresolved_native_module_alias");
+        if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && ts.isIdentifier(node.expression) && dynamicLoaders.has(node.expression.text))
+          unresolved.push(file + ":unresolved_dynamic_execution:" + node.expression.text);
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+    }
+  } catch { unresolved.push(entry + ":unresolved_executable_import_closure"); }
+  const inputs = ["package.json", "package-lock.json", "tsconfig.json"].map(file => {
+    const bytes = sources.get(file); if (bytes === undefined) unresolved.push(file + ":missing_execution_input");
+    return { file, sha256: bytes === undefined ? null : digest(bytes.toString().replaceAll("\r\n", "\n")) };
+  });
+  for (const hash of [runtime.executableSha256, runtime.installedLockSha256]) if (!/^[a-f0-9]{64}$/u.test(hash)) unresolved.push("missing_runtime_or_installed_dependency_identity");
+  try {
+    assert.equal(digest(installedLockSource), runtime.installedLockSha256);
+    const installed = JSON.parse(installedLockSource).packages as Record<string, Record<string, unknown>>;
+    const locked = JSON.parse(sources.get("package-lock.json")!.toString()).packages as Record<string, Record<string, unknown>>;
+    assert.ok(installed && locked && Object.hasOwn(installed, "node_modules/typescript"));
+    for (const [file, value] of Object.entries(installed)) for (const field of ["version", "resolved", "integrity", "link"])
+      assert.deepEqual(value[field], locked[file]?.[field], "Installed package differs from the current package lock.");
+  } catch { unresolved.push("installed_dependencies_do_not_match_current_lock"); }
+  closure.sort((left, right) => left.file.localeCompare(right.file));
+  const reasons = [...new Set(unresolved)].sort();
+  return { entry, closure, inputs, runtime, unresolved: reasons,
+    fingerprint: reasons.length ? null : digest(JSON.stringify({ schema: "native-source-guard-effects-v1", entry, closure, inputs, runtime })) };
 }
 
 /** One reviewed effect contract for an existing canonical leaf, never an arbitrary-command execution registry. */
-export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string, string>>, analysis: LocalVerificationSourceImpact, fixtureSha256: string) {
+export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string, string>>, analysis: LocalVerificationSourceImpact, fixtureSha256: string,
+  sourceGuardSha256: Readonly<Record<string, string>> = {}) {
   const entry = "scripts/qa-admin-form-guarded-navigation.mts";
   const step = "node --experimental-strip-types " + entry + " --save-cache-only";
-  const fixtureApproved = fixtureSha256 === "8dae106c0bbe3cfb94ccab215097ea67cc313aa34edaeadf39e2ca130630f37c";
+  const fixtureApproved = fixtureSha256 === "2fb51c01ef99c2e049ffa46ca1a77fe2566cbbf795999bb3cc49e016b3c9e369";
   const bindings = (analysis.ownerBindings ?? []).filter(binding => binding.capability === "form_runtime");
   const commands = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(step)).sort();
   const reasons = analysis.changes.filter(change => change.semanticChange && !change.presentationOnly && commands.some(check => change.candidateChecks.includes(check))
@@ -618,15 +719,48 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
     ...(!commands.length ? ["missing_exact_registered_save_cache_leaf"] : []),
     ...(analysis.changes.some(change => ["package.json", "package-lock.json"].includes(change.file) && change.semanticChange) ? ["dependency_or_command_contract_changed"] : []),
   ];
-  const targets = reasons.length && !blockers.length ? [{ family: "admin-form-save-cache", entry, step,
+  const targets = reasons.length && !blockers.length ? [{ kind: "browser_behavior" as "browser_behavior" | "source_guard", family: "admin-form-save-cache", entry, step,
     canonicalChecks: commands.filter(check => reasons.some(change => change.candidateChecks.includes(check))),
     owners: [...new Set(bindings.map(binding => binding.owner))].sort(), capabilities: [...new Set(bindings.flatMap(binding => binding.capability ? [binding.capability] : []))].sort(),
     contracts: [...new Set([...bindings.map(binding => binding.manifest), ...reasons.flatMap(change => change.contracts)])].sort(),
     consumers: [...new Set(reasons.flatMap(change => change.consumers))].sort(),
     reasons: reasons.map(change => ({ file: change.file, owners: change.owners, capabilities: change.capabilities, contracts: change.contracts, consumers: change.consumers })),
     fixtureSha256, effects: ["browser", "owned_filesystem", "owned_process", "owned_loopback_http"], supportedPlatforms: ["win32", "linux"], limitMs: 300_000,
-    proofLevel: "shared_owner_controlled_browser_behavior" as const, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false }] : [];
-  return { targets, blockers, applicable: reasons.length > 0, unqualifiedRemainUnderExistingGates: true as const };
+    proofLevel: "shared_owner_controlled_browser_behavior" as "shared_owner_controlled_browser_behavior" | "source_guard_execution",
+    successMarker: "", nativePersistenceVerified: false, businessConsumerAdoptionVerified: false }] : [];
+  const qualityReasons = analysis.changes.filter(change => /^(?:scripts|tests)\//u.test(change.file) && change.semanticChange);
+  // These are reviewed effect contracts for two existing direct source leaves, not their npm composites.
+  // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
+  const sourceGuards = [
+    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", marker: "Executable governance PASS" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "UNQUALIFIED_DYNAMIC_EXECUTION_CLOSURE", marker: "PASS verification infrastructure:" },
+  ];
+  const qualityBlockers: string[] = [];
+  const selections = [{ family: "admin-form-save-cache", selected: reasons.length > 0, qualified: targets.length > 0,
+    reason: reasons.length ? blockers.length ? "effect_contract_blocked" : "affected_qualified_form_runtime" : "no_affected_form_runtime",
+    command: step, owner: bindings.map(binding => binding.owner), contract: bindings.map(binding => binding.manifest) }];
+  for (const guard of sourceGuards) {
+    const command = "node --experimental-strip-types " + guard.entry;
+    const canonicalChecks = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(command)).sort();
+    const affected = qualityReasons.filter(change => change.candidateChecks.includes(guard.check)
+      || canonicalChecks.some(check => change.candidateChecks.includes(check)));
+    const failures = [...(!/^[a-f0-9]{64}$/u.test(guard.sha256) || sourceGuardSha256[guard.entry] !== guard.sha256 ? ["qualified_source_guard_bytes_changed_review_effect_contract:" + guard.entry] : []),
+      ...(!canonicalChecks.length ? ["missing_exact_registered_source_guard:" + guard.entry] : []),
+      ...(analysis.changes.some(change => ["package.json", "package-lock.json"].includes(change.file) && change.semanticChange) ? ["dependency_or_command_contract_changed"] : [])];
+    if (affected.length) qualityBlockers.push(...failures);
+    selections.push({ family: guard.entry, selected: affected.length > 0, qualified: affected.length > 0 && !failures.length,
+      reason: affected.length ? failures.length ? "effect_contract_blocked" : "mandatory_qa_quality_guard" : "no_changed_qa_input",
+      command, owner: [guard.entry], contract: ["docs/QA_RELEASE_CLOSURE.md#3.2.2"] });
+    if (affected.length && !failures.length) targets.push({ kind: "source_guard", family: guard.entry, entry: guard.entry, step: command,
+      canonicalChecks, owners: [guard.entry], capabilities: ["verification_quality"], contracts: ["docs/QA_RELEASE_CLOSURE.md#3.2.2"],
+      consumers: [...new Set(affected.map(change => change.file))].sort(),
+      reasons: affected.map(change => ({ file: change.file, owners: change.owners, capabilities: change.capabilities, contracts: change.contracts, consumers: change.consumers })),
+      fixtureSha256: guard.sha256, effects: ["source_read", "owned_temp_filesystem", "owned_process"], supportedPlatforms: ["win32", "linux"], limitMs: 180_000,
+      proofLevel: "source_guard_execution", successMarker: guard.marker, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false });
+  }
+  return { targets: [...new Map(targets.map(target => [target.step, target])).values()], blockers: [...new Set([...blockers, ...qualityBlockers])],
+    blocking: [...new Set([...(reasons.length ? blockers : []), ...qualityBlockers])], selections,
+    applicable: reasons.length > 0 || qualityReasons.length > 0, unqualifiedRemainUnderExistingGates: true as const };
 }
 
 /** A changed obligation cannot be silently blessed by changed Product bytes or a free-form waiver. */
@@ -699,6 +833,8 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
     ({ file, beforeSha256, afterSha256 })).sort((a, b) => a.file.localeCompare(b.file));
   assert.deepEqual(bindings(impact.changes), bindings(actual.changes), "Risk evidence must cover every actual changed file and byte identity.");
   assertLocalVerificationProtectionMaintenance(impact, actual);
+  assert.deepEqual((actual.changeImpact?.qaQuality ?? []).flatMap(row => row.failures.map(reason => ({ file: row.file, reason }))), [],
+    "QA assertion coverage decreased; preserve the original assertions or obtain explicit protection review before admission.");
   const present = (value: unknown) => typeof value === "string" && value.trim().length > 0;
   const risks = ["A", "B", "C", "D", "E"] as const;
   let rank = 0, bounded = true;
@@ -902,9 +1038,14 @@ export function inspectLocalVerificationChangeImpact(options: { baselineHead?: s
     const coherenceStarted = performance.now();
     const coherence = deriveLocalVerificationSourceCoherence(scripts, actual);
     timings.contractCoherenceMs = performance.now() - coherenceStarted;
-    const qualifiedTargets = qualifyLocalVerificationTargets(scripts, actual.changeImpact!, digest(readFileSync(safeSourcePath("scripts/qa-admin-form-guarded-navigation.mts"), "utf8").replaceAll("\r\n", "\n")));
+    const sourceBytes = new Map(manifest.map(row => { const bytes = readFileSync(safeSourcePath(row.file));
+      assert.equal(digest(bytes), row.sha256, "Source effect closure snapshot changed: " + row.file); return [row.file, bytes] as const; }));
+    const sourceGuardEffects = ["scripts/verify-executable-governance.mts", "scripts/verify-verification-infrastructure.mts"]
+      .map(entry => localVerificationSourceGuardEffects(entry, sourceBytes));
+    const qualifiedTargets = qualifyLocalVerificationTargets(scripts, actual.changeImpact!, digest(readFileSync(safeSourcePath("scripts/qa-admin-form-guarded-navigation.mts"), "utf8").replaceAll("\r\n", "\n")),
+      Object.fromEntries(sourceGuardEffects.map(effect => [effect.entry, effect.fingerprint ?? ""])));
     return { ...base, ...coherence, checksExecuted: coherence.fast.checksExecuted, candidateCommandsExecuted: 0,
-      qualifiedTargets,
+      qualifiedTargets, sourceGuardEffects,
       ciBinding: options.ci ? { eventName: options.ci.eventName, checkoutHead } : null, timings: measuredTimings() };
   }
   if (!options.impact) return { ...base, status: actual.changeImpact!.obligations.length ? "DRIFT" : "REVIEW_REQUIRED", exitCode: 2,
@@ -939,6 +1080,7 @@ export function localVerificationFamilyReceipt(stdout: string, family: string) {
 export function localVerificationFailureClassification(facts: {
   stage: "execution" | "terminal_receipt" | "cleanup" | "evidence";
   error?: unknown; exitCode?: number | null; childReason?: string | null;
+  nativeEvidence?: { stderr: string; stderrSha256: string; signal?: string | null };
 }) {
   const categories = ["Product", "QA / Test", "Fixture", "Harness", "Environment", "UNKNOWN"] as const;
   const error = facts.error instanceof Error ? facts.error : undefined;
@@ -946,10 +1088,25 @@ export function localVerificationFailureClassification(facts: {
   const code = error && "code" in error ? String(error.code) : ownedCause && typeof ownedCause === "object" && "code" in ownedCause ? String(ownedCause.code) : null;
   const operatingSystemCodes = ["EACCES", "EPERM", "ENOSPC", "EROFS", "ENOENT", "EMFILE", "ENFILE"];
   if (code && operatingSystemCodes.includes(code)) return { category: categories[4], technicalKind: facts.stage + "_os_failure",
+    failureClass: "Environment Failure", rootCause: "UNKNOWN", confidence: "observed_os_code",
     evidence: "The owner observed the operating-system error code " + code + ".", osCode: code };
+  const native = facts.nativeEvidence;
+  if (native && /^[a-f0-9]{64}$/u.test(native.stderrSha256) && facts.exitCode !== 0 &&
+      (facts.exitCode === 2147483651 || native.signal === "SIGABRT") &&
+      /(?:^|\n)[^\n]*Check failed: jit_page_->allocations_\.erase\(addr\) == 1\./u.test(native.stderr))
+    return { category: "Runtime Crash" as const, failureClass: "Node/V8 Runtime Crash", rootCause: "UNKNOWN",
+      technicalKind: "owned_node_v8_native_abort", confidence: "native_fatal_and_exit",
+      evidence: "Owned child retained the V8 CHECK fatal, native abort exit/signal and stderr SHA-256; the initiating defect remains UNKNOWN.",
+      evidenceSha256: native.stderrSha256, osCode: null };
+  if (code === "APPLICATION_CLIENT_DISCONNECTED") return { category: "Database Transport" as const,
+    failureClass: "Database Transport Failure", rootCause: "UNKNOWN", technicalKind: "owned_pg_control_connection_disconnected",
+    confidence: "observed_owner_error_code", evidence: "The owned PostgreSQL control client disconnected; no Codex, Sleep, Docker or memory cause is inferred.", osCode: null };
   if (facts.stage === "terminal_receipt" && facts.exitCode === 0) return { category: categories[2], technicalKind: "terminal_receipt_contract_violation",
+    failureClass: "QA / Harness Failure", rootCause: "UNKNOWN", confidence: "owner_validated_protocol_violation",
     evidence: "The canonical process exited zero but its required family receipt failed explicit owner validation.", osCode: null };
   return { category: categories[5], technicalKind: facts.stage + (facts.childReason ? "_" + facts.childReason : "_failure"),
+    failureClass: facts.childReason === "timeout" ? "Timeout" : facts.childReason === "cancelled" ? "Cancellation" : "UNKNOWN",
+    rootCause: "UNKNOWN", confidence: facts.childReason === "timeout" || facts.childReason === "cancelled" ? "observed_termination_reason" : "insufficient_causal_evidence",
     evidence: "The original failure is retained. Exit status, assertion labels, cancellation and timeout alone do not establish a Product, Test, Fixture, Harness or Environment root cause.", osCode: null };
 }
 
@@ -982,8 +1139,15 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
     assert.equal(digest(JSON.stringify(manifest)), input.sourceSha256, "Targeted execution has a stale source snapshot.");
     assert.equal(changeImpact.sourceSha256, input.sourceSha256);
     const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+    const sourceBytes = new Map(manifest.map(row => { const bytes = readFileSync(safeSourcePath(row.file));
+      assert.equal(digest(bytes), row.sha256, "Source effect closure snapshot changed: " + row.file); return [row.file, bytes] as const; }));
+    const sourceGuardEffects = ["scripts/verify-executable-governance.mts", "scripts/verify-verification-infrastructure.mts"]
+      .map(entry => localVerificationSourceGuardEffects(entry, sourceBytes));
+    assert.ok("sourceGuardEffects" in input, "Missing complete source guard effect closure.");
+    assert.deepEqual(sourceGuardEffects, input.sourceGuardEffects, "Targeted source guard effect closure changed before execution.");
     assert.deepEqual(qualifyLocalVerificationTargets(scripts, changeImpact,
-      digest(readFileSync(safeSourcePath("scripts/qa-admin-form-guarded-navigation.mts"), "utf8").replaceAll("\r\n", "\n"))), input.qualifiedTargets, "Targeted selector is stale or incomplete.");
+      digest(readFileSync(safeSourcePath("scripts/qa-admin-form-guarded-navigation.mts"), "utf8").replaceAll("\r\n", "\n")),
+      Object.fromEntries(sourceGuardEffects.map(effect => [effect.entry, effect.fingerprint ?? ""]))), input.qualifiedTargets, "Targeted selector is stale or incomplete.");
     phaseTimings.snapshotVerificationMs += performance.now() - snapshotStarted;
   };
   verifySource();
@@ -992,17 +1156,29 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
     sourceReport: input, commitSha: input.finalHead, sourceSha256: input.sourceSha256, results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0, browserExecuted: false, durationMs: performance.now() - started,
     attempt: 0, retry: 0, reason: qualified.applicable ? qualified.blockers : ["no_affected_qualified_family"], fullGatesPreserved: true };
   assert.equal(new Set(qualified.targets.map(row => row.step)).size, qualified.targets.length, "A qualified leaf cannot execute twice in one path.");
-  assert.equal(qualified.targets.length, 1, "Only the qualified existing Form family is executable.");
-  const target = qualified.targets[0]!;
-  assert.equal(target.step, "node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts --save-cache-only");
-  if (!target.supportedPlatforms.includes(process.platform)) return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1,
+  if (qualified.targets.some(target => !target.supportedPlatforms.includes(process.platform))) return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1,
     results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0, browserExecuted: false, attempt: 0, retry: 0,
     reason: ["qualified_process_tree_cleanup_not_proved_for_platform"], durationMs: performance.now() - started, fullGatesPreserved: true };
   const evidenceRoot = resolve(ROOT, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true });
   assert.ok(lstatSync(evidenceRoot).isDirectory() && realpathSync(evidenceRoot) === evidenceRoot, "Targeted evidence root cannot traverse links.");
   const runDirectory = realpathSync(mkdtempSync(join(evidenceRoot, "impact-targeted-")));
   assert.ok(runDirectory.startsWith(evidenceRoot + sep));
-  const tempDirectory = join(runDirectory, "temp"); mkdirSync(tempDirectory);
+  let processReadiness: Awaited<ReturnType<typeof verifyOwnedProcessReadiness>>;
+  try {
+    processReadiness = await verifyOwnedProcessReadiness({ sourceDirectory: ROOT,
+      context: { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) }, signal });
+  } catch (error) {
+    return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1, results: [], runId: invocationId,
+      commitSha: input.finalHead, sourceSha256: input.sourceSha256, executedCommands: 0, commandAttempts: 0,
+      attempt: 0, retry: 0, flakyStatus: "NOT_RUN", browserExecuted: false, durationMs: performance.now() - started,
+      reason: ["owned_process_execution_context_not_qualified"], evidenceReference: ".tmp-qa/" + runDirectory.slice(evidenceRoot.length + 1).replaceAll("\\", "/") + "/process-readiness.json",
+      failurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Owned process readiness failed", fullGatesPreserved: true };
+  }
+  const results: Array<Record<string, unknown>> = [];
+  let browserExecuted = false, executedCommands = 0;
+  for (const [targetIndex, target] of qualified.targets.entries()) {
+  const targetName = `targeted-${targetIndex + 1}-${target.kind}`;
+  const tempDirectory = join(runDirectory, "temp-" + (targetIndex + 1)); mkdirSync(tempDirectory);
   environment.TEMP = environment.TMP = tempDirectory;
   const context = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
   const children = new Set<ChildProcess>();
@@ -1017,10 +1193,13 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
   try {
     signal.throwIfAborted(); verifySource();
     child = await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, target.step.split(" ").slice(1),
-      environment, "targeted-form-save-cache", target.limitMs);
-    phaseTimings.executionMs = child.durationMs;
+      environment, targetName, target.limitMs);
+    phaseTimings.executionMs += child.durationMs;
     assert.equal(child.code, 0, "Qualified canonical leaf failed; retain its original stdout/stderr and exit code.");
     failureStage = "terminal_receipt";
+    if (target.kind === "browser_behavior") {
+    assert.equal(qualified.targets.filter(row => row.kind === "browser_behavior").length, 1, "Only the qualified existing Form family is executable.");
+    assert.equal(target.step, "node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts --save-cache-only");
     fixture = localVerificationFamilyReceipt(child.stdout, target.family) as typeof fixture;
     assert.ok(fixture, "A successful process without the actual family receipt is not behavioral proof.");
     assert.equal(fixture.status, "PASS"); assert.equal(fixture.proofLevel, target.proofLevel);
@@ -1029,6 +1208,11 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
     assert.equal(fixture.nativePersistenceVerified, false); assert.equal(fixture.businessConsumerAdoptionVerified, false);
     assert.deepEqual(fixture.cleanup?.map(row => [row.resource, row.status]), [["browser", "PASS"], ["server", "PASS"], ["temp", "PASS"]]);
     assert.deepEqual(fixture.deniedForeignRequests, []);
+    } else {
+      assert.equal(target.kind, "source_guard");
+      assert.equal(target.step, "node --experimental-strip-types " + target.entry);
+      assert.ok(target.successMarker && child.stdout.includes(target.successMarker), "Source guard terminal success evidence is missing.");
+    }
     failureStage = "execution";
     assert.equal(child.cleanup.status, "PASS");
     assert.equal(child.cleanup.liveProcesses, 0);
@@ -1050,7 +1234,7 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
     } catch (error) { cleanupFailure = error; }
   }
   const logs = (kind: "stdout" | "stderr") => {
-    const path = ownedPath(context, `public-targeted-form-save-cache.${kind}.log`);
+    const path = ownedPath(context, `public-${targetName}.${kind}.log`);
     return existsSync(path) ? readFileSync(path, "utf8") : "";
   };
   let evidenceFailure: unknown;
@@ -1059,40 +1243,67 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
   const status = failure || cleanupFailure || evidenceFailure ? "FAIL" as const : "PASS" as const;
   const retainedChild = failure instanceof Error && "childResult" in failure ? failure.childResult as {
     code?: number | null; signal?: string | null; durationMs?: number; reason?: string | null;
+    identity?: { pid: number | null; ppid: number; spawnedAtUtc: string }; rawExit?: { code: number | null; signal: string | null };
     stdout?: string | null; stderr?: string | null; cleanup?: unknown;
   } : undefined;
-  if (!child && retainedChild?.durationMs !== undefined) phaseTimings.executionMs = retainedChild.durationMs;
-  const cause = status === "PASS" ? null : localVerificationFailureClassification({
+  const rawExit = child ? child.rawExit : retainedChild ? retainedChild.rawExit
+    ?? { code: retainedChild.code === undefined ? null : retainedChild.code, signal: retainedChild.signal ?? null } : null;
+  if (!child && retainedChild?.durationMs !== undefined) phaseTimings.executionMs += retainedChild.durationMs;
+  const originalCause = failure ? localVerificationFailureClassification({ stage: failureStage, error: failure,
+    exitCode: rawExit?.code, childReason: retainedChild?.reason,
+    nativeEvidence: { stderr, stderrSha256: digest(stderr), signal: rawExit?.signal } }) : null;
+  const cause = originalCause ?? (status === "PASS" ? null : localVerificationFailureClassification({
     stage: cleanupFailure ? "cleanup" : evidenceFailure ? "evidence" : failureStage,
-    error: cleanupFailure ?? evidenceFailure ?? failure, exitCode: child?.code ?? retainedChild?.code, childReason: retainedChild?.reason,
-  });
-  phaseTimings.evidenceAndCleanupMs = performance.now() - cleanupStarted;
+    error: cleanupFailure ?? evidenceFailure ?? failure, exitCode: rawExit?.code, childReason: retainedChild?.reason,
+    nativeEvidence: { stderr, stderrSha256: digest(stderr), signal: rawExit?.signal },
+  }));
+  phaseTimings.evidenceAndCleanupMs += performance.now() - cleanupStarted;
   const result = { status, runId: invocationId, commitSha: input.finalHead, sourceSha256: input.sourceSha256, owners: target.owners, capabilities: target.capabilities,
     contracts: target.contracts, consumers: target.consumers, test: target.entry, canonicalChecks: target.canonicalChecks, command: target.step,
     durationMs: child?.durationMs ?? retainedChild?.durationMs ?? performance.now() - started, attempt: 1, retry: 0,
-    flakyStatus: "NOT_ASSESSED_SINGLE_ATTEMPT", attempts: [{ attempt: 1, retry: 0, status, cause }], cause, exitCode: child?.code ?? retainedChild?.code ?? null,
-    childOutcome: retainedChild ?? (child ? { code: child.code, cleanup: child.cleanup } : null),
+    flakyStatus: "NOT_ASSESSED_SINGLE_ATTEMPT", attempts: [{ attempt: 1, retry: 0, status, cause }], cause, originalCause,
+    cleanupCause: cleanupFailure ? localVerificationFailureClassification({ stage: "cleanup", error: cleanupFailure }) : null,
+    exitCode: rawExit?.code === undefined ? null : rawExit.code,
+    childOutcome: retainedChild ? { ...retainedChild, rawExit } : child ? { code: child.code, rawExit, identity: child.identity, cleanup: child.cleanup } : null,
     timings: { ...phaseTimings, source: input.timings, fixture: fixture?.timings ?? null, finalReceiptWriteIncluded: false },
-    proofLevel: target.proofLevel, fixture: fixture ?? null, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false,
-    evidenceReference: ".tmp-qa/" + runDirectory.slice(evidenceRoot.length + 1).replaceAll("\\", "/") + "/targeted-result.json",
+    proofLevel: target.proofLevel, behavioralPass: target.kind === "browser_behavior" && status === "PASS", fixture: fixture ?? null, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false,
+    selected: true, reason: target.reasons, owner: target.owners, contract: target.contracts,
+    evidenceReference: ".tmp-qa/" + runDirectory.slice(evidenceRoot.length + 1).replaceAll("\\", "/") + "/" + targetName + "-result.json",
     evidence: { stdoutSha256: digest(stdout), stderrSha256: digest(stderr), stdout, stderr },
     cleanup: { childProcessesClosed: children.size === 0, ownedTempRemoved: !existsSync(tempDirectory), status: cleanupFailure ? "FAIL" : "PASS" },
     failurePreserved: failure instanceof Error ? failure.message.split(/\r?\n/u)[0] : failure ? "Original execution failed" : null,
     cleanupFailurePreserved: cleanupFailure instanceof Error ? cleanupFailure.message.split(/\r?\n/u)[0] : cleanupFailure ? "Owned cleanup failed" : null };
   const receiptStarted = performance.now();
-  try { receipt(context, "targeted-result.json", result); } catch (error) { evidenceFailure = error; }
+  try { receipt(context, targetName + "-result.json", result); } catch (error) { evidenceFailure = error; }
   const receiptPersistenceMs = performance.now() - receiptStarted;
   const finalStatus = evidenceFailure ? "FAIL" as const : status;
-  return { sourceReport: input, status: finalStatus, exitCode: finalStatus === "PASS" ? 0 : 1, commitSha: input.finalHead, sourceSha256: input.sourceSha256,
-    results: [evidenceFailure ? { ...result, status: "FAIL" as const, evidencePersistence: "FAIL",
+  results.push(evidenceFailure ? { ...result, status: "FAIL" as const, evidencePersistence: "FAIL", originalCause,
       originalAttempt: { status: result.status, cause: result.cause, exitCode: result.exitCode },
       attempts: [{ attempt: 1, retry: 0, status: "FAIL" as const, cause: localVerificationFailureClassification({ stage: "evidence", error: evidenceFailure }) }],
       cause: localVerificationFailureClassification({ stage: "evidence", error: evidenceFailure }),
-      evidenceFailurePreserved: evidenceFailure instanceof Error ? evidenceFailure.message.split(/\r?\n/u)[0] : "Evidence persistence failed" } : result],
-    executedCommands: child ? 1 : retainedChild?.reason === "process_failure" ? null : retainedChild ? 1 : null, commandAttempts: 1, runId: invocationId, flakyStatus: "NOT_ASSESSED_SINGLE_ATTEMPT",
-    timings: { ...phaseTimings, source: input.timings, receiptPersistenceMs }, browserExecuted: fixture?.browserExecuted ?? null,
-    evidenceFailurePreserved: evidenceFailure instanceof Error ? evidenceFailure.message.split(/\r?\n/u)[0] : evidenceFailure ? "Evidence persistence failed" : null,
-    durationMs: performance.now() - started, attempt: 1, retry: 0, fullGatesPreserved: true };
+      evidenceFailurePreserved: evidenceFailure instanceof Error ? evidenceFailure.message.split(/\r?\n/u)[0] : "Evidence persistence failed" }
+    : { ...result, originalCause, receiptPersistenceMs });
+  executedCommands += child || retainedChild?.identity && Number.isSafeInteger(retainedChild.identity.pid) && retainedChild.identity.pid! > 0 ? 1 : 0;
+  browserExecuted ||= fixture?.browserExecuted === true;
+  if (finalStatus !== "PASS") break;
+  }
+  const preflight = qualified.selections.map(selection => {
+    const result = results.find(row => row.command === selection.command);
+    return { ...selection, sourceSha256: input.sourceSha256, durationMs: result?.durationMs ?? 0,
+      result: result?.status ?? "NOT RUN", evidence: result?.evidenceReference ?? null,
+      reason: result ? selection.reason : selection.selected && selection.qualified ? "blocked_or_prior_leaf_failed" : selection.reason };
+  });
+  const status = results.length !== qualified.targets.length || results.some(result => result.status !== "PASS") ? "FAIL" as const
+    : qualified.blocking.length ? "BLOCKED" as const : "PASS" as const;
+  const report = { sourceReport: input, status, exitCode: status === "PASS" ? 0 : 1, commitSha: input.finalHead, sourceSha256: input.sourceSha256,
+    results, preflight, processReadiness, executedCommands, commandAttempts: results.length, runId: invocationId, flakyStatus: "NOT_ASSESSED_SINGLE_ATTEMPT",
+    timings: { ...phaseTimings, source: input.timings }, browserExecuted,
+    qualifiedBehavioralPass: results.some(result => result.proofLevel === "shared_owner_controlled_browser_behavior" && result.status === "PASS"),
+    behavioralPass: false, releaseEvidence: false, durationMs: performance.now() - started, attempt: 1, retry: 0, fullGatesPreserved: true };
+  try { receipt({ runDirectory, sanitize: (value: string) => value }, "targeted-result.json", report); }
+  catch (error) { return { ...report, status: "FAIL" as const, exitCode: 1,
+    evidenceFailurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Evidence persistence failed" }; }
+  return report;
 }
 
 /** Inspect literal registered command chains without executing or expanding the gate prefix. */
@@ -2818,23 +3029,28 @@ async function gitHead(context: PrivatePublicVerificationContext) {
 async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
   const owned = (child as ChildProcess & { verificationLinuxCleanup?: () => Promise<{
     status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
-    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number;
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null;
   }> }).verificationLinuxCleanup;
   if (process.platform === "linux" && owned) return owned();
-  let forcedTermination = false;
+  let forcedTermination = false, terminationExitCode: number | null = null;
   if (child.exitCode !== null || child.signalCode !== null || !child.pid) return {
     status: "PASS" as const, platform: process.platform, method: "closed-child", processTreeVerified: false,
-    forcedTermination, observedProcesses: Number(Boolean(child.pid)), liveProcesses: 0, residualProcessesAfterExit: 0,
+    forcedTermination, observedProcesses: Number(Boolean(child.pid)), liveProcesses: 0,
+    residualProcessesAfterExit: process.platform === "win32" && child.pid ? null : 0,
+    descendantObservation: process.platform === "win32" && child.pid ? "UNVERIFIED_AFTER_ROOT_EXIT" : "root-only",
   };
   if (process.platform === "win32") {
     await new Promise<void>((done, reject) => {
       const killer = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { env: environment, windowsHide: true, stdio: "ignore" });
       const timer = setTimeout(() => { killer.kill(); reject(new Error("Owned child cleanup exceeded its bound.")); }, 15_000);
-      killer.once("error", () => { clearTimeout(timer); reject(new Error("Owned child cleanup failed.")); });
+      killer.once("error", (error: NodeJS.ErrnoException) => { clearTimeout(timer); reject(new Error("Owned child cleanup failed.", {
+        cause: { code: typeof error.code === "string" && /^[A-Z0-9_]+$/u.test(error.code) ? error.code : null },
+      })); });
       killer.once("close", code => {
-        clearTimeout(timer);
-        if (code === 0 || child.exitCode !== null || child.signalCode !== null) done();
-        else reject(new Error("Owned child cleanup failed."));
+        clearTimeout(timer); terminationExitCode = code;
+        // A concurrent root exit cannot qualify a failed tree termination command.
+        if (code === 0) done();
+        else reject(new Error("Owned child cleanup failed.", { cause: { exitCode: code, signal: killer.signalCode } }));
       });
     });
     forcedTermination = true;
@@ -2852,7 +3068,7 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
     child.once("close", () => { clearTimeout(timer); done(); });
   });
   return { status: "PASS" as const, platform: process.platform, method: process.platform === "win32" ? "windows-taskkill-tree" : "owned-child-signals",
-    processTreeVerified: process.platform === "win32", forcedTermination, observedProcesses: 1, liveProcesses: 0, residualProcessesAfterExit: 0 };
+    processTreeVerified: process.platform === "win32", forcedTermination, terminationExitCode, observedProcesses: 1, liveProcesses: 0, residualProcessesAfterExit: 0 };
 }
 
 /** One owned Node-child lifecycle shared by Public gates and qualified targeted verification. */
@@ -2862,8 +3078,9 @@ export function runOwnedVerificationChild(ports: {
   children: Set<ChildProcess>;
   signal: AbortSignal;
 }, args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number): Promise<{ code: number; stdout: string; stderr: string; durationMs: number;
+  rawExit: { code: number | null; signal: NodeJS.Signals | null }; identity: { pid: number | null; ppid: number; spawnedAtUtc: string };
   cleanup: { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
-    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number } }> {
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null } }> {
   const { sourceDirectory, context, children, signal } = ports;
   const started = performance.now();
   return new Promise((done, reject) => {
@@ -2878,6 +3095,7 @@ export function runOwnedVerificationChild(ports: {
     // This nonsecret marker is inherited by the reviewed Playwright fixture, including its detached Chromium groups.
     // Linux discovery never retains environment contents and excludes every process older than this owned root.
     const markerKey = "VENESIA_QA_OWNED_CHILD", marker = globalThis.crypto.randomUUID();
+    const spawnedAtUtc = new Date().toISOString();
     const child = spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...env, [markerKey]: marker },
       detached: process.platform === "linux", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     children.add(child); let stdout = "", stderr = "", failed = false;
@@ -3018,18 +3236,120 @@ export function runOwnedVerificationChild(ports: {
         writeFileSync(stdoutPath, cleanOutput, { mode: 0o600, flag: "wx" });
         writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
       } catch (error) { evidenceFailure = error; }
-      const childResult = { code: code ?? null, signal: child.signalCode, durationMs: performance.now() - started,
+      const childResult = { code: code ?? null, signal: child.signalCode,
+        identity: { pid: child.pid ?? null, ppid: process.pid, spawnedAtUtc }, durationMs: performance.now() - started,
         reason: failureReason ?? (code ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
         cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
           forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
+        cleanupFailure: cleanupFailure instanceof Error && cleanupFailure.cause && typeof cleanupFailure.cause === "object" ? {
+          code: "code" in cleanupFailure.cause && typeof cleanupFailure.cause.code === "string" && /^[A-Z0-9_]+$/u.test(cleanupFailure.cause.code) ? cleanupFailure.cause.code : null,
+          exitCode: "exitCode" in cleanupFailure.cause && typeof cleanupFailure.cause.exitCode === "number" ? cleanupFailure.cause.exitCode : null,
+        } : null,
         evidence: { stdout: `public-${name}.stdout.log`, stderr: `public-${name}.stderr.log`, sanitized: cleanOutput !== null && cleanErrors !== null } };
       const error = failed ? new Error(`Public ${name} was aborted or exceeded its bound.`, { cause: cleanupFailure ?? evidenceFailure })
         : processFailure ?? (cleanupFailure ? new Error(`Public ${name} cleanup failed.`, { cause: cleanupFailure }) : evidenceFailure);
       if (error) { if (error instanceof Error) Object.defineProperty(error, "childResult", { value: childResult, enumerable: true }); reject(error); }
-      else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: code ?? -1, stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
+      else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: code ?? -1, rawExit: { code, signal: child.signalCode },
+        identity: childResult.identity, stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
     };
     child.once("close", code => { void settle(code).catch(reject); });
   });
+}
+
+/** Qualify this execution context with a real, disposable owned tree before Docker allocation. */
+export async function verifyOwnedProcessReadiness(options: {
+  sourceDirectory: string;
+  context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
+  signal: AbortSignal;
+}) {
+  const started = performance.now(), { context, signal, sourceDirectory } = options;
+  signal.throwIfAborted();
+  assert.ok(process.platform === "win32" || process.platform === "linux", "Owned process readiness is unqualified on this platform.");
+  const controller = new AbortController(), children = new Set<ChildProcess>();
+  const cancel = () => controller.abort(signal.reason);
+  signal.addEventListener("abort", cancel, { once: true });
+  // Both identities are reported by their actual child processes. No foreign process is selected or signaled.
+  const expiresAt = Date.now() + 12_000;
+  const leaf = `setTimeout(()=>process.exit(0),Math.max(1,${expiresAt}-Date.now()));process.stdout.write(JSON.stringify({pid:process.pid,ppid:process.ppid})+'\\n');setInterval(()=>{},1000);`;
+  const root = `setTimeout(()=>process.exit(0),Math.max(1,${expiresAt}-Date.now()));const {spawn}=require('node:child_process');const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{env:process.env,detached:process.platform==='linux',windowsHide:true,stdio:['ignore','pipe','pipe']});leaf.stdout.once('data',data=>process.stdout.write(JSON.stringify({root:{pid:process.pid,ppid:process.ppid},leaf:JSON.parse(String(data))})+'\\n'));setInterval(()=>{},1000);`;
+  const knownPids = new Set<number>();
+  const alive = (pid: number) => {
+    if (process.platform === "linux") {
+      try { const raw = readFileSync(`/proc/${pid}/stat`, "utf8"); return !["Z", "X", "x"].includes(raw.slice(raw.lastIndexOf(")") + 2).split(" ")[0]!); }
+      catch (error) { if (["ENOENT", "ESRCH"].includes(String((error as NodeJS.ErrnoException).code))) return false; throw error; }
+    }
+    try { process.kill(pid, 0); return true; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return true; throw error; }
+  };
+  const pending = runOwnedVerificationChild({ sourceDirectory, context, children, signal: controller.signal }, ["-e", root], context.cleanEnvironment(), "process-readiness", 10_000);
+  const outcome = pending.then(value => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
+  try {
+    const child = [...children][0]; assert.ok(child?.stdout, "Owned process readiness did not start its child.");
+    if (child.pid) knownPids.add(child.pid);
+    const identities = await new Promise<{ root: { pid: number; ppid: number }; leaf: { pid: number; ppid: number } }>((done, reject) => {
+      let output = "";
+      const finish = (error?: Error) => {
+        clearTimeout(timer); child.stdout!.off("data", data); child.off("close", closed);
+        controller.signal.removeEventListener("abort", aborted); if (error) reject(error);
+      };
+      const data = (value: Buffer) => {
+        output += String(value);
+        if (output.length > 4_096) return finish(new Error("Owned process readiness identity output exceeded its bound."));
+        if (!output.includes("\n")) return;
+        try { const row = JSON.parse(output.split("\n")[0]!); finish(); done(row); }
+        catch { finish(new Error("Owned process readiness identity output is invalid.")); }
+      };
+      const closed = () => finish(new Error("Owned process readiness exited before its tree was observed."));
+      const aborted = () => finish(new Error("Owned process readiness was cancelled before observation."));
+      const timer = setTimeout(() => finish(new Error("Owned process readiness observation exceeded its bound.")), 8_000);
+      child.stdout!.on("data", data); child.once("close", closed); controller.signal.addEventListener("abort", aborted, { once: true });
+      if (controller.signal.aborted) aborted();
+    });
+    assert.equal(identities.root.pid, child.pid); assert.equal(identities.root.ppid, process.pid);
+    assert.ok(Number.isSafeInteger(identities.leaf.pid) && identities.leaf.pid > 1 && identities.leaf.pid !== identities.root.pid);
+    assert.equal(identities.leaf.ppid, identities.root.pid);
+    knownPids.add(identities.leaf.pid);
+    signal.throwIfAborted(); controller.abort(new Error("Controlled owned process readiness cancellation."));
+    const result = await outcome;
+    assert.ok(result.error instanceof Error, "Owned process readiness must observe cancellation, not a passing command.");
+    const retained = (result.error as Error & { childResult?: { code: number | null; signal: NodeJS.Signals | null; reason: string;
+      cleanup: Awaited<ReturnType<typeof stopChild>> } }).childResult;
+    assert.ok(retained && retained.reason === "cancelled" && retained.cleanup.status === "PASS" && retained.cleanup.processTreeVerified,
+      "Owned process readiness did not prove live-tree termination in this execution context.");
+    for (const pid of knownPids) assert.equal(alive(pid), false, "Owned process readiness left a known owned process live.");
+    assert.equal(children.size, 0, "Owned process readiness retained an undrained child registration.");
+    const readinessReceipt = { status: "PASS" as const, platform: process.platform, scope: "self-owned-live-tree-cancellation" as const,
+      durationMs: performance.now() - started, rootIdentity: identities.root, descendantIdentity: identities.leaf,
+      rawExit: { code: retained.code, signal: retained.signal }, cleanup: retained.cleanup,
+      limitations: process.platform === "win32" ? ["Already-exited Windows roots have unverified descendant cleanup; this live-tree probe does not qualify that path."]
+        : ["Detached descendants that clear the inherited ownership marker remain outside qualification."] };
+    receipt(context, "process-readiness.json", readinessReceipt); return readinessReceipt;
+  } catch (error) {
+    if (!controller.signal.aborted) controller.abort(new Error("Owned process readiness failure cleanup."));
+    const finished = await outcome;
+    // This diagnostic tree has its own finite expiry. A denied tree-kill remains BLOCKED;
+    // wait for the known identities to disappear without selecting any foreign PID for termination.
+    const fallbackDeadline = performance.now() + 14_000;
+    while ([...knownPids].some(alive) && performance.now() < fallbackDeadline) await new Promise<void>(done => setTimeout(done, 50));
+    const knownOwnedProcessesAbsent = [...knownPids].every(pid => !alive(pid));
+    const retained = finished.error instanceof Error ? (finished.error as Error & { childResult?: {
+      code: number | null; signal: NodeJS.Signals | null; identity: unknown; reason: unknown; cleanup: unknown; cleanupFailure: unknown; evidence: unknown;
+    } }).childResult : undefined;
+    if (!existsSync(ownedPath(context, "process-readiness.json"))) receipt(context, "process-readiness.json", {
+      status: "BLOCKED", platform: process.platform, scope: "self-owned-live-tree-cancellation", durationMs: performance.now() - started,
+      rawExit: retained ? { code: retained.code, signal: retained.signal } : null, identity: retained?.identity ?? null,
+      reason: retained?.reason ?? "readiness_unproved", cleanup: retained?.cleanup ?? null, evidence: retained?.evidence ?? null,
+      cleanupFailure: retained?.cleanupFailure ?? null,
+      finiteSelfExpiryMs: 12_000, knownOwnedProcessesAbsent, knownIdentities: knownPids.size,
+    });
+    if (error instanceof Error && retained) Object.defineProperty(error, "childResult", { value: retained, enumerable: true });
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (!controller.signal.aborted) controller.abort(new Error("Owned process readiness final cleanup."));
+    await outcome;
+  }
 }
 
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {

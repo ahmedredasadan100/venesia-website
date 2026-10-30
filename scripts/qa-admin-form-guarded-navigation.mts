@@ -214,6 +214,29 @@ qa.router = {
 
 window.__ADMIN_FORM_GUARDED_NAV_QA__ = qa;
 
+// Only the explicitly bounded save-cache fixture enables this passive ring.
+// It records lengths/booleans/enums, never field contents, URLs or state objects.
+function createSaveCacheDiagnosticTimeline(now = () => performance.now()) {
+  const started = now(), events = [];
+  let sequence = 0, dropped = 0;
+  const kinds = new Set(["input", "dom_value_observed", "state_update_requested", "state_render_observed",
+    "controlled_action", "controlled_source_write", "query_invalidation", "controlled_api_read", "controlled_readback", "assertion_failure"]);
+  return {
+    record(kind, facts = {}) {
+      if (!kinds.has(kind)) return;
+      const row = { sequence: ++sequence, elapsedMs: Math.max(0, now() - started), kind };
+      for (const key of ["valueLength", "actionCalls", "reads", "assertionOrdinal"]) {
+        if (Number.isSafeInteger(facts[key]) && facts[key] >= 0) row[key] = Math.min(facts[key], 1000000);
+      }
+      for (const key of ["trusted", "pending", "dirty"]) if (typeof facts[key] === "boolean") row[key] = facts[key];
+      if (["idle", "success", "warning", "error", "throw", "no-confirmation"].includes(facts.status)) row.status = facts.status;
+      events.push(row);
+      if (events.length > 128) { events.shift(); dropped += 1; }
+    },
+    snapshot() { return { events: events.map(row => ({ ...row })), totalObserved: sequence, dropped, limit: 128 }; },
+  };
+}
+
 function RuntimeProbe() {
   const runtime = useAdminFormRuntime();
   qa.runtime = runtime;
@@ -663,6 +686,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
     const invalidate = queryClient.invalidateQueries.bind(queryClient);
     queryClient.invalidateQueries = async (filters, options) => {
       qa.saveCache.invalidations.push(filters);
+      qa.saveCacheDiagnostic?.record("query_invalidation");
       if (cacheFailure) throw new Error("ISOLATED_CLIENT_INVALIDATION_FAILURE");
       return invalidate(filters, options);
     };
@@ -671,6 +695,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
   const action = async (previous, formData) => {
     qa.actionCalls += 1;
     const requestedOutcome = qa.saveCache.nextOutcome ?? outcome;
+    qa.saveCacheDiagnostic?.record("controlled_action", { status: requestedOutcome, actionCalls: qa.actionCalls });
     if (requestedOutcome === "throw") throw new Error("ISOLATED_UNCONFIRMED_WRITE");
     if (requestedOutcome === "no-confirmation") return { ...previous, status: "idle" };
     if (requestedOutcome === "error") return {
@@ -678,6 +703,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
       title: "Write failed", message: "The source did not confirm the write.",
     };
     qa.saveCache.sourceTitle = String(formData.get("title"));
+    qa.saveCacheDiagnostic?.record("controlled_source_write", { valueLength: qa.saveCache.sourceTitle.length });
     return {
       status: requestedOutcome === "warning" ? "warning" : "success",
       mode, revision: previous.revision + 1, entityId: 42, savedRevision: "saved-42",
@@ -693,9 +719,14 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
     onClose: () => setView("list"),
   }, ({ state, pending, requestClose, isDirty }) => {
     qa.saveCache.formState = state;
+    // Render observation is explicitly not React commit proof.
+    qa.saveCacheDiagnostic?.record("state_render_observed", { status: state.status, pending, dirty: isDirty });
     return React.createElement(React.Fragment, null,
       React.createElement("input", { id: "qa-save-cache-title", name: "title",
-        ...(controlled ? { value: controlledTitle, onChange: (event) => setControlledTitle(event.target.value) }
+        ...(controlled ? { value: controlledTitle, onChange: (event) => {
+          qa.saveCacheDiagnostic?.record("state_update_requested", { valueLength: event.target.value.length });
+          setControlledTitle(event.target.value);
+        } }
           : { defaultValue: "Before save" }) }),
       React.createElement("button", { id: "qa-save-cache-submit", type: "submit", disabled: pending }, "Save"),
       React.createElement("button", { id: "qa-save-cache-return", type: "button", onClick: requestClose }, "Return"),
@@ -705,13 +736,31 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
   });
 }
 qa.mountSaveCache = (options = {}) => {
+  qa.saveCacheDiagnosticDispose?.();
+  qa.saveCacheDiagnostic = options.diagnostics === true ? createSaveCacheDiagnosticTimeline() : null;
+  if (qa.saveCacheDiagnostic) {
+    const observe = (event) => {
+      const field = event.target;
+      if (!(field instanceof HTMLInputElement) || field.id !== "qa-save-cache-title" || field.form?.id !== "qa-save-cache-form") return;
+      qa.saveCacheDiagnostic.record("input", { trusted: event.isTrusted, valueLength: field.value.length });
+      qa.saveCacheDiagnostic.record("dom_value_observed", { valueLength: field.value.length });
+    };
+    document.addEventListener("input", observe);
+    document.addEventListener("change", observe);
+    qa.saveCacheDiagnosticDispose = () => {
+      document.removeEventListener("input", observe);
+      document.removeEventListener("change", observe);
+    };
+  } else qa.saveCacheDiagnosticDispose = null;
   qa.actionCalls = 0;
   qa.routerEvents.length = 0;
   qa.saveCache = { sourceTitle: "Before save", reads: 0, invalidations: [], client: null, formState: null };
   root.render(React.createElement(AdminEntityListQueryProvider, null,
     React.createElement(AdminFeedbackProvider, null, React.createElement(SaveCacheFlow, options))));
 };
-qa.saveCacheSnapshot = () => ({
+qa.saveCacheSnapshot = () => {
+  qa.saveCacheDiagnostic?.record("controlled_readback", { reads: qa.saveCache.reads, actionCalls: qa.actionCalls });
+  return ({
   sourceTitle: qa.saveCache.sourceTitle,
   reads: qa.saveCache.reads,
   actionCalls: qa.actionCalls,
@@ -722,7 +771,8 @@ qa.saveCacheSnapshot = () => ({
     const state = qa.saveCache.client.getQueryState(adminEntityListQueryKeys.query(entity, saveCacheQuery));
     return [entity, { invalidated: state?.isInvalidated ?? false, title: state?.data?.rows[0]?.title }];
   })),
-});
+  });
+};
 qa.mount = (options) => {
   qa.routerEvents.length = 0;
   qa.actionCalls = 0;
@@ -1443,6 +1493,11 @@ let primaryFailed = false;
 let saveCacheScenariosStarted = 0;
 let saveCacheScenariosCompleted = 0;
 const saveCacheDeniedRequests: SaveCacheDeniedRequest[] = [];
+let saveCacheDiagnosticPage: Page | null = null;
+const saveCacheDiagnosticSummaries: Array<{ totalObserved: number; dropped: number; kinds: string[] }> = [];
+let saveCacheFailureTimeline: unknown = null;
+let saveCacheDiagnosticCaptureFailed = false;
+let saveCacheObservedAssertionFailure = false;
 
 try {
   const webpackWarnings = await compileHarness(rootDir, tempDir);
@@ -1503,6 +1558,7 @@ try {
     if (saveCacheOnly) saveCacheScenariosStarted += 1;
     const page = await browser.newPage(saveCacheOnly ? { serviceWorkers: "block" } : undefined);
     if (saveCacheOnly) {
+      saveCacheDiagnosticPage = page;
       page.setDefaultTimeout(30_000);
       page.setDefaultNavigationTimeout(30_000);
     }
@@ -1513,6 +1569,8 @@ try {
           saveCache: { reads: number; sourceTitle: string };
         } }).__ADMIN_FORM_GUARDED_NAV_QA__;
         qa.saveCache.reads += 1;
+        (qa as unknown as { saveCacheDiagnostic?: { record(kind: string, facts: { reads: number }): void } })
+          .saveCacheDiagnostic?.record("controlled_api_read", { reads: qa.saveCache.reads });
         return qa.saveCache.sourceTitle;
       });
       await route.fulfill({ contentType: "application/json", body: JSON.stringify({
@@ -1526,7 +1584,7 @@ try {
     await page.evaluate((options) => {
       (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { mountSaveCache(value: unknown): void } })
         .__ADMIN_FORM_GUARDED_NAV_QA__.mountSaveCache(options);
-    }, scenario);
+    }, { ...scenario, diagnostics: saveCacheOnly });
     await page.locator("#qa-save-cache-list").waitFor();
     await page.locator("#qa-save-cache-edit").click();
     await page.locator("#qa-save-cache-title").fill("Saved at source");
@@ -1620,8 +1678,18 @@ try {
       check(`${secondLabel}: submitted input survives`, submittedValue === "Second unsaved edit");
       if (dirty !== "true") secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
     }
+    if (saveCacheOnly) {
+      const summary = await page.evaluate(() => {
+        const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: {
+          saveCacheDiagnostic?: { snapshot(): { totalObserved: number; dropped: number; events: Array<{ kind: string }> } };
+        } }).__ADMIN_FORM_GUARDED_NAV_QA__.saveCacheDiagnostic?.snapshot();
+        return { totalObserved: diagnostic?.totalObserved ?? 0, dropped: diagnostic?.dropped ?? 0,
+          kinds: [...new Set(diagnostic?.events.map(event => event.kind) ?? [])] };
+      });
+      saveCacheDiagnosticSummaries.push(summary);
+    }
     await closePage(page);
-    if (saveCacheOnly) saveCacheScenariosCompleted += 1;
+    if (saveCacheOnly) { saveCacheScenariosCompleted += 1; saveCacheDiagnosticPage = null; }
   }
   if (!reportFreshnessOnly && !returnPathOnly) check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
     secondSaveFailures.length === 0);
@@ -2661,6 +2729,18 @@ try {
   }
 } catch (error) {
   primaryFailed = true;
+  saveCacheObservedAssertionFailure = error instanceof assert.AssertionError;
+  if (saveCacheOnly && saveCacheDiagnosticPage && !saveCacheDiagnosticPage.isClosed()) {
+    try {
+      saveCacheFailureTimeline = await saveCacheDiagnosticPage.evaluate(({ assertionFailure, assertionOrdinal }) => {
+        const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__?: {
+          saveCacheDiagnostic?: { record(kind: string, facts: { assertionOrdinal: number }): void; snapshot(): unknown };
+        } }).__ADMIN_FORM_GUARDED_NAV_QA__?.saveCacheDiagnostic;
+        if (assertionFailure) diagnostic?.record("assertion_failure", { assertionOrdinal });
+        return diagnostic?.snapshot() ?? null;
+      }, { assertionFailure: saveCacheObservedAssertionFailure, assertionOrdinal: passed + 1 });
+    } catch { saveCacheDiagnosticCaptureFailed = true; }
+  }
   throw error;
 } finally {
   const cleanupStarted = performance.now();
@@ -2687,6 +2767,18 @@ try {
       nativePersistenceVerified: false,
       businessConsumerAdoptionVerified: false,
       deniedForeignRequests: saveCacheDeniedRequests,
+      diagnostics: {
+        owner: "src/components/admin/ui/AdminFormRuntime.tsx",
+        capability: "form_runtime", scope: "controlled_save_cache_fixture_only",
+        status: primaryFailed ? saveCacheFailureTimeline ? "CAPTURED" : "UNAVAILABLE" : "NOT_REQUIRED",
+        failureClassification: saveCacheObservedAssertionFailure ? "Assertion Failure; Product/QA cause UNKNOWN" : "UNKNOWN",
+        firstProvenDivergence: saveCacheObservedAssertionFailure ? { boundary: "assertion_failure", assertionOrdinal: passed + 1 } : "UNKNOWN",
+        evidenceConfidence: saveCacheObservedAssertionFailure ? "observed_assertion_boundary_only" : "insufficient_causal_evidence",
+        missingEvidence: ["React commit not observed", "Native database persistence not executed", "Causal owner of divergence UNKNOWN"],
+        timeline: saveCacheFailureTimeline, captureFailed: saveCacheDiagnosticCaptureFailed,
+        completedScenarioSummaries: saveCacheDiagnosticSummaries, maxEventsPerScenario: 128,
+        fieldContentsRecorded: false, productionDataRecorded: false, schedulingAdded: false,
+      },
       cleanup: cleanup.map(({ resource, status }) => ({ resource, status,
         created: resource === "browser" ? browser !== null : resource === "server" ? server !== null : true })),
     }));

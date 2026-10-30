@@ -365,7 +365,7 @@ actual effects. It first requires automatic source consistency for an explicit
 immutable baseline and the complete current tracked snapshot; approval records,
 untracked additions, stale selectors and arbitrary commands cannot authorize
 execution. Current manifest owner bindings, actual changed inputs, registered
-literal command steps and the reviewed harness bytes qualify one existing leaf:
+literal command steps and the reviewed harness bytes qualify the existing Form leaf:
 `node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts --save-cache-only`.
 The exact flag selects thirteen existing controlled save/cache scenarios; it
 rejects additional or combined flags before allocating resources. A changed
@@ -391,6 +391,32 @@ Linux source selection and ordinary mandatory CI commands retain their existing
 behavior and obligations. The read-only CI source step is unchanged; this
 explicit qualified path does not add a second execution of the same leaf to
 the mandatory full CI chain.
+
+Phase 06 additionally selects the two direct, registered source leaves of the
+existing Executable Governance and Verification Infrastructure owners. Automatic
+execution requires a reviewed fingerprint of the complete native eager import
+closure, build/dependency inputs, installed lock and actual Node/runtime identity,
+recomputed from immutable source bytes. The existing executable graph owns the
+explicit eager-import option; its ordinary callers retain their default behavior.
+Missing or generated/dynamic execution remains unqualified. Current Executable
+Governance has a reviewed closure; Verification Infrastructure remains selected
+but unqualified because its existing loader executes generated fixture code.
+This does not qualify their named composite commands, Database effects or
+Browser behavior. QA/fixture changes automatically nominate these
+existing quality owners even without an import-graph edge; unresolved fixture
+coverage remains explicit and retains the conservative Full obligation.
+The existing impact report emits selected/not-selected reasons, owners,
+contracts, current commands, duration, result, evidence and source bindings.
+Before execution its rows remain NOT RUN. Overlapping selections execute each
+qualified literal step once, write distinct retained leaf receipts and stop at
+the first executed failure. Independently qualified leaves may execute while an
+unqualified required selection stays NOT RUN and the aggregate stays BLOCKED;
+failed global source coherence still prevents all execution. Source-guard PASS
+remains `qualifiedBehavioralPass=false`.
+Loss of AST-observed assertion count blocks source coherence; this bounded
+protection does not claim to detect every semantic assertion weakening or prove
+equivalent protection. Contract-specific relevance and Owner review remain
+required. No mandatory machine hook, new workflow or parallel registry is added.
 
 This leaf mounts the actual Form Runtime, Entity List controller and QueryClient
 with controlled action results and an in-memory source. It covers confirmed
@@ -430,6 +456,40 @@ and UNKNOWN. A directly observed OS error code can establish Environment; a
 zero-exit process with an invalid required terminal receipt establishes a
 Fixture protocol failure. Assertion labels, nonzero exit, timeout and cancellation
 alone remain UNKNOWN and cannot establish a Product diagnosis.
+
+The existing classifier additionally separates observed failure disposition
+from initiating cause: retained native V8 CHECK plus abort exit/signal and log
+hash may establish Runtime Crash; the owned pg control-client error code may
+establish Database Transport failure. Timeout and Cancellation retain UNKNOWN
+causal category while naming their observed termination reason. None proves a
+Sleep, memory, Docker, Codex transport or Product cause. Primary child evidence
+and cleanup classification remain separate.
+
+The same bounded Form fixture now retains at most 128 passive metadata events
+per scenario: input/DOM value lengths, controlled state-update requests and
+render observations, controlled action/source/cache/API/readback boundaries,
+and an observed assertion boundary. It records no field values, arbitrary
+objects, URLs or credentials; no diagnostic timer, microtask or React setter is
+added. Render observations are not React commit proof. Failure collection must
+rethrow the original error even if collection fails; unavailable evidence stays
+unavailable and causal divergence stays UNKNOWN. The parent receipt's existing
+hashes/source binding cover this evidence. Broader consumers and native
+persistence are not qualified by the thirteen controlled scenarios.
+
+Before Docker allocation, the existing isolated lifecycle invokes the existing
+owned-child process owner to qualify creation and live-tree cancellation in
+the actual caller context. A denied tree-kill remains BLOCKED even if its
+finite self-owned probe subsequently expires cleanly. Windows root exit alone
+does not prove detached descendants absent. Preparation has a 600-second phase
+budget and 1800-second cumulative budget, excluding gate execution, with age
+observation and rejection before the pinned 600-second control-connection
+lifetime. Verified-idle renewal reuses the existing port; it does not replace a
+failed connection or renew an active transaction. Timeout/cancellation revokes
+the handle, aborts owned work and retains phase/duration/control age plus safe
+pg failure metadata. Cleanup closes owned transport and drains pending work
+before resource removal; a failed drain is retained, never recorded PASS.
+These controls and their targeted receipts do not alone prove long-running
+Environment Readiness, repair the historical V8 abort or satisfy Full Local E.
 
 Contract correspondence is per exported contract/symbol and its actual
 assertion dependency, including lexically bound runtime aliases. An unrelated

@@ -12,6 +12,7 @@ import { assertApplicationMigrationTool, selectApplicationMigrationTool, Isolate
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 import { proveHostBoundary, startHostAccessBridge, waitForOwnedDatabaseCapacity } from "./isolated-supabase-transport.mjs";
 import { prepareOwnedPublicVerification, registerOwnedAdminMeasurement, runOwnedPublicVerification, isOwnedLocalVerificationActive,
+  verifyOwnedProcessReadiness,
   type PrivatePublicVerificationContext, type PublicFixtureReadiness, type PublicGateRequest } from "./isolated-public-verification.mts";
 import { prepareOwnedAdminMeasurementAccount } from "../fixtures/admin-interaction-fixtures.mts";
 
@@ -52,16 +53,18 @@ function requireThat(condition: unknown, code: string, stage: string): asserts c
 // pg emits idle socket failures outside query promises. Keep an error listener
 // through end(), and reject the handoff instead of letting EventEmitter crash
 // the process before the lifecycle's finally block can release owned resources.
-export function observeApplicationClient(client: Pick<PgConnection, "on">, recordFailure: () => void) {
+export function observeApplicationClient(client: Pick<PgConnection, "on">, recordFailure: (facts: { pgCode: string | null; pgMessageClass: string }) => void) {
   let failure: IsolatedSupabaseError | undefined;
   let rejectFailure: (error: IsolatedSupabaseError) => void = () => undefined;
   const failed = new Promise<never>((_resolve, reject) => { rejectFailure = reject; });
   void failed.catch(() => undefined);
-  const watch = (watched: Pick<PgConnection,"on">) => watched.on("error", () => {
+  const watch = (watched: Pick<PgConnection,"on">) => watched.on("error", (error: unknown) => {
     if (failure) return;
     failure = new IsolatedSupabaseError("APPLICATION_CLIENT_DISCONNECTED", "application-handoff");
     // A failed receipt write must also remain inside the awaited failure path.
-    try { recordFailure(); } catch {
+    const pgCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      && /^(?:[0-9A-Z]{5}|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENETUNREACH|EHOSTUNREACH)$/u.test(error.code) ? error.code : null;
+    try { recordFailure({ pgCode, pgMessageClass: classifyOwnedPgConnectMessage(error)?.messageClass ?? "unclassified" }); } catch {
       failure = new IsolatedSupabaseError("APPLICATION_CLIENT_RECEIPT_FAILED", "application-handoff");
     }
     rejectFailure(failure);
@@ -92,6 +95,7 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
   let current=initial,bornAt=now(),renewing:Promise<void>|undefined;
   return {
     get client(){return current;},
+    ageMs() { return Math.max(0, now() - bornAt); },
     async renewIfDue(adminJobActive:boolean, explicitIdleBoundary = false) {
       options.assertHealthy();
       if(!adminJobActive || (!explicitIdleBoundary && now()-bornAt<240_000)) return;
@@ -131,6 +135,83 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
       })();
       try{await renewing;}finally{renewing=undefined;}
     },
+  };
+}
+
+/** Preparation shares the existing lifecycle's cancellation and evidence ports.
+ * Its budget excludes gate execution and never extends a failed socket lease. */
+export function createOwnedPreparationLifecycle(options: {
+  record(values: Record<string, string | number | boolean | null>): void;
+  cancel(): void;
+  controlAgeMs(): number | null;
+  now?: () => number;
+  phaseLimitMs?: number;
+  totalLimitMs?: number;
+  signal?: AbortSignal;
+}) {
+  const now = options.now ?? performance.now.bind(performance);
+  const phaseLimitMs = options.phaseLimitMs ?? 600_000, totalLimitMs = options.totalLimitMs ?? 1_800_000;
+  requireThat([phaseLimitMs, totalLimitMs].every(value => Number.isFinite(value) && value > 0), "INVALID_PREPARATION_BUDGET", "preflight");
+  const abort = new AbortController();
+  let phase: string | undefined, bornAt = now(), elapsedMs = 0, failure: IsolatedSupabaseError | undefined, ageObserved = false, cancellationPortFailed = false;
+  const snapshot = () => ({ phase: phase ?? "inactive", phaseDurationMs: phase ? Math.max(0, now() - bornAt) : 0,
+    totalDurationMs: elapsedMs + (phase ? Math.max(0, now() - bornAt) : 0), controlAgeMs: options.controlAgeMs(),
+    phaseLimitMs, totalLimitMs, cancellationPortFailed });
+  const failPreparation = (code: string) => {
+    if (failure) return;
+    failure = new IsolatedSupabaseError(code, "preparation");
+    // Record only bounded owner facts; SQL, parameters and raw errors never enter this receipt.
+    try { options.record({ ...snapshot(), status: "FAIL", code }); }
+    catch { /* The original timeout/cancellation still rejects; native failure receipts remain mandatory. */ }
+    finally {
+      abort.abort(failure);
+      try { options.cancel(); } catch { cancellationPortFailed = true; }
+    }
+  };
+  const check = () => {
+    if (failure) throw failure;
+    if (!phase) return;
+    const facts = snapshot();
+    if (facts.totalDurationMs >= totalLimitMs) failPreparation("PREPARATION_TOTAL_TIMEOUT");
+    else if (facts.phaseDurationMs >= phaseLimitMs) failPreparation("PREPARATION_PHASE_TIMEOUT");
+    else if (facts.controlAgeMs !== null && facts.controlAgeMs >= 480_000) failPreparation("PREPARATION_CONTROL_LEASE_OVERDUE");
+    if (!failure && facts.controlAgeMs !== null && facts.controlAgeMs >= 240_000 && !ageObserved) {
+      ageObserved = true;
+      try { options.record({ ...facts, status: "OBSERVED", code: "PREPARATION_CONTROL_RENEWAL_DUE" }); }
+      catch { failPreparation("PREPARATION_EVIDENCE_FAILED"); }
+    } else if (facts.controlAgeMs !== null && facts.controlAgeMs < 240_000) ageObserved = false;
+    if (failure) throw failure;
+  };
+  const pause = () => {
+    check();
+    if (!phase) return;
+    try { options.record({ ...snapshot(), status: "PASS", code: null }); }
+    catch { failPreparation("PREPARATION_EVIDENCE_FAILED"); check(); }
+    elapsedMs += Math.max(0, now() - bornAt); phase = undefined;
+  };
+  const enter = (next: string) => {
+    requireThat(/^[a-z][a-z0-9-]{0,70}$/u.test(next), "INVALID_PREPARATION_PHASE", "preparation");
+    check(); if (phase === next) return;
+    pause(); phase = next; bornAt = now(); check();
+  };
+  const cancel = () => failPreparation("PREPARATION_CANCELLED");
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  if (options.signal?.aborted) cancel();
+  const timer = setInterval(() => { try { check(); } catch { /* Awaited owner boundaries retain this first failure. */ } }, 1_000);
+  return { signal: abort.signal, snapshot, check, enter, pause, cancel,
+    async run<T>(body: () => Promise<T>): Promise<T> {
+      check(); abort.signal.throwIfAborted();
+      let rejectAbort: (() => void) | undefined;
+      const cancelled = new Promise<never>((_resolve, reject) => {
+        rejectAbort = () => reject(failure ?? abort.signal.reason);
+        abort.signal.addEventListener("abort", rejectAbort, { once: true });
+      });
+      try { return await Promise.race([Promise.resolve().then(() => { check(); abort.signal.throwIfAborted(); return body(); }), cancelled]); }
+      finally { if (rejectAbort) abort.signal.removeEventListener("abort", rejectAbort); }
+    },
+    get failure() { return failure; },
+    get active() { return phase !== undefined; },
+    close() { clearInterval(timer); options.signal?.removeEventListener("abort", cancel); },
   };
 }
 
@@ -397,16 +478,21 @@ export function readReleaseLock(lockPath: string): ReleaseLock {
 const imageForService = (lock: ReleaseLock, service: Service) => lock.images[service === "qa-transport" ? "storage" : service];
 
 type CommandResult = { code: number | null; stdout: string; stderrHash: string };
-async function command(binary: string, args: string[], stage: string, options: { timeout?: number; env?: NodeJS.ProcessEnv; allowFailure?: boolean } = {}): Promise<CommandResult> {
+async function command(binary: string, args: string[], stage: string, options: { timeout?: number; env?: NodeJS.ProcessEnv; allowFailure?: boolean; signal?: AbortSignal } = {}): Promise<CommandResult> {
   return new Promise((done, reject) => {
+    if (options.signal?.aborted) { reject(options.signal.reason); return; }
     const child = spawn(binary, args, { cwd: ROOT, env: options.env ?? cleanChildEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "", errorOutput = "", timedOut = false, overflow = false;
     const timer = setTimeout(() => { timedOut = true; child.kill(); }, options.timeout ?? 60_000);
+    const abort = () => child.kill();
+    options.signal?.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); if (output.length > 8_000_000) { overflow = true; child.kill(); } });
     child.stderr.on("data", (chunk: Buffer) => { errorOutput += chunk.toString(); if (errorOutput.length > 8_000_000) { overflow = true; child.kill(); } });
-    child.once("error", () => { clearTimeout(timer); reject(new IsolatedSupabaseError("PROCESS_START_FAILED", stage)); });
+    child.once("error", () => { clearTimeout(timer); options.signal?.removeEventListener("abort", abort); reject(new IsolatedSupabaseError("PROCESS_START_FAILED", stage)); });
     child.once("close", code => {
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
+      if (options.signal?.aborted) { reject(options.signal.reason); return; }
       if (timedOut || overflow) { reject(new IsolatedSupabaseError(timedOut ? "COMMAND_TIMEOUT" : "OUTPUT_LIMIT", stage)); return; }
       if (code !== 0 && !options.allowFailure) { reject(new IsolatedSupabaseError("COMMAND_FAILED", stage)); return; }
       done({ code, stdout: output, stderrHash: sha256(errorOutput) });
@@ -433,6 +519,7 @@ export type IsolatedSupabaseOptions = {
   storagePort?: number;
   apiPort?: number;
   failureInjection?: "before-handoff";
+  signal?: AbortSignal;
   cleanupOnly?: boolean;
   abruptRecovery?: {
     artifactLayout?: "nested-runtime" | "direct-runner-argument";
@@ -697,12 +784,17 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const dockerHost = options.dockerHost ?? (process.platform === "win32" ? "npipe:////./pipe/dockerDesktopLinuxEngine" : "unix:///var/run/docker.sock");
   requireThat(["npipe:////./pipe/dockerDesktopLinuxEngine", "npipe:////./pipe/docker_engine", "unix:///var/run/docker.sock"].includes(dockerHost), "REMOTE_DOCKER_FORBIDDEN", "preflight");
   let interrupted = false, cleaning = false;
+  let preparation: ReturnType<typeof createOwnedPreparationLifecycle> | undefined;
   let cliJobAbort: AbortController | undefined;
   let cliJob: Promise<ApplicationMigrationCliResult> | undefined;
-  const interrupt = () => { interrupted = true; cliJobAbort?.abort(); };
+  const interrupt = () => {
+    interrupted = true; cliJobAbort?.abort(); publicJobAbort?.abort(); lifetimeAbort.abort();
+    if (preparation?.active) preparation.cancel();
+  };
   const dc = (args: string[], stage: string, extra: { timeout?: number; allowFailure?: boolean } = {}) => {
+    if (!cleaning) preparation?.check();
     requireThat(cleaning || !interrupted, "INTERRUPTED", stage);
-    return command(dockerBinary, ["--host", dockerHost, ...args], stage, extra);
+    return command(dockerBinary, ["--host", dockerHost, ...args], stage, { ...extra, ...(!cleaning ? { signal: preparation?.signal } : {}) });
   };
   const parse = (value: string) => object(JSON.parse(value));
   const lines = (text: string) => text.trim().split(/\r?\n/).filter(Boolean);
@@ -754,6 +846,20 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   let primaryFailure: IsolatedSupabaseError | undefined;
   let cleanupFailure: IsolatedSupabaseError | undefined;
   let currentStage = "preflight";
+  let controlAgeMs = (): number | null => null;
+  const preparationJobs = new Set<Promise<unknown>>();
+  const lifetimeAbort = new AbortController();
+  if (!priorIntent) preparation = createOwnedPreparationLifecycle({
+    signal: options.signal,
+    controlAgeMs: () => controlAgeMs(),
+    record: values => safeRecord("preparation-lifecycle", values),
+    cancel: () => {
+      lifetimeAbort.abort(preparation?.failure);
+      if (handle) activeHandles.delete(handle);
+      cliJobAbort?.abort(); publicJobAbort?.abort();
+      for (const client of [...scopedConnections, ...(appConnection ? [appConnection] : [])]) void client.end().catch(() => undefined);
+    },
+  });
   const transportCodes = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "EACCES", "EPIPE", "ENOTFOUND", "DB_CONNECTION_TIMEOUT"]);
   const ownerTransportCodes = new Set(["INVALID_QA_TRANSPORT", "INVALID_QA_TRANSPORT_PORTS", "QA_TRANSPORT_CLEANUP_INCOMPLETE", "QA_TRANSPORT_LISTEN_FAILED", "INVALID_QA_BOUNDARY_PORTS", "NON_LOOPBACK_EXPOSURE"]);
   const asSafeError = (error: unknown, stage: string) => error instanceof IsolatedSupabaseError
@@ -894,7 +1000,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     try {
       const connectionTimeoutMillis = hostBridge ? await waitForOwnedDatabaseCapacity(hostBridge) : 5000;
       client = new pg.Client({ connectionString: databaseUrl(username), connectionTimeoutMillis, ssl: false, options: "",
-        statement_timeout: 30000, application_name: OWNER }) as PgConnection;
+        statement_timeout: 30000, query_timeout: 30000, application_name: OWNER }) as PgConnection;
       await client.connect();
     } catch (error) {
       const elapsedMs = performance.now() - started, safe = asSafeError(error, "database-connect");
@@ -984,7 +1090,16 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     ...(abruptRecovery?.terminalFailure ? { terminalFailureRecovery: abruptRecovery.terminalFailure } : {}) });
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
+  options.signal?.addEventListener("abort", interrupt, { once: true });
   try {
+    if (!priorIntent) {
+      preparation!.enter("process-readiness");
+      await verifyOwnedProcessReadiness({ sourceDirectory: ROOT,
+        context: { runDirectory: artifactDir, cleanEnvironment: cleanChildEnvironment,
+          sanitize: value => privateValues.reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_CREDENTIAL]"), value) },
+        signal: lifetimeAbort.signal });
+      preparation!.enter("preflight");
+    }
     if (priorIntent) {
       // Reserving every original listener rejects a live host runner and stops
       // another owner from acquiring those ports during cleanup verification.
@@ -1063,12 +1178,13 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         server.listen({ host: "127.0.0.1", port, exclusive: true }, () => server.close(() => done()));
       });
     }
-    currentStage = "upstream-provenance";
+    currentStage = "upstream-provenance"; preparation?.enter(currentStage);
     for (const file of lock.files) {
       let bytes: Buffer | undefined;
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          const response = await fetch(new URL(file.path, lock.release.sourceBaseUrl), { redirect: "error", signal: AbortSignal.timeout(30000) });
+          const response = await fetch(new URL(file.path, lock.release.sourceBaseUrl), { redirect: "error",
+            signal: AbortSignal.any([AbortSignal.timeout(30000), lifetimeAbort.signal]) });
           requireThat(response.ok, "UPSTREAM_SOURCE_UNAVAILABLE", currentStage);
           bytes = Buffer.from(await response.arrayBuffer());
           break;
@@ -1088,7 +1204,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       const target = resolve(run.upstreamRoot, file.path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, bytes, { flag: "wx" });
     }
     safeRecord("upstream-source-verified", { files: lock.files.length, releaseCommit: RELEASE_COMMIT });
-    currentStage = "image-provenance";
+    currentStage = "image-provenance"; preparation?.enter(currentStage);
     for (const service of IMAGE_SERVICES) {
       const image = lock.images[service];
       const inspected = await dc(["image", "inspect", "--format", '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"repoDigests":{{json .RepoDigests}}}', image.reference], "image-inspect", { allowFailure: true });
@@ -1097,11 +1213,11 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       assertPinnedImageIdentity(identity as Parameters<typeof assertPinnedImageIdentity>[0], image);
       safeRecord("image-verified", { service, configDigest: image.configDigest, manifestDigest: image.manifestDigest, dockerImageId: String(identity.id) });
     }
-    currentStage = "compose-contract";
+    currentStage = "compose-contract"; preparation?.enter(currentStage);
     const composeArgs = await prepareCompose();
     requireThat(config, "MISSING_COMPOSE_CONTRACT", currentStage);
     safeRecord("compose-validated", { services: SERVICES.length, volumes: Object.keys(config.volumes).length, internalNetwork: true });
-    currentStage = "owned-create";
+    currentStage = "owned-create"; preparation?.enter(currentStage);
     created = true;
     await dc([...composeArgs, "create", "--no-build", "--pull", "never"], "compose-create", { timeout: 120_000 });
     await discoverOwned();
@@ -1109,7 +1225,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       && captured.filter(row => row.identity.kind === "volume").length === 3
       && captured.filter(row => row.identity.kind === "network").length === 1, "INCOMPLETE_OWNED_RESOURCE_SET", currentStage);
     recordFile("owned-resources.json", captured);
-    currentStage = "post-create-baseline";
+    currentStage = "post-create-baseline"; preparation?.enter(currentStage);
     const afterCreate = await inventory();
     const previousBridge = before.networks.find(row => row.name === "bridge");
     const currentBridge = afterCreate.networks.find(row => row.name === "bridge");
@@ -1131,7 +1247,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       originalUserResourcesExact: true, servicesStarted: false, cleanupRequiresExactOperationalIdentity: true });
     before = operationalBaseline;
     safeRecord("post-create-baseline", { bridgeEpochTransition: transition, originalUserResourcesExact: true, servicesStarted: false });
-    currentStage = "network-denial-preflight";
+    currentStage = "network-denial-preflight"; preparation?.enter(currentStage);
     await startService("qa-transport");
     const transportPreflight = serviceResource("qa-transport"); await inspectCaptured(transportPreflight);
     const routeProof = parse((await dc(["container", "exec", "--user", "1000:1000", transportPreflight.identity.id,
@@ -1144,7 +1260,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       everyContainerAttachedOnlyToOwnedInternalNetwork: true, extraCapabilities: false, dockerPortPublishing: false,
       officialDatabaseStarted: false, storageStarted: false });
     safeRecord("network-denial-before-bootstrap", { externalRouteAbsent: true, reservedDestinationDenied: true, containers: SERVICES.length });
-    currentStage = "postgres-platform";
+    currentStage = "postgres-platform"; preparation?.enter(currentStage);
     await startService("db");
     hostBridge = await startHostAccessBridge({ dockerBinary, dockerHost, env: cleanChildEnvironment(),
       ports: { db: run.pgPort, rest: run.restPort, storage: run.storagePort, "api-gw": run.apiPort },
@@ -1165,7 +1281,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     requireThat(database.rows.length === 1 && database.rows[0].database === "postgres" && database.rows[0].role === "supabase_admin"
       && database.rows[0].postgres_create === true, "OFFICIAL_DATABASE_PREREQUISITE_MISSING", currentStage);
     recordFile("postgres-readiness.json", database.rows[0]);
-    currentStage = "official-storage";
+    currentStage = "official-storage"; preparation?.enter(currentStage);
     await startService("rest");
     await startService("imgproxy");
     await startService("storage");
@@ -1186,22 +1302,24 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     recordFile("storage-readiness.json", { migrationCount: expected.length, migrationHead: expected.at(-1), historySha256: sha256(canonical(history.rows)),
       fullBundledChainExact: true, loader: "postgres-migrations.loadMigrationFiles", catalog: catalog.rows });
     safeRecord("storage-verified", { migrationCount: expected.length, fullBundledChainExact: true, ownershipAndAclVerified: true });
-    currentStage = "rest-readiness";
-    const response = await fetch(`http://127.0.0.1:${run.restPort}/`, { headers: { Authorization: `Bearer ${anonKey}` }, redirect: "error", signal: AbortSignal.timeout(10000) });
+    currentStage = "rest-readiness"; preparation?.enter(currentStage);
+    const response = await fetch(`http://127.0.0.1:${run.restPort}/`, { headers: { Authorization: `Bearer ${anonKey}` }, redirect: "error",
+      signal: AbortSignal.any([AbortSignal.timeout(10000), lifetimeAbort.signal]) });
     requireThat(response.ok, "REST_READINESS_FAILED", currentStage);
     await response.body?.cancel();
     safeRecord("storage-rest-ready", { restStatus: response.status, postgresRoleVerified: true, storageVerified: true });
-    currentStage = "official-api-gateway";
+    currentStage = "official-api-gateway"; preparation?.enter(currentStage);
     await startService("api-gw");
     const apiResponse = await fetch(`http://127.0.0.1:${run.apiPort}/rest/v1/`, {
       // The official gateway restricts this exact OpenAPI discovery route to
       // service_role. Use only this run's generated local key; preserve routing.
-      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }, redirect: "error",
+      signal: AbortSignal.any([AbortSignal.timeout(15000), lifetimeAbort.signal]) });
     recordFile("api-gateway-readiness.json", { status: apiResponse.status, path: "/rest/v1/", localServiceRoleProbe: true,
       officialConfigurationUnmodified: true, responseBodyRetained: false });
     requireThat(apiResponse.ok, "OFFICIAL_API_GATEWAY_NOT_READY", currentStage);
     await apiResponse.body?.cancel();
-    currentStage = "network-contract";
+    currentStage = "network-contract"; preparation?.enter(currentStage);
     const transport = serviceResource("qa-transport"); await inspectCaptured(transport);
     const networkProof = parse((await dc(["container", "exec", "--user", "1000:1000", transport.identity.id,
       "node", "/qa/isolated-supabase-transport.mjs", "--network-proof"], "network-proof", { timeout: 20000 })).stdout);
@@ -1234,23 +1352,46 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     safeRecord("platform-ready", { restStatus: response.status, apiStatus: apiResponse.status, postgresRoleVerified: true, storageVerified: true, networkContractVerified: true });
     if (options.failureInjection === "before-handoff") fail("INJECTED_BEFORE_HANDOFF", "failure-injection");
     if (options.handoff) {
-      currentStage = "application-handoff";
+      currentStage = "application-handoff"; preparation?.enter(currentStage);
       appConnection = await connect("postgres");
       const boundConnection = appConnection;
-      const applicationClient = observeApplicationClient(boundConnection, () => {
+      const applicationClient = observeApplicationClient(boundConnection, facts => {
         cliJobAbort?.abort();
         if (handle) activeHandles.delete(handle);
-        safeRecord("application-client-disconnected", { code: "APPLICATION_CLIENT_DISCONNECTED", errorDetailsRetained: false });
+        safeRecord("application-client-disconnected", { code: "APPLICATION_CLIENT_DISCONNECTED", errorDetailsRetained: false,
+          ...facts, ...(preparation?.snapshot() ?? {}) });
       });
       const applicationLease=createAdminMeasurementControlLease(boundConnection,{
         connect:()=>connect("postgres"),assertHealthy:()=>applicationClient.assertHealthy(),watch:client=>applicationClient.watch(client),
         assertOwned:async()=>{assertOwnedLocalHandle(handle);requireThat(!interrupted&&!cleaning,"INACTIVE_ADMIN_CONTROL_LEASE","admin-measurement");await inspectCaptured(serviceResource("db"));},
         replaced:client=>{appConnection=client;},record:values=>safeRecord(values.deferred===true?"admin-control-connection-deferred":"admin-control-connection-renewed",values),
       });
+      controlAgeMs = () => applicationLease.ageMs();
+      const renewPreparationControl = async () => {
+        preparation!.check();
+        if (!preparation!.active || applicationLease.ageMs() < 240_000 || controlMaintenance || controlQueries > 0
+          || pendingScopedConnections > 0 || scopedConnections.size > 0 || cliJob || publicJob) return;
+        try { await handle!.renewDatabaseControlConnection(); }
+        catch (error) {
+          // A transaction must finish on its original healthy socket. The fixed
+          // preparation/lease deadline still applies; no failed client is retried.
+          if (!(error instanceof IsolatedSupabaseError && error.code === "CONTROL_TRANSACTION_OPEN")) throw error;
+          safeRecord("preparation-control-transaction", { ...preparation!.snapshot(), renewalSkipped: true });
+          preparation!.check();
+        }
+      };
+      const runPreparationPhase = async <T,>(phase: string, body: () => Promise<T>): Promise<T> => {
+        preparation!.enter(phase);
+        await renewPreparationControl();
+        const job = Promise.resolve().then(() => { preparation!.check(); preparation!.signal.throwIfAborted(); return body(); }); preparationJobs.add(job);
+        try { return await preparation!.run(() => job); }
+        finally { void job.finally(() => preparationJobs.delete(job)).catch(() => undefined); }
+      };
       requireThat(options.cliBinary, "CLI_BINARY_REQUIRED_FOR_HANDOFF", currentStage);
       // One private context per handoff preserves the helper's verified binary
       // and dry-run/apply sequencing. Neither it nor its credential is exposed.
       const cliContext: ApplicationMigrationCliContext = Object.freeze({ runDirectory: artifactDir,
+        signal: lifetimeAbort.signal,
         host: "127.0.0.1", port: run.pgPort, database: "postgres", password,
         tool: Object.freeze({ ...applicationTool }), sourceBinary: resolve(options.cliBinary),
         generatorDocker: Object.freeze({ binary: dockerBinary, host: dockerHost, databaseContainerId: serviceResource("db").identity.id }),
@@ -1275,12 +1416,14 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       handle = Object.freeze({ identity: Object.freeze({ runId, projectName: run.projectName, database: "postgres" as const, host: "127.0.0.1" as const, port: run.pgPort, databaseContainerId: serviceResource("db").identity.id }),
         query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
           requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
+          if (preparation?.active && applicationLease.ageMs() >= 240_000) await renewPreparationControl();
           controlQueries++;
           try {
             assertOwnedLocalHandle(handle);
             applicationClient.assertHealthy();
             await inspectCaptured(serviceResource("db"));
             const result = await applicationLease.client.query(sql, params);
+            preparation?.check(); applicationClient.assertHealthy();
             return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
           } catch (error) { throw asSafeError(error, "application-query"); }
           finally { controlQueries--; }
@@ -1355,7 +1498,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           const connection: OwnedDatabaseConnection = Object.freeze({
             query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
               requireThat(open, "EXPIRED_DATABASE_CONNECTION", "application-query");
-              await cliContext.assertOwned(); observer.assertHealthy();
+              preparation?.check(); await cliContext.assertOwned(); observer.assertHealthy();
               try {
                 const result = await client.query(sql, params);
                 await cliContext.assertOwned(); observer.assertHealthy();
@@ -1414,13 +1557,14 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         },
         preparePublicVerification: async () => {
           assertOwnedLocalHandle(handle);
-          return prepareOwnedPublicVerification(publicContext, handle);
+          return runPreparationPhase("public-fixture", () => prepareOwnedPublicVerification(publicContext, handle!));
         },
         prepareAdminInteractions: async (request?: { study: "heavy-editor-performance" | "media-upload-limit" }) => {
           assertOwnedLocalHandle(handle);
+          return runPreparationPhase("admin-fixture", async () => {
           requireThat(!request || request.study === "heavy-editor-performance" || request.study === "media-upload-limit", "ADMIN_FIXTURE_STUDY_INVALID", "admin-measurement");
           requireThat(!publicJob, "ADMIN_FIXTURE_DURING_JOB", "admin-measurement");
-          const credentials=await prepareOwnedAdminMeasurementAccount(handle);
+          const credentials=await prepareOwnedAdminMeasurementAccount(handle!);
           if (!privateValues.includes(credentials.secret)) {
             privateValues.push(credentials.secret, credentials.password);
             registerOwnedAdminMeasurement(publicContext, credentials);
@@ -1434,15 +1578,17 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           requireThat(!acceptedAdminFixtureHash || acceptedAdminFixtureHash===fixtureHash,"ADMIN_ACCEPTED_FIXTURE_MODEL_CHANGED","admin-measurement");
           safeRecord("admin-fixture-attempt",{fixtureHash,acceptedBefore:Boolean(acceptedAdminFixtureHash)});
           const fixtureOwner=await import(new URL(`../fixtures/admin-interaction-fixtures.mts?fixture=${fixtureHash}`, import.meta.url).href);
-          const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle,credentials,request ? {
+          const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle!,credentials,request ? {
             study: request.study, apiPort: publicContext.apiPort, serviceKey: publicContext.serviceKey,
           } : undefined);
           acceptedAdminFixtureHash=fixtureHash;
           safeRecord("admin-fixture-ready",{fixtureHash});
           return result.fixtures;
+          });
         },
         runPublicVerification: async (request: PublicGateRequest) => {
           assertOwnedLocalHandle(handle);
+          preparation?.pause();
           requireThat(!publicJob, "PUBLIC_JOB_ALREADY_STARTED", "public-verification");
           requireThat(!controlMaintenance && !cliJob, "CLI_CONTROL_BUSY", "public-verification");
           publicJobAbort = new AbortController();
@@ -1486,14 +1632,22 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         }, record: safeRecord });
       activeHandles.add(handle);
       const boundHandle = handle;
-      await applicationClient.run(() => options.handoff!(boundHandle));
+      const handoffJob = Promise.resolve().then(() => {
+        preparation!.check(); preparation!.signal.throwIfAborted(); return options.handoff!(boundHandle);
+      }); preparationJobs.add(handoffJob);
+      try { await applicationClient.run(() => preparation!.run(() => handoffJob)); }
+      finally { void handoffJob.finally(() => preparationJobs.delete(handoffJob)).catch(() => undefined); }
       safeRecord("application-handoff-complete", { completed: true });
     }
+    preparation?.pause();
     }
   } catch (error) {
-    primaryFailure = asSafeError(error, currentStage);
-    recordFile("failure.json", { stage: primaryFailure.stage, code: primaryFailure.code, rawErrorRetained: false });
+    primaryFailure = preparation?.failure ?? asSafeError(error, currentStage);
+    recordFile("failure.json", { stage: primaryFailure.stage, code: primaryFailure.code, rawErrorRetained: false,
+      ...(preparation ? { preparation: preparation.snapshot() } : {}) });
   } finally {
+    preparation?.close();
+    lifetimeAbort.abort(primaryFailure);
     cliJobAbort?.abort();
     if (cliJob) await cliJob.catch(() => undefined);
     publicJobAbort?.abort();
@@ -1512,6 +1666,18 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         cleanupFailure = asSafeError(error, "host-access-cleanup");
         recordFile("host-access-cleanup-failure.json", { stage: cleanupFailure.stage, code: cleanupFailure.code, snapshot: hostBridge.snapshot() });
       }
+    }
+    if (preparationJobs.size) {
+      let drainTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([Promise.allSettled([...preparationJobs]), new Promise<never>((_resolve, reject) => {
+          drainTimer = setTimeout(() => reject(new IsolatedSupabaseError("PREPARATION_DRAIN_TIMEOUT", "cleanup")), 30_000);
+        })]);
+      } catch (error) {
+        cleanupFailure ??= asSafeError(error, "cleanup");
+        recordFile("preparation-drain-failure.json", { code: "PREPARATION_DRAIN_TIMEOUT", stage: "cleanup",
+          pendingOwnedJobs: preparationJobs.size, handleInvalidated: !handle || !activeHandles.has(handle) });
+      } finally { if (drainTimer) clearTimeout(drainTimer); }
     }
     try {
       assertRecoveryCleanupAuthorized(Boolean(priorIntent), recoveryAuthorized);
@@ -1595,6 +1761,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       releaseCommit: RELEASE_COMMIT, runId, retainedProofsReexecuted: false });
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", interrupt);
+    options.signal?.removeEventListener("abort", interrupt);
   }
   if (cleanupFailure) throw cleanupFailure;
   if (primaryFailure) throw primaryFailure;

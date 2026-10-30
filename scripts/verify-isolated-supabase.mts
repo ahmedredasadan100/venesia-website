@@ -639,6 +639,7 @@ async function networkBoundaryOnly() {
 }
 
 async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/isolated-supabase.mts")) {
+  await verifyOwnedPreparationLifecycle(owner);
   await verifyPublicSourceHeartbeatBoundary(owner);
   const cliControl = await verifyIsolatedApplicationCliPulse();
   cases.push(...cliControl.names.map((name: string) => `CLI control pulse: ${name}`));
@@ -753,6 +754,148 @@ async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/is
     assert.equal(t.connections(), 0);
     cases.push("explicit idle phase preserves the existing lease deadline without reconnecting an expired control socket");
   }
+}
+
+async function verifyOwnedPreparationLifecycle(owner: typeof import("./lib/isolated-supabase.mts")) {
+  const setup = (phaseLimitMs = 100, totalLimitMs = 150) => {
+    let time = 0, age: number | null = null, cancellations = 0;
+    const records: Array<Record<string, unknown>> = [], signal = new AbortController();
+    const lifecycle = owner.createOwnedPreparationLifecycle({ phaseLimitMs, totalLimitMs, now: () => time,
+      signal: signal.signal, controlAgeMs: () => age, record: value => records.push(value), cancel: () => { cancellations++; } });
+    return { lifecycle, records, signal, setTime(value: number) { time = value; }, setAge(value: number | null) { age = value; }, cancelled: () => cancellations };
+  };
+  {
+    const t = setup();
+    try {
+      t.lifecycle.enter("platform"); t.setTime(90); t.lifecycle.enter("admin-fixture"); t.setTime(149); t.lifecycle.check();
+      t.setTime(150); assert.throws(() => t.lifecycle.check(), /PREPARATION_TOTAL_TIMEOUT/);
+      assert.equal(t.cancelled(), 1); assert.equal(t.lifecycle.signal.aborted, true);
+      assert.equal(t.records.at(-1)?.phase, "admin-fixture"); assert.equal(t.records.at(-1)?.totalDurationMs, 150);
+      assert.throws(() => t.lifecycle.enter("retry"), /PREPARATION_TOTAL_TIMEOUT/); assert.equal(t.cancelled(), 1);
+    } finally { t.lifecycle.close(); }
+    cases.push("preparation aggregate deadline survives phase transitions and preserves the first failure without retry");
+  }
+  {
+    const t = setup();
+    try {
+      t.lifecycle.enter("admin-fixture"); t.setTime(99); t.lifecycle.check(); t.setTime(100);
+      assert.throws(() => t.lifecycle.check(), /PREPARATION_PHASE_TIMEOUT/);
+      assert.equal(t.records.at(-1)?.phaseDurationMs, 100); assert.equal(t.cancelled(), 1);
+    } finally { t.lifecycle.close(); }
+    cases.push("each preparation phase fails at its exact finite deadline with phase and duration evidence");
+  }
+  {
+    const t = setup();
+    try {
+      t.lifecycle.enter("fixture"); t.setTime(60); t.lifecycle.pause(); t.setTime(5_000); t.lifecycle.check();
+      t.lifecycle.enter("after-gate-fixture"); t.setTime(5_089); t.lifecycle.check(); t.setTime(5_090);
+      assert.throws(() => t.lifecycle.check(), /PREPARATION_TOTAL_TIMEOUT/);
+    } finally { t.lifecycle.close(); }
+    cases.push("gate time is excluded while later preparation retains the same cumulative operating budget");
+  }
+  {
+    const t = setup();
+    try {
+      t.lifecycle.enter("fixture"); t.setAge(240_000); t.lifecycle.check(); t.lifecycle.check();
+      assert.equal(t.records.filter(row => row.code === "PREPARATION_CONTROL_RENEWAL_DUE").length, 1);
+      t.setAge(480_000); assert.throws(() => t.lifecycle.check(), /PREPARATION_CONTROL_LEASE_OVERDUE/);
+      assert.equal(t.records.at(-1)?.controlAgeMs, 480_000); assert.equal(t.cancelled(), 1);
+    } finally { t.lifecycle.close(); }
+    cases.push("preparation observes control age before expiry and fails closed at the existing eight-minute lease bound");
+  }
+  {
+    const t = setup(); let finished = false, release: (() => void) | undefined;
+    try {
+      t.lifecycle.enter("fixture");
+      const work = t.lifecycle.run(async () => { await new Promise<void>(resolve => { release = resolve; }); finished = true; });
+      await Promise.resolve(); t.signal.abort();
+      await assert.rejects(work, error => error === t.lifecycle.failure);
+      assert.equal(t.cancelled(), 1); assert.equal(finished, false); release!(); await Promise.resolve();
+      await assert.rejects(t.lifecycle.run(async () => { throw Error("must not launch"); }), /PREPARATION_CANCELLED/);
+    } finally { t.lifecycle.close(); }
+    cases.push("preparation cancellation rejects awaited work with original failure and prohibits later allocation; cleanup is an explicit owner port");
+  }
+  for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => setup(limit), /INVALID_PREPARATION_BUDGET/);
+    assert.throws(() => setup(100, limit), /INVALID_PREPARATION_BUDGET/);
+  }
+  cases.push("nonfinite or nonpositive preparation limits are rejected before starting lifecycle work");
+  {
+    let time = 0;
+    const lifecycle = owner.createOwnedPreparationLifecycle({ phaseLimitMs: 10, totalLimitMs: 100, now: () => time,
+      controlAgeMs: () => 11, record() { throw Error("Secondary evidence failure"); }, cancel() { throw Error("Secondary cancellation failure"); } });
+    try {
+      lifecycle.enter("fixture"); time = 10;
+      assert.throws(() => lifecycle.check(), error => error === lifecycle.failure && /PREPARATION_PHASE_TIMEOUT/u.test(String(error)));
+      assert.equal(lifecycle.signal.aborted, true); assert.equal(lifecycle.snapshot().cancellationPortFailed, true);
+    } finally { lifecycle.close(); }
+    cases.push("secondary receipt/cancellation-port errors cannot replace the original timeout and cancellation weakness remains explicit");
+  }
+  {
+    const t = setup(); let release: (() => void) | undefined;
+    try {
+      t.lifecycle.enter("fixture");
+      const pending = t.lifecycle.run(() => new Promise<void>(resolve => { release = resolve; }));
+      await Promise.resolve(); t.setTime(100);
+      assert.throws(() => t.lifecycle.check(), /PREPARATION_PHASE_TIMEOUT/);
+      await assert.rejects(pending, error => error === t.lifecycle.failure);
+      assert.equal(t.cancelled(), 1); assert.equal(t.lifecycle.snapshot().phase, "fixture"); release!();
+    } finally { t.lifecycle.close(); }
+    cases.push("phase deadline rejects the actual awaited preparation body through the cancellation port with original timeout identity");
+  }
+  const file = ts.createSourceFile("isolated-supabase.mts", readSource("scripts/lib/isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let renewal: ts.VariableDeclaration | undefined;
+  const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(file) === "renewPreparationControl") renewal = node; ts.forEachChild(node, visit); }; visit(file);
+  assert.ok(renewal?.initializer);
+  {
+    const declarations = new Map<string, ts.VariableDeclaration>();
+    const find = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && ["runPreparationPhase", "handoffJob"].includes(node.name.getText(file))) declarations.set(node.name.getText(file), node); ts.forEachChild(node, find); }; find(file);
+    const source = declarations.get("runPreparationPhase")!.initializer!.getText(file);
+    const handoff = declarations.get("handoffJob")!.initializer!.getText(file);
+    for (const removeGuard of [false, true]) {
+      let release: (() => void) | undefined, started = 0;
+      const t = setup(), jobs = new Set<Promise<unknown>>();
+      const selected = removeGuard ? source.replace("preparation!.check(); preparation!.signal.throwIfAborted(); return body();", "return body();") : source;
+      assert.ok(!removeGuard || selected !== source);
+      const compiled = ts.transpileModule("return " + selected, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+      const run = new Function("preparation", "preparationJobs", "renewPreparationControl", compiled)(t.lifecycle, jobs,
+        () => new Promise<void>(resolve => { release = resolve; })) as (phase: string, body: () => Promise<void>) => Promise<void>;
+      try {
+        const pending = run("fixture", async () => { started++; });
+        t.lifecycle.cancel(); release!(); await assert.rejects(pending, /PREPARATION_CANCELLED/); await Promise.resolve();
+        assert.equal(started, removeGuard ? 1 : 0);
+      } finally { t.lifecycle.close(); }
+    }
+    {
+      let started = 0; const t = setup(); t.lifecycle.enter("application-handoff");
+      const compiled = ts.transpileModule("return " + handoff, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+      try {
+        const pending = new Function("preparation", "options", "boundHandle", compiled)(t.lifecycle, { handoff: async () => { started++; } }, {});
+        t.lifecycle.cancel(); await assert.rejects(pending, /PREPARATION_CANCELLED/); assert.equal(started, 0);
+      } finally { t.lifecycle.close(); }
+    }
+    cases.push("actual deferred preparation and handoff callbacks refuse cancellation before their microtask; removing the preparation callback guard reproduces the forbidden launch");
+  }
+  const compile = ts.transpileModule("return " + renewal.initializer.getText(file), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  for (const state of ["idle", "transaction", "failed"] as const) {
+    let calls = 0, records = 0;
+    const t = setup(); t.lifecycle.enter("fixture"); t.setAge(240_000);
+    const expected = new owner.IsolatedSupabaseError(state === "transaction" ? "CONTROL_TRANSACTION_OPEN" : "APPLICATION_CLIENT_DISCONNECTED", "application-query");
+    const run = new Function("preparation", "applicationLease", "controlMaintenance", "controlQueries", "pendingScopedConnections", "scopedConnections", "cliJob", "publicJob", "handle", "safeRecord", "IsolatedSupabaseError", compile)(
+      t.lifecycle, { ageMs: () => 240_000 }, false, 0, 0, new Set(), undefined, undefined,
+      { async renewDatabaseControlConnection() { calls++; if (state !== "idle") throw expected; } }, () => { records++; }, owner.IsolatedSupabaseError) as () => Promise<void>;
+    try {
+      if (state === "failed") await assert.rejects(run(), error => error === expected);
+      else await run();
+      assert.equal(calls, 1); assert.equal(records, state === "transaction" ? 1 : 0);
+    } finally { t.lifecycle.close(); }
+  }
+  cases.push("actual preparation query boundary uses the verified-idle renewal port, skips an active transaction, and propagates failed-session transport without retry");
+  const source = file.text;
+  assert.ok(source.indexOf('await verifyOwnedProcessReadiness(') < source.indexOf('const prewarmStartedAt'));
+  assert.ok(source.includes('preparation?.pause();') && source.includes('query_timeout: 30000'));
+  assert.ok(source.includes('preparationJobs') && source.includes('PREPARATION_DRAIN_TIMEOUT'));
+  cases.push("fresh lifecycle qualifies process permissions before Docker work and retains bounded preparation drain and client query timeout");
 }
 
 async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/isolated-supabase.mts")) {
@@ -1620,6 +1763,66 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     const value = scenario([[owner, 'export function Phase03Owner() { return "shared after"; }']], baseline);
     assert.ok(value.actual.changeImpact!.changes[0].consumers.includes(formAuthority + "#second-consumer"));
     assert.equal(value.actual.changeImpact!.proofBoundary, "source_discovery_only");
+  });
+  check("every changed QA script or fixture selects existing quality guards without inventing executable coverage", () => {
+    const extra = "scripts/fixtures/phase06-unreferenced.mts", baseline = new Map(originals);
+    baseline.set(extra, "export const vector = 1;");
+    const value = scenario([[extra, "export const vector = 2;"]], baseline);
+    const qualityScripts = { ...scripts, "verify:executable-governance": repositoryScripts["verify:executable-governance"],
+      "verify:verification-infrastructure": repositoryScripts["verify:verification-infrastructure"] };
+    const analysis = api.deriveLocalVerificationSourceImpact(qualityScripts, value.actual.changes, value.current, value.baseline);
+    const row = analysis.changes.find(row => row.file === extra)!;
+    assert.ok(row.candidateChecks.includes("verify:executable-governance") && row.candidateChecks.includes("verify:verification-infrastructure"));
+    assert.ok(row.unresolved.includes("no_positive_source_protection_relationship"), "A quality-guard selection does not manufacture coverage of an unreferenced fixture.");
+  });
+  check("QA assertion loss blocks automatic source correspondence and reviewed admission without dropping the original protection", () => {
+    const value = scenario([[entry, guardSource.replace('assert.ok(value.includes("value: string"));', "")]]);
+    const quality = value.actual.changeImpact!.qaQuality!.find(row => row.file === entry)!;
+    assert.equal(quality.assertionsBefore, 1); assert.equal(quality.assertionsAfter, 0);
+    assert.deepEqual(quality.failures, ["qa_assertion_count_decreased_requires_explicit_protection_review"]);
+    const coherence = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(coherence.status, "DRIFT"); assert.ok(coherence.diagnostics.some(message => message.includes("assertion preservation")));
+    assert.throws(() => plan(value), /QA assertion coverage decreased/u);
+  });
+  check("source impact quality contract retains optional readonly counts and explicit failure dispositions", () => {
+    const source = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const contract = source.statements.find((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === "LocalVerificationSourceImpact");
+    assert.ok(contract && ts.isTypeLiteralNode(contract.type));
+    const quality = contract.type.members.find((node): node is ts.PropertySignature => ts.isPropertySignature(node) && node.name.getText(source) === "qaQuality");
+    assert.ok(quality?.questionToken && quality.type && ts.isTypeOperatorNode(quality.type) && quality.type.operator === ts.SyntaxKind.ReadonlyKeyword);
+    assert.ok(ts.isArrayTypeNode(quality.type.type) && ts.isTypeLiteralNode(quality.type.type.elementType));
+    const fields = quality.type.type.elementType.members.filter(ts.isPropertySignature);
+    assert.deepEqual(fields.map(field => [field.name.getText(source), Boolean(field.questionToken), field.type?.getText(source)]),
+      [["file", false, "string"], ["assertionsBefore", false, "number"], ["assertionsAfter", false, "number"], ["failures", false, "readonly string[]"]]);
+  });
+  check("unrelated added assertions cannot conceal lost owner or assertion-operator coverage", () => {
+    const before = new Map(originals);
+    before.set(entry, 'import assert from "node:assert/strict"; function protectsOwner(){ assert.equal(actual,expected); }');
+    for (const source of [
+      'import assert from "node:assert/strict"; function protectsOwner(){ assert.ok(actual); }',
+      'import assert from "node:assert/strict"; function protectsOwner(){} function unrelated(){ assert.equal(other,other); }',
+    ]) {
+      const value = scenario([[entry, source]], before), row = value.actual.changeImpact!.qaQuality!.find(row => row.file === entry)!;
+      assert.equal(row.assertionsBefore, row.assertionsAfter);
+      assert.deepEqual(row.failures, ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"]);
+      assert.equal(api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 }).status, "DRIFT");
+      assert.throws(() => plan(value), /QA assertion coverage decreased/u);
+    }
+  });
+  check("preflight emits selected and not-selected source-bound rows without granting unexecuted behavior PASS", () => {
+    const value = scenario([[owner, 'export function Phase03Owner() { return "preflight"; }']]);
+    const coherence = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(coherence.behavioralPass, false); assert.equal(coherence.releaseEvidence, false);
+    for (const row of coherence.preflight) {
+      assert.equal(row.sourceSha256, value.actual.changeImpact!.sourceSha256); assert.equal(row.durationMs, 0);
+      assert.equal(row.result, "NOT RUN"); assert.equal(row.evidence, null); assert.ok(row.reason && row.command);
+      assert.ok(Array.isArray(row.owner) && Array.isArray(row.contract));
+    }
+    assert.ok(coherence.preflight.find(row => row.check === "lint")?.selected);
+    assert.ok(coherence.preflight.find(row => row.check === "typecheck")?.selected);
+    const unrelated = api.deriveLocalVerificationSourceCoherence({ ...scripts, "verify:unrelated-preflight": "node scripts/unrelated.mjs" },
+      { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(unrelated.preflight.find(row => row.check === "verify:unrelated-preflight")?.selected, false);
   });
   check("unknown generated adoption stays explicit and widens only the affected shared owner", () => {
     const baseline = new Map(originals);
@@ -2692,6 +2895,130 @@ async function verifyLocalRiskControlLeaseAdmission() {
 async function verifyQualifiedFormHarnessControls() {
   const filename = "scripts/qa-admin-form-guarded-navigation.mts";
   const source = ts.createSourceFile(filename, readSource(filename), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const entry = source.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations])
+    .find(node => node.name.getText(source) === "entrySource");
+  assert.ok(entry?.initializer && ts.isTaggedTemplateExpression(entry.initializer) && ts.isNoSubstitutionTemplateLiteral(entry.initializer.template));
+  const embedded = entry.initializer.template as ts.NoSubstitutionTemplateLiteral & { rawText?: string };
+  const browserSource = ts.createSourceFile("actual-form-fixture.js", embedded.rawText ?? embedded.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const diagnostic = browserSource.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "createSaveCacheDiagnosticTimeline");
+  assert.ok(diagnostic, "Diagnostics execute the same bounded collector embedded in the canonical Browser fixture.");
+  const createTimeline = new Function(ts.transpileModule(diagnostic.getText(browserSource), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return createSaveCacheDiagnosticTimeline;")() as (now: () => number) => {
+      record(kind: string, facts?: Record<string, unknown>): void;
+      snapshot(): { events: Array<Record<string, unknown>>; totalObserved: number; dropped: number; limit: number };
+    };
+  check("qualified diagnostics retain bounded pre-failure metadata without recording field values URLs or arbitrary facts", () => {
+    let clock = 0;
+    const timeline = createTimeline(() => clock);
+    timeline.record("foreign", { value: "private" });
+    assert.equal(timeline.snapshot().totalObserved, 0);
+    for (let index = 0; index < 129; index++) {
+      clock += 1;
+      timeline.record("input", { valueLength: index, trusted: true, status: "secret", token: "private", value: "private", url: "https://private.invalid" });
+    }
+    const snapshot = timeline.snapshot();
+    assert.equal(snapshot.events.length, 128); assert.equal(snapshot.totalObserved, 129); assert.equal(snapshot.dropped, 1); assert.equal(snapshot.limit, 128);
+    assert.equal(snapshot.events[0].sequence, 2); assert.equal(snapshot.events.at(-1)?.sequence, 129);
+    assert.equal(snapshot.events[0].elapsedMs, 2);
+    assert.equal(JSON.stringify(snapshot).includes("private"), false); assert.equal(JSON.stringify(snapshot).includes("secret"), false);
+    assert.deepEqual(Object.keys(snapshot.events[0]), ["sequence", "elapsedMs", "kind", "valueLength", "trusted"]);
+    snapshot.events[0].kind = "mutated"; assert.equal(timeline.snapshot().events[0].kind, "input");
+    timeline.record("assertion_failure", { assertionOrdinal: 7, valueLength: -1, reads: Infinity });
+    assert.equal(timeline.snapshot().events.at(-1)?.assertionOrdinal, 7);
+    assert.equal("valueLength" in timeline.snapshot().events.at(-1)!, false);
+    assert.equal("reads" in timeline.snapshot().events.at(-1)!, false);
+  });
+  check("qualified diagnostic observation adds no timers microtasks React state setters or DOM writes", () => {
+    const forbidden = new Set(["setTimeout", "setInterval", "queueMicrotask", "requestAnimationFrame", "setState", "setControlledTitle"]);
+    const inspect = (node: ts.Node) => {
+      if (ts.isCallExpression(node)) assert.equal(forbidden.has(node.expression.getText(browserSource)), false);
+      ts.forEachChild(node, inspect);
+    };
+    inspect(diagnostic);
+    const mount = browserSource.statements.find(node => ts.isExpressionStatement(node) && ts.isBinaryExpression(node.expression)
+      && node.expression.left.getText(browserSource) === "qa.mountSaveCache");
+    assert.ok(mount && ts.isExpressionStatement(mount) && ts.isBinaryExpression(mount.expression) && ts.isArrowFunction(mount.expression.right));
+    const observers: ts.ArrowFunction[] = [];
+    const registrations: ts.CallExpression[] = [], removals: ts.CallExpression[] = [];
+    const findObserver = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && node.name.getText(browserSource) === "observe") {
+        assert.ok(node.initializer && ts.isArrowFunction(node.initializer)); observers.push(node.initializer);
+      }
+      if (ts.isCallExpression(node)) {
+        const callee = node.expression.getText(browserSource);
+        if (callee === "document.addEventListener") registrations.push(node);
+        if (callee === "document.removeEventListener") removals.push(node);
+        assert.ok(["qa.saveCacheDiagnosticDispose", "createSaveCacheDiagnosticTimeline", "qa.saveCacheDiagnostic.record",
+          "document.addEventListener", "document.removeEventListener", "root.render", "React.createElement"].includes(callee),
+        "Passive diagnostic mount cannot introduce scheduling or unreviewed callback calls: " + callee);
+      }
+      ts.forEachChild(node, findObserver);
+    };
+    findObserver(mount.expression.right);
+    assert.equal(observers.length, 1);
+    const observe = observers[0];
+    const inspectPassive = (callback: ts.Node, tree: ts.SourceFile) => {
+      const visit = (node: ts.Node) => {
+        if (ts.isCallExpression(node)) assert.equal(node.expression.getText(tree), "qa.saveCacheDiagnostic.record",
+          "Passive observer allows only bounded metadata recording");
+        if (ts.isBinaryExpression(node)) assert.equal(node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment,
+          false, "Passive observer cannot assign DOM values or schedule through an assignment");
+        if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) assert.equal(
+          node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken, false, "Passive observer cannot update DOM values");
+        assert.equal(ts.isNewExpression(node), false, "Passive observer cannot construct an unreviewed effect");
+        ts.forEachChild(node, visit);
+      };
+      visit(callback);
+    };
+    inspectPassive(observe, browserSource);
+    assert.ok(observe.getText(browserSource).includes('field.form?.id !== "qa-save-cache-form"'));
+    const eventBindings = (rows: ts.CallExpression[]) => rows.map(call => [
+      ts.isStringLiteral(call.arguments[0]) ? call.arguments[0].text : null, call.arguments[1]?.getText(browserSource), call.arguments.length,
+    ]);
+    assert.deepEqual(eventBindings(registrations), [["input", "observe", 2], ["change", "observe", 2]]);
+    assert.deepEqual(eventBindings(removals), [["input", "observe", 2], ["change", "observe", 2]]);
+    assert.ok(ts.isBlock(observe.body));
+    const printer = ts.createPrinter();
+    for (const statement of [
+      ts.factory.createExpressionStatement(ts.factory.createCallExpression(ts.factory.createIdentifier("queueMicrotask"), undefined, [ts.factory.createIdentifier("unobservedCallback")])),
+      ts.factory.createExpressionStatement(ts.factory.createBinaryExpression(ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("field"), "value"),
+        ts.factory.createToken(ts.SyntaxKind.EqualsToken), ts.factory.createStringLiteral("changed"))),
+    ]) {
+      const changed = ts.factory.updateArrowFunction(observe, observe.modifiers, observe.typeParameters, observe.parameters, observe.type, observe.equalsGreaterThanToken,
+        ts.factory.updateBlock(observe.body, [...observe.body.statements, statement]));
+      const negative = ts.createSourceFile("diagnostic-observer-negative.js", "const observe = " + printer.printNode(ts.EmitHint.Expression, changed, browserSource) + ";",
+        ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+      const declaration = negative.statements[0]; assert.ok(ts.isVariableStatement(declaration));
+      const callback = declaration.declarationList.declarations[0].initializer; assert.ok(callback);
+      assert.throws(() => inspectPassive(callback, negative), /Passive observer/u);
+    }
+    assert.ok(diagnostic.getText(browserSource).includes("events.map(row => ({ ...row }))"));
+    const main = source.statements.find(ts.isTryStatement); assert.ok(main?.catchClause);
+    assert.ok(main.catchClause.block.getText(source).includes("saveCacheFailureTimeline"));
+    assert.ok(main.catchClause.block.statements.some(node => ts.isThrowStatement(node) && node.expression?.getText(source) === "error"));
+    assert.ok(main.finallyBlock?.getText(source).includes('"Causal owner of divergence UNKNOWN"'));
+  });
+  const mainCatch = source.statements.find(ts.isTryStatement)?.catchClause;
+  assert.ok(mainCatch);
+  for (const captureFails of [false, true]) {
+    const original = new assert.AssertionError({ message: "controlled original assertion" });
+    let inspected: Record<string, unknown> | undefined;
+    const compiled = ts.transpileModule(`return (async () => {
+      let primaryFailed=false,saveCacheObservedAssertionFailure=false,saveCacheFailureTimeline=null,saveCacheDiagnosticCaptureFailed=false;
+      const saveCacheOnly=true,saveCacheDiagnosticPage=ports.page,passed=4,error=ports.original;
+      try ${mainCatch.block.getText(source)} finally { ports.inspect({primaryFailed,saveCacheObservedAssertionFailure,saveCacheFailureTimeline,saveCacheDiagnosticCaptureFailed}); }
+    })();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const run = new Function("assert", "ports", compiled) as (assertPort: typeof assert, ports: Record<string, unknown>) => Promise<void>;
+    await assert.rejects(run(assert, { original, page: { isClosed: () => false, evaluate: async (_callback: unknown, args: { assertionFailure: boolean; assertionOrdinal: number }) => {
+      assert.deepEqual(args, { assertionFailure: true, assertionOrdinal: 5 });
+      if (captureFails) throw Error("controlled unavailable page");
+      return { events: [{ kind: "assertion_failure", assertionOrdinal: 5 }], totalObserved: 1, dropped: 0, limit: 128 };
+    } }, inspect: (value: Record<string, unknown>) => { inspected = value; } }), error => error === original);
+    assert.equal(inspected?.primaryFailed, true); assert.equal(inspected?.saveCacheObservedAssertionFailure, true);
+    assert.equal(inspected?.saveCacheDiagnosticCaptureFailed, captureFails);
+    assert.equal(inspected?.saveCacheFailureTimeline === null, captureFails);
+    cases.push("Qualified diagnostics preserve the original assertion when failure capture " + (captureFails ? "fails" : "succeeds"));
+  }
   type CleanupResource = { resource: "browser" | "server" | "temp"; close: () => Promise<void> };
   type CleanupResult = { resource: CleanupResource["resource"]; status: "PASS" | "FAIL"; error?: unknown };
   type DeniedRequest = { method: string; origin: string | null; resourceType: string };
@@ -2802,17 +3129,18 @@ async function verifyQualifiedFormHarnessControls() {
 async function verifySharedChildControls() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const declarations = ["ownedPath", "stopChild", "runOwnedVerificationChild"].map(name => {
+  const declarations = ["ownedPath", "receipt", "stopChild", "runOwnedVerificationChild", "verifyOwnedProcessReadiness"].map(name => {
     const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
     assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
   });
   const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const buildApi = (write: typeof writeFileSync = writeFileSync) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild};")(
-    assert, path.isAbsolute, path.resolve, path.sep, spawn, write, existsSync, readFileSync, readdirSync, lstatSync) as {
+  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", code + ";return {run:runOwnedVerificationChild,stop:stopChild,readiness:verifyOwnedProcessReadiness};")(
+    assert, path.isAbsolute, path.resolve, path.sep, launch, write, existsSync, readFileSync, readdirSync, lstatSync) as {
       run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
-      stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<void>;
+      readiness: typeof import("./lib/isolated-public-verification.mts").verifyOwnedProcessReadiness;
+      stop(child: ChildProcess, environment: NodeJS.ProcessEnv): Promise<Awaited<ReturnType<typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild>>["cleanup"]>;
     };
-  const api = buildApi();
+  const api = buildApi(), runtimeProofs: Array<Record<string, unknown>> = [];
   const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-child-controls-"))), children = new Set<ChildProcess>();
   const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
   for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
@@ -2832,6 +3160,9 @@ async function verifySharedChildControls() {
       assert.equal(readFileSync(path.join(directory, "public-success.stderr.log"), "utf8"), result.stderr);
       assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0);
       assert.equal(result.cleanup.processTreeVerified, process.platform === "linux");
+      assert.deepEqual(result.rawExit, { code: 0, signal: null }); assert.equal(result.identity.ppid, process.pid);
+      assert.ok(Number.isSafeInteger(result.identity.pid) && Number.isFinite(Date.parse(result.identity.spawnedAtUtc)));
+      if (process.platform === "win32") assert.equal(result.cleanup.residualProcessesAfterExit, null, "Exited Windows roots cannot prove descendant absence.");
     });
     await control("duplicate evidence names reject before execution and preserve both original logs", async () => {
       const before = readdirSync(directory).sort(), output = readFileSync(path.join(directory, "public-success.stdout.log")), errors = readFileSync(path.join(directory, "public-success.stderr.log"));
@@ -2855,6 +3186,8 @@ async function verifySharedChildControls() {
     await control("nonzero status retains actual output duration and cleanup", async () => {
       const result = await run("nonzero", ["-e", "process.stdout.write('partial');process.stderr.write('failure');process.exitCode=7;"]);
       assert.equal(result.code, 7); assert.equal(result.stdout, "partial"); assert.equal(result.stderr, "failure");
+      assert.deepEqual(result.rawExit, { code: 7, signal: null });
+      runtimeProofs.push({ scope: "abnormal_nonzero_exit", rawExit: result.rawExit, identity: result.identity, cleanup: result.cleanup });
       assert.ok(Number.isFinite(result.durationMs) && result.durationMs >= 0); assert.equal(children.size, 0);
     });
     await control("sanitizer failure rejects instead of escaping the close callback", async () => {
@@ -2915,6 +3248,24 @@ async function verifySharedChildControls() {
       await assert.rejects(run("pre-aborted", ["-e", "throw Error('must not execute')"], controller.signal), /Pre-aborted control/u);
       assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
     });
+    await control("process readiness proves actual live-tree cancellation and preserves identities and exclusive evidence", async () => {
+      const result = await api.readiness({ sourceDirectory: directory, context, signal: new AbortController().signal });
+      assert.equal(result.status, "PASS"); assert.equal(result.scope, "self-owned-live-tree-cancellation");
+      assert.equal(result.rootIdentity.ppid, process.pid); assert.equal(result.descendantIdentity.ppid, result.rootIdentity.pid);
+      assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true); assert.equal(result.cleanup.liveProcesses, 0);
+      assert.ok(result.durationMs > 0 && result.limitations.length > 0);
+      runtimeProofs.push({ ...result, control: "preallocation_readiness" });
+      assert.equal(JSON.parse(readFileSync(path.join(directory, "process-readiness.json"), "utf8")).status, "PASS");
+      const original = readFileSync(path.join(directory, "public-process-readiness.stdout.log"));
+      await assert.rejects(api.readiness({ sourceDirectory: directory, context, signal: new AbortController().signal }), /did not start its child/u);
+      assert.deepEqual(readFileSync(path.join(directory, "public-process-readiness.stdout.log")), original);
+    });
+    await control("pre-aborted readiness starts no probe and writes no evidence", async () => {
+      const controller = new AbortController(); controller.abort(Error("Pre-aborted readiness control"));
+      const before = readdirSync(directory).sort();
+      await assert.rejects(api.readiness({ sourceDirectory: directory, context, signal: controller.signal }), /Pre-aborted readiness control/u);
+      assert.deepEqual(readdirSync(directory).sort(), before);
+    });
     await control("spawn failure rejects and drains its owned child registration", async () => {
       const pending = run("spawn-error", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "absent-owned-cwd"));
       const child = [...children][0]; assert.ok(child);
@@ -2934,6 +3285,51 @@ async function verifySharedChildControls() {
       await assert.rejects(pending, /process failed/u); await closed; assert.equal(children.size, 0);
       assert.equal(existsSync(path.join(directory, "public-spawn-write-failure.stdout.log")), false);
     });
+    if (process.platform === "win32") {
+      await control("denied Windows tree termination remains BLOCKED and the finite self-owned probe expires without orphans", async () => {
+        const runDirectory = realpathSync(mkdtempSync(path.join(directory, "denied-readiness-")));
+        const deniedLaunch = ((binary: string, args: string[], options: Parameters<typeof spawn>[2]) => binary === "taskkill.exe"
+          ? spawn(process.execPath, ["-e", "process.exit(5)"], options) : spawn(binary, args, options)) as typeof spawn;
+        await assert.rejects(buildApi(writeFileSync, deniedLaunch).readiness({ sourceDirectory: directory,
+          context: { ...context, runDirectory }, signal: new AbortController().signal }), /did not prove live-tree termination/u);
+        const blocked = JSON.parse(readFileSync(path.join(runDirectory, "process-readiness.json"), "utf8"));
+        assert.equal(blocked.status, "BLOCKED"); assert.equal(blocked.cleanup.status, "FAIL");
+        assert.equal(blocked.cleanupFailure.exitCode, 5);
+        assert.equal(blocked.knownOwnedProcessesAbsent, true); assert.equal(blocked.knownIdentities, 2); assert.equal(blocked.finiteSelfExpiryMs, 12_000);
+        runtimeProofs.push({ control: "denied_taskkill_finite_self_expiry", ...blocked });
+      });
+      const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; } };
+      const ready = (child: ChildProcess) => new Promise<string>((done, reject) => {
+        const timer = setTimeout(() => reject(Error("Owned Windows tree did not become ready.")), 8_000);
+        child.stdout!.once("data", value => { clearTimeout(timer); done(String(value)); });
+        child.once("error", () => { clearTimeout(timer); reject(Error("Owned Windows tree failed before readiness.")); });
+      });
+      const leaf = "process.stdout.write(JSON.stringify({pid:process.pid,ppid:process.ppid}));setInterval(()=>{},1000);";
+      const tree = `const {spawn}=require('node:child_process');const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{windowsHide:true,stdio:['ignore','pipe','pipe']});leaf.stdout.once('data',data=>process.stdout.write(JSON.stringify({root:{pid:process.pid,ppid:process.ppid},leaf:JSON.parse(String(data))})));setInterval(()=>{},1000);`;
+      for (const kind of ["timeout", "cancelled"] as const) await control(`Windows ${kind} removes a known live tree and preserves an unrelated child`, async () => {
+        let sentinel: ChildProcess | undefined;
+        try {
+          const controller = new AbortController(), pending = run(`windows-tree-${kind}`, ["-e", tree], controller.signal, kind === "timeout" ? 3_000 : 15_000);
+          const child = [...children][0]; assert.ok(child);
+          const outcome = pending.then(() => assert.fail("A terminated owned tree cannot PASS."), (error: unknown) => error);
+          const identities = JSON.parse(await ready(child)) as { root: { pid: number; ppid: number }; leaf: { pid: number; ppid: number } };
+          assert.equal(identities.root.pid, child.pid); assert.equal(identities.root.ppid, process.pid); assert.equal(identities.leaf.ppid, child.pid);
+          assert.ok(alive(identities.root.pid) && alive(identities.leaf.pid));
+          sentinel = spawn(process.execPath, ["-e", "process.stdout.write('sentinel');setInterval(()=>{},1000)"], { env: { ...environment }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+          await ready(sentinel); assert.ok(sentinel.pid && alive(sentinel.pid));
+          if (kind === "cancelled") controller.abort(Error("Controlled Windows tree cancellation"));
+          const error = await outcome;
+          assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+          const retained = (error as Error & { childResult: { code: number | null; signal: NodeJS.Signals | null; reason: string;
+            identity: { pid: number; ppid: number }; cleanup: { status: string; processTreeVerified: boolean; liveProcesses: number } } }).childResult;
+          assert.equal(retained.reason, kind); assert.equal(retained.identity.pid, identities.root.pid); assert.equal(retained.identity.ppid, process.pid);
+          assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.processTreeVerified, true); assert.equal(retained.cleanup.liveProcesses, 0);
+          assert.equal(alive(identities.root.pid), false); assert.equal(alive(identities.leaf.pid), false); assert.equal(children.size, 0);
+          assert.equal(alive(sentinel.pid), true, "Owned Windows cleanup must preserve unrelated children.");
+          runtimeProofs.push({ scope: kind, identities, result: retained, unrelatedProcessPreserved: true, knownOwnedProcessesAbsent: true });
+        } finally { if (sentinel) await api.stop(sentinel, environment); }
+      });
+    }
     if (process.platform === "linux") {
       await control("Linux immediate zero-exit child retains an inspectable root identity and leaves no live process", async () => {
         const result = await run("linux-fast-exit", ["-e", "process.exit(0)"]);
@@ -2988,7 +3384,7 @@ async function verifySharedChildControls() {
         const result = await run("linux-orphan", ["-e", orphan]);
         const pid = Number(result.stdout.trim().replace(/^orphan:/u, "")); assert.ok(Number.isSafeInteger(pid) && pid > 1);
         assert.equal(result.code, 0); assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.processTreeVerified, true);
-        assert.equal(result.cleanup.forcedTermination, true); assert.ok(result.cleanup.residualProcessesAfterExit >= 1);
+        assert.equal(result.cleanup.forcedTermination, true); assert.ok(result.cleanup.residualProcessesAfterExit !== null && result.cleanup.residualProcessesAfterExit >= 1);
         assert.ok(result.cleanup.observedProcesses >= 2); assert.equal(result.cleanup.liveProcesses, 0);
         assert.equal(processAlive(pid), false); assert.equal(children.size, 0);
       });
@@ -3000,16 +3396,29 @@ async function verifySharedChildControls() {
     rmSync(directory, { recursive: true, force: true });
     assert.ok(stopped.every(result => result.status === "fulfilled")); assert.equal(children.size, 0); assert.equal(existsSync(directory), false);
   }
+  return runtimeProofs;
+}
+
+async function ownedChildControlsOnly() {
+  const runtimeProofs = await verifySharedChildControls();
+  console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, platform: process.platform,
+    runtimeProofs, actualOwnedChildrenExecuted: true, tempFixtureCleanupVerified: true, browserExecuted: false, databaseCalls: 0,
+    dockerResourcesAllocated: 0, windowsExitedRootDescendantsQualified: false }, null, 2));
 }
 
 async function verifyQualifiedSelectionControls() {
   const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const declarations = ["qualifyLocalVerificationTargets", "localVerificationCommandSteps"].map(name => {
+  const declarations = ["qualifyLocalVerificationTargets", "localVerificationCommandSteps", "localVerificationSourceGuardEffects"].map(name => {
     const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
     assert.ok(node); return node.getText(file).replace(/^export /u, "");
   });
-  const qualify = new Function("assert", ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-    + ";return qualifyLocalVerificationTargets;")(assert) as typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets;
+  const { qualify, effects } = new Function("assert", "collectExecutableSourceGraph", "ROOT", "digest", "ts", "process", "readFileSync", "existsSync", "join",
+    ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    + ";return {qualify:qualifyLocalVerificationTargets,effects:localVerificationSourceGuardEffects};")(
+    assert, collectExecutableSourceGraph, root, sha256, ts, process, readFileSync, existsSync, path.join) as {
+      qualify: typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets;
+      effects: typeof import("./lib/isolated-public-verification.mts").localVerificationSourceGuardEffects;
+    };
   type Analysis = import("./lib/isolated-public-verification.mts").LocalVerificationSourceImpact;
   const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
   const entry = "scripts/qa-admin-form-guarded-navigation.mts", step = "node --experimental-strip-types " + entry + " --save-cache-only";
@@ -3056,6 +3465,65 @@ async function verifyQualifiedSelectionControls() {
   check("overlapping wrappers and repeated leaf occurrences execute the same family only once", () => {
     const value = analysis(); value.changes = [{ ...value.changes[0]!, candidateChecks: ["qa:qualified-control", "verify:admin-query-save-failure-contracts"] }];
     assert.equal(qualify({ ...scripts, "qa:qualified-control": step + " && " + step }, value, fixtureHash).targets.length, 1);
+  });
+  const sourceGuardHashes = { "scripts/verify-executable-governance.mts": "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f" };
+  const qualityAnalysis = () => {
+    const value = analysis(); value.changes = [{ ...value.changes[0]!, file: "scripts/fixtures/phase06-vector.mts", owners: ["existing-fixture"],
+      capabilities: [], consumers: [], contracts: [], candidateChecks: ["verify:executable-governance", "verify:verification-infrastructure"] }];
+    return value;
+  };
+  check("QA quality qualification preserves two required selections while executing only the reviewed complete closure", () => {
+    const value = qualityAnalysis(), result = qualify(scripts, value, fixtureHash, sourceGuardHashes);
+    assert.equal(result.selections.filter(row => row.selected).length, 2); assert.equal(result.targets.length, 1);
+    assert.ok(result.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:scripts/verify-verification-infrastructure.mts"));
+    assert.equal(new Set(result.targets.map(target => target.step)).size, 1);
+    for (const target of result.targets) {
+      assert.equal(target.kind, "source_guard"); assert.equal(target.proofLevel, "source_guard_execution");
+      assert.ok(target.step === "node --experimental-strip-types " + target.entry);
+      assert.ok(!target.effects.includes("browser") && !target.effects.includes("database"));
+      assert.equal(target.nativePersistenceVerified, false); assert.equal(target.businessConsumerAdoptionVerified, false);
+    }
+    assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+    const repeated = qualify({ ...scripts, "verify:phase06-source-alias": scripts["verify:executable-governance"] }, value, fixtureHash, sourceGuardHashes);
+    assert.equal(repeated.selections.filter(row => row.selected).length, 2, "Both required quality guards remain selected.");
+    assert.equal(repeated.targets.length, 1, "Wrapper overlap must not execute any source leaf again.");
+  });
+  check("stale source guard effect bytes and changed helper dependencies block automatic source execution", () => {
+    const stale = qualify(scripts, qualityAnalysis(), fixtureHash,
+      { ...sourceGuardHashes, "scripts/verify-executable-governance.mts": "f".repeat(64) });
+    assert.ok(stale.blocking.some(reason => reason.startsWith("qualified_source_guard_bytes_changed_review_effect_contract:")));
+    const dependency = qualityAnalysis(); dependency.changes = [...dependency.changes,
+      { ...dependency.changes[0]!, file: "scripts/lib/verification-module-loader.mjs" }];
+    const changed = qualify(scripts, dependency, fixtureHash, { ...sourceGuardHashes, "scripts/verify-executable-governance.mts": "e".repeat(64) });
+    assert.equal(changed.targets.length, 0); assert.ok(changed.blocking.some(reason => reason.startsWith("qualified_source_guard_bytes_changed_review_effect_contract:")));
+    const redirected = qualify({ ...scripts, "verify:executable-governance": "node scripts/unqualified-quality.mjs" }, qualityAnalysis(), fixtureHash, sourceGuardHashes);
+    assert.ok(redirected.blocking.includes("missing_exact_registered_source_guard:scripts/verify-executable-governance.mts"));
+  });
+  check("complete native closure includes unused eager imports re-exports and transitive owners while preserving default graph behavior", () => {
+    const entry = "scripts/phase06-effect-entry.mts", hidden = "scripts/fixtures/phase06-effect-unused.mts", side = "scripts/fixtures/phase06-effect-side.mts",
+      nested = "scripts/fixtures/phase06-effect-nested.mts", forwarded = "scripts/fixtures/phase06-effect-export.mts";
+    const lock = JSON.stringify({ packages: { "node_modules/typescript": { version: "fixture", integrity: "fixture-integrity" } } });
+    const sources = new Map<string, string>([[entry, 'import { unusedBinding } from "./fixtures/phase06-effect-unused.mts"; import "./fixtures/phase06-effect-side.mts"; export { value } from "./fixtures/phase06-effect-export.mts";'],
+      [hidden, "export const unusedBinding = 1;"], [side, 'import { unusedNested } from "./phase06-effect-nested.mts";'],
+      [nested, "export const unusedNested = 1;"], [forwarded, "export const value = 1;"], ["package.json", "{}"], ["package-lock.json", lock], ["tsconfig.json", "{}"]]);
+    const runtime = { node: "fixture-node", v8: "fixture-v8", modules: "fixture-modules", platform: "fixture-platform", arch: "fixture-arch",
+      executableSha256: "a".repeat(64), installedLockSha256: sha256(lock), execArgv: ["--experimental-strip-types"] };
+    const original = effects(entry, sources, runtime, lock); assert.deepEqual(original.unresolved, []); assert.ok(original.fingerprint);
+    assert.deepEqual(original.closure.map(row => row.file).sort(), [entry, hidden, side, nested, forwarded].sort());
+    const ordinary = collectExecutableSourceGraph({ root, entrySourceFiles: [entry], sourceOverrides: sources, symbolAware: false });
+    assert.equal(ordinary.has(hidden), false); assert.equal(ordinary.has(nested), false);
+    assert.throws(() => collectExecutableSourceGraph({ root, entrySourceFiles: [entry], sourceOverrides: sources, nativeEagerImports: true }), /complete module graph/u);
+    const tampered = new Map(sources); tampered.set(hidden, "globalThis.__unexecutedClosureMutation = true; export const unusedBinding = 1;");
+    const changed = effects(entry, tampered, runtime, lock); assert.notEqual(changed.fingerprint, original.fingerprint);
+    assert.equal((globalThis as Record<string, unknown>).__unexecutedClosureMutation, undefined, "Effect discovery must never execute a helper, even when it already exists in the baseline.");
+    assert.notEqual(effects(entry, sources, { ...runtime, execArgv: ["--experimental-strip-types", "--jitless"] }, lock).fingerprint, original.fingerprint);
+    const unlocked = new Map(sources); unlocked.set("package-lock.json", JSON.stringify({ packages: { "node_modules/typescript": { version: "changed" } } }));
+    assert.ok(effects(entry, unlocked, runtime, lock).unresolved.includes("installed_dependencies_do_not_match_current_lock"));
+    for (const source of ['import "./missing-phase06-effect.mts";', 'export { value } from "./missing-phase06-effect.mts";', 'const value = import("./missing-phase06-effect.mts");',
+      'const module = import(dynamicModule);', 'const value = new Function("return 1")();', 'import { createRequire as requireModule } from "node:module"; requireModule(import.meta.url)(dynamicModule);']) {
+      const unresolved = new Map(sources); unresolved.set(entry, source);
+      const result = effects(entry, unresolved, runtime, lock); assert.equal(result.fingerprint, null); assert.ok(result.unresolved.length > 0);
+    }
   });
   check("dependency or tooling changes require effect review before automatic execution", () => {
     const value = analysis(); value.changes = [...value.changes, { ...value.changes[0]!, file: "package-lock.json" }];
@@ -3120,6 +3588,69 @@ async function verifyQualifiedSelectionControls() {
     await assertActualExecutorAdmission({ executeLocalVerificationTargets: execute });
   } catch (error) { console.error("FAIL " + admissionCase); throw error; }
   cases.push(admissionCase);
+  const rawExitCase = "actual qualified executor preserves resolved SIGABRT raw exit identity and counts failed spawn only as attempted";
+  try {
+    const classifyNode = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "localVerificationFailureClassification"); assert.ok(classifyNode);
+    const classify = new Function(ts.transpileModule(classifyNode.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+      + ";return localVerificationFailureClassification;")() as typeof import("./lib/isolated-public-verification.mts").localVerificationFailureClassification;
+    const sourceBytes = new Map([["package.json", Buffer.from(JSON.stringify({ scripts }))], ["bound-source.mts", Buffer.from("bound-source")],
+      [entry, Buffer.from("bound-fixture")]]);
+    const manifest = [...sourceBytes].map(([file, bytes]) => ({ file, sha256: sha256(bytes) }));
+    const sourceSha256 = sha256(JSON.stringify(manifest)), finalHead = "b".repeat(40);
+    const currentAnalysis = { ...analysis(), sourceSha256 }, selected = qualify(scripts, currentAnalysis, fixtureHash);
+    assert.equal(selected.targets.length, 1);
+    const closureEffects = ["scripts/verify-executable-governance.mts", "scripts/verify-verification-infrastructure.mts"].map(entry => ({ entry, fingerprint: null }));
+    const sourceReport = { status: "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: 0, finalHead, sourceSha256, changeImpact: currentAnalysis,
+      qualifiedTargets: selected, sourceGuardEffects: closureEffects, timings: {} };
+    const identity = { pid: 23456, ppid: 12345, spawnedAtUtc: "2026-01-01T00:00:00.000Z" };
+    const fatal = "FATAL ERROR: Check failed: jit_page_->allocations_.erase(addr) == 1.\n";
+    const cleanup = { status: "PASS", liveProcesses: 0, processTreeVerified: true };
+    for (const kind of ["resolved-abort", "failed-spawn"] as const) {
+      const saved: Array<{ name: string; value: Record<string, unknown> }> = [], directories = new Set<string>();
+      const ports: Record<string, unknown> = {
+        ROOT: root,
+        execFileSync: (_command: string, args: string[]) => Buffer.from(args[0] === "rev-parse" ? finalHead : [...sourceBytes.keys()].join("\0") + "\0"),
+        selectSourceInventory: () => [...sourceBytes.keys()], safeSourcePath: (file: string) => file,
+        existsSync: (file: string) => sourceBytes.has(file) || directories.has(file),
+        lstatSync: () => ({ isFile: () => true, isDirectory: () => true, isSymbolicLink: () => false }), realpathSync: (file: string) => file,
+        readFileSync: (file: string, encoding?: string) => { const bytes = sourceBytes.get(file); assert.ok(bytes); return encoding ? bytes.toString() : bytes; },
+        digest: sha256, qualifyLocalVerificationTargets: () => selected,
+        localVerificationSourceGuardEffects: (entry: string) => closureEffects.find(effect => effect.entry === entry),
+        resolve: path.resolve, join: path.join, sep: path.sep,
+        mkdirSync: (file: string) => { directories.add(file); }, mkdtempSync: (prefix: string) => prefix + "controlled",
+        writeFileSync: () => assert.fail("Controlled executor must use its receipt owner"),
+        runOwnedVerificationChild: async () => {
+          if (kind === "resolved-abort") return { code: -1, rawExit: { code: null, signal: "SIGABRT" }, identity, stdout: "", stderr: fatal, durationMs: 2, cleanup };
+          const error = new Error("Owned child could not spawn");
+          Object.defineProperty(error, "childResult", { value: { code: null, signal: null, identity: { ...identity, pid: null }, reason: "process_failure",
+            durationMs: 1, stdout: "", stderr: "", cleanup } }); throw error;
+        },
+        verifyOwnedProcessReadiness: async () => ({ status: "PASS" }), stopChild: () => assert.fail("No controlled child is left registered"),
+        readdirSync: () => [], rmSync: (file: string) => { directories.delete(file); },
+        ownedPath: (context: { runDirectory: string }, name: string) => path.join(context.runDirectory, name),
+        receipt: (_context: unknown, name: string, value: Record<string, unknown>) => { saved.push({ name, value: JSON.parse(JSON.stringify(value)) }); },
+        localVerificationFamilyReceipt: () => assert.fail("A nonzero native exit cannot proceed to family receipt admission"),
+        localVerificationFailureClassification: classify,
+      };
+      const names = Object.keys(ports);
+      const executeActual = new Function("assert", "inspectLocalVerificationChangeImpact", "process", ...names,
+        ts.transpileModule(executorNode.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+        + ";return executeLocalVerificationTargets;")(assert, () => sourceReport, { env: {}, platform: "win32" }, ...names.map(name => ports[name])) as typeof execute;
+      const result = await executeActual({ baselineHead }, new AbortController().signal);
+      assert.equal(result.status, "FAIL"); assert.equal(result.commandAttempts, 1); assert.equal(result.executedCommands, kind === "resolved-abort" ? 1 : 0);
+      const leaf = saved.find(row => row.name.endsWith("-result.json"))!.value;
+      assert.equal(leaf.exitCode, null); assert.equal(result.results[0]!.exitCode, null);
+      const outcome = leaf.childOutcome as { rawExit: { code: number | null; signal: string | null }; identity: typeof identity };
+      assert.equal(outcome.rawExit.code, null); assert.deepEqual(outcome.identity, kind === "resolved-abort" ? identity : { ...identity, pid: null });
+      if (kind === "resolved-abort") {
+        assert.equal(outcome.rawExit.signal, "SIGABRT");
+        assert.equal((leaf.cause as { category: string }).category, "Runtime Crash");
+        assert.equal((leaf.originalCause as { evidenceSha256: string }).evidenceSha256, sha256(fatal));
+      }
+      assert.equal(saved.filter(row => row.name === "targeted-result.json").length, 1);
+    }
+  } catch (error) { console.error("FAIL " + rawExitCase); throw error; }
+  cases.push(rawExitCase);
 }
 
 async function localRiskVerificationOnly() {
@@ -3174,6 +3705,28 @@ function verifyQualifiedResultControls() {
       const result = classify({ stage: "execution", childReason }); assert.equal(result.category, "UNKNOWN"); assert.ok(result.technicalKind.endsWith(childReason));
     }
   });
+  check("native crash classification requires the actual fatal plus native abort and retained evidence hash", () => {
+    const stderr = "# Check failed: jit_page_->allocations_.erase(addr) == 1.\n";
+    const nativeEvidence = { stderr, stderrSha256: "a".repeat(64) };
+    const actual = classify({ stage: "execution", exitCode: 2147483651, nativeEvidence });
+    assert.equal(actual.category, "Runtime Crash"); assert.equal(actual.failureClass, "Node/V8 Runtime Crash");
+    assert.equal(actual.rootCause, "UNKNOWN"); assert.equal(actual.confidence, "native_fatal_and_exit");
+    for (const facts of [
+      { exitCode: 0, nativeEvidence }, { exitCode: 1, nativeEvidence },
+      { exitCode: 2147483651, nativeEvidence: { ...nativeEvidence, stderr: "Product V8 failure label" } },
+      { exitCode: 2147483651, nativeEvidence: { ...nativeEvidence, stderrSha256: "missing" } },
+    ]) assert.equal(classify({ stage: "execution", ...facts }).category, "UNKNOWN");
+  });
+  check("database transport and termination disposition remain separate from unproved causal attribution", () => {
+    const actual = classify({ stage: "execution", error: Object.assign(Error("redacted"), { code: "APPLICATION_CLIENT_DISCONNECTED" }) });
+    assert.equal(actual.failureClass, "Database Transport Failure"); assert.equal(actual.rootCause, "UNKNOWN");
+    assert.equal(classify({ stage: "execution", error: Error("APPLICATION_CLIENT_DISCONNECTED") }).category, "UNKNOWN");
+    assert.equal(classify({ stage: "execution", error: { code: "APPLICATION_CLIENT_DISCONNECTED" } }).category, "UNKNOWN");
+    for (const [childReason, disposition] of [["timeout", "Timeout"], ["cancelled", "Cancellation"]]) {
+      const result = classify({ stage: "execution", childReason });
+      assert.equal(result.category, "UNKNOWN"); assert.equal(result.failureClass, disposition); assert.equal(result.rootCause, "UNKNOWN");
+    }
+  });
   check("qualified receipts retain run identity, first attempt, no retry, cleanup and sanitized log hashes", () => {
     const execute = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "executeLocalVerificationTargets"); assert.ok(execute);
     const source = execute.getText(file);
@@ -3222,9 +3775,9 @@ async function changeImpactOnly() {
       ci = { eventName, event, githubSha };
     }
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
+    const names = ["GATES", "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "localVerificationSourceGuardEffects", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",
-      "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild"];
+      "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild", "verifyOwnedProcessReadiness"];
     const declarations = names.map(name => {
       const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
         || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name));
@@ -3239,7 +3792,7 @@ async function changeImpactOnly() {
     if (executeMode) {
       const { sourceReport: report, ...targetedExecution } = await api.executeLocalVerificationTargets({ baselineHead: baselineHead! }, new AbortController().signal);
       const combined = { ...report, sourceStatus: report.status, status: targetedExecution.status, targetedExecution,
-        qualifiedBehavioralPass: targetedExecution.status === "PASS", candidateCommandsExecuted: targetedExecution.executedCommands,
+        qualifiedBehavioralPass: "qualifiedBehavioralPass" in targetedExecution && targetedExecution.qualifiedBehavioralPass === true, candidateCommandsExecuted: targetedExecution.executedCommands,
         browserExecuted: targetedExecution.browserExecuted, sourceNetworkRequests: report.networkRequests, networkRequests: targetedExecution.commandAttempts ? null : 0,
         exitCode: targetedExecution.exitCode, behavioralPass: false, releaseEvidence: false };
       console.log(JSON.stringify(combined, null, 2)); process.exitCode = combined.exitCode; return;
@@ -4192,4 +4745,5 @@ async function retainedFinalQualityOnly() {
 }
 
 const verification = process.argv.includes("--ci-change-impact") || process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
-(process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : verification)().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
+const selectedVerification = process.argv.includes("--owned-child-controls-only") ? ownedChildControlsOnly : verification;
+(process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : selectedVerification)().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
