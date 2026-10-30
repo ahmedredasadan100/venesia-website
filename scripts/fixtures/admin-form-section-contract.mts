@@ -14,10 +14,15 @@ export function verifyAdminFormSectionContract(source: string, {
 }) {
   const verify = (candidate: string) => {
     const Section = loadSection(candidate);
-    const native = createElement("input", { name: "native", defaultValue: "same", required: true, disabled: true, onChange: () => undefined });
-    const explicitHeader = createElement("header", { "data-explicit-header": "" }, "Explicit header");
-    for (const header of [undefined, explicitHeader]) {
-      const props = { id: "original-section", title: "Original title", eyebrow: "Original eyebrow", description: "Original description", actions: createElement("button", { type: "button" }, "Original action"), header, className: "original-composition", children: native };
+    const profiles = [
+      { native: createElement("input", { name: "native", defaultValue: "same", required: true, disabled: true, onChange: () => undefined }),
+        explicitHeader: createElement("header", { "data-explicit-header": "" }, "Explicit header"), className: "original-composition", neutralClassName: "min-w-0 original-composition" },
+      { native: createElement("input", { name: "native", defaultValue: "same", required: true, disabled: true }),
+        explicitHeader: createElement("div", { "data-explicit-header": "" }, "Explicit header"), className: undefined, neutralClassName: "min-w-0" },
+    ];
+    for (const profile of profiles) for (const header of [undefined, profile.explicitHeader]) {
+      const native = profile.native;
+      const props = { id: "original-section", title: "Original title", eyebrow: "Original eyebrow", description: "Original description", actions: createElement("button", { type: "button" }, "Original action"), header, ...(profile.className === undefined ? {} : { className: profile.className }), children: native };
       const panel = renderToStaticMarkup(Section(props));
       assert.ok(panel.includes(premiumSurfaceClassName));
       assert.equal((panel.match(/name="native"/gu) ?? []).length, 1);
@@ -31,7 +36,7 @@ export function verifyAdminFormSectionContract(source: string, {
       assert.ok(isValidElement<{ id: string; className: string; children: ReactNode[] }>(neutral));
       assert.equal(neutral.type, "section");
       assert.equal(neutral.props.id, props.id);
-      assert.equal(neutral.props.className, "min-w-0 original-composition");
+      assert.equal(neutral.props.className, profile.neutralClassName);
       assert.equal(neutral.props.children[1], native, "Neutral composition preserves exact callback-bearing native content");
       const html = renderToStaticMarkup(neutral);
       assert.ok(html.includes('data-admin-form-section-surface="neutral"'));

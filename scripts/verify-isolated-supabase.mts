@@ -2771,9 +2771,69 @@ function verifyLocalRiskVerificationPlan() {
     const commands = { ...scripts,
       "verify:coverage-parent": "npm run verify:coverage-middle && node " + entry + " --literal=boundary",
       "verify:coverage-middle": "npm run verify:admin-core-residual-search" };
+    assert.deepEqual(api.localVerificationCommandSteps(commands, "verify:coverage-parent"),
+      [scripts["verify:admin-core-residual-search"], "node " + entry + " --literal=boundary"]);
     assert.deepEqual(api.registeredVerificationNodeEntries(commands, "verify:coverage-parent"), [entry]);
     assert.ok(api.registeredVerificationNodeEntries(scripts, "verify:admin-runtime").includes("scripts/verify-page-block-editor-presentation.mts"),
       "The actual current Admin aggregate positively reaches its registered nested Page Block guard.");
+  });
+  check("registered command consolidation rejects inherited root and recursive child commands before granting entry coverage", () => {
+    const entry = "scripts/verify-admin-core-residual-search.mjs", leaf = "node " + entry;
+    const inherited = { "verify:coverage-prototype": leaf };
+    const own = (values: Record<string, string>) => Object.assign(Object.create(inherited) as Record<string, string>, values);
+    for (const [commands, name] of [
+      [own({}), "verify:coverage-prototype"],
+      [own({ "verify:coverage-parent": "npm run verify:coverage-prototype" }), "verify:coverage-parent"],
+      [own({ "verify:coverage-parent": leaf + " && npm run verify:coverage-prototype" }), "verify:coverage-parent"],
+      [own({ "verify:coverage-parent": "npm run verify:coverage-middle", "verify:coverage-middle": "npm run verify:coverage-prototype" }), "verify:coverage-parent"],
+    ] as const) {
+      assert.equal(api.localVerificationCommandSteps(commands, name), undefined);
+      assert.throws(() => api.registeredVerificationNodeEntries(commands, name));
+    }
+    const commands = Object.assign(Object.create(null) as Record<string, string>, {
+      "verify:coverage-parent": "npm run verify:coverage-middle", "verify:coverage-middle": leaf,
+    });
+    assert.deepEqual(api.localVerificationCommandSteps(commands, "verify:coverage-parent"), [leaf]);
+    assert.deepEqual(api.registeredVerificationNodeEntries(commands, "verify:coverage-parent"), [entry]);
+  });
+  check("literal command ownership requires a valid own string at every recursive boundary", () => {
+    const leaf = "node scripts/verify-admin-core-residual-search.mjs";
+    for (const invalid of [undefined, null, 17, true, [], {}, () => leaf]) {
+      const commands = { "verify:coverage-parent": "npm run verify:coverage-middle", "verify:coverage-middle": invalid } as unknown as Record<string, string>;
+      assert.equal(api.localVerificationCommandSteps(commands, "verify:coverage-middle"), undefined);
+      assert.equal(api.localVerificationCommandSteps(commands, "verify:coverage-parent"), undefined);
+      assert.throws(() => api.registeredVerificationNodeEntries(commands, "verify:coverage-middle"));
+      assert.throws(() => api.registeredVerificationNodeEntries(commands, "verify:coverage-parent"));
+    }
+    for (const invalid of ["", "verify:invalid name", "../verify:parent", "verify:parent\nchild", "verify:parent\rchild"]) {
+      const commands = { [invalid]: leaf };
+      assert.equal(api.localVerificationCommandSteps(commands, invalid), undefined);
+      assert.throws(() => api.registeredVerificationNodeEntries(commands, invalid));
+    }
+  });
+  check("removing the actual registered-entry assertion admits a private path and is detected by the unchanged negative boundary", () => {
+    const registration = ts.createSourceFile("registration.mts", statement("registeredVerificationNodeEntries"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const guards: ts.ExpressionStatement[] = [];
+    const inspect = (node: ts.Node) => {
+      if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression) && node.expression.expression.getText(registration) === "assert.ok"
+        && node.expression.arguments[0] && ts.isCallExpression(node.expression.arguments[0])
+        && node.expression.arguments[0].expression.getText(registration) === "sourceIncluded") guards.push(node);
+      ts.forEachChild(node, inspect);
+    };
+    inspect(registration); assert.equal(guards.length, 1);
+    const transformed = ts.transform(registration, [context => {
+      const visit: ts.Visitor = node => node === guards[0] ? undefined : ts.visitEachChild(node, visit, context);
+      return node => ts.visitNode(node, visit) as ts.SourceFile;
+    }]);
+    try {
+      const mutantSource = ts.createPrinter().printFile(transformed.transformed[0]);
+      const removed = new Function("assert", "sourceIncluded", "localVerificationCommandSteps",
+        ts.transpileModule(mutantSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + ";return registeredVerificationNodeEntries;")(
+        assert, sourceIncluded, api.localVerificationCommandSteps) as typeof api.registeredVerificationNodeEntries;
+      const commands = { "verify:private-control": "node scripts/../private/coverage.mjs" };
+      assert.throws(() => api.registeredVerificationNodeEntries(commands, "verify:private-control"));
+      assert.deepEqual(removed(commands, "verify:private-control"), ["scripts/../private/coverage.mjs"]);
+    } finally { transformed.dispose(); }
   });
   check("canonical parent coverage retains its parent key and the complete existing full prefix without appending nested execution", () => {
     const value = fixture(), entry = "scripts/verify-admin-core-residual-search.mjs", changed = "scripts/fixtures/admin-core-residual-search.mjs";
@@ -2804,6 +2864,7 @@ function verifyLocalRiskVerificationPlan() {
     { name: "background execution", command: "node " + coverageEntry + " & echo skipped" },
     { name: "redirection", command: "node " + coverageEntry + " > result.log" },
     { name: "newline", command: "node " + coverageEntry + "\necho unsafe" },
+    { name: "carriage return", command: "node " + coverageEntry + "\recho unsafe" },
     { name: "empty chain step", command: "node " + coverageEntry + " && " },
     { name: "private path", command: "node scripts/../private/coverage.mjs" },
     { name: "valid match cannot conceal invalid sibling", command: "node " + coverageEntry + " && echo skipped" },
@@ -2811,6 +2872,7 @@ function verifyLocalRiskVerificationPlan() {
   for (const probe of unsafeChains) check("registered coverage rejects " + probe.name, () => {
     const commands = { ...scripts, "verify:coverage-parent": probe.command,
       ...(probe.child ? { "verify:coverage-child": probe.child } : {}) };
+    if (probe.name !== "private path") assert.equal(api.localVerificationCommandSteps(commands, "verify:coverage-parent"), undefined);
     assert.throws(() => api.registeredVerificationNodeEntries(commands, "verify:coverage-parent"));
   });
   check("registered coverage rejects a missing root command and unresolved executable graphs after valid wrapper reachability", () => {

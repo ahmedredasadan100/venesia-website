@@ -987,7 +987,10 @@ export function assertLocalVerificationProtectionMaintenance(impact: LocalVerifi
 
 /** Exact literal command/argv identity only; unsupported command shapes are never pruned. */
 export function localVerificationCommandSteps(scripts: Readonly<Record<string, string>>, check: string, active = new Set<string>()): string[] | undefined {
-  if (active.has(check) || typeof scripts[check] !== "string" || /[\r\n]/u.test(scripts[check])) return undefined;
+  // Validate every recursive wrapper before reading its command; a prototype
+  // property cannot authorize an executable package step.
+  if (!/^[a-zA-Z0-9:_-]+$/u.test(check) || !Object.hasOwn(scripts, check)
+    || active.has(check) || typeof scripts[check] !== "string" || /[\r\n]/u.test(scripts[check])) return undefined;
   const next = new Set([...active, check]), result: string[] = [];
   for (const raw of scripts[check].split("&&")) {
     const step = raw.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
