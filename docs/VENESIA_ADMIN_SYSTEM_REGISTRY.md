@@ -2358,3 +2358,48 @@ Pre-Push, new-head CI/Preview, public evidence and actual Owner reviews remain
 independent release requirements. No Product, schema, Auth, global setting,
 Production write, Push, Ready, merge or deployment is authorized.
 `globalClosed=false`; human approval remains PENDING.
+
+### 27.30 Current — QA engineering final closure — One-Shot 03
+
+**Previous to current / scope:** starts at `419925762d362504bc9897462fc41f8a899370cf`
+with all thirteen prior local commits and Engineering02's raw failures retained.
+The existing `runOwnedVerificationChild` / `stopChild`, Windows native capability,
+Admission, Automatic Preflight and isolated application owners remain canonical.
+There is no Product, Alt, Auth/schema, package, workflow, global-setting or
+Treasury change. The [Engineering03 final report](../.tmp-qa/qa-engineering-final-closure-03-20261031/final-engineering-closure-report.json)
+owns actual final-source gate results, identities, preservation and release
+disposition; an unexecuted gate remains NOT RUN.
+
+**Proved root cause / bounded correction:** actual held native identities locate
+the additional member at `C:\Windows\System32\conhost.exe`, parented to the Node
+root and inside the exact private Job. In the flags-only comparison,
+`CREATE_NO_WINDOW` to `DETACHED_PROCESS` changes Success/Nonzero Job total from
+two to one and first cleanup snapshot from one to zero, without forced
+termination. The initial pre-cleanup zero assertion is preserved. Separately,
+the original accounting-zero receipt preceded signaling of a known member
+handle; the existing native cleanup loop now requires both zero membership
+and completion of every retained exact-Job member before PASS. Failure-only
+bounded identity/PPID enrichment preserves partial/unavailable observations,
+and all acquired handles close. PPID is never ownership authority. No ordinary
+success polling, new native wrapper or timeout increase is added.
+
+**Verification / adoption boundaries:** the final existing shared-owner control
+mode passes110 checks, including the twelve native acceptance cases, original
+Success/Nonzero/Timeout/Cancellation, known descendant handle completion, an
+actual zero/one-retained positive and seventeen malformed/omitted ownership
+evidence rejection vectors. Root/helper exits, native receipts, source hashes,
+zero owned children and the earlier failing runs remain separate. Windows-only
+branches leave Linux execution unchanged; qualified earlier Linux evidence is
+reused only for its unchanged consumed scope. Native cleanup success does not
+resolve historical V8/PostgreSQL causation or establish future client endurance.
+
+**Coverage / approval / release:** the existing sixty-row behavioral matrix in
+QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.
+Only executed current gates may renew their specific behavior rows; source
+guards do not establish six-type save/readback or Auth/RLS. Per-type Delete and
+hosted persistence gaps remain classified Backlog unless current release impact
+requires them. Owner Create/Edit Desktop/Mobile/RTL functional and visual review
+remains PENDING, with `globalClosed=false`. The current request authorizes Full E
+after fresh qualification and one conditional Push followed by exact-SHA CI and
+Preview; all mandatory gates and preservation still apply. PR229 stays Draft;
+Ready, merge and Production deployment require separate Owner approval.

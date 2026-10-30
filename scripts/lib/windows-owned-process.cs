@@ -60,6 +60,12 @@ internal static class WindowsOwnedProcess
     }
     [StructLayout(LayoutKind.Sequential)]
     private struct FileTime { public uint Low; public uint High; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32 {
+        public uint Size; public uint Usage; public uint Pid; public UIntPtr DefaultHeap;
+        public uint ModuleId; public uint Threads; public uint ParentPid; public int BasePriority; public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+    }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateJobObjectW(IntPtr attributes, string name);
@@ -125,6 +131,19 @@ internal static class WindowsOwnedProcess
     private static extern bool GetHandleInformation(IntPtr handle, out uint flags);
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint pid);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetProcessId(IntPtr process);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder path, ref uint length);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry32 entry);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry32 entry);
 
     private sealed class NativeFailure : Exception {
         public readonly string Stage;
@@ -263,6 +282,8 @@ internal static class WindowsOwnedProcess
         public IntPtr Handle;
         public bool Signaled;
         public long? Code;
+        public Dictionary<string, object> OrdinaryIdentity;
+        public bool OrdinaryOwnershipVerified;
     }
     private static string CreationTime(IntPtr process, string stage) {
         FileTime creation, exit, kernel, user;
@@ -300,6 +321,92 @@ internal static class WindowsOwnedProcess
     private static void CheckBound(Stopwatch elapsed, DateTime started, int deadline, string stage) {
         double wall = WallElapsed(started);
         if (wall < 0 || wall > deadline || elapsed.ElapsedMilliseconds > deadline) throw new NativeFailure(stage, 0);
+    }
+    private static Dictionary<string, object> CaptureResidualMembers(IntPtr job, long[] ids, uint active, List<ObservedProcess> opened, ref NativeFailure ownerFailure, int boundMs) {
+        // Diagnostic enrichment only: keep the first accounting/member count unchanged.
+        // PPID is context, never ownership; each observed target needs this exact held Job.
+        Stopwatch elapsed = Stopwatch.StartNew(); DateTime started = DateTime.UtcNow;
+        List<object> records = new List<object>(), errors = new List<object>();
+        HashSet<uint> wanted = new HashSet<uint>(); Dictionary<uint, uint> parents = new Dictionary<uint, uint>();
+        bool complete = ids.Length == active && ids.Length <= 64, snapshotClosed = true; IntPtr snapshot = InvalidHandle;
+        try {
+            if (Marshal.SizeOf(typeof(ProcessEntry32)) != 568 || Marshal.OffsetOf(typeof(ProcessEntry32), "ParentPid").ToInt32() != 32)
+                throw new NativeFailure("member_snapshot_layout", 0);
+            foreach (long id in ids) {
+                if (records.Count >= 64) break;
+                CheckBound(elapsed, started, boundMs, "member_capture_deadline");
+                Dictionary<string, object> record = Map("pid", id, "identityStatus", "UNAVAILABLE", "parentPid", null,
+                    "creationTimeFileTime", null, "creationTimeUtc", null, "imagePath", null,
+                    "inExactJob", false, "liveThroughoutCapture", false, "signaledAfterCleanup", null, "processHandleClosed", null);
+                records.Add(record);
+                try {
+                    if (id <= 0 || id > UInt32.MaxValue) throw new NativeFailure("member_pid_bound", 0);
+                    ObservedProcess member = OpenObserved((uint)id, null, opened); member.OrdinaryIdentity = record;
+                    if (GetProcessId(member.Handle) != (uint)id) throw new NativeFailure("member_handle_pid", 0);
+                    bool inJob;
+                    if (!IsProcessInJob(member.Handle, job, out inJob)) throw Error("member_exact_job");
+                    if (!inJob) throw new NativeFailure("member_outside_job", 0);
+                    member.OrdinaryOwnershipVerified = true;
+                    record["inExactJob"] = true; record["creationTimeFileTime"] = member.Creation;
+                    record["creationTimeUtc"] = DateTime.FromFileTimeUtc(Int64.Parse(member.Creation, System.Globalization.CultureInfo.InvariantCulture)).ToString("o");
+                    StringBuilder image = new StringBuilder(32768); uint length = (uint)image.Capacity;
+                    if (!QueryFullProcessImageNameW(member.Handle, 0, image, ref length)) throw Error("member_image_path");
+                    if (length == 0 || length >= image.Capacity || !Path.IsPathRooted(image.ToString())) throw new NativeFailure("member_image_path_bound", 0);
+                    record["imagePath"] = image.ToString(); wanted.Add(member.Pid);
+                } catch (NativeFailure error) {
+                    // OpenObserved records its handle before validation; attach even an incomplete
+                    // identity so terminal evidence can account for that exact handle's closure.
+                    foreach (ObservedProcess member in opened) if (member.Pid == id && member.OrdinaryIdentity == null) member.OrdinaryIdentity = record;
+                    complete = false; errors.Add(Map("pid", id, "stage", error.Stage, "win32Code", error.Code));
+                }
+            }
+            if (wanted.Count != 0) {
+                snapshot = CreateToolhelp32Snapshot(2, 0);
+                if (snapshot == InvalidHandle) throw Error("member_parent_snapshot");
+                uint flags;
+                if (!GetHandleInformation(snapshot, out flags)) throw Error("member_parent_snapshot_flags");
+                if ((flags & 1) != 0) throw new NativeFailure("member_parent_snapshot_inherited", 0);
+                ProcessEntry32 entry = new ProcessEntry32(); entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry32));
+                bool found = Process32FirstW(snapshot, ref entry);
+                if (!found) throw Error("member_parent_first");
+                do {
+                    CheckBound(elapsed, started, boundMs, "member_capture_deadline");
+                    // Retain no metadata for unrelated processes; no modules, heap, memory or command line reads.
+                    if (wanted.Contains(entry.Pid)) parents[entry.Pid] = entry.ParentPid;
+                    if (parents.Count == wanted.Count) break;
+                    found = Process32NextW(snapshot, ref entry);
+                    if (!found && Marshal.GetLastWin32Error() != 18) throw Error("member_parent_next");
+                } while (found);
+            }
+            foreach (ObservedProcess member in opened) {
+                if (member.OrdinaryIdentity == null || !wanted.Contains(member.Pid)) continue;
+                bool inJob; uint parent;
+                if (!parents.TryGetValue(member.Pid, out parent) || RootExited(member.Handle)
+                    || !IsProcessInJob(member.Handle, job, out inJob) || !inJob
+                    || GetProcessId(member.Handle) != member.Pid || CreationTime(member.Handle, "member_creation_recheck") != member.Creation) {
+                    complete = false; errors.Add(Map("pid", member.Pid, "stage", "member_parent_identity_unqualified", "win32Code", 0)); continue;
+                }
+                member.OrdinaryIdentity["parentPid"] = parent; member.OrdinaryIdentity["liveThroughoutCapture"] = true;
+                member.OrdinaryIdentity["identityStatus"] = "QUALIFIED";
+            }
+            CheckBound(elapsed, started, boundMs, "member_capture_deadline");
+        } catch (NativeFailure error) { complete = false; errors.Add(Map("stage", error.Stage, "win32Code", error.Code)); }
+        catch { complete = false; errors.Add(Map("stage", "managed_member_capture", "win32Code", 0)); }
+        finally {
+            if (snapshot != InvalidHandle) {
+                snapshotClosed = CloseHandle(snapshot);
+                if (!snapshotClosed) {
+                    NativeFailure closeFailure = Error("member_snapshot_close"); Remember(ref ownerFailure, closeFailure);
+                    complete = false; errors.Add(Map("stage", closeFailure.Stage, "win32Code", closeFailure.Code));
+                }
+            }
+        }
+        foreach (object value in records) if ((string)((Dictionary<string, object>)value)["identityStatus"] != "QUALIFIED") complete = false;
+        return Map("schema", 1, "status", complete ? "COMPLETE" : "PARTIAL", "initialActiveProcesses", active, "initialProcessIds", ids,
+            "firstSnapshotPreserved", true, "processAccessMask", 0x00101000, "processHandlesInheritable", false, "jobHandlesExported", 0,
+            "parentSource", "PROCESSENTRY32W filtered to held exact Job members; PPID is not ownership", "memberLimit", 64,
+            "deadlineMs", boundMs, "startedUtc", started.ToString("o"), "endedUtc", DateTime.UtcNow.ToString("o"), "elapsedMs", elapsed.ElapsedMilliseconds,
+            "members", records, "snapshotHandleClosed", snapshotClosed, "captureErrors", errors);
     }
     private static void WriteClosureCheckpoint(string path, IntPtr job, ProcessInformation root, string rootCreation, string token, int helperPid) {
         Stopwatch elapsed = Stopwatch.StartNew(); DateTime started = DateTime.UtcNow;
@@ -637,6 +744,9 @@ internal static class WindowsOwnedProcess
         bool rootExitedBeforeCleanup = false, rootHandleExited = false, treeVerified = false, unstartedRootTerminated = false;
         uint effectiveFlags = 0; long? rootCode = null; uint? activeBefore = null, activeAfter = null, total = null;
         long[] membersBefore = null, membersAfter = null;
+        Dictionary<string, object> residualMemberEvidence = null;
+        List<ObservedProcess> residualHandles = new List<ObservedProcess>();
+        bool retainedOwnedHandlesSignaled = false;
         string rootCreationFileTime = null, rootCreationUtc = null;
         Dictionary<string, object> jobBeforeResume = null;
         ProcessInformation root = new ProcessInformation(); NativeFailure failure = null;
@@ -679,7 +789,9 @@ internal static class WindowsOwnedProcess
             if (ControlReceived.WaitOne(0)) { reason = ReadControlReason(); }
             else {
                 // JOB_LIST associates containment during CreateProcess, before any root instruction.
-                if (!CreateProcessW(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, 0x08080404, IntPtr.Zero, null, ref startup, out root)) throw Error("create_root_in_job");
+                // This noninteractive pipe/NUL root is detached from console allocation;
+                // CREATE_NO_WINDOW can create a hidden console host that outlives Node.
+                if (!CreateProcessW(executable, commandLine, IntPtr.Zero, IntPtr.Zero, true, 0x0008040c, IntPtr.Zero, null, ref startup, out root)) throw Error("create_root_in_job");
                 bool inJob;
                 if (!IsProcessInJob(root.Process, job, out inJob)) throw Error("verify_root_membership");
                 if (!inJob) throw new NativeFailure("root_outside_job", 0);
@@ -744,6 +856,12 @@ internal static class WindowsOwnedProcess
             try { BasicAccounting initial = Accounting(job); activeBefore = initial.ActiveProcesses; total = initial.TotalProcesses; membersBefore = ProcessIds(job); }
             catch (NativeFailure error) { Remember(ref failure, error); }
             catch { Remember(ref failure, new NativeFailure("managed_cleanup_snapshot", 0)); }
+            if (activeBefore.HasValue && activeBefore.Value != 0 && membersBefore != null) {
+                try {
+                    int remaining = (int)Math.Min(1000, cleanupMs - cleanup.ElapsedMilliseconds);
+                    if (remaining > 0) residualMemberEvidence = CaptureResidualMembers(job, membersBefore, activeBefore.Value, residualHandles, ref failure, remaining);
+                } catch (NativeFailure error) { Remember(ref failure, error); }
+            }
             // Keep the private handle open while proving the job drained; close-on-owner-death is an additional fail-safe.
             if (!activeBefore.HasValue || activeBefore.Value != 0) {
                 forced = true;
@@ -754,7 +872,12 @@ internal static class WindowsOwnedProcess
                 for (;;) {
                     BasicAccounting current = Accounting(job); activeAfter = current.ActiveProcesses; total = current.TotalProcesses;
                     membersAfter = ProcessIds(job); rootHandleExited = RootExited(root.Process);
-                    if (activeAfter == 0 && membersAfter.Length == 0 && rootHandleExited) { treeVerified = true; break; }
+                    retainedOwnedHandlesSignaled = true;
+                    foreach (ObservedProcess member in residualHandles)
+                        if (member.OrdinaryOwnershipVerified && !RootExited(member.Handle)) retainedOwnedHandlesSignaled = false;
+                    // Job accounting can reach zero before a retained member's termination
+                    // completes. Known exact-Job handles must also be signaled before PASS.
+                    if (activeAfter == 0 && membersAfter.Length == 0 && rootHandleExited && retainedOwnedHandlesSignaled) { treeVerified = true; break; }
                     if (cleanup.ElapsedMilliseconds >= cleanupMs) throw new NativeFailure("cleanup_deadline", 0);
                     Thread.Sleep(10);
                 }
@@ -762,15 +885,31 @@ internal static class WindowsOwnedProcess
             } catch (NativeFailure error) { Remember(ref failure, error); }
             catch { Remember(ref failure, new NativeFailure("managed_cleanup", 0)); }
             if (!CloseHandle(job)) Remember(ref failure, Error("close_job")); else jobClosed = true;
-        } else { rootHandleExited = root.Process == IntPtr.Zero; treeVerified = rootHandleExited; activeAfter = 0; membersAfter = new long[0]; }
+        } else { rootHandleExited = root.Process == IntPtr.Zero; treeVerified = rootHandleExited; activeAfter = 0; membersAfter = new long[0]; retainedOwnedHandlesSignaled = true; }
         if (root.Thread != IntPtr.Zero && !CloseHandle(root.Thread)) Remember(ref failure, Error("close_root_thread"));
         if (root.Process != IntPtr.Zero && !CloseHandle(root.Process)) Remember(ref failure, Error("close_root_process"));
+        foreach (ObservedProcess member in residualHandles) {
+            try {
+                if (member.OrdinaryIdentity != null) {
+                    member.OrdinaryIdentity["signaledAfterCleanup"] = RootExited(member.Handle);
+                    member.OrdinaryIdentity["exitCodeAfterCleanup"] = ExitCode(member.Handle);
+                }
+            } catch (NativeFailure error) { Remember(ref failure, error); }
+            finally {
+                bool closed = CloseHandle(member.Handle);
+                if (member.OrdinaryIdentity != null) member.OrdinaryIdentity["processHandleClosed"] = closed;
+                if (!closed) Remember(ref failure, Error("close_residual_process_handle"));
+            }
+        }
         bool passed = failure == null && treeVerified;
+        List<uint> retainedOwnedPids = new List<uint>();
+        foreach (ObservedProcess member in residualHandles) if (member.OrdinaryOwnershipVerified) retainedOwnedPids.Add(member.Pid);
         Dictionary<string, object> receipt = Map("schema", 1, "status", passed ? "PASS" : "BLOCKED", "reason", reason,
             "jobToken", jobToken, "helperPid", helperPid, "rootPid", root.Pid == 0 ? null : (object)root.Pid, "rootPpid", helperPid,
             "rootCreationTimeFileTime", rootCreationFileTime, "rootCreationTimeUtc", rootCreationUtc,
             "ownerJobAssignedBeforeResume", assigned, "jobHandleNonInheritable", jobNonInheritable, "effectiveLimitFlags", effectiveFlags, "resumeSucceeded", resumed,
             "jobBeforeResume", jobBeforeResume,
+            "residualMemberEvidence", residualMemberEvidence,
             "rootExitCode", rootCode.HasValue ? (object)rootCode.Value : null, "rootSignal", null,
             "durationMs", lifetime.ElapsedMilliseconds, "cleanupDurationMs", cleanup.ElapsedMilliseconds,
             "nativeFailure", failure == null ? null : Map("stage", failure.Stage, "win32Code", failure.Code),
@@ -779,6 +918,8 @@ internal static class WindowsOwnedProcess
                 "activeProcessesBeforeCleanup", activeBefore.HasValue ? (object)activeBefore.Value : null,
                 "activeProcessesAfterCleanup", activeAfter.HasValue ? (object)activeAfter.Value : null,
                 "activeProcessIdsBeforeCleanup", membersBefore, "activeProcessIdsAfterCleanup", membersAfter,
+                "retainedOwnedProcessHandles", retainedOwnedPids.Count, "retainedOwnedProcessIds", retainedOwnedPids,
+                "retainedOwnedHandlesSignaled", retainedOwnedHandlesSignaled,
                 "totalProcesses", total.HasValue ? (object)total.Value : null, "rootHandleExited", rootHandleExited, "processTreeVerified", treeVerified));
         try { WriteExclusive(receiptPath, receipt); }
         catch { HelperFinished.Set(); return 3; }

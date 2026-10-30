@@ -4705,6 +4705,69 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
       });
     };
     await verifyActualReadiness(api);
+    if (process.platform === "win32") {
+      const nativeFile = "scripts/lib/windows-owned-process.mts", nativeText = readSource(nativeFile);
+      const nativeTree = ts.createSourceFile(nativeFile, nativeText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const nativeSpawn = nativeTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "spawnWindowsOwnedProcess");
+      assert.ok(nativeSpawn?.body);
+      const cleanupNodes = nativeSpawn.body.statements.filter((node): node is ts.VariableStatement => ts.isVariableStatement(node)
+        && node.declarationList.declarations.some(value => ts.isIdentifier(value.name) && value.name.text === "verifiedCleanup"));
+      assert.equal(cleanupNodes.length, 1, "Use the actual unique native receipt qualifier.");
+      const cleanupSource = cleanupNodes[0]!.getText(nativeTree);
+      const cleanupCode = ts.transpileModule(cleanupSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+      type Identity = import("./lib/windows-owned-process.mts").WindowsJobIdentity;
+      type Receipt = import("./lib/windows-owned-process.mts").WindowsJobReceipt;
+      const qualify = (identity: Identity, result: Receipt) => new Function("assert", "readIdentity", "readReceipt", "child", cleanupCode + ";return verifiedCleanup;")(
+        assert, () => identity, () => result, { pid: identity.helperPid, exitCode: 0 }) as () => { status: string; liveProcesses: number };
+      const actualZeroIdentity = JSON.parse(readFileSync(path.join(directory, "public-success.native-identity.json"), "utf8")) as Identity;
+      const actualZero = JSON.parse(readFileSync(path.join(directory, "public-success.native-result.json"), "utf8")) as Receipt;
+      const actualHeldIdentity = JSON.parse(readFileSync(path.join(directory, "public-timeout.native-identity.json"), "utf8")) as Identity;
+      const actualHeld = JSON.parse(readFileSync(path.join(directory, "public-timeout.native-result.json"), "utf8")) as Receipt;
+      await control("actual native cleanup qualifier accepts zero-retained and actually terminated retained-root receipts", async () => {
+        assert.equal(actualZero.cleanup.retainedOwnedProcessHandles, 0); assert.deepEqual(actualZero.cleanup.retainedOwnedProcessIds, []);
+        assert.equal(actualHeld.cleanup.retainedOwnedProcessHandles, 1); assert.deepEqual(actualHeld.cleanup.retainedOwnedProcessIds, [actualHeldIdentity.rootPid]);
+        assert.equal(qualify(actualZeroIdentity, actualZero)().status, "PASS");
+        assert.equal(qualify(actualHeldIdentity, actualHeld)().liveProcesses, 0);
+      });
+      const rejected: string[] = [];
+      const rejectReceipt = async (name: string, mutate: (value: Receipt) => void) => {
+        await control("actual native cleanup qualifier rejects " + name, async () => {
+          const changed = structuredClone(actualHeld); mutate(changed);
+          assert.throws(qualify(actualHeldIdentity, changed), /termination of every retained owned process handle/u);
+          assert.deepEqual(actualHeld, JSON.parse(readFileSync(path.join(directory, "public-timeout.native-result.json"), "utf8")));
+          rejected.push(name);
+        });
+      };
+      const member = (value: Receipt) => {
+        const found = value.residualMemberEvidence?.members?.find(row => row.pid === actualHeldIdentity.rootPid);
+        assert.ok(found); return found;
+      };
+      await rejectReceipt("legacy missing retained-handle evidence", value => {
+        delete value.cleanup.retainedOwnedHandlesSignaled; delete value.cleanup.retainedOwnedProcessHandles; delete value.cleanup.retainedOwnedProcessIds;
+      });
+      await rejectReceipt("missing retained termination flag", value => { delete value.cleanup.retainedOwnedHandlesSignaled; });
+      await rejectReceipt("false retained termination flag", value => { value.cleanup.retainedOwnedHandlesSignaled = false; });
+      await rejectReceipt("retained count and ID mismatch", value => { value.cleanup.retainedOwnedProcessHandles = 2; });
+      await rejectReceipt("foreign retained PID", value => { value.cleanup.retainedOwnedProcessIds = [actualHeldIdentity.rootPid === 1 ? 2 : 1]; });
+      await rejectReceipt("duplicate retained PIDs", value => { value.cleanup.retainedOwnedProcessHandles = 2; value.cleanup.retainedOwnedProcessIds = [actualHeldIdentity.rootPid, actualHeldIdentity.rootPid]; });
+      await rejectReceipt("zero retained PID", value => { value.cleanup.retainedOwnedProcessIds = [0]; });
+      await rejectReceipt("out-of-DWORD retained PID", value => { value.cleanup.retainedOwnedProcessIds = [0x1_0000_0000]; });
+      await rejectReceipt("fractional retained PID", value => { value.cleanup.retainedOwnedProcessIds = [actualHeldIdentity.rootPid + 0.5]; });
+      await rejectReceipt("missing retained member identity", value => { delete value.residualMemberEvidence; });
+      await rejectReceipt("foreign retained member identity", value => { member(value).pid = actualHeldIdentity.rootPid === 1 ? 2 : 1; });
+      await rejectReceipt("duplicate retained member identity", value => { value.residualMemberEvidence!.members!.push(structuredClone(member(value))); });
+      await rejectReceipt("unqualified exact-Job membership", value => { member(value).inExactJob = false; });
+      await rejectReceipt("unknown retained member birth", value => { member(value).creationTimeFileTime = "UNKNOWN"; });
+      await rejectReceipt("known retained member not signaled", value => { member(value).signaledAfterCleanup = false; });
+      await rejectReceipt("known retained member handle not closed", value => { member(value).processHandleClosed = false; });
+      await rejectReceipt("omitted known retained member with a false terminal state", value => {
+        value.cleanup.retainedOwnedProcessHandles = 0; value.cleanup.retainedOwnedProcessIds = []; member(value).signaledAfterCleanup = false;
+      });
+      runtimeProofs.push({ control: "actual_native_retained_handle_receipt_qualification", sourceOwnerSha256: sha256(nativeText),
+        declarationSha256: sha256(cleanupSource), actualSourceProjection: true,
+        originalPositiveInputs: ["public-success.native-result.json", "public-timeout.native-result.json"],
+        positiveRetainedCounts: [0, 1], rejected, additionalNativeProcessesExecuted: 0 });
+    }
     await control("spawn failure rejects and drains its owned child registration", async () => {
       const pending = run("spawn-error", ["-e", "throw Error('must not execute')"], new AbortController().signal, 10_000, path.join(directory, "absent-owned-cwd"));
       const child = [...children][0]; assert.ok(child);
@@ -4784,6 +4847,14 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
         assert.equal(result.code, exitCode); assert.deepEqual(result.rawExit, { code: exitCode, signal: null }); assert.equal(proof.receipt.rootExitCode, exitCode);
         assert.equal(proof.receipt.cleanup.rootExitedBeforeCleanup, true); assert.ok(proof.receipt.cleanup.totalProcesses >= 3);
         assert.ok(proof.receipt.cleanup.activeProcessesBeforeCleanup >= 2); assert.equal(proof.receipt.cleanup.forcedTermination, true);
+        assert.equal(proof.receipt.cleanup.retainedOwnedHandlesSignaled, true);
+        for (const pid of [identities.middle.pid, identities.leaf.pid]) {
+          assert.ok(proof.receipt.cleanup.retainedOwnedProcessIds?.includes(pid), "Retain the actual live descendant handle through Job termination.");
+          const members = proof.receipt.residualMemberEvidence?.members?.filter(member => member.pid === pid);
+          assert.equal(members?.length, 1); assert.equal(members![0]!.inExactJob, true);
+          assert.match(members![0]!.creationTimeFileTime!, /^[1-9][0-9]*$/u);
+          assert.equal(members![0]!.signaledAfterCleanup, true); assert.equal(members![0]!.processHandleClosed, true);
+        }
         await treeProof(identities, proof.identity); assert.equal(children.size, 0);
         runtimeProofs.push({ control: "windows_native_exited_root", exitCode, identities, result });
       });

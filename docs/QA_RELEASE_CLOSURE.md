@@ -529,6 +529,13 @@ end a stalled helper. Two evidence kinds remain distinct:
 - Ordinary native cleanup retains accounting/member-list zero evidence while
   the valid Job handle is held. A missing or corrupt normal execution receipt
   remains FAIL; a separate containment certificate cannot turn that run PASS.
+  Accounting zero does not replace termination of a known retained member:
+  every acquired exact-Job process handle must also signal within the original
+  shared cleanup deadline and close before acceptance. Receipts bind its PID,
+  birth time and native membership; the adapter rejects omitted, duplicate,
+  foreign, unsignaled or unclosed retained-member evidence. The initial
+  `activeProcessesBeforeCleanup` snapshot and the strict natural-exit zero
+  assertion remain separate from final cleanup zero.
 - Kernel last-close containment cannot query zero membership after the final
   Job handle closes. Its safety certificate instead requires native pre-close
   complete actual Job membership with process birth times, verified limit
@@ -563,6 +570,22 @@ long-run transport guarantee follows ([Microsoft wait semantics](https://learn.m
 The original root exit is distinct from the helper/capability outcome. Normal
 and abnormal root exit, cancellation, timeout, detached descendants, owner loss
 and unrelated-process preservation need actual scoped controls.
+
+The ordinary noninteractive Windows root uses `DETACHED_PROCESS` with its
+existing suspended creation, explicit Job/handle attribute lists, NUL stdin
+and output pipes. Engineering03 identified an actual exact-Job `conhost.exe`
+member with its held process identity during the previous `CREATE_NO_WINDOW`
+launch. A flags-only counterfactual removed that additional allocation in the
+actual Success/Nonzero controls without forced cleanup; it did not relax the
+pre-cleanup zero assertion. Existing failure-only diagnostic enrichment retains
+at most64 initially reported members within at most1000ms of the original
+cleanup budget. Query/synchronization handles establish identity and exact Job
+membership; a filtered `PROCESSENTRY32W` snapshot supplies PPID as context only.
+Unavailable or raced metadata remains PARTIAL. No normal-path polling,
+historical PID ownership, external-process termination, new runtime or global
+console setting is introduced. The scoped evidence and original failures live
+in the [Engineering03 report](../.tmp-qa/qa-engineering-final-closure-03-20261031/final-engineering-closure-report.json);
+this correction alone does not qualify PostgreSQL, Full E, CI or human review.
 
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory

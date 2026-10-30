@@ -68,7 +68,10 @@ export type WindowsJobIdentity = { jobToken: string; helperPid: number; rootPid:
 export type WindowsJobReceipt = Omit<WindowsJobIdentity, "rootPid"> & { rootPid: number | null; status: string; reason: string; rootExitCode: number | null; resumeSucceeded: boolean;
   cleanup: { status: string; method: string; rootExitedBeforeCleanup: boolean; forcedTermination: boolean;
     activeProcessesBeforeCleanup: number; activeProcessesAfterCleanup: number; activeProcessIdsBeforeCleanup: number[];
-    activeProcessIdsAfterCleanup: number[]; totalProcesses: number; rootHandleExited: boolean; processTreeVerified: boolean; jobHandleClosed?: boolean };
+    activeProcessIdsAfterCleanup: number[]; totalProcesses: number; rootHandleExited: boolean; processTreeVerified: boolean; jobHandleClosed?: boolean;
+    retainedOwnedProcessHandles?: number; retainedOwnedProcessIds?: number[]; retainedOwnedHandlesSignaled?: boolean };
+  residualMemberEvidence?: { members: { pid: number; creationTimeFileTime: string | null; inExactJob: boolean;
+    signaledAfterCleanup: boolean | null; processHandleClosed: boolean | null }[] } | null;
   nativeFailure: { stage: string; win32Code: number } | null };
 export type WindowsStopReason = "cancelled" | "timeout" | "output_limit" | "owner_shutdown";
 type NativeCleanup = { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
@@ -286,6 +289,22 @@ export function spawnWindowsOwnedProcess(options: { args: string[]; cwd: string;
       && result.cleanup.processTreeVerified === true && result.cleanup.activeProcessesAfterCleanup === 0
       && result.cleanup.activeProcessIdsAfterCleanup.length === 0 && result.cleanup.rootHandleExited === true,
     "Native cleanup did not prove zero owned processes.");
+    assert.ok(result.cleanup.retainedOwnedHandlesSignaled === true
+      && Number.isSafeInteger(result.cleanup.retainedOwnedProcessHandles) && result.cleanup.retainedOwnedProcessHandles! >= 0
+      && Array.isArray(result.cleanup.retainedOwnedProcessIds)
+      && result.cleanup.retainedOwnedProcessIds.length === result.cleanup.retainedOwnedProcessHandles
+      && (result.residualMemberEvidence == null || Array.isArray(result.residualMemberEvidence.members))
+      && (result.residualMemberEvidence?.members.filter(member => member.inExactJob === true).length ?? 0)
+        === result.cleanup.retainedOwnedProcessHandles
+      && new Set(result.cleanup.retainedOwnedProcessIds).size === result.cleanup.retainedOwnedProcessIds.length
+      && result.cleanup.retainedOwnedProcessIds.every(pid => Number.isSafeInteger(pid) && pid > 0 && pid <= 0xffffffff
+        && result.cleanup.activeProcessIdsBeforeCleanup.includes(pid)
+        && Array.isArray(result.residualMemberEvidence?.members)
+        && result.residualMemberEvidence.members.filter(member => member.pid === pid).length === 1
+        && result.residualMemberEvidence.members.some(member => member.pid === pid && member.inExactJob === true
+          && typeof member.creationTimeFileTime === "string" && /^[1-9][0-9]*$/u.test(member.creationTimeFileTime)
+          && member.signaledAfterCleanup === true && member.processHandleClosed === true)),
+    "Native cleanup did not prove termination of every retained owned process handle.");
     assert.ok(Number.isSafeInteger(result.rootExitCode) && result.rootExitCode! >= 0 && result.rootExitCode! <= 0xffffffff,
       "Native root exit status is missing.");
     assert.equal(child.exitCode, 0, "Native capability failed independently of the root exit.");
