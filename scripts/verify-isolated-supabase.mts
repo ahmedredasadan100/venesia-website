@@ -3323,6 +3323,95 @@ async function verifyQualifiedFormHarnessControls() {
 
 /** Real imported compiler contracts plus source-bound union/member checks, not native execution evidence. */
 function verifyWindowsOwnedProcessContracts() {
+  function verifyNativeBuildPublicationControls() {
+    const nativeFile = "scripts/lib/windows-owned-process.mts", nativeSource = ts.createSourceFile(nativeFile, readSource(nativeFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const actual = ["hash", "build", "nativeBuild"].map(name => {
+      const node = nativeSource.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
+        || ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(nativeSource) === name));
+      assert.ok(node); return node.getText(nativeSource);
+    }).join("\n");
+    type Built = Extract<ReturnType<typeof windowsOwnedProcessCapability>, { status: "PASS" }>["native"];
+    type Mutation = "source" | "snapshot" | "compiler" | "reference";
+    const setup = (options: { mutateDuringCompile?: Mutation; failProvenanceOnce?: boolean; corruptProvenanceOnce?: boolean } = {}) => {
+      const fixtureRoot = path.resolve(root, ".tmp-qa", "controlled-native-build-no-files"), systemRoot = path.join(fixtureRoot, "controlled-windows");
+      const framework = path.join(systemRoot, "Microsoft.NET/Framework64/v4.0.30319"), source = path.join(fixtureRoot, "scripts/lib/windows-owned-process.cs"), compiler = path.join(framework, "csc.exe");
+      const references = ["mscorlib.dll", "System.dll", "System.Core.dll", "System.Web.dll", "System.Web.Extensions.dll"].map(name => path.join(framework, name));
+      const files = new Map<string, Buffer>([[source, Buffer.from("controlled captured C# source")], [compiler, Buffer.from("controlled compiler bytes")],
+        ...references.map(file => [file, Buffer.from("controlled reference " + path.basename(file))] as const)]);
+      const directories = new Set<string>([fixtureRoot]), writes: Array<{ file: string; flag: string }> = [], invocations: Array<{ snapshot: string; flags: string[] }> = [];
+      let serial = 0, failProvenance = options.failProvenanceOnce ?? false, corruptProvenance = options.corruptProvenanceOnce ?? false;
+      const failure = Error("Controlled native provenance write failure");
+      const read = (file: string) => { const value = files.get(file); assert.ok(value, "Unexpected controlled native read: " + file); return Buffer.from(value); };
+      const ports = {
+        assert, ROOT: fixtureRoot, createHash, join: path.join, release: () => "10.0.19045",
+        process: { platform: "win32", arch: "x64", version: "controlled-node", env: { SystemRoot: systemRoot, WINDIR: systemRoot, TEMP: fixtureRoot, TMP: fixtureRoot } },
+        readFileSync: read, realpathSync: (file: string) => { assert.ok(files.has(file) || directories.has(file)); return file; },
+        lstatSync: (file: string) => ({ isFile: () => files.has(file) }),
+        mkdirSync: (directory: string, settings: { recursive: boolean }) => { assert.equal(settings.recursive, true); directories.add(directory); },
+        mkdtempSync: (prefix: string) => { const directory = prefix + ++serial; assert.equal(directories.has(directory), false); directories.add(directory); return directory; },
+        writeFileSync: (file: string, data: string | Buffer, settings: { flag: string }) => {
+          assert.equal(settings.flag, "wx"); assert.equal(files.has(file), false); writes.push({ file, flag: settings.flag });
+          if (path.basename(file) === "build.json" && failProvenance) { failProvenance = false; throw failure; }
+          files.set(file, Buffer.isBuffer(data) ? Buffer.from(data) : Buffer.from(data));
+          if (path.basename(file) === "build.json" && corruptProvenance) { corruptProvenance = false; files.set(file, Buffer.from("altered provenance write")); }
+        },
+        execFileSync: (binary: string, flags: string[], settings: { cwd: string; timeout: number; env: { NODE_ENV: string } }) => {
+          assert.equal(binary, compiler); assert.equal(settings.cwd, fixtureRoot); assert.equal(settings.timeout, 60_000); assert.equal(settings.env.NODE_ENV, "test");
+          const snapshot = flags.at(-1)!; assert.notEqual(snapshot, source); assert.deepEqual(read(snapshot), Buffer.from("controlled captured C# source"));
+          assert.ok(writes.some(row => row.file === snapshot && row.flag === "wx")); invocations.push({ snapshot, flags: [...flags] });
+          const output = flags.find(flag => flag.startsWith("/out:")); assert.ok(output); files.set(output.slice(5), Buffer.from("controlled executable " + invocations.length));
+          const changed = { source, snapshot, compiler, reference: references[0]! };
+          if (options.mutateDuringCompile) files.set(changed[options.mutateDuringCompile], Buffer.from("changed during controlled compilation"));
+          return Buffer.alloc(0);
+        },
+      };
+      const api = new Function(...Object.keys(ports), ts.transpileModule(actual, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+        + ";return {nativeBuild, inspectBuild:()=>build};")(...Object.values(ports)) as { nativeBuild(): Built; inspectBuild(): Built | undefined };
+      return { api, files, writes, invocations, failure, source, compiler, references, read };
+    };
+    const results: string[] = [], prove = (name: string, run: () => void) => { run(); results.push(name); };
+    prove("captured source compiles once and only fully verified provenance publishes immutable cached build", () => {
+      const fixture = setup(), built = fixture.api.nativeBuild();
+      assert.equal(fixture.invocations.length, 1); assert.equal(fixture.invocations[0]!.snapshot, built.sourceSnapshot);
+      assert.equal(sha256(fixture.read(built.sourceSnapshot)), built.sourceSha256); assert.equal(sha256(fixture.read(built.provenance)), built.provenanceSha256);
+      assert.equal(Object.isFrozen(built), true); assert.equal(Object.isFrozen(built.frameworkReferences), true);
+      assert.ok(built.frameworkReferences.every(reference => Object.isFrozen(reference)));
+      const writes = fixture.writes.length; assert.equal(fixture.api.inspectBuild(), built); assert.equal(fixture.api.nativeBuild(), built);
+      assert.equal(fixture.invocations.length, 1); assert.equal(fixture.writes.length, writes);
+    });
+    for (const [mutation, message] of [["source", "Native source changed during compilation."], ["snapshot", "Native captured source changed during compilation."],
+      ["compiler", "Native compiler changed during compilation."], ["reference", "Native framework input changed during compilation."]] as const) {
+      prove(mutation + " mutation during compilation rejects without publishing cache", () => {
+        const fixture = setup({ mutateDuringCompile: mutation });
+        assert.throws(() => fixture.api.nativeBuild(), (error: unknown) => error instanceof Error && error.message.includes(message));
+        assert.equal(fixture.api.inspectBuild(), undefined); assert.equal(fixture.invocations.length, 1);
+        assert.equal(fixture.writes.some(row => path.basename(row.file) === "build.json"), false);
+      });
+    }
+    prove("failed provenance write retains the failure and the next call compiles fresh before publishing", () => {
+      const fixture = setup({ failProvenanceOnce: true }); assert.throws(() => fixture.api.nativeBuild(), error => error === fixture.failure);
+      assert.equal(fixture.api.inspectBuild(), undefined); assert.equal(fixture.invocations.length, 1);
+      const built = fixture.api.nativeBuild(); assert.equal(fixture.invocations.length, 2);
+      assert.notEqual(fixture.invocations[0]!.snapshot, fixture.invocations[1]!.snapshot); assert.equal(fixture.api.inspectBuild(), built);
+      assert.equal(sha256(fixture.read(built.provenance)), built.provenanceSha256);
+    });
+    prove("provenance readback mismatch rejects before cache publication", () => {
+      const fixture = setup({ corruptProvenanceOnce: true });
+      assert.throws(() => fixture.api.nativeBuild(), /Native build provenance was not preserved/u); assert.equal(fixture.api.inspectBuild(), undefined);
+    });
+    for (const [field, message] of [["provenance", "Native build provenance changed during this invocation."], ["sourceSnapshot", "Native captured source changed during this invocation."],
+      ["compiler", "Native compiler changed during this invocation."]] as const) {
+      prove("cached " + field + " byte tamper rejects without recompilation or spawn", () => {
+        const fixture = setup(), built = fixture.api.nativeBuild(), writes = fixture.writes.length;
+        fixture.files.set(built[field], Buffer.from("tampered cached input"));
+        assert.throws(() => fixture.api.nativeBuild(), (error: unknown) => error instanceof Error && error.message.includes(message));
+        assert.equal(fixture.invocations.length, 1); assert.equal(fixture.writes.length, writes);
+      });
+    }
+    return { status: "PASS", scope: "actual_nativeBuild_hash_and_build_declarations_with_controlled_ports", checks: results.length, cases: results,
+      operatingSystemWrites: 0, compilerProcessesExecuted: 0, nativeProcessesAllocated: 0 };
+  }
+  const nativeBuildPublication = verifyNativeBuildPublicationControls();
   const identity: import("./lib/windows-owned-process.mts").WindowsJobIdentity = {
     jobToken: "00000000-0000-4000-8000-000000000000", helperPid: 11, rootPid: 12, rootPpid: 11,
     rootCreationTimeFileTime: "1", rootCreationTimeUtc: "2000-01-01T00:00:00.000Z",
@@ -3387,7 +3476,7 @@ function verifyWindowsOwnedProcessContracts() {
   }
   return { status: "PASS", scope: "imported_type_value_vectors_and_source_contracts_only", nativeRootProcessesAllocated: 0,
     identityMemberVectors: 3, receiptNumberAndNullVectors: 2, compilerNegativeVectorsDeclared: 3, compilerNegativeProof: "requires actual TypeScript check",
-    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity };
+    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity, nativeBuildPublication };
 }
 
 /** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */

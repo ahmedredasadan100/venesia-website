@@ -9,7 +9,8 @@ import { release } from "node:os";
 // remain in runOwnedVerificationChild. No shell, downloads or persistent binary cache.
 const ROOT = resolve(import.meta.dirname, "../..");
 const hash = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
-type Build = Readonly<{ executable: string; executableSha256: string; sourceSha256: string; compilerSha256: string; provenance: string;
+type Build = Readonly<{ executable: string; executableSha256: string; sourceSha256: string; sourceSnapshot: string;
+  compiler: string; compilerSha256: string; provenance: string; provenanceSha256: string;
   frameworkReferences: readonly Readonly<{ file: string; sha256: string }>[] }>;
 let build: Build | undefined;
 function nativeBuild(): Build {
@@ -19,7 +20,10 @@ function nativeBuild(): Build {
   assert.equal(realpathSync(source), source, "Native source cannot traverse links.");
   if (build) {
     assert.equal(hash(bytes), build.sourceSha256, "Native source changed during this invocation.");
+    assert.equal(hash(readFileSync(build.sourceSnapshot)), build.sourceSha256, "Native captured source changed during this invocation.");
+    assert.equal(hash(readFileSync(build.compiler)), build.compilerSha256, "Native compiler changed during this invocation.");
     assert.equal(hash(readFileSync(build.executable)), build.executableSha256, "Native executable changed during this invocation.");
+    assert.equal(hash(readFileSync(build.provenance)), build.provenanceSha256, "Native build provenance changed during this invocation.");
     for (const reference of build.frameworkReferences) assert.equal(hash(readFileSync(reference.file)), reference.sha256, "Native framework input changed during this invocation.");
     return build;
   }
@@ -29,17 +33,27 @@ function nativeBuild(): Build {
   const evidenceRoot = join(ROOT, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true });
   assert.equal(realpathSync(evidenceRoot), evidenceRoot, "Native build evidence cannot traverse links.");
   const directory = mkdtempSync(join(evidenceRoot, "windows-native-build-")), executable = join(directory, "windows-owned-process.exe");
+  const sourceSnapshot = join(directory, "windows-owned-process.cs"), sourceSha256 = hash(bytes), compilerSha256 = hash(readFileSync(compiler));
+  writeFileSync(sourceSnapshot, bytes, { flag: "wx", mode: 0o600 });
   const frameworkReferences = ["mscorlib.dll", "System.dll", "System.Core.dll", "System.Web.dll", "System.Web.Extensions.dll"]
     .map(name => ({ file: join(framework, name), sha256: hash(readFileSync(join(framework, name))) }));
   const flags = ["/nologo", "/noconfig", "/target:exe", "/platform:x64", "/optimize+", "/out:" + executable,
-    ...frameworkReferences.filter(reference => !reference.file.endsWith("mscorlib.dll")).map(reference => "/r:" + reference.file), source];
+    ...frameworkReferences.filter(reference => !reference.file.endsWith("mscorlib.dll")).map(reference => "/r:" + reference.file), sourceSnapshot];
   execFileSync(compiler, flags, { windowsHide: true, cwd: ROOT, timeout: 60_000, maxBuffer: 1_000_000,
     env: { NODE_ENV: "test", SystemRoot: process.env.SystemRoot, WINDIR: process.env.WINDIR, TEMP: process.env.TEMP, TMP: process.env.TMP }, stdio: ["ignore", "pipe", "pipe"] });
+  assert.equal(hash(readFileSync(source)), sourceSha256, "Native source changed during compilation.");
+  assert.equal(hash(readFileSync(sourceSnapshot)), sourceSha256, "Native captured source changed during compilation.");
+  assert.equal(hash(readFileSync(compiler)), compilerSha256, "Native compiler changed during compilation.");
+  for (const reference of frameworkReferences) assert.equal(hash(readFileSync(reference.file)), reference.sha256, "Native framework input changed during compilation.");
   const provenance = join(directory, "build.json");
-  build = Object.freeze({ executable, sourceSha256: hash(bytes), compilerSha256: hash(readFileSync(compiler)), executableSha256: hash(readFileSync(executable)), provenance,
+  const candidate = Object.freeze({ executable, sourceSha256, sourceSnapshot, compiler, compilerSha256, executableSha256: hash(readFileSync(executable)), provenance,
     frameworkReferences: Object.freeze(frameworkReferences.map(reference => Object.freeze(reference))) });
-  writeFileSync(provenance, JSON.stringify({ ...build, schema: 1, compiler, flags, node: process.version, platform: process.platform,
-    arch: process.arch, builtUtc: new Date().toISOString(), distribution: "Fresh local build from tracked C# source; no binary or cache trusted across invocations" }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  const provenanceBytes = JSON.stringify({ ...candidate, schema: 1, flags, node: process.version, platform: process.platform,
+    arch: process.arch, builtUtc: new Date().toISOString(), distribution: "Fresh local build from tracked C# source; no binary or cache trusted across invocations" }, null, 2) + "\n";
+  writeFileSync(provenance, provenanceBytes, { flag: "wx", mode: 0o600 });
+  const provenanceSha256 = hash(provenanceBytes);
+  assert.equal(hash(readFileSync(provenance)), provenanceSha256, "Native build provenance was not preserved.");
+  build = Object.freeze({ ...candidate, provenanceSha256 });
   return build;
 }
 

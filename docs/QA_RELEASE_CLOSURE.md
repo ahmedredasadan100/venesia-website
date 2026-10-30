@@ -512,8 +512,13 @@ and unrelated-process preservation need actual scoped controls.
 
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory
-once per Node invocation. Source, compiler, binary hashes and compiler flags are
-retained as provenance; source and binary bytes are rechecked before each launch.
+from an exclusive captured C# snapshot. Source/compiler/explicit Framework input
+hashes are pinned before compilation and checked afterward; flags and binary
+identity are retained in provenance. Only successful byte-verified provenance
+publication permits reuse within that Node invocation. Before another launch,
+the tracked source, captured source, compiler, Framework inputs, executable and
+provenance must still match their retained hashes. Failed build/provenance writes
+cannot publish a reusable build.
 No committed executable, cross-invocation binary cache, downloaded dependency,
 global setting, new pipeline or alternate canonical command is introduced.
 Unavailable native build/launch capability or a denied actual-context probe stays
