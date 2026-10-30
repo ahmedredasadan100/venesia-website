@@ -3915,6 +3915,43 @@ async function ownedChildControlsOnly() {
 }
 
 async function verifyQualifiedSelectionControls() {
+  check("actual canonical CLI factory reaches native ports and rejects either omitted binding before allocation", () => {
+    const verifier = ts.createSourceFile("verify-isolated-supabase.mts", readSource("scripts/verify-isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const cli = verifier.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "changeImpactOnly");
+    assert.ok(cli?.body); const body = cli.body.statements.find(ts.isTryStatement); assert.ok(body);
+    const statement = body.tryBlock.statements.find((node): node is ts.VariableStatement => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(verifier) === "api"));
+    const declaration = statement?.declarationList.declarations.find(row => row.name.getText(verifier) === "api"); assert.ok(declaration?.initializer);
+    const expression = ts.isAsExpression(declaration.initializer) ? declaration.initializer.expression : declaration.initializer;
+    assert.ok(ts.isCallExpression(expression) && ts.isNewExpression(expression.expression));
+    const constructor = expression.expression; assert.ok(constructor.arguments);
+    const code = "function inspectLocalVerificationChangeImpact(){return windowsOwnedProcessCapability();} function executeLocalVerificationTargets(input){return spawnWindowsOwnedProcess(input);}";
+    let forbiddenCalls = 0, capabilityCalls = 0, nativeLaunchCalls = 0;
+    const forbidden = () => { forbiddenCalls++; throw Error("Canonical factory probe reached an allocation or external operation."); };
+    const capability = Object.freeze({ status: "PASS", probe: "actual_factory_capability_binding" }), native = Object.freeze({ probe: "actual_factory_launch_binding_no_process" });
+    const input = Object.freeze({ args: [], controlledNoAllocationProbe: true });
+    const bindings = { assert, root, code, ts, path, sha256: forbidden, execFileSync: forbidden, selectSourceInventory: forbidden, sourceIncluded: forbidden,
+      existsSync: forbidden, lstatSync: forbidden, realpathSync: forbidden, readFileSync: forbidden, collectExecutableSourceGraph: forbidden,
+      spawn: forbidden, mkdtempSync: forbidden, mkdirSync: forbidden, writeFileSync: forbidden, rmSync: forbidden, readdirSync: forbidden,
+      createRequire: forbidden, isBuiltin: forbidden,
+      windowsOwnedProcessCapability: () => { capabilityCalls++; return capability; },
+      spawnWindowsOwnedProcess: (value: unknown) => { nativeLaunchCalls++; assert.equal(value, input); return native; } };
+    const project = (actual: ts.Expression) => {
+      const source = "const api=" + ts.createPrinter().printNode(ts.EmitHint.Expression, actual, verifier) + ";return api;";
+      return new Function(...Object.keys(bindings), ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(bindings)) as {
+        inspectLocalVerificationChangeImpact(): unknown; executeLocalVerificationTargets(value: unknown): unknown;
+      };
+    };
+    const api = project(expression); assert.equal(api.inspectLocalVerificationChangeImpact(), capability); assert.equal(api.executeLocalVerificationTargets(input), native);
+    for (const missing of ["windowsOwnedProcessCapability", "spawnWindowsOwnedProcess"]) {
+      const mutated = ts.factory.updateCallExpression(expression, ts.factory.updateNewExpression(constructor, constructor.expression, constructor.typeArguments,
+        constructor.arguments.filter(argument => !ts.isStringLiteral(argument) || argument.text !== missing)), expression.typeArguments,
+      expression.arguments.filter(argument => argument.getText(verifier) !== missing));
+      const incomplete = project(mutated), invoke = missing === "windowsOwnedProcessCapability"
+        ? () => incomplete.inspectLocalVerificationChangeImpact() : () => incomplete.executeLocalVerificationTargets(input);
+      assert.throws(invoke, (error: unknown) => error instanceof ReferenceError && error.message === missing + " is not defined");
+    }
+    assert.equal(capabilityCalls, 1); assert.equal(nativeLaunchCalls, 1); assert.equal(forbiddenCalls, 0);
+  });
   const file = ts.createSourceFile("owner.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const declarations = ["qualifyLocalVerificationTargets", "localVerificationCommandSteps", "localVerificationSourceGuardEffects"].map(name => {
     const node = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
@@ -4390,9 +4427,9 @@ async function changeImpactOnly() {
     });
     const code = ts.transpileModule(adminAdoptionControlSource(parsed) + "\n" + declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
     const api = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph",
-      "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", "nodeModule", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets};")(
+      "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", "nodeModule", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets};")(
       assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph,
-      spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep, { createRequire, isBuiltin }) as
+      spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep, { createRequire, isBuiltin }, windowsOwnedProcessCapability, spawnWindowsOwnedProcess) as
       Pick<typeof import("./lib/isolated-public-verification.mts"), "inspectLocalVerificationChangeImpact" | "executeLocalVerificationTargets">;
     if (executeMode) {
       const { sourceReport: report, ...targetedExecution } = await api.executeLocalVerificationTargets({ baselineHead: baselineHead! }, new AbortController().signal);

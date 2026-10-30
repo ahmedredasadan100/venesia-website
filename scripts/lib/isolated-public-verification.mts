@@ -3562,11 +3562,20 @@ export async function verifyOwnedProcessReadiness(options: {
     const retained = finished.error instanceof Error ? (finished.error as Error & { childResult?: {
       code: number | null; signal: NodeJS.Signals | null; identity: unknown; reason: unknown; cleanup: unknown; cleanupFailure: unknown; evidence: unknown;
     } }).childResult : undefined;
+    const startupFailure = !retained && finished.error instanceof Error ? finished.error : undefined;
+    // A failure before registration has no childResult. Retain that original
+    // error without letting the secondary "no child" observation erase it.
+    if (error instanceof Error && startupFailure && error !== startupFailure) {
+      if (error.cause === undefined) Object.defineProperty(error, "cause", { value: startupFailure });
+      else Object.defineProperty(error, "startupFailure", { value: startupFailure });
+    }
     if (!existsSync(ownedPath(context, "process-readiness.json"))) receipt(context, "process-readiness.json", {
       status: "BLOCKED", platform: process.platform, scope: "self-owned-live-tree-cancellation", durationMs: performance.now() - started,
       rawExit: retained ? { code: retained.code, signal: retained.signal } : null, identity: retained?.identity ?? null,
       reason: retained?.reason ?? "readiness_unproved", cleanup: retained?.cleanup ?? null, evidence: retained?.evidence ?? null,
       cleanupFailure: retained?.cleanupFailure ?? null,
+      startupFailure: startupFailure ? { name: ["Error", "ReferenceError", "TypeError", "AssertionError"].includes(startupFailure.name) ? startupFailure.name : "Error",
+        code: "code" in startupFailure && typeof startupFailure.code === "string" && /^[A-Z0-9_]{1,64}$/u.test(startupFailure.code) ? startupFailure.code : null } : null,
       finiteSelfExpiryMs: 12_000, knownOwnedProcessesAbsent, knownIdentities: knownPids.size,
     });
     if (error instanceof Error && retained) Object.defineProperty(error, "childResult", { value: retained, enumerable: true });
