@@ -503,9 +503,42 @@ The native helper owns the private job, receives the owner's control pipe and
 passes the root's stdout/stderr through; the root receives NUL stdin. Owner-pipe
 EOF and the independent native deadline require cleanup, including after root
 exit. The job handle is verified noninheritable. A bounded helper watchdog may
-end a stalled helper; kernel handle-close containment without a final native
-zero-membership receipt still fails qualification. Assignment, identity, resume or final zero-membership receipt failure
-rejects qualification; finite descendants ending by self-expiry are insufficient.
+end a stalled helper. Two evidence kinds remain distinct:
+
+- Ordinary native cleanup retains accounting/member-list zero evidence while
+  the valid Job handle is held. A missing or corrupt normal execution receipt
+  remains FAIL; a separate containment certificate cannot turn that run PASS.
+- Kernel last-close containment cannot query zero membership after the final
+  Job handle closes. Its safety certificate instead requires native pre-close
+  complete actual Job membership with process birth times, verified limit
+  `0x2000`, noninheritability and helper-only Job-handle ownership. An independent
+  observer retains only target process query/synchronization handles with rights
+  `0x101000`; it holds no Job handle and performs no termination, discovery or
+  daemon work. Every helper/member handle must be live/nonsignaled before READY,
+  then every retained handle must become signaled within one shared bound of at
+  most six seconds measured with both Stopwatch and UTC, never reset per handle.
+  All target process handles must close on success or failure. Missing ownership,
+  complete membership/birth-time binding, READY, bounded exit or handle-close
+  evidence rejects the certificate; self-expiry or PID/helper polling is not proof.
+
+The fixed bounded `--observe-close` entry in the same C# source/executable is a
+read-only native wait primitive within the approved capability. Its explicit
+`IndependentObservation` evidence introduces no other module, executable, runner,
+runtime or registry. Receipt availability remains separate; root exit stays
+UNKNOWN unless independently observed. Expected-fault safety acceptance never
+fabricates a native queried-zero receipt or successful Product execution.
+Required negatives cover live/unsignaled targets, stale or mismatched identities,
+incomplete member evidence, invalid rights/ownership, malformed inputs, deadline
+failure and handle cleanup; original errors and prior failures remain preserved.
+For nested-job breakaway probes, creation denial5 is one valid result, not a
+universal invariant. A created suspended candidate instead needs the native
+exact private-ancestor checkpoint bound to its PID and birth time; membership in
+any Job or a probe-only guard is insufficient. The probe's own creation-time
+Job guards its unexecuted candidate against escape/probe crash, without proving
+private-ancestor membership. Unknown ancestry remains unqualified.
+Native waits on Windows8+ exclude low-power time, so native and UTC bounds and
+the scoped awake-window evidence must remain explicit; no future Sleep or
+long-run transport guarantee follows ([Microsoft wait semantics](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)).
 The original root exit is distinct from the helper/capability outcome. Normal
 and abnormal root exit, cancellation, timeout, detached descendants, owner loss
 and unrelated-process preservation need actual scoped controls.

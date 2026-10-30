@@ -15,7 +15,8 @@ import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application
 import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
 import { selectSourceInventory, sourceIncluded } from "./lib/verification-source-inventory.mts";
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
-import { windowsOwnedProcessCapability, spawnWindowsOwnedProcess } from "./lib/windows-owned-process.mts";
+import { windowsOwnedProcessCapability, spawnWindowsOwnedProcess, requestWindowsClosureCheckpoint,
+  startWindowsClosureObservation, qualifyWindowsClosureEvidence } from "./lib/windows-owned-process.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -3479,6 +3480,340 @@ function verifyWindowsOwnedProcessContracts() {
     sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity, nativeBuildPublication };
 }
 
+/** Independent retained PROCESS handles prove abrupt closure without retaining a JOB handle. */
+async function verifyWindowsClosureAcceptanceControls() {
+  if (process.platform !== "win32") return { status: "NOT_APPLICABLE", platform: process.platform };
+  const directory = realpathSync(mkdtempSync(path.join(root, ".tmp-qa", "windows-closure-controls-")));
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const { runOwnedVerificationChild } = await import("./lib/isolated-public-verification.mts");
+  const sourceFile = ts.createSourceFile("verify-isolated-supabase.mts", readSource("scripts/verify-isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const shared = sourceFile.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "verifySharedChildControls");
+  assert.ok(shared);
+  const treeDeclarations: ts.VariableDeclaration[] = [];
+  const findTree = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(sourceFile) === "tree" && node.initializer && ts.isArrowFunction(node.initializer)
+    && node.initializer.getText(sourceFile).includes("25_000")) treeDeclarations.push(node); ts.forEachChild(node, findTree); };
+  findTree(shared); assert.equal(treeDeclarations.length, 1);
+  // Reuse the actual existing finite detached root/child/grandchild fixture.
+  const tree = new Function(ts.transpileModule("const " + treeDeclarations[0]!.getText(sourceFile) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + ";return tree;")() as (onReady?: string) => string;
+  type Identity = import("./lib/windows-owned-process.mts").WindowsJobIdentity;
+  type FailedResult = { code: number | null; signal: NodeJS.Signals | null; helperExit?: { code: number | null; signal: NodeJS.Signals | null };
+    nativeJobIdentity: Identity | null; nativeJobReceipt: unknown; cleanup: { status: string }; reason: string };
+  type Observation = ReturnType<typeof startWindowsClosureObservation>;
+  const children = new Set<ChildProcess>(), rawChildren = new Set<ChildProcess>(), observations = new Set<Observation>();
+  const rawEvidence = new Map<ChildProcess, { name: string; stdout: string; stderr: string }>();
+  const controllers = new Set<AbortController>(), outcomes: Promise<unknown>[] = [], proofs: Array<Record<string, unknown>> = [], completedControls: string[] = [];
+  let currentContext: Record<string, unknown> = {}, primaryFailure: unknown;
+  const context = { runDirectory: directory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
+  const launch = (name: string, args: string[], limitMs = 20_000) => {
+    const previous = new Set(children), controller = new AbortController(); controllers.add(controller);
+    const pending = runOwnedVerificationChild({ sourceDirectory: directory, context, children, signal: controller.signal }, args, { ...environment }, name, limitMs);
+    const outcome = pending.then(value => value, (error: unknown) => error); outcomes.push(outcome);
+    const helper = [...children].find(child => !previous.has(child)); assert.ok(helper);
+    return { name, helper, controller, outcome };
+  };
+  const close = (child: ChildProcess) => !child.pid || child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : new Promise<void>(done => child.once("close", () => done()));
+  const retainRaw = (child: ChildProcess, name: string) => {
+    rawChildren.add(child); const evidence = { name, stdout: "", stderr: "" }; rawEvidence.set(child, evidence);
+    child.stdout!.on("data", (bytes: Buffer) => { evidence.stdout = (evidence.stdout + String(bytes)).slice(0, 131_072); });
+    child.stderr!.on("data", (bytes: Buffer) => { evidence.stderr = (evidence.stderr + String(bytes)).slice(0, 131_072); });
+  };
+  const messages = (child: ChildProcess) => {
+    let output = ""; const waiters = new Set<() => void>();
+    const data = (bytes: Buffer) => { output += String(bytes); assert.ok(output.length <= 131_072, "Owned closure fixture output exceeded its bound."); for (const waiter of waiters) waiter(); };
+    child.stdout!.on("data", data);
+    return { next: (prefix: string) => new Promise<string>((done, reject) => {
+      const finish = (error?: Error, line?: string) => { clearTimeout(timer); waiters.delete(read); child.off("close", closed); child.off("error", failed); if (error) reject(error); else done(line!); };
+      const read = () => { const line = output.split("\n").slice(0, -1).find(row => row.startsWith(prefix)); if (line !== undefined) finish(undefined, line.slice(prefix.length)); };
+      const closed = () => finish(Error("Owned closure fixture closed before its required message.")), failed = () => finish(Error("Owned closure fixture failed before readiness."));
+      const timer = setTimeout(() => finish(Error("Owned closure fixture message exceeded its finite bound.")), 8_000);
+      waiters.add(read); child.once("close", closed); child.once("error", failed); read();
+    }), dispose: () => child.stdout!.off("data", data) };
+  };
+  const identity = (helper: ChildProcess): Identity => {
+    const value = (helper as ChildProcess & { verificationWindowsIdentity(): Identity | null }).verificationWindowsIdentity(); assert.ok(value); return value;
+  };
+  const checkpoint = async (helper: ChildProcess) => {
+    const value = await requestWindowsClosureCheckpoint(helper);
+    assert.equal(value.checkpoint.membershipCompleteAtCapture, true); assert.equal(value.checkpoint.jobHandlesExported, 0);
+    assert.equal(value.checkpoint.jobHandleNonInheritable, true); assert.equal(value.checkpoint.effectiveLimitFlags, 0x2000); return value;
+  };
+  const observe = (owner: Identity, checkpointPath: string, observationPath: string, deadlineMs = 6_000) => {
+    const value = startWindowsClosureObservation({ identity: owner, checkpointPath, observationPath, deadlineMs, env: { ...environment } }); observations.add(value); return value;
+  };
+  const cancelled = async (job: ReturnType<typeof launch>) => {
+    job.controller.abort(Error("Controlled final cleanup of this exact owned job"));
+    const error = await job.outcome; assert.ok(error instanceof Error);
+    const retained = (error as Error & { childResult: FailedResult }).childResult;
+    assert.equal(retained.reason, "cancelled"); assert.equal(retained.cleanup.status, "PASS");
+    const receipt = retained.nativeJobReceipt as import("./lib/windows-owned-process.mts").WindowsJobReceipt;
+    assert.equal(receipt.cleanup.activeProcessesAfterCleanup, 0); assert.deepEqual(receipt.cleanup.activeProcessIdsAfterCleanup, []); return retained;
+  };
+  const control = async (name: string, run: () => Promise<void>) => {
+    currentContext = { control: name, startedUtc: new Date().toISOString() };
+    try {
+      await run(); completedControls.push(name); cases.push("Windows closure acceptance " + name);
+      writeFileSync(path.join(directory, "control-progress-" + completedControls.length + ".json"), JSON.stringify({ schema: 1, completedControls, proofs, currentContext }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    }
+    catch (error) {
+      try { writeFileSync(path.join(directory, "control-failure.json"), JSON.stringify({ control: name, message: error instanceof Error ? error.message : String(error),
+        completedControls, proofs, currentContext, originalFailurePreserved: true }, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
+      catch (evidenceError) { if (error instanceof Error) Object.defineProperty(error, "controlFailureEvidenceError", { value: evidenceError }); }
+      throw error;
+    }
+  };
+  let qualifiedInput: Parameters<typeof qualifyWindowsClosureEvidence>[0] | undefined;
+  try {
+    for (const kind of ["owner-death", "last-handle-close"] as const) await control(kind + " retains complete live native handles before closure and signals them within one deadline", async () => {
+      const sentinel = spawn(process.execPath, ["-e", "process.stdin.setEncoding('utf8');process.stdin.on('data',v=>process.stdout.write('echo:'+v));process.stdout.write('sentinel-ready\\n');setTimeout(()=>process.exit(0),25000);"],
+        { cwd: directory, env: { ...environment }, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] }); retainRaw(sentinel, kind + "-sentinel");
+      const sentinelMessages = messages(sentinel); await sentinelMessages.next("sentinel-ready");
+      const jobB = launch(kind + "-independent-b", ["-e", tree()]), bMessages = messages(jobB.helper);
+      const treeB = JSON.parse(await bMessages.next("tree:")) as { root: { pid: number }; middle: { pid: number }; leaf: { pid: number } };
+      const bIdentity = identity(jobB.helper);
+      let owner: ChildProcess | undefined, jobA: ReturnType<typeof launch> | undefined, ownerMessages: ReturnType<typeof messages>;
+      let aIdentity: Identity, aCheckpoint: Awaited<ReturnType<typeof requestWindowsClosureCheckpoint>>;
+      let treeA: { root: { pid: number }; middle: { pid: number }; leaf: { pid: number } };
+      if (kind === "owner-death") {
+        const ownerDirectory = realpathSync(mkdtempSync(path.join(directory, "nested-owner-"))), ownerHref = new URL("./lib/isolated-public-verification.mts", import.meta.url).href;
+        const nativeHref = new URL("./lib/windows-owned-process.mts", import.meta.url).href;
+        const code = `const{runOwnedVerificationChild}=await import(${JSON.stringify(ownerHref)});const{requestWindowsClosureCheckpoint}=await import(${JSON.stringify(nativeHref)});const env=${JSON.stringify(environment)},children=new Set();const pending=runOwnedVerificationChild({sourceDirectory:${JSON.stringify(directory)},context:{runDirectory:${JSON.stringify(ownerDirectory)},sanitize:v=>v,cleanEnvironment:()=>({...env})},children,signal:new AbortController().signal},['-e',${JSON.stringify(tree())}],env,'closure-owner-a',20000);pending.catch(()=>{});const child=[...children][0];let output='';await new Promise((done,reject)=>{child.stdout.on('data',v=>{process.stdout.write(v);output+=v;if(output.includes('tree:'))done();});child.once('error',reject);});const proof=await requestWindowsClosureCheckpoint(child);process.stdout.write('checkpoint:'+JSON.stringify(proof)+'\\n');setTimeout(()=>process.exit(17),22000);`;
+        owner = spawn(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", code], { cwd: root, env: { ...environment }, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); retainRaw(owner, "nested-owner");
+        ownerMessages = messages(owner); aCheckpoint = JSON.parse(await ownerMessages.next("checkpoint:")) as typeof aCheckpoint;
+        treeA = JSON.parse(await ownerMessages.next("tree:")) as typeof treeA;
+        aIdentity = JSON.parse(readFileSync(path.join(ownerDirectory, "public-closure-owner-a.native-identity.json"), "utf8")) as Identity;
+      } else {
+        jobA = launch("closure-last-a", ["-e", tree()]); ownerMessages = messages(jobA.helper); treeA = JSON.parse(await ownerMessages.next("tree:")) as typeof treeA;
+        aIdentity = identity(jobA.helper); aCheckpoint = await checkpoint(jobA.helper);
+      }
+      currentContext = { ...currentContext, nativeJobIdentity: aIdentity, checkpoint: aCheckpoint, fixtureTree: treeA, independentIdentity: bIdentity };
+      assert.notEqual(aIdentity.jobToken, bIdentity.jobToken);
+      assert.equal(aCheckpoint.checkpoint.activeProcesses, aCheckpoint.checkpoint.members.length);
+      assert.equal(aCheckpoint.checkpoint.activeProcesses, aCheckpoint.checkpoint.processIds.length);
+      assert.ok([treeA.root.pid, treeA.middle.pid, treeA.leaf.pid].every(pid => aCheckpoint.checkpoint.processIds.includes(pid)), "Every actual detached fixture member belongs to the complete native snapshot.");
+      const observationPath = path.join(path.dirname(aCheckpoint.checkpointPath), kind + ".observation.json"), observer = observe(aIdentity, aCheckpoint.checkpointPath, observationPath);
+      const ready = await observer.ready; currentContext = { ...currentContext, ready }; assert.equal(ready.allHandlesLive, true); assert.equal(ready.processHandlesOnly, true);
+      const target = owner ?? jobA!.helper, targetClosed = close(target); assert.equal(target.kill(), true); await targetClosed;
+      const trigger = { retainedChildPid: target.pid, code: target.exitCode, signal: target.signalCode, triggerUtc: new Date().toISOString() };
+      currentContext = { ...currentContext, trigger };
+      const closure = await observer.completed; currentContext = { ...currentContext, closure }; assert.equal(closure.status, "PASS"); assert.equal(closure.liveProcesses, 0); assert.equal(closure.jobQueriedAfterClosure, false);
+      assert.equal(closure.certificate.observation.allMembersSignaled, true); assert.equal(closure.certificate.observation.helperSignaled, true);
+      assert.deepEqual(closure.certificate.observation.members.map(member => member.pid).sort((a, b) => a - b), [...aCheckpoint.checkpoint.processIds].sort((a, b) => a - b));
+      assert.equal(closure.certificate.jobHandlesRetained, 0); assert.equal(closure.certificate.allObservationHandlesClosed, true);
+      assert.equal(closure.certificate.processAccessMask, 0x101000); assert.equal(closure.certificate.processHandlesInheritable, false);
+      assert.equal(closure.certificate.observationHandleCount, aCheckpoint.checkpoint.members.length + 1);
+      assert.equal(closure.certificate.closedObservationHandleCount, closure.certificate.observationHandleCount);
+      qualifiedInput = { identity: aIdentity, checkpoint: aCheckpoint.checkpoint, ready, certificate: closure.certificate,
+        observerExit: { code: observer.child.exitCode, signal: observer.child.signalCode } };
+      assert.equal(qualifyWindowsClosureEvidence(qualifiedInput).status, "PASS");
+      let executionEvidence: unknown;
+      if (jobA) {
+        const error = await jobA.outcome; assert.ok(error instanceof Error && /cleanup failed/u.test(error.message));
+        const retained = (error as Error & { childResult: FailedResult }).childResult;
+        currentContext = { ...currentContext, originalExecutionFailure: { message: error.message, childResult: retained } };
+        assert.equal(retained.nativeJobReceipt, null); assert.equal(retained.cleanup.status, "FAIL"); assert.equal(retained.code, null); assert.equal(retained.signal, null);
+        assert.deepEqual(retained.helperExit, { code: jobA.helper.exitCode, signal: jobA.helper.signalCode }); children.delete(jobA.helper); executionEvidence = retained;
+      } else {
+        const receiptPath = aCheckpoint.checkpointPath.replace(/\.native-identity\.json\.closure\.json$/u, ".native-result.json");
+        let receipt: unknown = null; if (existsSync(receiptPath)) { try { receipt = JSON.parse(readFileSync(receiptPath, "utf8")); } catch { /* Original corrupt bytes remain in the owned evidence directory. */ } }
+        executionEvidence = { nativeJobReceipt: receipt, rootExit: receipt === null ? { code: null, signal: null } : "retained in native receipt",
+          nativeTerminalReceiptAvailable: receipt !== null, outerRunLostWithOwner: true, executionQualified: false };
+      }
+      // A fresh native capture after A closes proves independent B is still an actual live job.
+      const bCheckpoint = await checkpoint(jobB.helper);
+      assert.equal(bCheckpoint.checkpoint.activeProcesses, bCheckpoint.checkpoint.members.length);
+      assert.equal(bCheckpoint.checkpoint.activeProcesses, bCheckpoint.checkpoint.processIds.length);
+      assert.ok([treeB.root.pid, treeB.middle.pid, treeB.leaf.pid].every(pid => bCheckpoint.checkpoint.processIds.includes(pid)), "Independent B retains every fixture member within its complete native snapshot.");
+      sentinel.stdin!.write(kind + "-after-a\n"); assert.equal(await sentinelMessages.next("echo:"), kind + "-after-a");
+      assert.equal(sentinel.exitCode, null); assert.equal(sentinel.signalCode, null);
+      const bResult = await cancelled(jobB);
+      proofs.push({ control: kind, trigger, checkpoint: aCheckpoint, ready, closure, observationPath, executionEvidence,
+        sentinel: { pid: sentinel.pid, respondedAfterClosure: true }, independentJob: { identity: bIdentity, checkpoint: bCheckpoint, result: bResult } });
+      sentinelMessages.dispose(); bMessages.dispose(); ownerMessages.dispose(); const sentinelClosed = close(sentinel); sentinel.kill(); await sentinelClosed;
+    });
+    await control("actual observer timeout retains BLOCKED evidence while its owned job remains live", async () => {
+      const job = launch("closure-observer-timeout", ["-e", tree()]), output = messages(job.helper); await output.next("tree:");
+      const owner = identity(job.helper), captured = await checkpoint(job.helper), observationPath = path.join(directory, "observer-timeout.json");
+      const observer = observe(owner, captured.checkpointPath, observationPath, 500); await observer.ready;
+      const error = await observer.completed.then(value => value, (failure: unknown) => failure); currentContext = { ...currentContext, checkpoint: captured, observationPath,
+        originalObserverFailure: error instanceof Error ? { message: error.message, observation: (error as Error & { closureObservation?: unknown }).closureObservation } : error }; assert.ok(error instanceof Error);
+      const retained = (error as Error & { closureObservation: { certificate: { status: string }; observerExit: { code: number | null }; observationPath: string } }).closureObservation;
+      assert.equal(retained.certificate.status, "BLOCKED"); assert.notEqual(retained.observerExit.code, 0); assert.equal(retained.observationPath, observationPath);
+      assert.equal(job.helper.exitCode, null); assert.equal(job.helper.signalCode, null);
+      const result = await cancelled(job); output.dispose(); proofs.push({ control: "observer_timeout", retained, result });
+    });
+    await control("breakaway is denied or the suspended candidate remains in the exact private ancestor job", async () => {
+      const capability = windowsOwnedProcessCapability(); assert.ok(capability.status === "PASS");
+      const readyPath = path.join(directory, "breakaway-ready.json"), releasePath = readyPath + ".release.json";
+      const program = `const{spawnSync}=require('node:child_process');const p=spawnSync(${JSON.stringify(capability.native.executable)},['--probe-breakaway',process.execPath,${JSON.stringify(readyPath)}],{encoding:'utf8',windowsHide:true,timeout:8000});process.stdout.write('probe:'+JSON.stringify({status:p.status,signal:p.signal,stdout:p.stdout,stderr:p.stderr,error:p.error?{code:p.error.code,message:p.error.message}:null})+'\\n');setTimeout(()=>process.exit(p.status===0?0:19),10000);`;
+      const job = launch("closure-breakaway-ancestor", ["-e", program]), output = messages(job.helper), deadline = performance.now() + 3000;
+      let rawReady = "", ready: { schema: number; kind: string; challenge: string; createdSuspended: boolean; win32Code: number;
+        candidatePid: number | null; candidateCreationTimeFileTime: string | null; probePid: number; probeCreationTimeFileTime: string; rootResumed: boolean;
+        guard: { privateUnnamedJob: boolean; jobHandleNonInheritable: boolean; effectiveLimitFlags: number; ownerAssignedBeforeResume: boolean; jobHandlesExported: number } } | undefined;
+      let captured: Awaited<ReturnType<typeof requestWindowsClosureCheckpoint>> | undefined, membershipFailure: unknown;
+      try {
+        while (!ready) {
+          if (existsSync(readyPath)) {
+            rawReady = readFileSync(readyPath, "utf8"); currentContext = { ...currentContext, readyPath, rawReady };
+            try { ready = JSON.parse(rawReady) as typeof ready; } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+          }
+          if (!ready) { assert.ok(performance.now() < deadline, "Native breakaway readiness exceeded its finite bound."); await new Promise<void>(done => setTimeout(done, 10)); }
+        }
+        currentContext = { ...currentContext, readiness: ready, nativeBuild: capability.native };
+        assert.equal(ready.schema, 1); assert.equal(ready.kind, "windows-job-breakaway-ready"); assert.match(ready.challenge, /^[a-fA-F0-9-]{32,36}$/u);
+        assert.equal(ready.rootResumed, false); assert.equal(ready.guard.privateUnnamedJob, true); assert.equal(ready.guard.jobHandleNonInheritable, true);
+        assert.equal(ready.guard.effectiveLimitFlags, 0x2000); assert.equal(ready.guard.jobHandlesExported, 0);
+        captured = await checkpoint(job.helper); currentContext = { ...currentContext, checkpoint: captured };
+        const probeMember = captured.checkpoint.members.find(member => member.pid === ready!.probePid);
+        assert.ok(probeMember); assert.equal(probeMember.creationTimeFileTime, ready.probeCreationTimeFileTime, "The native probe itself belongs to this exact private ancestor job.");
+        if (ready.createdSuspended) {
+          assert.equal(ready.win32Code, 0); assert.equal(ready.guard.ownerAssignedBeforeResume, true); assert.ok(ready.candidatePid && ready.candidateCreationTimeFileTime);
+          const candidate = captured.checkpoint.members.find(member => member.pid === ready!.candidatePid);
+          assert.ok(candidate, "The attempted breakaway candidate must remain in the exact owner's native job snapshot.");
+          assert.equal(candidate.creationTimeFileTime, ready.candidateCreationTimeFileTime, "PID reuse or a different native creation cannot satisfy ancestor membership.");
+        } else {
+          assert.equal(ready.win32Code, 5); assert.equal(ready.candidatePid, null); assert.equal(ready.candidateCreationTimeFileTime, null); assert.equal(ready.guard.ownerAssignedBeforeResume, false);
+        }
+      } catch (error) { membershipFailure = error; currentContext = { ...currentContext, membershipFailure: error instanceof Error ? error.message : String(error) }; }
+      finally {
+        // Even a failed ancestor assertion releases only this exact probe's guard for disposal.
+        if (ready && typeof ready.challenge === "string") writeFileSync(releasePath, JSON.stringify({ schema: 1, challenge: ready.challenge }) + "\n", { flag: "wx", mode: 0o600 });
+      }
+      const rawResponse = await output.next("probe:"); currentContext = { ...currentContext, rawResponse };
+      const response = JSON.parse(rawResponse) as { status: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string; error: unknown };
+      const probe = JSON.parse(response.stdout.trim()) as { schema: number; kind: string; status: string; expectedWin32Code: number; win32Code: number;
+        createdSuspended: boolean; rootResumed: boolean; allProbeHandlesClosed: boolean; nativeFailure: unknown;
+        challenge: string; candidatePid: number | null; candidateCreationTimeFileTime: string | null; probePid: number; probeCreationTimeFileTime: string;
+        releaseObserved: boolean; readyWritten: boolean; ancestorContainmentQualified: boolean;
+        releaseWait: { deadlineMs: number; elapsedMs: number; wallElapsedMs: number };
+        guard: { processTreeVerified: boolean; activeProcessesAfterCleanup: number; activeProcessIdsAfterCleanup: number[]; jobHandleClosed: boolean } };
+      currentContext = { ...currentContext, response, terminal: probe };
+      const result = await cancelled(job); output.dispose(); currentContext = { ...currentContext, result };
+      assert.equal(response.status, 0); assert.equal(response.signal, null); assert.equal(response.error, null);
+      assert.equal(probe.schema, 1); assert.equal(probe.kind, "windows-job-breakaway-negative"); assert.equal(probe.expectedWin32Code, 5);
+      assert.equal(probe.rootResumed, false); assert.equal(probe.allProbeHandlesClosed, true); assert.equal(probe.nativeFailure, null);
+      assert.equal(probe.guard.processTreeVerified, true); assert.equal(probe.guard.activeProcessesAfterCleanup, 0); assert.deepEqual(probe.guard.activeProcessIdsAfterCleanup, []); assert.equal(probe.guard.jobHandleClosed, true);
+      assert.ok(ready && captured); assert.equal(probe.createdSuspended, ready.createdSuspended); assert.equal(probe.win32Code, ready.win32Code);
+      assert.equal(probe.challenge, ready.challenge); assert.equal(probe.candidatePid, ready.candidatePid); assert.equal(probe.candidateCreationTimeFileTime, ready.candidateCreationTimeFileTime);
+      assert.equal(probe.probePid, ready.probePid); assert.equal(probe.probeCreationTimeFileTime, ready.probeCreationTimeFileTime);
+      assert.equal(probe.readyWritten, true); assert.equal(probe.releaseObserved, true); assert.equal(probe.ancestorContainmentQualified, false);
+      assert.equal(probe.releaseWait.deadlineMs, 2500); assert.ok(Number.isFinite(probe.releaseWait.elapsedMs) && probe.releaseWait.elapsedMs >= 0 && probe.releaseWait.elapsedMs <= 2500);
+      assert.ok(Number.isFinite(probe.releaseWait.wallElapsedMs) && probe.releaseWait.wallElapsedMs >= 0 && probe.releaseWait.wallElapsedMs <= 2500);
+      assert.equal(probe.status, ready.createdSuspended ? "OBSERVED_SUSPENDED" : "PASS");
+      if (membershipFailure) throw membershipFailure;
+      proofs.push({ control: "native_breakaway_private_ancestor", rawReady, readiness: ready, checkpoint: captured, response, probe, result,
+        privateAncestorMembershipVerified: true, candidateAncestorMembershipVerified: ready.createdSuspended, deniedWithAccessDenied5: !ready.createdSuspended,
+        disposalGuardIsNotAncestorEvidence: true, originalStrictError5FailureRetained: true,
+        contractSources: ["https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs", "https://github.com/nodejs/node/blob/v24.14.0/deps/uv/src/win/process.c"] });
+    });
+    await control("corrupt ordinary native receipt remains an execution and cleanup failure", async () => {
+      const job = launch("closure-corrupt-receipt", ["-e", "process.stdout.write('corrupt-ready\\n');setTimeout(()=>process.exit(0),1500);"]), output = messages(job.helper); await output.next("corrupt-ready");
+      const receiptPath = path.join(directory, "public-closure-corrupt-receipt.native-result.json"); writeFileSync(receiptPath, "{", { flag: "wx", mode: 0o600 });
+      const error = await job.outcome; assert.ok(error instanceof Error && /cleanup failed/u.test(error.message));
+      const retained = (error as Error & { childResult: FailedResult }).childResult;
+      currentContext = { ...currentContext, receiptPath, originalExecutionFailure: { message: error.message, childResult: retained } };
+      assert.equal(retained.cleanup.status, "FAIL"); assert.equal(retained.nativeJobReceipt, null); assert.equal(retained.code, null); assert.equal(retained.signal, null);
+      assert.equal(readFileSync(receiptPath, "utf8"), "{"); assert.ok(job.helper.exitCode !== null || job.helper.signalCode !== null); children.delete(job.helper);
+      output.dispose(); proofs.push({ control: "corrupt_ordinary_receipt", expectedFailure: true, result: retained, receiptPath });
+    });
+    await control("actual closure qualifier rejects malformed stale incomplete and unbounded evidence", async () => {
+      assert.ok(qualifiedInput); const original = structuredClone(qualifiedInput);
+      const record = (value: unknown) => { assert.ok(value && typeof value === "object" && !Array.isArray(value)); return value as Record<string, unknown>; };
+      const variants: Array<[string, (value: Parameters<typeof qualifyWindowsClosureEvidence>[0]) => void]> = [
+        ["corrupt checkpoint", value => { value.checkpoint = null; }],
+        ["mismatched creation identity", value => { record(value.checkpoint).rootCreationTimeFileTime = "100000000000000000"; }],
+        ["inheritable job handle", value => { value.identity.jobHandleNonInheritable = false; }],
+        ["breakaway enabled", value => { record(value.checkpoint).effectiveLimitFlags = 0x2800; }],
+        ["missing closure certificate", value => { value.certificate = null; }],
+        ["already dead at readiness", value => { record(value.ready).allHandlesLive = false; }],
+        ["no independent readiness", value => { value.ready = null; }],
+        ["helper exit not observed", value => { record(record(value.certificate).observation).helperSignaled = false; }],
+        ["observer deadline exceeded", value => { record(record(value.certificate).observation).elapsedMs = 6001; }],
+        ["UTC interval exceeded its deadline", value => { const observation = record(record(value.certificate).observation); observation.endedUtc = new Date(Date.parse(String(observation.startedUtc)) + 6001).toISOString().replace(/(\.\d{3})Z$/u, "$10000Z"); }],
+        ["foreign job token", value => { record(value.certificate).jobToken = "11111111-1111-4111-8111-111111111111"; }],
+        ["observer did not exit successfully", value => { value.observerExit = { code: null, signal: null }; }],
+        ["observer retained job handle", value => { record(value.certificate).jobHandlesRetained = 1; }],
+        ["observer requested termination rights", value => { record(value.certificate).processAccessMask = 0x1fffff; }],
+        ["observer process handle is inheritable", value => { record(value.certificate).processHandlesInheritable = true; }],
+        ["observer left a process handle open", value => { const certificate = record(value.certificate); certificate.closedObservationHandleCount = Number(certificate.observationHandleCount) - 1; }],
+        ["member never signaled", value => { const observation = record(record(value.certificate).observation); const members = observation.members as Array<Record<string, unknown>>; members[0]!.signaled = false; }],
+        ["coherent numeric helper FILETIME cannot replace native strings", value => { const checkpoint = record(value.checkpoint), certificate = record(value.certificate);
+          checkpoint.helperCreationTimeFileTime = Number(checkpoint.helperCreationTimeFileTime); certificate.helperCreationTimeFileTime = checkpoint.helperCreationTimeFileTime; }],
+        ["coherent numeric member FILETIME cannot replace native strings", value => { const members = record(value.checkpoint).members as Array<Record<string, unknown>>;
+          const member = members.find(row => row.pid !== value.identity.rootPid); assert.ok(member); member.creationTimeFileTime = Number(member.creationTimeFileTime);
+          const observed = record(record(value.certificate).observation).members as Array<Record<string, unknown>>;
+          const same = observed.find(row => row.pid === member.pid); assert.ok(same); same.creationTimeFileTime = member.creationTimeFileTime; }],
+        ["numeric capture UTC cannot be coerced into native time", value => { record(value.checkpoint).capturedUtc = 0; }],
+        ["parseable noncanonical capture UTC is rejected", value => { const checkpoint = record(value.checkpoint); checkpoint.capturedUtc = new Date(String(checkpoint.capturedUtc)).toUTCString(); }],
+        ["parseable noncanonical certificate UTC is rejected", value => { const observation = record(record(value.certificate).observation); observation.startedUtc = new Date(String(observation.startedUtc)).toUTCString(); }],
+      ];
+      for (const [name, mutate] of variants) { const value = structuredClone(original); mutate(value); assert.throws(() => qualifyWindowsClosureEvidence(value), error => error instanceof Error, name); }
+      assert.deepEqual(qualifiedInput, original); assert.equal(qualifyWindowsClosureEvidence(original).status, "PASS");
+      const checkpointPath = (proofs[0]!.checkpoint as Awaited<ReturnType<typeof requestWindowsClosureCheckpoint>>).checkpointPath;
+      for (const deadlineMs of [49, 6001, Number.NaN]) assert.throws(() => startWindowsClosureObservation({ identity: original.identity, checkpointPath,
+        observationPath: path.join(path.dirname(checkpointPath), "must-not-allocate.json"), deadlineMs, env: { ...environment } }), /finite bounded deadline/u);
+      assert.throws(() => requestWindowsClosureCheckpoint({} as ChildProcess), /registered native child/u);
+      proofs.push({ control: "actual_qualifier_negative_vectors", scope: "pure_input_qualification_vectors", nativeLifecycleClaimed: false,
+        positive: 2, negative: variants.map(([name]) => name), invalidDeadlineNoAllocation: 3, unregisteredChildNoAllocation: true });
+    });
+    await control("actual observer declaration rejects its deadline even when the retained child never closes", async () => {
+      assert.ok(qualifiedInput);
+      const nativeFile = "scripts/lib/windows-owned-process.mts", nativeSource = ts.createSourceFile(nativeFile, readSource(nativeFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const actual = ["closureFileTime", "closureUtcMillis", "closureCheckpoint", "startWindowsClosureObservation"].map(name => {
+        const node = nativeSource.statements.find((row): row is ts.FunctionDeclaration => ts.isFunctionDeclaration(row) && row.name?.text === name);
+        assert.ok(node); return node.getText(nativeSource).replace(/^export /u, "");
+      }).join("\n");
+      let kills = 0, allocations = 0, serial = 0;
+      const timers = new Map<number, { run: () => void; delay: number }>();
+      const fake = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), exitCode: null, signalCode: null,
+        kill: () => { kills++; return true; } });
+      const checkpointPath = path.join(directory, "controlled-checkpoint-no-file.json"), observationPath = path.join(directory, "controlled-observation-no-file.json");
+      const ports = { assert, dirname: path.dirname, resolve: path.resolve,
+        nativeBuild: () => ({ executable: "controlled-native-no-allocation.exe" }),
+        readFileSync: (file: string) => { assert.equal(file, checkpointPath); return JSON.stringify(qualifiedInput!.checkpoint); },
+        lstatSync: (file: string) => { assert.equal(file, checkpointPath); return { isFile: () => true }; },
+        existsSync: (file: string) => { assert.equal(file, observationPath); return false; }, realpathSync: (file: string) => file,
+        spawn: (executable: string, args: string[]) => { allocations++; assert.equal(executable, "controlled-native-no-allocation.exe"); assert.deepEqual(args, ["--observe-close", checkpointPath, observationPath, "50"]); return fake; },
+        qualifyWindowsClosureEvidence,
+        setTimeout: (run: () => void, delay: number) => { const id = ++serial; timers.set(id, { run, delay }); return id; },
+        clearTimeout: (id: number) => { timers.delete(id); } };
+      const actualStart = new Function(...Object.keys(ports), ts.transpileModule(actual, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+        + ";return startWindowsClosureObservation;")(...Object.values(ports)) as typeof startWindowsClosureObservation;
+      const observer = actualStart({ identity: qualifiedInput.identity, checkpointPath, observationPath, deadlineMs: 50, env: { NODE_ENV: "test" } });
+      fake.stdout.emit("data", Buffer.from(JSON.stringify(qualifiedInput.ready) + "\n")); await observer.ready;
+      const outcome = observer.completed.then(value => value, (error: unknown) => error);
+      const timer = [...timers.values()].find(value => value.delay === 2050); assert.ok(timer); timer.run();
+      let wall: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const error = await Promise.race([outcome, new Promise<never>((_, reject) => { wall = setTimeout(() => reject(Error("Controlled actual observer deadline did not settle.")), 1000); })]);
+        assert.ok(error instanceof Error && /independent deadline/u.test(error.message));
+        const retained = (error as Error & { closureObservation: { cleanupPending: boolean; observerExit: { code: number | null; signal: NodeJS.Signals | null } } }).closureObservation;
+        assert.equal(retained.cleanupPending, true); assert.deepEqual(retained.observerExit, { code: null, signal: null }); assert.equal(kills, 1);
+      } finally { if (wall) clearTimeout(wall); }
+      const cancelled = observer.cancel(), cancellation = assert.rejects(cancelled, /cancellation did not close/u);
+      const cancellationTimer = [...timers.values()].find(value => value.delay === 2000); assert.ok(cancellationTimer); cancellationTimer.run(); await cancellation;
+      assert.equal(kills, 2); assert.equal(allocations, 1); assert.equal(timers.size, 0);
+      proofs.push({ control: "actual_observer_no_close_deadline", deadlineRejected: true, cleanupPendingPreserved: true, cancellationBoundRejected: true,
+        retainedHandleKillAttempts: kills, operatingSystemAllocations: 0, copiedRuntimeImplementation: false });
+    });
+    const result = { status: "PASS", scope: "affected_native_handle_closure_acceptance_only", directory, controls: completedControls.length, cases: completedControls, proofs,
+      pidAbsenceUsedAsClosureProof: false, nativeJobHandlesRetainedByObserver: 0, originalExecutionReceiptsRemainRequired: true };
+    writeFileSync(path.join(directory, "acceptance-results.json"), JSON.stringify(result, null, 2) + "\n", { flag: "wx", mode: 0o600 }); return result;
+  } catch (error) { primaryFailure = error; throw error; }
+  finally {
+    for (const controller of controllers) if (!controller.signal.aborted) controller.abort(Error("Final cleanup of owned acceptance fixture"));
+    for (const child of rawChildren) if (child.exitCode === null && child.signalCode === null) child.kill();
+    await Promise.allSettled(outcomes); await Promise.allSettled([...rawChildren].map(close));
+    await Promise.allSettled([...observations].map(observer => observer.cancel()));
+    try {
+      for (const evidence of rawEvidence.values()) for (const stream of ["stdout", "stderr"] as const)
+        writeFileSync(path.join(directory, evidence.name + "." + stream + ".log"), evidence[stream], { flag: "wx", mode: 0o600 });
+      writeFileSync(path.join(directory, "control-final-progress.json"), JSON.stringify({ schema: 1, completedControls, proofs, currentContext,
+        primaryFailure: primaryFailure instanceof Error ? primaryFailure.message : null }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+    } catch (evidenceError) { if (primaryFailure instanceof Error) Object.defineProperty(primaryFailure, "finalProgressEvidenceError", { value: evidenceError }); else throw evidenceError; }
+  }
+}
+
 /** Actual owned Node children exercise the shared lifecycle without Browser/DB transports. */
 async function verifySharedChildControls() {
   const launchWindows = (options: Parameters<typeof spawnWindowsOwnedProcess>[0]) => {
@@ -3721,6 +4056,7 @@ async function verifySharedChildControls() {
       assert.equal(existsSync(path.join(directory, "public-spawn-write-failure.stdout.log")), false);
     });
     if (process.platform === "win32") {
+      runtimeProofs.push({ control: "windows_native_independent_closure_acceptance", ...await verifyWindowsClosureAcceptanceControls() });
       const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; } };
       type NativeIdentity = import("./lib/windows-owned-process.mts").WindowsJobIdentity;
       type NativeReceipt = import("./lib/windows-owned-process.mts").WindowsJobReceipt;

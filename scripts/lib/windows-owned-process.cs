@@ -25,6 +25,7 @@ internal static class WindowsOwnedProcess
     private static readonly object ControlLock = new object();
     private static string controlReason;
     private static long controlStartedTicks;
+    private static int checkpointState;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SecurityAttributes { public uint Length; public IntPtr Descriptor; [MarshalAs(UnmanagedType.Bool)] public bool Inherit; }
@@ -122,6 +123,8 @@ internal static class WindowsOwnedProcess
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetHandleInformation(IntPtr handle, out uint flags);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint pid);
 
     private sealed class NativeFailure : Exception {
         public readonly string Stage;
@@ -165,6 +168,10 @@ internal static class WindowsOwnedProcess
                     }
                     Dictionary<string, object> message = new JavaScriptSerializer().DeserializeObject(line.ToString()) as Dictionary<string, object>;
                     object command, reason;
+                    if (message != null && message.Count == 1 && message.TryGetValue("command", out command) && command is string && (string)command == "checkpoint") {
+                        if (Interlocked.CompareExchange(ref checkpointState, 1, 0) != 0) { RequestControl("invalid_control"); return; }
+                        line.Length = 0; continue;
+                    }
                     if (message == null || message.Count != 2 || !message.TryGetValue("command", out command) || !message.TryGetValue("reason", out reason)
                         || !(command is string) || (string)command != "cancel" || !(reason is string)
                         || !new HashSet<string>(new string[] { "cancelled", "timeout", "output_limit", "owner_shutdown" }).Contains((string)reason)) {
@@ -208,7 +215,7 @@ internal static class WindowsOwnedProcess
         if (!QueryAccounting(job, 1, out value, (uint)Marshal.SizeOf(typeof(BasicAccounting)), IntPtr.Zero)) throw Error("query_accounting");
         return value;
     }
-    private static long[] ProcessIds(IntPtr job) {
+    private static long[] ProcessIds(IntPtr job, bool requireComplete = false) {
         int capacity = 16;
         for (int attempt = 0; attempt < 8; attempt++) {
             int size = checked(8 + capacity * IntPtr.Size); IntPtr memory = Marshal.AllocHGlobal(size);
@@ -223,6 +230,12 @@ internal static class WindowsOwnedProcess
                 }
                 uint count = unchecked((uint)Marshal.ReadInt32(memory, 4));
                 if (count > capacity) throw new NativeFailure("job_member_count", 0);
+                if (requireComplete && unchecked((uint)Marshal.ReadInt32(memory, 0)) != count) {
+                    uint assignedCount = unchecked((uint)Marshal.ReadInt32(memory, 0));
+                    capacity = Math.Max(capacity * 2, checked((int)assignedCount));
+                    if (capacity > 4096) throw new NativeFailure("job_member_read_bound", 0);
+                    continue;
+                }
                 long[] values = new long[count];
                 for (int i = 0; i < values.Length; i++) values[i] = IntPtr.Size == 8 ? Marshal.ReadInt64(memory, 8 + i * IntPtr.Size) : (long)unchecked((uint)Marshal.ReadInt32(memory, 8 + i * IntPtr.Size));
                 return values;
@@ -244,7 +257,363 @@ internal static class WindowsOwnedProcess
     }
     private static void Remember(ref NativeFailure failure, NativeFailure next) { if (failure == null) failure = next; }
 
+    private sealed class ObservedProcess {
+        public uint Pid;
+        public string Creation;
+        public IntPtr Handle;
+        public bool Signaled;
+        public long? Code;
+    }
+    private static string CreationTime(IntPtr process, string stage) {
+        FileTime creation, exit, kernel, user;
+        if (!GetProcessTimes(process, out creation, out exit, out kernel, out user)) throw Error(stage);
+        long value = unchecked((long)(((ulong)creation.High << 32) | creation.Low));
+        if (value <= 0) throw new NativeFailure(stage, 0);
+        return value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+    private static ObservedProcess OpenObserved(uint pid, string expectedCreation, List<ObservedProcess> opened) {
+        // Observation never obtains a job handle, termination rights, or inherited handles.
+        IntPtr handle = OpenProcess(0x00101000, false, pid);
+        if (handle == IntPtr.Zero) throw Error("observation_open_process");
+        ObservedProcess observed = new ObservedProcess { Pid = pid, Handle = handle }; opened.Add(observed);
+        uint flags;
+        if (!GetHandleInformation(handle, out flags)) throw Error("observation_handle_flags");
+        if ((flags & 1) != 0) throw new NativeFailure("observation_inherited_handle", 0);
+        observed.Creation = CreationTime(handle, "observation_creation_time");
+        if (expectedCreation != null && observed.Creation != expectedCreation) throw new NativeFailure("observation_identity_mismatch", 0);
+        if (RootExited(handle)) throw new NativeFailure("observation_not_live", 0);
+        return observed;
+    }
+    private static bool SameIds(long[] first, long[] second) {
+        if (first.Length != second.Length) return false;
+        for (int i = 0; i < first.Length; i++) if (first[i] != second[i]) return false;
+        return true;
+    }
+    private static long[] CompleteIds(IntPtr job, uint active) {
+        long[] ids = ProcessIds(job, true); Array.Sort(ids);
+        if (ids.Length != active || ids.Length == 0) throw new NativeFailure("checkpoint_incomplete_membership", 0);
+        for (int i = 0; i < ids.Length; i++)
+            if (ids[i] <= 0 || ids[i] > UInt32.MaxValue || (i > 0 && ids[i] == ids[i - 1])) throw new NativeFailure("checkpoint_member_id", 0);
+        return ids;
+    }
+    private static double WallElapsed(DateTime started) { return (DateTime.UtcNow - started).TotalMilliseconds; }
+    private static void CheckBound(Stopwatch elapsed, DateTime started, int deadline, string stage) {
+        double wall = WallElapsed(started);
+        if (wall < 0 || wall > deadline || elapsed.ElapsedMilliseconds > deadline) throw new NativeFailure(stage, 0);
+    }
+    private static void WriteClosureCheckpoint(string path, IntPtr job, ProcessInformation root, string rootCreation, string token, int helperPid) {
+        Stopwatch elapsed = Stopwatch.StartNew(); DateTime started = DateTime.UtcNow;
+        ValidateEvidencePath(path);
+        for (;;) {
+            List<ObservedProcess> opened = new List<ObservedProcess>(); NativeFailure failure = null;
+            Dictionary<string, object> checkpoint = null;
+            try {
+                CheckBound(elapsed, started, 1000, "checkpoint_deadline");
+                uint flags; ExtendedLimits limits;
+                if (!GetHandleInformation(job, out flags)) throw Error("checkpoint_job_handle_flags");
+                if ((flags & 1) != 0) throw new NativeFailure("checkpoint_job_handle_inheritable", 0);
+                if (!QueryLimits(job, 9, out limits, (uint)Marshal.SizeOf(typeof(ExtendedLimits)), IntPtr.Zero)) throw Error("checkpoint_job_limits");
+                if (limits.Basic.Flags != KillOnJobClose) throw new NativeFailure("checkpoint_job_policy", 0);
+                BasicAccounting first = Accounting(job); long[] ids = CompleteIds(job, first.ActiveProcesses);
+                bool rootListed = false; List<object> members = new List<object>();
+                foreach (long pid in ids) {
+                    CheckBound(elapsed, started, 1000, "checkpoint_deadline");
+                    if (pid == helperPid) throw new NativeFailure("checkpoint_helper_in_job", 0);
+                    ObservedProcess member = OpenObserved((uint)pid, pid == root.Pid ? rootCreation : null, opened);
+                    bool inJob;
+                    if (!IsProcessInJob(member.Handle, job, out inJob)) throw Error("checkpoint_exact_job_membership");
+                    if (!inJob) throw new NativeFailure("checkpoint_member_outside_job", 0);
+                    if (pid == root.Pid) rootListed = true;
+                    members.Add(Map("pid", pid, "creationTimeFileTime", member.Creation));
+                }
+                if (!rootListed) throw new NativeFailure("checkpoint_root_missing", 0);
+                BasicAccounting second = Accounting(job); long[] secondIds = CompleteIds(job, second.ActiveProcesses);
+                if (first.TotalProcesses == second.TotalProcesses && SameIds(ids, secondIds)) {
+                    foreach (ObservedProcess member in opened) if (RootExited(member.Handle)) throw new NativeFailure("checkpoint_member_exited", 0);
+                    CheckBound(elapsed, started, 1000, "checkpoint_deadline");
+                    checkpoint = Map("schema", 1, "kind", "windows-job-pre-close", "jobToken", token,
+                        "helperPid", helperPid, "helperCreationTimeFileTime", CreationTime(GetCurrentProcess(), "checkpoint_helper_creation"),
+                        "rootPid", root.Pid, "rootCreationTimeFileTime", rootCreation,
+                        "ownerJobAssignedBeforeResume", true, "jobHandleNonInheritable", true, "effectiveLimitFlags", limits.Basic.Flags,
+                        "privateUnnamedJob", true, "jobHandleOwner", "helper-only", "jobHandlesExported", 0, "processHandlesOnly", true,
+                        "activeProcesses", second.ActiveProcesses, "processIds", ids, "members", members,
+                        "membershipCompleteAtCapture", true, "capturedUtc", DateTime.UtcNow.ToString("o"));
+                }
+            } catch (NativeFailure error) { failure = error; }
+            finally {
+                foreach (ObservedProcess member in opened)
+                    if (!CloseHandle(member.Handle) && failure == null) failure = Error("checkpoint_close_process");
+            }
+            if (failure != null) throw failure;
+            CheckBound(elapsed, started, 1000, "checkpoint_deadline");
+            if (checkpoint != null) { WriteExclusive(path, checkpoint); return; }
+            Thread.Sleep(1);
+        }
+    }
+    private static void ValidateExistingEvidence(string file) {
+        if (!Path.IsPathRooted(file) || !String.Equals(Path.GetFullPath(file), file, StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(file) || (File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0) throw new NativeFailure("checkpoint_path", 0);
+        for (DirectoryInfo parent = new DirectoryInfo(Path.GetDirectoryName(file)); parent != null; parent = parent.Parent)
+            if ((parent.Attributes & FileAttributes.ReparsePoint) != 0) throw new NativeFailure("checkpoint_reparse_parent", 0);
+    }
+    private static object Required(Dictionary<string, object> map, string key) {
+        object value; if (map == null || !map.TryGetValue(key, out value)) throw new NativeFailure("checkpoint_schema", 0); return value;
+    }
+    private static long Number(Dictionary<string, object> map, string key, long minimum, long maximum) {
+        object value = Required(map, key);
+        if (!(value is int) && !(value is long)) throw new NativeFailure("checkpoint_number", 0);
+        long number = Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+        if (number < minimum || number > maximum) throw new NativeFailure("checkpoint_number_bound", 0); return number;
+    }
+    private static string Text(Dictionary<string, object> map, string key, string exact) {
+        string value = Required(map, key) as string;
+        if (value == null || (exact != null && value != exact)) throw new NativeFailure("checkpoint_text", 0); return value;
+    }
+    private static void True(Dictionary<string, object> map, string key) {
+        object value = Required(map, key); if (!(value is bool) || !(bool)value) throw new NativeFailure("checkpoint_boolean", 0);
+    }
+    private static string FileTimeText(Dictionary<string, object> map, string key) {
+        string value = Text(map, key, null); long time;
+        if (!Int64.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out time) || time <= 0
+            || time.ToString(System.Globalization.CultureInfo.InvariantCulture) != value) throw new NativeFailure("checkpoint_creation_time", 0);
+        try { DateTime.FromFileTimeUtc(time); } catch { throw new NativeFailure("checkpoint_creation_time", 0); }
+        return value;
+    }
+    private static int ObserveClose(string[] args) {
+        if (args.Length != 4) return 2;
+        int deadline;
+        if (!Int32.TryParse(args[3], out deadline) || deadline <= 0 || deadline > 6000) return 2;
+        string checkpointPath = args[1], observationPath = args[2];
+        try {
+            ValidateEvidencePath(observationPath);
+            if (!checkpointPath.EndsWith(".closure.json", StringComparison.Ordinal)
+                || !String.Equals(Path.GetDirectoryName(checkpointPath), Path.GetDirectoryName(observationPath), StringComparison.OrdinalIgnoreCase)
+                || String.Equals(checkpointPath, observationPath, StringComparison.OrdinalIgnoreCase)) return 2;
+        } catch { return 2; }
+        Stopwatch elapsed = Stopwatch.StartNew(); DateTime started = DateTime.UtcNow;
+        string token = null, helperCreation = null, rootCreation = null; long helperPid = 0, rootPid = 0;
+        bool ready = false, allClosed = true; int closedCount = 0;
+        ObservedProcess helper = null; List<ObservedProcess> members = new List<ObservedProcess>();
+        List<ObservedProcess> opened = new List<ObservedProcess>();
+        NativeFailure failure = null;
+        try {
+            ValidateExistingEvidence(checkpointPath);
+            Dictionary<string, object> checkpoint;
+            using (FileStream input = new FileStream(checkpointPath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+                if (input.Length <= 0 || input.Length > 1048576) throw new NativeFailure("checkpoint_byte_bound", 0);
+                using (StreamReader reader = new StreamReader(input, new UTF8Encoding(false, true), false)) {
+                    JavaScriptSerializer serializer = new JavaScriptSerializer(); serializer.MaxJsonLength = 1048576; serializer.RecursionLimit = 16;
+                    checkpoint = serializer.DeserializeObject(reader.ReadToEnd()) as Dictionary<string, object>;
+                }
+            }
+            if (checkpoint == null || checkpoint.Count != 19) throw new NativeFailure("checkpoint_schema", 0);
+            Number(checkpoint, "schema", 1, 1); Text(checkpoint, "kind", "windows-job-pre-close");
+            token = Text(checkpoint, "jobToken", null); Guid parsedToken;
+            if (!Guid.TryParseExact(token, "D", out parsedToken)) throw new NativeFailure("checkpoint_job_token", 0);
+            helperPid = Number(checkpoint, "helperPid", 1, UInt32.MaxValue); rootPid = Number(checkpoint, "rootPid", 1, UInt32.MaxValue);
+            if (helperPid == rootPid || helperPid == Process.GetCurrentProcess().Id || rootPid == Process.GetCurrentProcess().Id) throw new NativeFailure("checkpoint_pid_identity", 0);
+            helperCreation = FileTimeText(checkpoint, "helperCreationTimeFileTime"); rootCreation = FileTimeText(checkpoint, "rootCreationTimeFileTime");
+            True(checkpoint, "ownerJobAssignedBeforeResume"); True(checkpoint, "jobHandleNonInheritable"); Number(checkpoint, "effectiveLimitFlags", KillOnJobClose, KillOnJobClose);
+            True(checkpoint, "privateUnnamedJob"); Text(checkpoint, "jobHandleOwner", "helper-only"); Number(checkpoint, "jobHandlesExported", 0, 0);
+            True(checkpoint, "processHandlesOnly"); True(checkpoint, "membershipCompleteAtCapture");
+            DateTime captured;
+            if (!DateTime.TryParseExact(Text(checkpoint, "capturedUtc", null), "o", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind, out captured) || captured.Kind != DateTimeKind.Utc || captured > started) throw new NativeFailure("checkpoint_capture_time", 0);
+            long active = Number(checkpoint, "activeProcesses", 1, 4096);
+            object[] ids = Required(checkpoint, "processIds") as object[], records = Required(checkpoint, "members") as object[];
+            if (ids == null || records == null || ids.Length != active || records.Length != active) throw new NativeFailure("checkpoint_member_count", 0);
+            List<uint> memberPids = new List<uint>(); List<string> creations = new List<string>(); bool rootListed = false;
+            for (int i = 0; i < records.Length; i++) {
+                Dictionary<string, object> member = records[i] as Dictionary<string, object>;
+                if (member == null || member.Count != 2 || (!(ids[i] is int) && !(ids[i] is long))) throw new NativeFailure("checkpoint_member_schema", 0);
+                long pid = Number(member, "pid", 1, UInt32.MaxValue);
+                if (Convert.ToInt64(ids[i], System.Globalization.CultureInfo.InvariantCulture) != pid || pid == helperPid
+                    || (i > 0 && pid <= memberPids[i - 1])) throw new NativeFailure("checkpoint_member_identity", 0);
+                string creation = FileTimeText(member, "creationTimeFileTime");
+                if (pid == rootPid) { if (creation != rootCreation) throw new NativeFailure("checkpoint_root_identity", 0); rootListed = true; }
+                memberPids.Add((uint)pid); creations.Add(creation);
+            }
+            if (!rootListed) throw new NativeFailure("checkpoint_root_missing", 0);
+            CheckBound(elapsed, started, deadline, "observation_deadline");
+            helper = OpenObserved((uint)helperPid, helperCreation, opened);
+            for (int i = 0; i < memberPids.Count; i++) {
+                CheckBound(elapsed, started, deadline, "observation_deadline");
+                members.Add(OpenObserved(memberPids[i], creations[i], opened));
+            }
+            if (RootExited(helper.Handle)) throw new NativeFailure("observation_helper_not_live", 0);
+            foreach (ObservedProcess member in members) if (RootExited(member.Handle)) throw new NativeFailure("observation_member_not_live", 0);
+            CheckBound(elapsed, started, deadline, "observation_deadline");
+            Console.Out.WriteLine(new JavaScriptSerializer().Serialize(Map("phase", "READY", "jobToken", token, "helperPid", helperPid,
+                "memberPids", memberPids, "processHandlesOnly", true, "allHandlesLive", true))); Console.Out.Flush(); ready = true;
+            for (;;) {
+                CheckBound(elapsed, started, deadline, "observation_deadline");
+                helper.Signaled = RootExited(helper.Handle); bool allMembers = true;
+                foreach (ObservedProcess member in members) { member.Signaled = RootExited(member.Handle); if (!member.Signaled) allMembers = false; }
+                // A resumed machine cannot turn an expired observation into a successful certificate.
+                CheckBound(elapsed, started, deadline, "observation_deadline");
+                if (helper.Signaled && allMembers) break;
+                Thread.Sleep(10);
+            }
+            helper.Code = ExitCode(helper.Handle); foreach (ObservedProcess member in members) member.Code = ExitCode(member.Handle);
+            CheckBound(elapsed, started, deadline, "observation_deadline");
+        } catch (NativeFailure error) { failure = error; }
+        catch { failure = new NativeFailure("observation_managed", 0); }
+        finally {
+            foreach (ObservedProcess member in opened) {
+                if (CloseHandle(member.Handle)) closedCount++; else { allClosed = false; Remember(ref failure, Error("observation_close_member")); }
+            }
+        }
+        DateTime ended = DateTime.UtcNow; double wallElapsed = (ended - started).TotalMilliseconds;
+        if (failure == null && (wallElapsed < 0 || wallElapsed > deadline || elapsed.ElapsedMilliseconds > deadline)) failure = new NativeFailure("observation_deadline", 0);
+        List<object> terminalMembers = new List<object>(); bool allSignaled = members.Count != 0;
+        foreach (ObservedProcess member in members) { if (!member.Signaled) allSignaled = false; terminalMembers.Add(Map("pid", member.Pid, "creationTimeFileTime", member.Creation,
+            "signaled", member.Signaled, "exitCode", member.Code.HasValue ? (object)member.Code.Value : null)); }
+        bool passed = failure == null && ready && helper != null && helper.Signaled && allSignaled && allClosed && opened.Count == closedCount;
+        try {
+            WriteExclusive(observationPath, Map("schema", 1, "kind", "windows-job-last-handle-close", "status", passed ? "PASS" : "BLOCKED",
+                "jobToken", token, "helperPid", helperPid, "helperCreationTimeFileTime", helperCreation, "rootPid", rootPid, "rootCreationTimeFileTime", rootCreation,
+                "readyBeforeClosure", ready, "processHandlesOnly", true, "processAccessMask", 0x00101000, "processHandlesInheritable", false, "jobHandlesRetained", 0,
+                "observation", Map("deadlineMs", deadline, "elapsedMs", elapsed.ElapsedMilliseconds, "startedUtc", started.ToString("o"), "endedUtc", ended.ToString("o"),
+                    "wallElapsedMs", wallElapsed, "helperSignaled", helper != null && helper.Signaled, "allMembersSignaled", allSignaled, "members", terminalMembers,
+                    "helperExitCode", helper != null && helper.Code.HasValue ? (object)helper.Code.Value : null),
+                "nativeFailure", failure == null ? null : Map("stage", failure.Stage, "win32Code", failure.Code),
+                "allObservationHandlesClosed", allClosed && opened.Count == closedCount, "observationHandleCount", opened.Count, "closedObservationHandleCount", closedCount,
+                "jobQueriedAfterClosure", false));
+        } catch { return 3; }
+        return passed ? 0 : 4;
+    }
+    private static int ProbeBreakaway(string[] args) {
+        if (args.Length != 3 || !Path.IsPathRooted(args[1]) || !File.Exists(args[1])) return 2;
+        string readyPath = args[2], releasePath = readyPath + ".release.json";
+        try { ValidateEvidencePath(readyPath); ValidateEvidencePath(releasePath); } catch { return 2; }
+        NativeFailure failure = null; ProcessInformation root = new ProcessInformation();
+        bool created = false, terminated = false, signaled = false, closed = true, assigned = false, jobClosed = false, guardZero = false, readyWritten = false, released = false, guardTerminated = false;
+        bool jobNonInheritable = false, attributeInitialized = false;
+        IntPtr guard = IntPtr.Zero, attributes = IntPtr.Zero, jobArray = IntPtr.Zero;
+        int nativeCode = 0, probePid = Process.GetCurrentProcess().Id; uint effectiveFlags = 0;
+        string challenge = Guid.NewGuid().ToString(), candidateCreation = null, probeCreation = null;
+        uint? activeAfter = null; long[] membersAfter = null;
+        Stopwatch releaseElapsed = null; DateTime releaseStarted = DateTime.MinValue, releaseEnded = DateTime.MinValue;
+        try {
+            bool currentInJob;
+            if (!IsProcessInJob(GetCurrentProcess(), IntPtr.Zero, out currentInJob)) throw Error("breakaway_current_membership");
+            if (!currentInJob) throw new NativeFailure("breakaway_requires_owned_job", 0);
+            probeCreation = CreationTime(GetCurrentProcess(), "breakaway_probe_creation");
+            // This separate guard disposes of the suspended candidate if this probe dies.
+            // It does not establish membership in the outer owner's exact private job.
+            guard = CreateJobObjectW(IntPtr.Zero, null);
+            if (guard == IntPtr.Zero) throw Error("breakaway_create_guard");
+            uint handleFlags;
+            if (!GetHandleInformation(guard, out handleFlags)) throw Error("breakaway_guard_handle_flags");
+            if ((handleFlags & 1) != 0) throw new NativeFailure("breakaway_guard_handle_inheritable", 0);
+            jobNonInheritable = true;
+            ExtendedLimits requested = new ExtendedLimits(); requested.Basic.Flags = KillOnJobClose;
+            if (!SetInformationJobObject(guard, 9, ref requested, (uint)Marshal.SizeOf(typeof(ExtendedLimits)))) throw Error("breakaway_set_guard_limits");
+            ExtendedLimits effective;
+            if (!QueryLimits(guard, 9, out effective, (uint)Marshal.SizeOf(typeof(ExtendedLimits)), IntPtr.Zero)) throw Error("breakaway_query_guard_limits");
+            effectiveFlags = effective.Basic.Flags;
+            if (effectiveFlags != KillOnJobClose) throw new NativeFailure("breakaway_guard_policy", 0);
+            IntPtr size = IntPtr.Zero; InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+            if (size == IntPtr.Zero) throw Error("breakaway_attribute_size");
+            attributes = Marshal.AllocHGlobal(size);
+            if (!InitializeProcThreadAttributeList(attributes, 1, 0, ref size)) throw Error("breakaway_attribute_initialize");
+            attributeInitialized = true;
+            jobArray = Marshal.AllocHGlobal(IntPtr.Size); Marshal.WriteIntPtr(jobArray, guard);
+            if (!UpdateProcThreadAttribute(attributes, 0, new IntPtr(0x0002000d), jobArray, new IntPtr(IntPtr.Size), IntPtr.Zero, IntPtr.Zero)) throw Error("breakaway_attribute_guard");
+            StartupInfoEx startup = new StartupInfoEx(); startup.Startup.Size = (uint)Marshal.SizeOf(typeof(StartupInfoEx)); startup.Attributes = attributes;
+            // Atomic guard membership, BREAKAWAY, and SUSPENDED; the candidate is never resumed.
+            created = CreateProcessW(args[1], new StringBuilder(QuoteArgument(args[1]) + " -e \"process.exit(0)\""), IntPtr.Zero, IntPtr.Zero,
+                false, 0x09080004, IntPtr.Zero, null, ref startup, out root);
+            if (!created) { nativeCode = Marshal.GetLastWin32Error(); if (nativeCode != 5) throw new NativeFailure("breakaway_unexpected_error", nativeCode); }
+            else {
+                bool inGuard;
+                if (!IsProcessInJob(root.Process, guard, out inGuard)) throw Error("breakaway_verify_guard_membership");
+                if (!inGuard) throw new NativeFailure("breakaway_candidate_outside_guard", 0);
+                assigned = true; candidateCreation = CreationTime(root.Process, "breakaway_candidate_creation");
+                if (RootExited(root.Process)) throw new NativeFailure("breakaway_candidate_not_live", 0);
+            }
+            releaseElapsed = Stopwatch.StartNew(); releaseStarted = DateTime.UtcNow;
+            WriteExclusive(readyPath, Map("schema", 1, "kind", "windows-job-breakaway-ready", "challenge", challenge,
+                "createdSuspended", created, "win32Code", nativeCode, "candidatePid", created ? (object)root.Pid : null,
+                "candidateCreationTimeFileTime", candidateCreation, "probePid", probePid, "probeCreationTimeFileTime", probeCreation, "rootResumed", false,
+                "guard", Map("privateUnnamedJob", true, "jobHandleNonInheritable", jobNonInheritable, "effectiveLimitFlags", effectiveFlags,
+                    "ownerAssignedBeforeResume", assigned, "jobHandlesExported", 0)));
+            readyWritten = true;
+            CheckBound(releaseElapsed, releaseStarted, 2500, "breakaway_release_deadline");
+            {
+                for (;;) {
+                    CheckBound(releaseElapsed, releaseStarted, 2500, "breakaway_release_deadline");
+                    if (File.Exists(releasePath)) {
+                        ValidateExistingEvidence(releasePath);
+                        Dictionary<string, object> release;
+                        using (FileStream input = new FileStream(releasePath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+                            if (input.Length <= 0 || input.Length > 4096) throw new NativeFailure("breakaway_release_byte_bound", 0);
+                            using (StreamReader reader = new StreamReader(input, new UTF8Encoding(false, true), false))
+                                release = new JavaScriptSerializer().DeserializeObject(reader.ReadToEnd()) as Dictionary<string, object>;
+                        }
+                        if (release == null || release.Count != 2) throw new NativeFailure("breakaway_release_schema", 0);
+                        Number(release, "schema", 1, 1); Text(release, "challenge", challenge);
+                        CheckBound(releaseElapsed, releaseStarted, 2500, "breakaway_release_deadline");
+                        released = true; break;
+                    }
+                    Thread.Sleep(10);
+                }
+            }
+            releaseEnded = DateTime.UtcNow;
+        } catch (NativeFailure error) { failure = error; }
+        catch { failure = new NativeFailure("breakaway_managed", 0); }
+        finally {
+            if (releaseStarted != DateTime.MinValue && releaseEnded == DateTime.MinValue) releaseEnded = DateTime.UtcNow;
+            if (releaseElapsed != null) releaseElapsed.Stop();
+            if (attributeInitialized) DeleteProcThreadAttributeList(attributes);
+            if (attributes != IntPtr.Zero) Marshal.FreeHGlobal(attributes);
+            if (jobArray != IntPtr.Zero) Marshal.FreeHGlobal(jobArray);
+            // Only our guard and retained CreateProcess handles may be used for disposal.
+            if (created && !assigned) {
+                try {
+                    if (!RootExited(root.Process) && !TerminateProcess(root.Process, ForcedExitCode)) Remember(ref failure, Error("breakaway_terminate_unverified_suspended_root"));
+                } catch (NativeFailure error) { Remember(ref failure, error); }
+                catch { Remember(ref failure, new NativeFailure("breakaway_unverified_root_cleanup", 0)); }
+            }
+            if (guard != IntPtr.Zero) {
+                if (!TerminateJobObject(guard, ForcedExitCode)) Remember(ref failure, Error("breakaway_terminate_guard")); else { guardTerminated = true; terminated = created; }
+                Stopwatch cleanup = Stopwatch.StartNew(); DateTime cleanupStarted = DateTime.UtcNow;
+                try {
+                    for (;;) {
+                        CheckBound(cleanup, cleanupStarted, 1000, "breakaway_cleanup_deadline");
+                        BasicAccounting accounting = Accounting(guard); activeAfter = accounting.ActiveProcesses; membersAfter = ProcessIds(guard, true);
+                        bool candidateExited = RootExited(root.Process); signaled = created && candidateExited;
+                        CheckBound(cleanup, cleanupStarted, 1000, "breakaway_cleanup_deadline");
+                        if (activeAfter == 0 && membersAfter.Length == 0 && candidateExited) { guardZero = true; break; }
+                        Thread.Sleep(10);
+                    }
+                } catch (NativeFailure error) { Remember(ref failure, error); }
+                catch { Remember(ref failure, new NativeFailure("breakaway_managed_cleanup", 0)); }
+                if (!CloseHandle(guard)) { closed = false; Remember(ref failure, Error("breakaway_close_guard")); } else jobClosed = true;
+            }
+            if (root.Thread != IntPtr.Zero && !CloseHandle(root.Thread)) { closed = false; Remember(ref failure, Error("breakaway_close_thread")); }
+            if (root.Process != IntPtr.Zero && !CloseHandle(root.Process)) { closed = false; Remember(ref failure, Error("breakaway_close_process")); }
+        }
+        bool completed = failure == null && readyWritten && released && closed && jobClosed && guardZero && (!created ? nativeCode == 5 : assigned);
+        Console.Out.WriteLine(new JavaScriptSerializer().Serialize(Map("schema", 1, "kind", "windows-job-breakaway-negative", "status", completed ? (created ? "OBSERVED_SUSPENDED" : "PASS") : "BLOCKED",
+            "expectedWin32Code", 5, "win32Code", nativeCode, "createdSuspended", created, "rootResumed", false,
+            "challenge", challenge, "candidatePid", created ? (object)root.Pid : null, "candidateCreationTimeFileTime", candidateCreation,
+            "probePid", probePid, "probeCreationTimeFileTime", probeCreation, "releaseObserved", released, "readyWritten", readyWritten,
+            "ancestorContainmentQualified", false,
+            "releaseWait", Map("deadlineMs", 2500, "elapsedMs", releaseElapsed == null ? 0 : releaseElapsed.ElapsedMilliseconds,
+                "startedUtc", releaseStarted == DateTime.MinValue ? null : releaseStarted.ToString("o"), "endedUtc", releaseEnded == DateTime.MinValue ? null : releaseEnded.ToString("o"),
+                "wallElapsedMs", releaseStarted == DateTime.MinValue ? 0 : (releaseEnded - releaseStarted).TotalMilliseconds),
+            "guard", Map("privateUnnamedJob", true, "jobHandleNonInheritable", jobNonInheritable, "effectiveLimitFlags", effectiveFlags,
+                "ownerAssignedBeforeResume", assigned, "jobHandlesExported", 0, "jobTerminated", guardTerminated, "jobHandleClosed", jobClosed,
+                "activeProcessesAfterCleanup", activeAfter.HasValue ? (object)activeAfter.Value : null, "activeProcessIdsAfterCleanup", membersAfter, "processTreeVerified", guardZero),
+            "unexpectedRootTerminated", terminated, "unexpectedRootSignaled", signaled, "allProbeHandlesClosed", closed,
+            "nativeFailure", failure == null ? null : Map("stage", failure.Stage, "win32Code", failure.Code)))); Console.Out.Flush();
+        return completed ? 0 : 4;
+    }
+
     public static int Main(string[] args) {
+        if (args.Length > 0 && args[0] == "--observe-close") return ObserveClose(args);
+        if (args.Length > 0 && args[0] == "--probe-breakaway") return ProbeBreakaway(args);
         string identityPath = null, receiptPath = null, executable = null;
         int limitMs = 0, cleanupMs = 0, firstArgument = -1;
         // Parse and validate the complete fixed protocol before allocating a process or job.
@@ -338,6 +707,8 @@ internal static class WindowsOwnedProcess
                     resumed = true;
                     for (;;) {
                         if (ControlReceived.WaitOne(0)) { reason = ReadControlReason(); break; }
+                        if (Interlocked.CompareExchange(ref checkpointState, 2, 1) == 1)
+                            WriteClosureCheckpoint(identityPath + ".closure.json", job, root, rootCreationFileTime, jobToken, helperPid);
                         uint wait = WaitForSingleObject(root.Process, 25);
                         if (wait == WaitObject0) { rootCode = ExitCode(root.Process); reason = "completed"; break; }
                         if (wait == WaitFailed) throw Error("wait_root");

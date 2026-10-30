@@ -74,6 +74,159 @@ export type WindowsStopReason = "cancelled" | "timeout" | "output_limit" | "owne
 type NativeCleanup = { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
   observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number; nativeJobReceipt: WindowsJobReceipt | null };
 
+type ClosureMember = { pid: number; creationTimeFileTime: string };
+type ClosureCheckpoint = { schema: number; kind: string; jobToken: string; helperPid: number; helperCreationTimeFileTime: string;
+  rootPid: number; rootCreationTimeFileTime: string; ownerJobAssignedBeforeResume: boolean; jobHandleNonInheritable: boolean;
+  effectiveLimitFlags: number; privateUnnamedJob: boolean; jobHandleOwner: string; jobHandlesExported: number; processHandlesOnly: boolean;
+  activeProcesses: number; processIds: number[]; members: ClosureMember[]; membershipCompleteAtCapture: boolean; capturedUtc: string };
+type ClosureReady = { phase: string; jobToken: string; helperPid: number; memberPids: number[]; processHandlesOnly: boolean; allHandlesLive: boolean };
+type ClosureCertificate = { schema: number; kind: string; status: string; jobToken: string; helperPid: number; helperCreationTimeFileTime: string;
+  rootPid: number; rootCreationTimeFileTime: string; readyBeforeClosure: boolean; processHandlesOnly: boolean; jobHandlesRetained: number;
+  processAccessMask: number; processHandlesInheritable: boolean; observationHandleCount: number; closedObservationHandleCount: number;
+  allObservationHandlesClosed: boolean; jobQueriedAfterClosure: boolean; nativeFailure: unknown;
+  observation: { deadlineMs: number; elapsedMs: number; wallElapsedMs: number; startedUtc: string; endedUtc: string; helperSignaled: boolean; allMembersSignaled: boolean;
+    helperExitCode: number; members: Array<ClosureMember & { signaled: boolean; exitCode: number }> } };
+function closureFileTime(value: unknown) {
+  return typeof value === "string" && /^[1-9]\d{11,19}$/u.test(value);
+}
+function closureUtcMillis(value: unknown) {
+  assert.ok(typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{7}Z$/u.test(value), "Native closure UTC must retain its canonical round-trip string.");
+  const parsed = Date.parse(value);
+  assert.ok(Number.isFinite(parsed) && new Date(parsed).toISOString() === value.replace(/(\.\d{3})\d{4}Z$/u, "$1Z"), "Native closure UTC is invalid.");
+  return parsed;
+}
+function closureCheckpoint(identity: WindowsJobIdentity, value: unknown): ClosureCheckpoint {
+  assert.ok(value && typeof value === "object" && !Array.isArray(value), "Native closure checkpoint is missing or malformed.");
+  const proof = value as ClosureCheckpoint;
+  assert.ok(proof.schema === 1 && proof.kind === "windows-job-pre-close" && identity.ownerJobAssignedBeforeResume === true
+    && identity.jobHandleNonInheritable === true && identity.effectiveLimitFlags === 0x2000
+    && identity.rootPpid === identity.helperPid && identity.jobBeforeResume.activeProcesses >= 1
+    && identity.jobBeforeResume.processIds.includes(identity.rootPid), "Native closure identity is unqualified.");
+  for (const key of ["jobToken", "helperPid", "rootPid", "rootCreationTimeFileTime"] as const)
+    assert.equal(proof[key], identity[key], "Native closure checkpoint identity differs.");
+  assert.ok(typeof proof.jobToken === "string" && /^[a-fA-F0-9-]{32,36}$/u.test(proof.jobToken) && Number.isSafeInteger(proof.helperPid) && proof.helperPid > 0
+    && Number.isSafeInteger(proof.rootPid) && proof.rootPid > 0 && proof.helperPid !== proof.rootPid
+    && closureFileTime(proof.helperCreationTimeFileTime) && closureFileTime(proof.rootCreationTimeFileTime), "Native closure birth identity is malformed.");
+  assert.ok(proof.ownerJobAssignedBeforeResume === true && proof.jobHandleNonInheritable === true && proof.effectiveLimitFlags === 0x2000
+    && proof.privateUnnamedJob === true && proof.jobHandleOwner === "helper-only" && proof.jobHandlesExported === 0
+    && proof.processHandlesOnly === true && proof.membershipCompleteAtCapture === true, "Native closure handle or containment contract is unqualified.");
+  assert.ok(Array.isArray(proof.processIds) && Array.isArray(proof.members) && Number.isSafeInteger(proof.activeProcesses)
+    && proof.activeProcesses > 0 && proof.activeProcesses <= 4096 && proof.activeProcesses === proof.processIds.length
+    && proof.members.length === proof.processIds.length && new Set(proof.processIds).size === proof.processIds.length
+    && proof.processIds.every(pid => Number.isSafeInteger(pid) && pid > 0 && pid !== proof.helperPid), "Native closure membership is incomplete.");
+  assert.deepEqual(proof.members.map(member => member.pid).sort((a, b) => a - b), [...proof.processIds].sort((a, b) => a - b), "Native closure member identities differ.");
+  assert.ok(proof.members.every(member => closureFileTime(member.creationTimeFileTime))
+    && proof.members.find(member => member.pid === proof.rootPid)?.creationTimeFileTime === proof.rootCreationTimeFileTime,
+  "Native closure member birth identity is unqualified.");
+  closureUtcMillis(proof.capturedUtc);
+  return proof;
+}
+
+/** Separate fail-safe qualification; never substitutes for the execution's native result receipt. */
+export function qualifyWindowsClosureEvidence(input: { identity: WindowsJobIdentity; checkpoint: unknown; ready: unknown; certificate: unknown;
+  observerExit: { code: number | null; signal: NodeJS.Signals | null } }) {
+  const checkpoint = closureCheckpoint(input.identity, input.checkpoint), ready = input.ready as ClosureReady, certificate = input.certificate as ClosureCertificate;
+  assert.ok(ready && ready.phase === "READY" && ready.jobToken === checkpoint.jobToken && ready.helperPid === checkpoint.helperPid
+    && ready.processHandlesOnly === true && ready.allHandlesLive === true, "Independent native observer was not live before closure.");
+  assert.deepEqual([...ready.memberPids].sort((a, b) => a - b), [...checkpoint.processIds].sort((a, b) => a - b), "Observer ready membership differs.");
+  assert.ok(certificate && certificate.schema === 1 && certificate.kind === "windows-job-last-handle-close" && certificate.status === "PASS"
+    && certificate.readyBeforeClosure === true && certificate.processHandlesOnly === true && certificate.jobHandlesRetained === 0
+    && certificate.processAccessMask === 0x101000 && certificate.processHandlesInheritable === false
+    && certificate.observationHandleCount === checkpoint.members.length + 1 && certificate.closedObservationHandleCount === certificate.observationHandleCount
+    && certificate.allObservationHandlesClosed === true && certificate.jobQueriedAfterClosure === false && certificate.nativeFailure === null,
+  "Native last-handle closure certificate is unqualified.");
+  for (const key of ["jobToken", "helperPid", "helperCreationTimeFileTime", "rootPid", "rootCreationTimeFileTime"] as const)
+    assert.equal(certificate[key], checkpoint[key], "Native closure certificate identity differs.");
+  const observation = certificate.observation;
+  const observationStarted = closureUtcMillis(observation?.startedUtc), observationEnded = closureUtcMillis(observation?.endedUtc);
+  assert.ok(observation && Number.isSafeInteger(observation.deadlineMs) && observation.deadlineMs >= 50 && observation.deadlineMs <= 6000
+    && Number.isFinite(observation.elapsedMs) && observation.elapsedMs >= 0 && observation.elapsedMs <= observation.deadlineMs
+    && Number.isFinite(observation.wallElapsedMs) && observation.wallElapsedMs >= 0 && observation.wallElapsedMs <= observation.deadlineMs
+    && observation.helperSignaled === true && observation.allMembersSignaled === true && Number.isSafeInteger(observation.helperExitCode)
+    && observation.helperExitCode >= 0 && observation.helperExitCode <= 0xffffffff, "Native closure observation exceeded its bound or lacks helper exit.");
+  assert.ok(observationStarted >= closureUtcMillis(checkpoint.capturedUtc)
+    && observationEnded >= observationStarted && observationEnded - observationStarted <= observation.deadlineMs,
+  "Native closure observation wall-clock interval is unqualified.");
+  assert.ok(Array.isArray(observation.members) && observation.members.length === checkpoint.members.length, "Native closure observation omitted a member.");
+  for (const member of checkpoint.members) {
+    const matches = observation.members.filter(value => value.pid === member.pid && value.creationTimeFileTime === member.creationTimeFileTime);
+    assert.ok(matches.length === 1 && matches[0]!.signaled === true && Number.isSafeInteger(matches[0]!.exitCode)
+      && matches[0]!.exitCode >= 0 && matches[0]!.exitCode <= 0xffffffff, "A retained native member handle did not signal within the bound.");
+  }
+  assert.deepEqual(input.observerExit, { code: 0, signal: null }, "Native observer failed independently of the owned run.");
+  return { status: "PASS" as const, method: "windows-kernel-last-handle-close", processTreeVerified: true, liveProcesses: 0,
+    observedProcesses: checkpoint.members.length, jobQueriedAfterClosure: false, checkpoint, certificate };
+}
+
+export function requestWindowsClosureCheckpoint(child: ReturnType<typeof spawn>) {
+  const request = (child as typeof child & { verificationWindowsCheckpoint?: () => Promise<{ checkpointPath: string; checkpoint: ClosureCheckpoint }> }).verificationWindowsCheckpoint;
+  assert.ok(process.platform === "win32" && request, "Closure checkpoint requires a registered native child.");
+  return request();
+}
+
+/** Fixed read-only wait primitive in the same native capability, used by the existing lifecycle verifier. */
+export function startWindowsClosureObservation(options: { identity: WindowsJobIdentity; checkpointPath: string; observationPath: string;
+  deadlineMs: number; env: NodeJS.ProcessEnv }) {
+  assert.ok(Number.isSafeInteger(options.deadlineMs) && options.deadlineMs >= 50 && options.deadlineMs <= 6000, "Native closure observation needs a finite bounded deadline.");
+  assert.ok(!existsSync(options.observationPath) && resolve(options.checkpointPath) === options.checkpointPath
+    && resolve(options.observationPath) === options.observationPath && dirname(options.checkpointPath) === dirname(options.observationPath)
+    && realpathSync(dirname(options.observationPath)) === dirname(options.observationPath) && lstatSync(options.checkpointPath).isFile()
+    && realpathSync(options.checkpointPath) === options.checkpointPath, "Native observation evidence must be fresh and owned.");
+  const checkpoint = closureCheckpoint(options.identity, JSON.parse(readFileSync(options.checkpointPath, "utf8"))), native = nativeBuild();
+  const child = spawn(native.executable, ["--observe-close", options.checkpointPath, options.observationPath, String(options.deadlineMs)], {
+    windowsHide: true, env: options.env, stdio: ["ignore", "pipe", "pipe"], cwd: dirname(options.checkpointPath) });
+  let stdout = "", stderr = "", readyValue: ClosureReady | undefined, failure: unknown;
+  let readyResolve!: (value: ClosureReady) => void, readyReject!: (error: unknown) => void;
+  const ready = new Promise<ClosureReady>((done, reject) => { readyResolve = done; readyReject = reject; });
+  ready.catch(() => undefined);
+  const closed = new Promise<void>(done => { child.once("close", () => done()); child.once("error", () => done()); });
+  let boundReject!: (error: unknown) => void;
+  const bound = new Promise<never>((_, reject) => { boundReject = reject; });
+  const deadline = setTimeout(() => {
+    failure = Error("Native closure observer exceeded its independent deadline.");
+    try { child.kill(); } catch { /* The bounded failure retains an outstanding cleanup obligation. */ }
+    readyReject(failure); boundReject(failure);
+  }, options.deadlineMs + 2000);
+  child.stdout.on("data", (bytes: Buffer) => {
+    stdout += String(bytes);
+    if (stdout.length > 65_536) { failure = Error("Native closure observer output exceeded its bound."); child.kill(); return; }
+    if (stdout.includes("\n") && !readyValue && !failure) {
+      try {
+        const value = JSON.parse(stdout.trim()) as ClosureReady;
+        assert.ok(value.phase === "READY" && value.jobToken === checkpoint.jobToken && value.helperPid === checkpoint.helperPid
+          && value.processHandlesOnly === true && value.allHandlesLive === true, "Native observer readiness is unqualified.");
+        assert.deepEqual([...value.memberPids].sort((a, b) => a - b), [...checkpoint.processIds].sort((a, b) => a - b));
+        readyValue = value; readyResolve(value);
+      } catch (error) { failure = error; readyReject(error); child.kill(); }
+    }
+  });
+  child.stderr.on("data", (bytes: Buffer) => { stderr += String(bytes); if (stderr.length > 65_536) { failure = Error("Native observer stderr exceeded its bound."); child.kill(); } });
+  child.once("error", error => { failure = error; readyReject(error); });
+  const completed = (async () => {
+    let certificate: unknown;
+    try {
+      await Promise.race([closed, bound]);
+      if (existsSync(options.observationPath)) certificate = JSON.parse(readFileSync(options.observationPath, "utf8"));
+      if (failure) throw failure;
+      assert.ok(readyValue, "Native closure observer exited before live readiness.");
+      return qualifyWindowsClosureEvidence({ identity: options.identity, checkpoint, ready: readyValue, certificate,
+        observerExit: { code: child.exitCode, signal: child.signalCode } });
+    } catch (error) {
+      readyReject(error);
+      if (error instanceof Error) Object.defineProperty(error, "closureObservation", { value: { certificate, observerExit: { code: child.exitCode, signal: child.signalCode },
+        stdout, stderr, observationPath: options.observationPath, cleanupPending: child.exitCode === null && child.signalCode === null }, enumerable: true });
+      throw error;
+    } finally { clearTimeout(deadline); }
+  })();
+  completed.catch(() => undefined);
+  return { child, ready, completed, native, cancel: async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([closed, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error("Native observer cancellation did not close its retained process.")), 2000); })]); }
+    finally { if (timer) clearTimeout(timer); }
+  } };
+}
+
 export function spawnWindowsOwnedProcess(options: { args: string[]; cwd: string; env: NodeJS.ProcessEnv;
   identityPath: string; receiptPath: string; limitMs: number }) {
   const native = nativeBuild(), { identityPath, receiptPath } = options;
@@ -88,6 +241,26 @@ export function spawnWindowsOwnedProcess(options: { args: string[]; cwd: string;
   const closed = new Promise<void>(done => { child.once("close", () => done()); child.once("error", () => done()); });
   const readIdentity = (): WindowsJobIdentity | null => existsSync(identityPath) ? JSON.parse(readFileSync(identityPath, "utf8")) : null;
   const readReceipt = (): WindowsJobReceipt | null => existsSync(receiptPath) ? JSON.parse(readFileSync(receiptPath, "utf8")) : null;
+  let checkpointRequested = false;
+  const requestCheckpoint = async () => {
+    assert.ok(!checkpointRequested && child.pid && child.exitCode === null && child.signalCode === null && child.stdin.writable,
+      "Native closure checkpoint requires one live registered owner.");
+    checkpointRequested = true;
+    const checkpointPath = identityPath + ".closure.json";
+    assert.equal(existsSync(checkpointPath), false, "Native closure checkpoint cannot replace evidence.");
+    child.stdin.write(JSON.stringify({ command: "checkpoint" }) + "\n");
+    const deadline = performance.now() + 2500, wallStarted = Date.now();
+    for (;;) {
+      const wallElapsed = Date.now() - wallStarted;
+      assert.ok(child.exitCode === null && child.signalCode === null && performance.now() < deadline && wallElapsed >= 0 && wallElapsed < 2500,
+        "Native closure checkpoint was not proved within its bound.");
+      if (existsSync(checkpointPath)) {
+        try { return { checkpointPath, checkpoint: closureCheckpoint(readIdentity()!, JSON.parse(readFileSync(checkpointPath, "utf8"))) }; }
+        catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+      }
+      await new Promise<void>(done => setTimeout(done, 10));
+    }
+  };
   let stopped: Promise<NativeCleanup> | undefined;
   const verifiedCleanup = (): NativeCleanup => {
     const identity = readIdentity(), result = readReceipt();
@@ -140,6 +313,6 @@ export function spawnWindowsOwnedProcess(options: { args: string[]; cwd: string;
     return verifiedCleanup();
   })();
   Object.defineProperties(child, { verificationWindowsCleanup: { value: cleanup }, verificationWindowsIdentity: { value: readIdentity },
-    verificationWindowsReceipt: { value: readReceipt }, verificationWindowsBuild: { value: native } });
-  return { child, readIdentity, readReceipt, native };
+    verificationWindowsReceipt: { value: readReceipt }, verificationWindowsBuild: { value: native }, verificationWindowsCheckpoint: { value: requestCheckpoint } });
+  return { child, readIdentity, readReceipt, native, requestClosureCheckpoint: requestCheckpoint };
 }
