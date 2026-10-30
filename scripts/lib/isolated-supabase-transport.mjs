@@ -71,6 +71,10 @@ export async function startHostAccessBridge(options) {
   const processes = new Map();
   const servers = [];
   const counts = { accepted: 0, rejected: 0, failed: 0, closed: 0 };
+  // First observed host close boundary only; these counters do not diagnose a remote root cause.
+  const closeReasons = Object.fromEntries(['peer_closed', 'idle_timeout', 'session_lifetime_timeout', 'ownership_timeout',
+    'ownership_rejected', 'pipe_start_failed', 'pipe_input_error', 'pipe_output_error', 'pipe_nonzero_exit', 'pipe_eof',
+    'owner_shutdown', 'unclassified'].map(reason => [reason, 0]));
   let stopping = false;
 
   async function open(client, service) {
@@ -87,21 +91,23 @@ export async function startHostAccessBridge(options) {
     client.pause();
     let lifetime;
     let ownershipTimer;
-    function release(failed = false) {
+    function release(failed = false, reason = session.closeReason ?? 'peer_closed') {
       if (session.released) return;
       session.released = true;
       clearTimeout(lifetime);
       clearTimeout(ownershipTimer);
       if (failed) counts.failed++;
       counts.closed++;
+      closeReasons[Object.hasOwn(closeReasons, reason) ? reason : 'unclassified']++;
       sessions.delete(session);
       session.child?.stdin.destroy();
       session.child?.kill();
       if (!client.destroyed) client.destroy();
     }
+    session.release = release;
     client.once('close', () => release());
-    client.setTimeout(IDLE_MS, () => release(true));
-    lifetime = setTimeout(() => release(true), LIFETIME_MS);
+    client.setTimeout(IDLE_MS, () => release(true, 'idle_timeout'));
+    lifetime = setTimeout(() => release(true, 'session_lifetime_timeout'), LIFETIME_MS);
     try {
       // The owner checks label/image/mount/network identity for every accepted
       // connection. No caller-supplied endpoint, executable or container name.
@@ -122,28 +128,26 @@ export async function startHostAccessBridge(options) {
       session.child = child;
       const exited = new Promise(done => child.once('close', () => { processes.delete(child); done(); }));
       processes.set(child, exited);
-      child.once('error', () => release(true));
+      child.once('error', () => release(true, 'pipe_start_failed'));
       // stderr may include platform details; drain without retaining/logging it.
       child.stderr.on('data', () => undefined);
-      child.stdin.on('error', () => release(true));
-      child.stdout.on('error', () => release(true));
+      child.stdin.on('error', () => release(true, 'pipe_input_error'));
+      child.stdout.on('error', () => release(true, 'pipe_output_error'));
       client.pipe(child.stdin);
       child.stdout.pipe(client);
       child.once('close', code => {
-        if (code !== 0) release(true);
-        else if (!client.destroyed) client.end();
+        if (code !== 0) release(true, 'pipe_nonzero_exit');
+        else if (!client.destroyed) { session.closeReason ??= 'pipe_eof'; client.end(); }
       });
       client.resume();
-    } catch { release(true); }
+    } catch (error) { release(true, error instanceof Error && error.message === 'OWNERSHIP_TIMEOUT' ? 'ownership_timeout' : 'ownership_rejected'); }
   }
 
   async function close() {
     if (stopping) return;
     stopping = true;
     for (const session of sessions) {
-      session.child?.stdin.destroy();
-      session.child?.kill();
-      session.client.destroy();
+      session.release(false, 'owner_shutdown');
     }
     await Promise.all(servers.map(server => new Promise(done => {
       if (!server.listening) done();
@@ -177,7 +181,8 @@ export async function startHostAccessBridge(options) {
   }
   return Object.freeze({
     close,
-    snapshot: () => ({ ...counts, active: sessions.size, localProcesses: processes.size, stopping,
+    snapshot: () => ({ ...counts, closeReasons: { ...closeReasons }, closeReasonBoundary: 'first_observed_host_boundary',
+      active: sessions.size, localProcesses: processes.size, stopping,
       listeners: servers.filter(server => server.listening).map(server => {
         const address = server.address();
         return { host: address.address, port: address.port };

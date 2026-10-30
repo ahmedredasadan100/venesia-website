@@ -7,6 +7,7 @@ import { dirname, resolve, sep } from "node:path";
 import { runApplicationHandoff } from "./lib/isolated-public-application.mts";
 import { assertDatabaseSecurityCatalog, captureDatabaseSecurityCatalog, loadDatabaseSecurityContract } from "./lib/database-rls-security-contract.mts";
 import { IsolatedSupabaseError, runIsolatedSupabase, type IsolatedSupabaseOptions, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
+import { ownedProcessCleanupQualification } from "./lib/isolated-public-verification.mts";
 
 const root = resolve(import.meta.dirname, "..");
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -341,6 +342,8 @@ async function heroCompatibilityProof(argv: string[]) {
     assert.match(finalHead ?? "", /^[a-f0-9]{40}$/u);
     argv = argv.filter((_, index) => index !== finalIndex && index !== finalIndex + 1);
     assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", windowsHide: true }).trim(), finalHead);
+    if (!ownedProcessCleanupQualification().fullEProcessCleanupQualified)
+      throw new IsolatedSupabaseError("FINAL_QUALITY_PROCESS_CLEANUP_UNQUALIFIED", "preflight");
   }
   const { parsed, output, sourceHash, files } = proofInputs(argv);
   if (finalHead) assert.deepEqual(files, [], "Final Hero quality uses committed membership only.");
@@ -360,6 +363,112 @@ async function heroCompatibilityProof(argv: string[]) {
   assert.equal(cleanup.status, "complete"); assert.equal(cleanup.remainingOwnedResources, 0);
   assert.equal(cleanup.originalResourcesUnchanged, true); assert.equal(cleanup.privateEnvRemoved, true);
   return result;
+}
+
+/** One bounded, read-only connection qualification through the existing isolated owner.
+ * It does not apply application migrations, seed Product fixtures, or run gates. */
+async function connectionLifecycleProof(argv: string[]) {
+  assert.ok(!argv.some(value => ["--platform-only", "--cleanup-only", "--inject-failure", "--retained-proof"].includes(value)),
+    "Connection lifecycle qualification cannot combine mutation, recovery, or retained proof modes.");
+  const parsed = options(argv), output = parsed.artifactDir;
+  const qaRoot = realpathSync(resolve(root, ".tmp-qa"));
+  assert.ok(output.startsWith(qaRoot + sep), "Connection evidence must remain inside the existing ignored QA root.");
+  let ancestor = dirname(output); while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+  assert.equal(realpathSync(ancestor), ancestor, "Connection evidence cannot traverse an existing link.");
+  assert.equal(existsSync(output), false, "Connection evidence must use a fresh directory.");
+  mkdirSync(output, { recursive: true, mode: 0o700 });
+  const save = (name: string, value: unknown) => writeFileSync(resolve(output, name), JSON.stringify(value, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  const started = performance.now(), controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new IsolatedSupabaseError("CONNECTION_READINESS_TIMEOUT", "connection-readiness")), 420_000);
+  const observations: Array<Record<string, string | number | boolean>> = [];
+  const sourceInputs = () => ["scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-supabase-cli.mts",
+    "scripts/lib/isolated-supabase-transport.mjs", "scripts/lib/isolated-public-verification.mts", "scripts/fixtures/isolated-supabase/stack.lock.json"]
+    .map(file => ({ file, sha256: createHash("sha256").update(readFileSync(resolve(root, file))).digest("hex") }));
+  const sources = sourceInputs();
+  let failure: { stage: string; code: string } | undefined;
+  let expectedCancellation = false, cancellationQueryRejected = false;
+  let nativeExpectedFailure: { stage: string; code: string } | undefined;
+  try {
+    await runIsolatedSupabase({ ...parsed, artifactDir: resolve(output, "run"), signal: controller.signal, async handoff(handle) {
+      const backend = async () => {
+        const row = (await handle.query("select pg_backend_pid() as pid,current_database() as database,current_user as role")).rows[0];
+        assert.equal(row.database, "postgres"); assert.equal(row.role, "postgres");
+        const pid = Number(row.pid); assert.ok(Number.isSafeInteger(pid) && pid > 0); return pid;
+      };
+      const firstPid = await backend();
+      await handle.query("begin read only");
+      try {
+        await assert.rejects(handle.renewDatabaseControlConnection(), error => error instanceof IsolatedSupabaseError && error.code === "CONTROL_TRANSACTION_OPEN");
+        assert.equal(await backend(), firstPid);
+      } finally { await handle.query("rollback"); }
+      observations.push({ case: "active-read-only-transaction", status: "PASS", originalBackendRetained: true });
+      const active = handle.query("select pg_sleep(0.3)");
+      await assert.rejects(handle.renewDatabaseControlConnection(), error => error instanceof IsolatedSupabaseError && error.code === "CONTROL_CONNECTION_NOT_IDLE");
+      await active; assert.equal(await backend(), firstPid);
+      observations.push({ case: "active-query", status: "PASS", originalBackendRetained: true });
+      await handle.renewDatabaseControlConnection();
+      const idlePid = await backend(); assert.notEqual(idlePid, firstPid);
+      observations.push({ case: "verified-idle-renewal", status: "PASS", backendChanged: true });
+      const observedFrom = performance.now();
+      let samples = 0, lastPid = idlePid;
+      while (performance.now() - observedFrom < 240_000) {
+        controller.signal.throwIfAborted();
+        await new Promise<void>((done, reject) => {
+          const abort = () => { clearTimeout(wait); reject(controller.signal.reason); };
+          const wait = setTimeout(() => { controller.signal.removeEventListener("abort", abort); done(); }, 20_000);
+          controller.signal.addEventListener("abort", abort, { once: true });
+          if (controller.signal.aborted) abort();
+        });
+        lastPid = await backend(); samples++;
+      }
+      assert.notEqual(lastPid, idlePid, "Actual due-lease renewal must replace the healthy idle backend.");
+      observations.push({ case: "actual-due-lease-renewal", status: "PASS", durationMs: performance.now() - observedFrom, samples, backendChanged: true });
+      save("connection-observations.json", { status: "PASS", observations, readOnlyStatementsOnly: true, applicationMigrationsRun: false,
+        productFixturesRun: false, gateCommandsRun: 0, longRunStabilityProved: false });
+      const activePid = await backend();
+      const cancellationQuery = handle.query("select pg_sleep(5)");
+      void cancellationQuery.catch(() => undefined);
+      await handle.withDatabaseConnection(async connection => {
+        await connection.query("begin read only");
+        try {
+          const row = (await connection.query("select state,wait_event from pg_stat_activity where pid=$1", [activePid])).rows[0];
+          assert.equal(row?.state, "active"); assert.equal(row?.wait_event, "PgSleep");
+        } finally { await connection.query("rollback"); }
+      });
+      expectedCancellation = true;
+      controller.abort(new IsolatedSupabaseError("CONTROLLED_CONNECTION_READINESS_CANCELLATION", "connection-readiness"));
+      await assert.rejects(cancellationQuery, error => error instanceof IsolatedSupabaseError);
+      cancellationQueryRejected = true;
+      observations.push({ case: "actual-active-query-cancellation", status: "PASS", activeStateObserved: true, queryRejected: true });
+      save("connection-cancellation-observation.json", { status: "PASS", expectedFault: true, activeStateObserved: true, queryRejected: true,
+        originalNativeFailureMustRemain: "PREPARATION_CANCELLED", databaseWrites: 0 });
+    } });
+  } catch (error) {
+    const safe = error instanceof IsolatedSupabaseError ? error : new IsolatedSupabaseError("UNCLASSIFIED_READINESS_FAILURE", "connection-readiness");
+    if (expectedCancellation && cancellationQueryRejected && controller.signal.reason instanceof IsolatedSupabaseError
+      && controller.signal.reason.code === "CONTROLLED_CONNECTION_READINESS_CANCELLATION" && safe.code === "PREPARATION_CANCELLED")
+      nativeExpectedFailure = { stage: safe.stage, code: safe.code };
+    else { failure = { stage: safe.stage, code: safe.code }; throw error; }
+  } finally {
+    clearTimeout(timer);
+    const runtime = resolve(output, "run"), cleanup = resolve(runtime, "cleanup.json");
+    const cleanupReceipt = existsSync(cleanup) ? JSON.parse(readFileSync(cleanup, "utf8")) : null;
+    const sourceUnchanged = JSON.stringify(sourceInputs()) === JSON.stringify(sources);
+    const cleanupComplete = cleanupReceipt?.status === "complete" && cleanupReceipt.remainingOwnedResources === 0
+      && cleanupReceipt.originalResourcesUnchanged === true && cleanupReceipt.privateEnvRemoved === true;
+    const accepted = !failure && expectedCancellation && cancellationQueryRejected && nativeExpectedFailure?.code === "PREPARATION_CANCELLED"
+      && cleanupComplete && sourceUnchanged;
+    save("connection-readiness-result.json", { status: accepted ? "PASS" : "BLOCKED", failure: failure ?? null, observations,
+      durationMsIncludingCleanup: performance.now() - started, executionDeadlineMs: 420_000,
+      sourceHead: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", timeout: 30_000 }).trim(),
+      sourceInputs: sources, sourceInputsAfter: sourceInputs(), sourceUnchanged, sourceSha256: hash(sources),
+      cancellationCode: controller.signal.reason instanceof IsolatedSupabaseError ? controller.signal.reason.code : null,
+      expectedFault: expectedCancellation, nativeExpectedFailure: nativeExpectedFailure ?? null, originalNativeResultUnchanged: true,
+      cleanup: cleanupReceipt,
+      proofScope: "bounded_owned_postgres_connection_lifecycle", fullEExecuted: false, fullEReadinessProved: false });
+    if (!failure) assert.equal(accepted, true, "Actual expected cancellation, stable source and complete native cleanup are mandatory.");
+  }
+  return { status: "complete", artifactDir: output, scope: "bounded_owned_postgres_connection_lifecycle" };
 }
 
 function options(argv: string[]): QaOptions {
@@ -397,10 +506,12 @@ function options(argv: string[]): QaOptions {
 
 try {
   const args = process.argv.slice(2);
-  const proofModes = args.filter(arg => arg === "--final-public-proof" || arg === "--build-contracts-proof" || arg === "--media-upload-limit-proof" || arg === "--hero-compatibility-proof");
+  const proofModes = args.filter(arg => arg === "--final-public-proof" || arg === "--build-contracts-proof" || arg === "--media-upload-limit-proof" || arg === "--hero-compatibility-proof" || arg === "--connection-lifecycle-only");
   assert.ok(proofModes.length <= 1, "Choose one fixed proof mode exactly once.");
   assert.ok(!args.includes("--retained-proof") || args.includes("--final-public-proof"));
-  const result = args.includes("--final-public-proof")
+  const result = args.includes("--connection-lifecycle-only")
+    ? await connectionLifecycleProof(args.filter(arg => arg !== "--connection-lifecycle-only"))
+    : args.includes("--final-public-proof")
     ? await finalPublicProof(args.filter(arg => arg !== "--final-public-proof"))
     : args.includes("--build-contracts-proof")
       ? await buildContractsProof(args.filter(arg => arg !== "--build-contracts-proof"))

@@ -82,11 +82,55 @@ rejected.on('error', () => undefined);
 await once(rejected, 'close');
 assert.equal(ownershipCalls, 1);
 assert.equal(bridge.snapshot().failed, 1);
+assert.equal(bridge.snapshot().closeReasons.ownership_rejected, 1);
+assert.equal(bridge.snapshot().closeReasonBoundary, 'first_observed_host_boundary');
 assert.equal(bridge.snapshot().active, 0);
 cases.push('invalid owner identity closes connection before Docker execution');
 await bridge.close();
 assert.equal(bridge.snapshot().listeners.length, 0);
 cases.push('cleanup releases every owned listener');
+for (const reason of ['idle_timeout', 'session_lifetime_timeout', 'owner_shutdown', 'peer_closed']) {
+  const createServer = net.createServer, schedule = globalThis.setTimeout;
+  let observed, hostClosed, releaseOwnership, trigger;
+  const accepted = new Promise(done => { observed = done; });
+  const hostClosure = new Promise(done => { hostClosed = done; });
+  const owner = new Promise(done => { releaseOwnership = done; });
+  let controlledBridge, client;
+  try {
+    net.createServer = (config, callback) => createServer.call(net, config, socket => {
+      socket.once('close', hostClosed);
+      const setIdle = socket.setTimeout;
+      socket.setTimeout = function (duration, callback) {
+        if (reason === 'idle_timeout' && duration === 60_000) trigger = callback;
+        return setIdle.call(this, duration, callback);
+      };
+      callback(socket); observed();
+    });
+    globalThis.setTimeout = (callback, duration, ...args) => {
+      if (reason === 'session_lifetime_timeout' && duration === 600_000) trigger = () => callback(...args);
+      return schedule(callback, duration, ...args);
+    };
+    controlledBridge = await startHostAccessBridge({ ...options, assertOwnedTransport: () => owner });
+    client = net.createConnection({ host: '127.0.0.1', port: ports.db }); client.on('error', () => undefined);
+    const closed = new Promise(done => client.once('close', done));
+    await accepted;
+    if (reason === 'owner_shutdown') await controlledBridge.close();
+    else if (reason === 'peer_closed') client.resetAndDestroy();
+    else { assert.equal(typeof trigger, 'function'); trigger(); }
+    await closed; await hostClosure; releaseOwnership('not-an-owned-container'); await controlledBridge.close();
+    const snapshot = controlledBridge.snapshot();
+    assert.equal(snapshot.closeReasons[reason], 1, `The observed ${reason} boundary must be retained.`);
+    assert.equal(snapshot.closed, 1); assert.equal(snapshot.active, 0); assert.equal(snapshot.localProcesses, 0);
+    assert.equal(snapshot.failed, reason.endsWith('timeout') ? 1 : 0);
+    assert.equal(Object.values(snapshot.closeReasons).reduce((sum, count) => sum + count, 0), snapshot.closed);
+    snapshot.closeReasons[reason] = 999;
+    assert.equal(controlledBridge.snapshot().closeReasons[reason], 1, 'A returned snapshot cannot rewrite the retained close evidence.');
+    cases.push(`actual host bridge records ${reason} once without raw details or a Docker dispatch`);
+  } finally {
+    net.createServer = createServer; globalThis.setTimeout = schedule;
+    client?.destroy(); releaseOwnership?.('not-an-owned-container'); await controlledBridge?.close();
+  }
+}
 for (const port of Object.values(ports)) {
   const server = net.createServer();
   server.listen({ host: '127.0.0.1', port, exclusive: true });

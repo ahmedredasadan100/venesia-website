@@ -721,9 +721,101 @@ export function localVerificationSourceGuardEffects(entry: string, sources: Read
     },
   });
   const closure: Array<{ file: string; sha256: string }> = [];
+  const dynamicInputs: Array<{ owner: string; selector: string; file: string; sha256: string }> = [];
+  const reviewedDynamic = new Map<string, string>();
+  const runtimePackages: Array<{ root: string; files: number; bytes: number; sha256: string }> = [];
+  const additionalEntries = new Set<string>();
+  if (entry === "scripts/verify-verification-infrastructure.mts") {
+    try {
+      // Current, manually reviewed producers only. The complete bytes bind the
+      // callee, temporary input, extraction predicate and controlled port wiring.
+      // A renamed/added call or path is not renewed by merely recomputing a hash.
+      const producers = new Map([
+        ["scripts/verify-verification-infrastructure.mts", "c9b10a1aa14295584edbbc5a0d1304981862605aea2b1d3ac166857c6bdc4f1c"],
+        ["scripts/lib/verification-module-loader.mjs", "23b537191a2f7eafc6b15ac9631faa1f701bfa0b7858c8870eff19254532d9e4"],
+        ["scripts/fixtures/verification-text-contract.mjs", "392c0e259233b4c8e67b03375c4e5f5eb66c9754a9843cfcaa64deb8778366e7"],
+        ["scripts/fixtures/admin-core-query-presentation-plan.mjs", "0edabba8604f429fe2ce8ddf8738fc545c395ee559f851c086305e7153552001"],
+      ]);
+      const read = (file: string) => {
+        assert.ok(/^(?:scripts|src)\/[a-zA-Z0-9_./()[\]@+-]+\.[cm]?[jt]sx?$/u.test(file)
+          && !file.split("/").some(part => part === "." || part === ".."), "Unsafe dynamic execution input.");
+        const value = sources.get(file); assert.ok(value !== undefined, "Missing bound dynamic execution input."); return value.toString().replaceAll("\r\n", "\n");
+      };
+      const parse = (file: string) => ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+      const nodes = <T extends ts.Node>(tree: ts.Node, predicate: (node: ts.Node) => node is T) => {
+        const found: T[] = []; const visit = (node: ts.Node) => { if (predicate(node)) found.push(node); ts.forEachChild(node, visit); }; visit(tree); return found;
+      };
+      const bind = (owner: string, selector: string, file: string, source: string) => dynamicInputs.push({ owner, selector, file, sha256: digest(source) });
+      for (const [file, approved] of producers) {
+        const actual = digest(read(file)); assert.equal(actual, approved, "Unreviewed dynamic execution producer."); reviewedDynamic.set(file, actual);
+      }
+      const textOwner = "scripts/fixtures/verification-text-contract.mjs", textTree = parse(textOwner);
+      const adoptersFile = "scripts/fixtures/verification-text-adopters.json", adoptersBytes = sources.get(adoptersFile);
+      assert.ok(adoptersBytes !== undefined, "Missing source-bound adopter inventory.");
+      const adopters = JSON.parse(adoptersBytes.toString()) as unknown;
+      assert.ok(Array.isArray(adopters) && adopters.every(file => typeof file === "string") && new Set(adopters).size === adopters.length);
+      bind(textOwner, "read_only_adopter_inventory", adoptersFile, adoptersBytes.toString().replaceAll("\r\n", "\n"));
+      for (const file of adopters as string[]) bind(textOwner, "read_only_adopter_source", file, read(file));
+      const specs = nodes(textTree, ts.isForOfStatement).filter(node => ts.isArrayLiteralExpression(node.expression)
+        && node.expression.elements.every(element => ts.isObjectLiteralExpression(element)
+          && element.properties.some(property => ts.isPropertyAssignment(property) && property.name.getText(textTree) === "forbidden")));
+      assert.equal(specs.length, 1); assert.ok(ts.isArrayLiteralExpression(specs[0].expression));
+      for (const element of specs[0].expression.elements) {
+        assert.ok(ts.isObjectLiteralExpression(element));
+        const fields = new Map(element.properties.map(property => { assert.ok(ts.isPropertyAssignment(property) && ts.isStringLiteral(property.initializer));
+          return [property.name.getText(textTree), property.initializer.text] as const; }));
+        const file = fields.get("owner")!, variable = fields.get("variable")!, owner = parse(file);
+        bind(textOwner, "read_only_guard_input", fields.get("file")!, read(fields.get("file")!));
+        for (const needle of [fields.get("required")!, fields.get("forbidden")!]) {
+          const selected = owner.statements.filter(node => ts.isExpressionStatement(node) && (node.getText(owner).includes(JSON.stringify(needle))
+            || node.getText(owner).includes("'" + needle.replaceAll("\n", "\\n") + "'")));
+          assert.equal(selected.length, 1, "Generated guard selector must be unique.");
+          const calls = nodes(selected[0], ts.isCallExpression);
+          assert.equal(calls.length, 2); assert.ok(calls.some(call => call.expression.getText(owner) === "assert.ok"));
+          assert.ok(calls.some(call => call.expression.getText(owner) === variable + ".includes"
+            && call.arguments.length === 1 && ts.isStringLiteral(call.arguments[0]) && call.arguments[0].text === needle));
+          bind(textOwner, "actual_assertion_statement", file, selected[0].getText(owner));
+        }
+      }
+      const schedulingFile = "scripts/verify-admin-core-query-fixture-contract.mjs", schedulingTree = parse(schedulingFile);
+      const scheduling = schedulingTree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "verifyCoreQueryFixtureScheduling");
+      assert.equal(scheduling.length, 1); bind(textOwner, "actual_scheduling_declaration", schedulingFile, scheduling[0].getText(schedulingTree));
+      const fixtureFile = "scripts/fixtures/admin-core-query-presentation-fixtures.mts", fixtureTree = parse(fixtureFile);
+      const loops = nodes(fixtureTree, ts.isForOfStatement).filter(node => node.expression.getText(fixtureTree) === "plan" && node.initializer.getText(fixtureTree) === "const spec");
+      assert.equal(loops.length, 1);
+      assert.equal(nodes(loops[0], ts.isIdentifier).some(node => ["process", "globalThis", "global", "require", "eval", "Function", "fetch", "WebSocket"].includes(node.text)), false,
+        "Generated scheduling loop cannot acquire an ambient execution/transport port.");
+      bind(schedulingFile, "actual_controlled_fixture_loop", fixtureFile, loops[0].getText(fixtureTree));
+      const planFile = "scripts/fixtures/admin-core-query-presentation-plan.mjs", planTree = parse(planFile);
+      const recipes = planTree.statements.flatMap(node => ts.isVariableStatement(node) ? node.declarationList.declarations.filter(row => row.name.getText(planTree) === "recipes") : []);
+      assert.equal(recipes.length, 1); assert.ok(recipes[0].initializer && ts.isObjectLiteralExpression(recipes[0].initializer));
+      const recipeArrays: ts.ArrayLiteralExpression[] = recipes[0].initializer.properties.map(property => {
+        assert.ok(ts.isPropertyAssignment(property) && ts.isArrayLiteralExpression(property.initializer)); return property.initializer;
+      });
+      for (const statement of planTree.statements.filter(ts.isForOfStatement)) for (const assignment of nodes(statement.statement, ts.isBinaryExpression)) {
+        if (!ts.isElementAccessExpression(assignment.left) || assignment.left.expression.getText(planTree) !== "recipes") continue;
+        assert.equal(assignment.operatorToken.kind, ts.SyntaxKind.EqualsToken); assert.ok(ts.isArrayLiteralExpression(assignment.right)); recipeArrays.push(assignment.right);
+      }
+      const recipePaths = new Set(recipeArrays.map(array => { const first = array.elements[0]; assert.ok(ts.isStringLiteral(first)); return first.text; }));
+      let recipeImports = 0;
+      for (const call of nodes(planTree, ts.isCallExpression).filter(call => ts.isPropertyAccessExpression(call.expression) && call.expression.getText(planTree) === "jiti.import")) {
+        assert.equal(call.arguments.length, 1); const argument = call.arguments[0];
+        if (ts.isStringLiteral(argument)) additionalEntries.add(resolve(ROOT, dirname(planFile), argument.text).slice(ROOT.length + 1).replaceAll("\\", "/"));
+        else {
+          assert.equal(argument.getText(planTree).replaceAll(" ", ""), "'../../src/lib/admin/'+modulePath+'.ts'"); recipeImports++;
+          for (const path of recipePaths) { assert.ok(/^[a-zA-Z0-9_/-]+$/u.test(path) && !path.split("/").includes("..")); additionalEntries.add("src/lib/admin/" + path + ".ts"); }
+        }
+      }
+      assert.equal(recipeImports, 1); assert.ok(additionalEntries.size > 8);
+      for (const file of additionalEntries) read(file);
+    } catch {
+      unresolved.push(entry + ":unresolved_reviewed_generated_execution_inputs"); reviewedDynamic.clear();
+    }
+  }
   try {
     assert.ok(sources.has(entry), "Missing source guard entry.");
-    const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], sourceOverrides: overrides, symbolAware: false, nativeEagerImports: true });
+    const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry, ...additionalEntries], sourceOverrides: overrides, symbolAware: false, nativeEagerImports: true });
+    const packageNames = new Set<string>();
     for (const [file, tree] of graph) {
       const bytes = sources.get(file); assert.ok(bytes !== undefined, "Executable closure escaped its immutable source snapshot.");
       closure.push({ file, sha256: digest(bytes.toString().replaceAll("\r\n", "\n")) });
@@ -734,11 +826,42 @@ export function localVerificationSourceGuardEffects(entry: string, sources: Read
       const visit = (node: ts.Node) => {
         if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
           && /^(?:@\/|@src\/|file:|https?:|\/|[A-Za-z]:)/u.test(node.moduleSpecifier.text)) unresolved.push(file + ":unresolved_native_module_alias");
+        if (entry === "scripts/verify-verification-infrastructure.mts" && (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+          && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && !node.moduleSpecifier.text.startsWith(".") && !nodeModule.isBuiltin(node.moduleSpecifier.text)) {
+          const parts = node.moduleSpecifier.text.split("/"); packageNames.add(parts[0].startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+        }
         if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && ts.isIdentifier(node.expression) && dynamicLoaders.has(node.expression.text))
-          unresolved.push(file + ":unresolved_dynamic_execution:" + node.expression.text);
+          if (!reviewedDynamic.has(file)) unresolved.push(file + ":unresolved_dynamic_execution:" + node.expression.text);
         ts.forEachChild(node, visit);
       };
       visit(tree);
+    }
+    if (entry === "scripts/verify-verification-infrastructure.mts" && reviewedDynamic.size) {
+      packageNames.add("js-yaml");
+      const seen = new Set<string>(), queue = [...packageNames].map(name => ({ name, from: join(ROOT, "package.json") }));
+      let totalBytes = 0, totalFiles = 0;
+      while (queue.length) {
+        const request = queue.shift()!, native = nodeModule.createRequire(request.from);
+        let directory = dirname(native.resolve(request.name));
+        while (directory !== dirname(directory) && (!existsSync(join(directory, "package.json"))
+          || JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).name !== request.name)) directory = dirname(directory);
+        const relative = directory.slice(ROOT.length + 1).replaceAll("\\", "/");
+        assert.ok(directory.startsWith(join(ROOT, "node_modules") + sep) && /^node_modules\//u.test(relative), "Runtime dependency escaped the installed project.");
+        if (seen.has(relative)) continue; seen.add(relative);
+        const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name: string; dependencies?: Record<string, string> };
+        assert.equal(manifest.name, request.name);
+        const files: Array<{ file: string; sha256: string }> = []; let bytes = 0;
+        const walk = (at: string) => { for (const name of readdirSync(at).sort()) {
+          const file = join(at, name), stat = lstatSync(file); assert.equal(stat.isSymbolicLink(), false, "Runtime package contains an unqualified link.");
+          if (stat.isDirectory()) walk(file);
+          else { assert.ok(stat.isFile()); const content = readFileSync(file); bytes += content.length; totalBytes += content.length; totalFiles++;
+            assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+            files.push({ file: file.slice(directory.length + 1).replaceAll("\\", "/"), sha256: digest(content) }); }
+        } };
+        walk(directory); runtimePackages.push({ root: relative, files: files.length, bytes, sha256: digest(JSON.stringify(files)) });
+        for (const name of Object.keys(manifest.dependencies ?? {}).sort()) queue.push({ name, from: join(directory, "package.json") });
+      }
+      runtimePackages.sort((left, right) => left.root.localeCompare(right.root));
     }
   } catch { unresolved.push(entry + ":unresolved_executable_import_closure"); }
   const inputs = ["package.json", "package-lock.json", "tsconfig.json"].map(file => {
@@ -756,8 +879,10 @@ export function localVerificationSourceGuardEffects(entry: string, sources: Read
   } catch { unresolved.push("installed_dependencies_do_not_match_current_lock"); }
   closure.sort((left, right) => left.file.localeCompare(right.file));
   const reasons = [...new Set(unresolved)].sort();
-  return { entry, closure, inputs, runtime, unresolved: reasons,
-    fingerprint: reasons.length ? null : digest(JSON.stringify({ schema: "native-source-guard-effects-v1", entry, closure, inputs, runtime })) };
+  const generated = entry === "scripts/verify-verification-infrastructure.mts" ? { producers: [...reviewedDynamic].map(([file, sha256]) => ({ file, sha256 })),
+    fragments: dynamicInputs, dynamicSourceEntries: [...additionalEntries].sort(), runtimePackages } : null;
+  return { entry, closure, inputs, runtime, generated, unresolved: reasons,
+    fingerprint: reasons.length ? null : digest(JSON.stringify({ schema: "native-source-guard-effects-v1", entry, closure, inputs, runtime, ...(generated ? { generated } : {}) })) };
 }
 
 /** One reviewed effect contract for an existing canonical leaf, never an arbitrary-command execution registry. */
@@ -765,7 +890,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   sourceGuardSha256: Readonly<Record<string, string>> = {}) {
   const entry = "scripts/qa-admin-form-guarded-navigation.mts";
   const step = "node --experimental-strip-types " + entry + " --save-cache-only";
-  const fixtureApproved = fixtureSha256 === "2fb51c01ef99c2e049ffa46ca1a77fe2566cbbf795999bb3cc49e016b3c9e369";
+  const fixtureApproved = fixtureSha256 === "26d296745885d0d590e03bf1e0db37d6484871d8c26ba9545ed38eba8f133142";
   const bindings = (analysis.ownerBindings ?? []).filter(binding => binding.capability === "form_runtime");
   const commands = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(step)).sort();
   const reasons = analysis.changes.filter(change => change.semanticChange && !change.presentationOnly && commands.some(check => change.candidateChecks.includes(check))
@@ -791,7 +916,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
   const sourceGuards = [
     { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", marker: "Executable governance PASS" },
-    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "UNQUALIFIED_DYNAMIC_EXECUTION_CLOSURE", marker: "PASS verification infrastructure:" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230", marker: "PASS verification infrastructure:" },
   ];
   const qualityBlockers: string[] = [];
   const selections = [{ family: "admin-form-save-cache", selected: reasons.length > 0, qualified: targets.length > 0,
@@ -3314,6 +3439,15 @@ export function runOwnedVerificationChild(ports: {
   });
 }
 
+/** Owner capability prerequisite only; it never replaces the actual caller-context process probe. */
+export function ownedProcessCleanupQualification() {
+  const rootExitQualified = process.platform === "linux";
+  return { status: rootExitQualified ? "PASS" as const : "BLOCKED" as const,
+    missingProof: rootExitQualified ? null : process.platform === "win32"
+      ? "windows_exited_root_descendant_ownership" : "unsupported_process_cleanup_platform",
+    fullEProcessCleanupQualified: rootExitQualified };
+}
+
 /** Qualify this execution context with a real, disposable owned tree before Docker allocation. */
 export async function verifyOwnedProcessReadiness(options: {
   sourceDirectory: string;
@@ -3377,9 +3511,12 @@ export async function verifyOwnedProcessReadiness(options: {
       "Owned process readiness did not prove live-tree termination in this execution context.");
     for (const pid of knownPids) assert.equal(alive(pid), false, "Owned process readiness left a known owned process live.");
     assert.equal(children.size, 0, "Owned process readiness retained an undrained child registration.");
+    const cleanupQualification = ownedProcessCleanupQualification();
     const readinessReceipt = { status: "PASS" as const, platform: process.platform, scope: "self-owned-live-tree-cancellation" as const,
       durationMs: performance.now() - started, rootIdentity: identities.root, descendantIdentity: identities.leaf,
       rawExit: { code: retained.code, signal: retained.signal }, cleanup: retained.cleanup,
+      cleanupQualification: { ...cleanupQualification, liveRootTreeProved: true,
+        rootExitTreeSupported: cleanupQualification.fullEProcessCleanupQualified },
       limitations: process.platform === "win32" ? ["Already-exited Windows roots have unverified descendant cleanup; this live-tree probe does not qualify that path."]
         : ["Detached descendants that clear the inherited ownership marker remain outside qualification."] };
     receipt(context, "process-readiness.json", readinessReceipt); return readinessReceipt;
@@ -3411,6 +3548,11 @@ export async function verifyOwnedProcessReadiness(options: {
 }
 
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
+  if (request.finalQualityGate && !ownedProcessCleanupQualification().fullEProcessCleanupQualified) {
+    const failure = new Error("Final quality requires qualified owned descendant cleanup after root exit.");
+    Object.defineProperty(failure, "code", { value: "FINAL_QUALITY_PROCESS_CLEANUP_UNQUALIFIED" });
+    throw failure;
+  }
   await context.assertOwned();
   const localImpact = request.localVerification;
   if (localImpact !== undefined) assert.ok(localImpact && typeof localImpact === "object", "Invalid local verification impact record.");

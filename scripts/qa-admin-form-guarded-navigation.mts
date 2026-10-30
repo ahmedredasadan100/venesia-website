@@ -216,24 +216,34 @@ window.__ADMIN_FORM_GUARDED_NAV_QA__ = qa;
 
 // Only the explicitly bounded save-cache fixture enables this passive ring.
 // It records lengths/booleans/enums, never field contents, URLs or state objects.
-function createSaveCacheDiagnosticTimeline(now = () => performance.now()) {
-  const started = now(), events = [];
-  let sequence = 0, dropped = 0;
+function createSaveCacheDiagnosticTimeline(now = () => performance.now(), mode = "deep") {
+  if (mode !== "light" && mode !== "deep") throw new Error("UNQUALIFIED_DIAGNOSTIC_MODE");
+  const started = now(), slots = [];
+  let sequence = 0, dropped = 0, cursor = 0;
   const kinds = new Set(["input", "dom_value_observed", "state_update_requested", "state_render_observed",
     "controlled_action", "controlled_source_write", "query_invalidation", "controlled_api_read", "controlled_readback", "assertion_failure"]);
   return {
+    mode,
     record(kind, facts = {}) {
       if (!kinds.has(kind)) return;
       const row = { sequence: ++sequence, elapsedMs: Math.max(0, now() - started), kind };
-      for (const key of ["valueLength", "actionCalls", "reads", "assertionOrdinal"]) {
-        if (Number.isSafeInteger(facts[key]) && facts[key] >= 0) row[key] = Math.min(facts[key], 1000000);
+      if (mode === "deep") {
+        for (const key of ["valueLength", "actionCalls", "reads", "assertionOrdinal"]) {
+          if (Number.isSafeInteger(facts[key]) && facts[key] >= 0) row[key] = Math.min(facts[key], 1000000);
+        }
+        for (const key of ["trusted", "pending", "dirty"]) if (typeof facts[key] === "boolean") row[key] = facts[key];
+        if (["idle", "success", "warning", "error", "throw", "no-confirmation"].includes(facts.status)) row.status = facts.status;
+      } else if (kind === "assertion_failure" && Number.isSafeInteger(facts.assertionOrdinal) && facts.assertionOrdinal >= 0) {
+        row.assertionOrdinal = Math.min(facts.assertionOrdinal, 1000000);
       }
-      for (const key of ["trusted", "pending", "dirty"]) if (typeof facts[key] === "boolean") row[key] = facts[key];
-      if (["idle", "success", "warning", "error", "throw", "no-confirmation"].includes(facts.status)) row.status = facts.status;
-      events.push(row);
-      if (events.length > 128) { events.shift(); dropped += 1; }
+      slots[cursor] = row;
+      cursor = (cursor + 1) % 128;
+      if (sequence > 128) dropped += 1;
     },
-    snapshot() { return { events: events.map(row => ({ ...row })), totalObserved: sequence, dropped, limit: 128 }; },
+    snapshot() {
+      const events = sequence > 128 ? slots.slice(cursor).concat(slots.slice(0, cursor)) : slots;
+      return { events: events.map(row => ({ ...row })), totalObserved: sequence, dropped, limit: 128, mode };
+    },
   };
 }
 
@@ -737,7 +747,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
 }
 qa.mountSaveCache = (options = {}) => {
   qa.saveCacheDiagnosticDispose?.();
-  qa.saveCacheDiagnostic = options.diagnostics === true ? createSaveCacheDiagnosticTimeline() : null;
+  qa.saveCacheDiagnostic = options.diagnostics === true ? createSaveCacheDiagnosticTimeline(undefined, options.diagnosticMode === "deep" ? "deep" : "light") : null;
   if (qa.saveCacheDiagnostic) {
     const observe = (event) => {
       const field = event.target;
@@ -1480,11 +1490,18 @@ async function runReportFreshnessCases(browser: Browser, harnessUrl: string, roo
 
 const rootDir = process.cwd();
 const saveCacheOnly = process.argv.includes("--save-cache-only");
+const saveCacheDiagnosticMode = process.argv.includes("--save-cache-diagnostics=deep") ? "deep" : "light";
+const saveCacheDiagnosticRequested = process.argv.slice(2).some(argument => argument.startsWith("--save-cache-diagnostics"));
 const reportFreshnessOnly = process.argv.includes("--report-freshness-only");
 const returnPathOnly = process.argv.includes("--return-path-only");
-if (saveCacheOnly) assert.deepEqual(process.argv.slice(2), ["--save-cache-only"], "The bounded save-cache family accepts only its exact flag.");
+if (saveCacheDiagnosticRequested) assert.ok(saveCacheOnly && saveCacheDiagnosticMode === "deep",
+  "Diagnostic arguments require the exact reviewed bounded deep mode before resource creation.");
+if (saveCacheOnly) assert.deepEqual(process.argv.slice(2), saveCacheDiagnosticMode === "deep"
+  ? ["--save-cache-only", "--save-cache-diagnostics=deep"] : ["--save-cache-only"],
+  "The bounded save-cache family accepts its exact normal flag or explicit reviewed deep diagnostics.");
+else assert.equal(saveCacheDiagnosticMode, "light", "Deep diagnostics require the bounded save-cache family.");
 const fixtureStarted = performance.now();
-const fixtureTimings = { preparationMs: 0, executionMs: 0, cleanupMs: 0 };
+const fixtureTimings = { preparationMs: 0, executionMs: 0, cleanupMs: 0, diagnosticCollectionMs: 0 };
 let executionStarted: number | null = null;
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
@@ -1584,7 +1601,7 @@ try {
     await page.evaluate((options) => {
       (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { mountSaveCache(value: unknown): void } })
         .__ADMIN_FORM_GUARDED_NAV_QA__.mountSaveCache(options);
-    }, { ...scenario, diagnostics: saveCacheOnly });
+    }, { ...scenario, diagnostics: saveCacheOnly, diagnosticMode: saveCacheDiagnosticMode });
     await page.locator("#qa-save-cache-list").waitFor();
     await page.locator("#qa-save-cache-edit").click();
     await page.locator("#qa-save-cache-title").fill("Saved at source");
@@ -1678,7 +1695,8 @@ try {
       check(`${secondLabel}: submitted input survives`, submittedValue === "Second unsaved edit");
       if (dirty !== "true") secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
     }
-    if (saveCacheOnly) {
+    if (saveCacheOnly && saveCacheDiagnosticMode === "deep") {
+      const diagnosticCollectionStarted = performance.now();
       const summary = await page.evaluate(() => {
         const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: {
           saveCacheDiagnostic?: { snapshot(): { totalObserved: number; dropped: number; events: Array<{ kind: string }> } };
@@ -1687,6 +1705,7 @@ try {
           kinds: [...new Set(diagnostic?.events.map(event => event.kind) ?? [])] };
       });
       saveCacheDiagnosticSummaries.push(summary);
+      fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted;
     }
     await closePage(page);
     if (saveCacheOnly) { saveCacheScenariosCompleted += 1; saveCacheDiagnosticPage = null; }
@@ -2731,6 +2750,7 @@ try {
   primaryFailed = true;
   saveCacheObservedAssertionFailure = error instanceof assert.AssertionError;
   if (saveCacheOnly && saveCacheDiagnosticPage && !saveCacheDiagnosticPage.isClosed()) {
+    const diagnosticCollectionStarted = performance.now();
     try {
       saveCacheFailureTimeline = await saveCacheDiagnosticPage.evaluate(({ assertionFailure, assertionOrdinal }) => {
         const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__?: {
@@ -2740,6 +2760,7 @@ try {
         return diagnostic?.snapshot() ?? null;
       }, { assertionFailure: saveCacheObservedAssertionFailure, assertionOrdinal: passed + 1 });
     } catch { saveCacheDiagnosticCaptureFailed = true; }
+    finally { fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted; }
   }
   throw error;
 } finally {
@@ -2777,6 +2798,9 @@ try {
         missingEvidence: ["React commit not observed", "Native database persistence not executed", "Causal owner of divergence UNKNOWN"],
         timeline: saveCacheFailureTimeline, captureFailed: saveCacheDiagnosticCaptureFailed,
         completedScenarioSummaries: saveCacheDiagnosticSummaries, maxEventsPerScenario: 128,
+        mode: saveCacheDiagnosticMode,
+        successSummaries: saveCacheDiagnosticMode === "deep" ? "COLLECTED" : "DEFERRED_UNTIL_FAILURE",
+        preFailureEvidence: saveCacheDiagnosticMode === "deep" ? "bounded_metadata" : "bounded_event_order_and_elapsed_only",
         fieldContentsRecorded: false, productionDataRecorded: false, schedulingAdded: false,
       },
       cleanup: cleanup.map(({ resource, status }) => ({ resource, status,

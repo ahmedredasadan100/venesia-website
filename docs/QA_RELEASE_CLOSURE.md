@@ -398,9 +398,16 @@ execution requires a reviewed fingerprint of the complete native eager import
 closure, build/dependency inputs, installed lock and actual Node/runtime identity,
 recomputed from immutable source bytes. The existing executable graph owns the
 explicit eager-import option; its ordinary callers retain their default behavior.
-Missing or generated/dynamic execution remains unqualified. Current Executable
-Governance has a reviewed closure; Verification Infrastructure remains selected
-but unqualified because its existing loader executes generated fixture code.
+Missing or unresolved generated/dynamic execution remains unqualified. The
+existing Infrastructure owner may qualify only its reviewed finite producers:
+actual selected guard/scheduler/fixture statements, literal and recipe-derived
+Jiti imports, read-input membership and the complete eager source closure.
+Producer bytes, installed native-resolved package distributions, dependency
+locks and actual runtime identity bind that footprint. Unknown paths, loaders,
+fragments, packages or runtime changes reject qualification; a success marker or
+caller-supplied hash cannot replace it. This is a bounded current-owner effect
+contract, not a resolver for arbitrary generated code. Executable Governance
+retains its separately reviewed closure.
 This does not qualify their named composite commands, Database effects or
 Browser behavior. QA/fixture changes automatically nominate these
 existing quality owners even without an import-graph edge; unresolved fixture
@@ -465,10 +472,17 @@ causal category while naming their observed termination reason. None proves a
 Sleep, memory, Docker, Codex transport or Product cause. Primary child evidence
 and cleanup classification remain separate.
 
-The same bounded Form fixture now retains at most 128 passive metadata events
-per scenario: input/DOM value lengths, controlled state-update requests and
-render observations, controlled action/source/cache/API/readback boundaries,
-and an observed assertion boundary. It records no field values, arbitrary
+The same bounded Form fixture retains at most 128 passive events per scenario.
+Its exact ordinary command keeps light event order/elapsed history and defers
+snapshot collection until failure. The explicit bounded
+`--save-cache-only --save-cache-diagnostics=deep` arm adds the existing permitted
+length/boolean/enum facts and successful scenario summaries. Diagnostic argument
+typos reject before resource creation; they cannot activate another family.
+Neither mode reconstructs facts that were not observed. Input/DOM, controlled
+state-update/render/action/source/cache/API/readback and assertion boundaries
+retain their proof levels. The collector cost is measured separately from
+Browser preparation/execution and snapshot RPC; constant-clock collector-only
+benchmarks exclude callsite allocations and DOM reads. It records no field values, arbitrary
 objects, URLs or credentials; no diagnostic timer, microtask or React setter is
 added. Render observations are not React commit proof. Failure collection must
 rethrow the original error even if collection fails; unavailable evidence stays
@@ -480,7 +494,13 @@ Before Docker allocation, the existing isolated lifecycle invokes the existing
 owned-child process owner to qualify creation and live-tree cancellation in
 the actual caller context. A denied tree-kill remains BLOCKED even if its
 finite self-owned probe subsequently expires cleanly. Windows root exit alone
-does not prove detached descendants absent. Preparation has a 600-second phase
+does not prove detached descendants absent. The canonical process owner exposes
+that missing capability separately from the live-tree permission probe. Known
+Full Quality intent rejects before CLI resource allocation when that prerequisite
+is unqualified; a direct public handoff rejects before gates, without claiming
+to know its future request before initial allocation. Finite detached probes
+ending by self-expiry do not establish general cleanup qualification.
+Preparation has a 600-second phase
 budget and 1800-second cumulative budget, excluding gate execution, with age
 observation and rejection before the pinned 600-second control-connection
 lifetime. Verified-idle renewal reuses the existing port; it does not replace a
