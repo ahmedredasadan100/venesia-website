@@ -2298,3 +2298,63 @@ The four unresolved inputs retain distinct boundaries: `stack.lock.json` is an a
 **Measured source/PostgreSQL coupling → bounded correction:** the first current upstream-only probe starts with a verified healthy idle backend (~1.5s idle), then actual synchronous analysis takes132218.4285ms (discovery119255.9519ms). The subsequent read fails APPLICATION_CLIENT_DISCONNECTED; the host records idle_timeout as its first observed boundary, and cleanup removes all10owned resources, closes transport and releases all four ports. This proves the current cold-analysis/idle conflict, not the historical initiating cause or which independent timer fired first. Source discovery now remains before allocation through private raw-fact retention in the existing live Admission WeakMap. Exact source/runtime/artifact/explicit-file/delta validation precedes reuse; missing/corrupt/rebound facts fail closed, returned data is cloned, and current request coverage/native descriptors are recomputed. A FinalQuality local-impact request lacking a live qualification rejects before ownership/source work; bounded/default prerequisites are preserved. No failed PG socket is recovered, no suspended client state or parallel cache registry is introduced, and no timeout is increased. The existing Admission controls own the new authority/alias/freshness rejection vectors. Actual post-correction results remain solely in the final report; the original blocked probe and fixture assertion failure are preserved.
 
 **Approval / preservation boundary:** targeted development verification and authorized local logical commit are separate from Full E/Pre-Push. This phase forbids Full E, Push, new CI/Preview, Ready, merge and deployment. PR229 remains Draft on the separately observed old published SHA; its CI/Preview do not qualify local changes. Protected files, .tmp/, debug.log, prior evidence and unrelated resources remain preserved. Human Create/Edit Desktop/Mobile/RTL and hosted persistence reviews remain PENDING. globalClosed=false. STOP — OWNER QA FOUNDATION CLOSURE REVIEW.
+
+### 27.29 Current — QA engineering diagnostics and runtime closure — One-Shot 02
+
+**Previous → current / bounded scope:** this continuation starts at local
+`ff1640d6857b865ce5b1e07643a94f3fb67f8e6b`, preserving all twelve unpublished
+commits and Foundation01's failures and passing scoped evidence. The Owner
+authorizes architecture-preserving diagnostics, measured performance, behavioral
+coverage classification and Linux finalization; Full E and remote release
+actions remain forbidden. Current observed outcomes and frozen identities are
+recorded in the [Engineering02 final report](../.tmp-qa/qa-engineering-completion-02-20261030/final-engineering-report.json).
+
+**Capability → owner → consumer / proved diagnostic gap:** the qualified
+`admin-form-save-cache` fixture already owns its bounded light/deep event ring,
+failure receipt and thirteen controlled shared Form scenarios. A second-save
+dirty DOM mismatch was appended to an aggregate before its page closed; the
+later assertion could therefore lose the first already-proved divergence and
+timeline. The same fixture now retains that first safe scenario/DOM boundary
+and takes the existing ring snapshot only on divergence/failure or explicit
+deep mode. Normal success adds no diagnostic scheduling or awaited capture.
+Original checks, aggregate assertion/order/error, field state and cleanup remain
+owned by the existing fixture and canonical child owner. The safe receipt binds
+component/capability/consumer/contract/runtime and explicitly delegates final
+exit status to the parent. Event order and DOM mismatch do not prove a React
+commit or the causal Product owner; missing evidence remains explicit. Adoption
+is limited to this qualified shared-owner fixture, not all six business editors.
+
+**Performance / runtime ownership:** source-impact semantic/graph/protection
+caches, private live Admission facts, fresh source/runtime/artifact checks and
+conservative fallback retain their existing owners. Unmeasured AST/blob-reading
+opportunities do not authorize new caches or speed claims. The Linux01 outer
+timeout occurred during repeated task-caller identity verification after the
+canonical Transport leaf had completed; no native/process-owner defect follows
+from exit137 alone. Task evidence preparation, execution, finalization and
+cleanup are measured separately. A correction may reuse one freshly measured
+tuple for its adjacent receipt consumers while retaining complete before/after
+source and runtime verification; no general timeout, runtime, engine or workflow
+is changed. Actual Linux/Windows outcomes and matched-input timing limits remain
+in the final report, including original failures and incomplete evidence.
+
+**Behavioral coverage / exceptions:** [QA Section5.1](QA_RELEASE_CLOSURE.md#51-bounded-six-type-content-behavioral-coverage--one-shot-02)
+classifies ten behaviors for the six current content adapters using their actual
+existing tests, assertions and raw fixture evidence. Historical Create/Edit,
+PGlite saves, draft/native tuple checks and Gallery metadata/order retain their
+consumer scopes; changed input closures prevent whole-current-source reuse.
+Synthetic permission actors are not Auth/RLS proof. Current per-type Delete
+receipts and authenticated hosted persistence are unproved. Applicable Alt and
+Caption contracts remain with existing image/Gallery owners; no Alt RCA is
+reopened. Component/source adoption, behavioral coverage, visual presentation
+and Owner approval stay distinct. The phase JSON is evidence, not another
+registry or live Admission authority.
+
+**Delivery / preservation:** targeted Syntax/ESLint/TypeScript, affected
+Governance/Infrastructure, qualified failure capture and Automatic Preflight
+must bind the final source before its authorized local commit. Prior raw
+failures, protected files, `.tmp/`, `debug.log` and Treasury remain preserved.
+CI/Preview on published`b771c98c` does not qualify the new local source. Full E,
+Pre-Push, new-head CI/Preview, public evidence and actual Owner reviews remain
+independent release requirements. No Product, schema, Auth, global setting,
+Production write, Push, Ready, merge or deployment is authorized.
+`globalClosed=false`; human approval remains PENDING.

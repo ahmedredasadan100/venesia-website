@@ -221,7 +221,7 @@ function createSaveCacheDiagnosticTimeline(now = () => performance.now(), mode =
   const started = now(), slots = [];
   let sequence = 0, dropped = 0, cursor = 0;
   const kinds = new Set(["input", "dom_value_observed", "state_update_requested", "state_render_observed",
-    "controlled_action", "controlled_source_write", "query_invalidation", "controlled_api_read", "controlled_readback", "assertion_failure"]);
+    "controlled_action", "controlled_source_write", "query_invalidation", "controlled_api_read", "controlled_readback", "contract_divergence", "assertion_failure"]);
   return {
     mode,
     record(kind, facts = {}) {
@@ -1488,6 +1488,19 @@ async function runReportFreshnessCases(browser: Browser, harnessUrl: string, roo
   }
 }
 
+// Serialized by the existing page.evaluate port only after a proven mismatch or
+// failure. A render observation is not a commit or a causal-owner diagnosis.
+function snapshotSaveCacheDiagnostic({ assertionFailure, assertionOrdinal, contractDivergence, dirty }: {
+  assertionFailure: boolean; assertionOrdinal: number; contractDivergence?: boolean; dirty?: boolean;
+}) {
+  const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__?: {
+    saveCacheDiagnostic?: { record(kind: string, facts: { assertionOrdinal?: number; dirty?: boolean }): void; snapshot(): unknown };
+  } }).__ADMIN_FORM_GUARDED_NAV_QA__?.saveCacheDiagnostic;
+  if (contractDivergence) diagnostic?.record("contract_divergence", { dirty });
+  if (assertionFailure) diagnostic?.record("assertion_failure", { assertionOrdinal });
+  return diagnostic?.snapshot() ?? null;
+}
+
 const rootDir = process.cwd();
 const saveCacheOnly = process.argv.includes("--save-cache-only");
 const saveCacheDiagnosticMode = process.argv.includes("--save-cache-diagnostics=deep") ? "deep" : "light";
@@ -1515,6 +1528,9 @@ const saveCacheDiagnosticSummaries: Array<{ totalObserved: number; dropped: numb
 let saveCacheFailureTimeline: unknown = null;
 let saveCacheDiagnosticCaptureFailed = false;
 let saveCacheObservedAssertionFailure = false;
+let saveCacheFirstDivergence: { boundary: "dirty_state_dom"; scenarioIndex: number; controlled: boolean; outcome: string;
+  expected: "true"; observed: "false" | "missing" | "unexpected"; observedAfterAssertions: number; elapsedMs: number } | null = null;
+let saveCacheOriginalFailure: { name: string; code: "ERR_ASSERTION" | null; assertionOrdinal: number | null; observedElapsedMs: number } | null = null;
 
 try {
   const webpackWarnings = await compileHarness(rootDir, tempDir);
@@ -1693,7 +1709,22 @@ try {
         JSON.stringify(afterSecond.invalidations) === JSON.stringify(beforeSecond.invalidations) &&
         JSON.stringify(afterSecond.cache) === JSON.stringify(beforeSecond.cache) && afterSecond.routerEvents.length === 0);
       check(`${secondLabel}: submitted input survives`, submittedValue === "Second unsaved edit");
-      if (dirty !== "true") secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
+      if (dirty !== "true") {
+        secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
+        if (saveCacheOnly && saveCacheFirstDivergence === null) {
+          saveCacheFirstDivergence = { boundary: "dirty_state_dom", scenarioIndex: saveCacheScenariosStarted,
+            controlled: scenario.controlled === true, outcome: scenario.secondFailure,
+            expected: "true", observed: dirty === "false" ? "false" : dirty === null ? "missing" : "unexpected",
+            observedAfterAssertions: passed, elapsedMs: performance.now() - fixtureStarted };
+          const diagnosticCollectionStarted = performance.now();
+          try {
+            saveCacheFailureTimeline = await page.evaluate(snapshotSaveCacheDiagnostic,
+              { assertionFailure: false, assertionOrdinal: passed + 1, contractDivergence: true,
+                ...(dirty === "false" ? { dirty: false } : {}) });
+          } catch { saveCacheDiagnosticCaptureFailed = true; }
+          finally { fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted; }
+        }
+      }
     }
     if (saveCacheOnly && saveCacheDiagnosticMode === "deep") {
       const diagnosticCollectionStarted = performance.now();
@@ -2749,16 +2780,19 @@ try {
 } catch (error) {
   primaryFailed = true;
   saveCacheObservedAssertionFailure = error instanceof assert.AssertionError;
-  if (saveCacheOnly && saveCacheDiagnosticPage && !saveCacheDiagnosticPage.isClosed()) {
+  const observedElapsedMs = performance.now() - fixtureStarted;
+  try {
+    saveCacheOriginalFailure = { name: error instanceof Error && ["AssertionError", "TimeoutError", "Error"].includes(error.name) ? error.name : "UNKNOWN",
+      code: saveCacheObservedAssertionFailure ? "ERR_ASSERTION" : null, assertionOrdinal: saveCacheObservedAssertionFailure ? passed + 1 : null, observedElapsedMs };
+  } catch {
+    saveCacheOriginalFailure = { name: "UNKNOWN", code: saveCacheObservedAssertionFailure ? "ERR_ASSERTION" : null,
+      assertionOrdinal: saveCacheObservedAssertionFailure ? passed + 1 : null, observedElapsedMs };
+  }
+  if (saveCacheOnly && saveCacheFirstDivergence === null && saveCacheDiagnosticPage && !saveCacheDiagnosticPage.isClosed()) {
     const diagnosticCollectionStarted = performance.now();
     try {
-      saveCacheFailureTimeline = await saveCacheDiagnosticPage.evaluate(({ assertionFailure, assertionOrdinal }) => {
-        const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__?: {
-          saveCacheDiagnostic?: { record(kind: string, facts: { assertionOrdinal: number }): void; snapshot(): unknown };
-        } }).__ADMIN_FORM_GUARDED_NAV_QA__?.saveCacheDiagnostic;
-        if (assertionFailure) diagnostic?.record("assertion_failure", { assertionOrdinal });
-        return diagnostic?.snapshot() ?? null;
-      }, { assertionFailure: saveCacheObservedAssertionFailure, assertionOrdinal: passed + 1 });
+      saveCacheFailureTimeline = await saveCacheDiagnosticPage.evaluate(snapshotSaveCacheDiagnostic,
+        { assertionFailure: saveCacheObservedAssertionFailure, assertionOrdinal: passed + 1 });
     } catch { saveCacheDiagnosticCaptureFailed = true; }
     finally { fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted; }
   }
@@ -2791,11 +2825,20 @@ try {
       diagnostics: {
         owner: "src/components/admin/ui/AdminFormRuntime.tsx",
         capability: "form_runtime", scope: "controlled_save_cache_fixture_only",
+        consumer: "scripts/qa-admin-form-guarded-navigation.mts#SaveCacheFlow",
+        contract: "Failed second save preserves submitted input and dirty state; confirmed save invalidates declared entity caches",
         status: primaryFailed ? saveCacheFailureTimeline ? "CAPTURED" : "UNAVAILABLE" : "NOT_REQUIRED",
         failureClassification: saveCacheObservedAssertionFailure ? "Assertion Failure; Product/QA cause UNKNOWN" : "UNKNOWN",
-        firstProvenDivergence: saveCacheObservedAssertionFailure ? { boundary: "assertion_failure", assertionOrdinal: passed + 1 } : "UNKNOWN",
-        evidenceConfidence: saveCacheObservedAssertionFailure ? "observed_assertion_boundary_only" : "insufficient_causal_evidence",
-        missingEvidence: ["React commit not observed", "Native database persistence not executed", "Causal owner of divergence UNKNOWN"],
+        firstProvenDivergence: saveCacheFirstDivergence ?? (saveCacheObservedAssertionFailure ? { boundary: "assertion_failure", assertionOrdinal: passed + 1 } : "UNKNOWN"),
+        originalFailure: saveCacheOriginalFailure,
+        originalExit: { value: null, owner: "canonical_parent_process_receipt", status: "NOT_YET_OBSERVED_BY_FIXTURE" },
+        environment: { node: process.version, v8: process.versions.v8, platform: process.platform, architecture: process.arch,
+          browser: "chromium_headless", database: "NOT_EXECUTED", transport: "owned_loopback_fixture_and_route_stubs_only" },
+        evidenceConfidence: saveCacheFirstDivergence ? "observed_dom_contract_boundary_only" : saveCacheObservedAssertionFailure ? "observed_assertion_boundary_only" : "insufficient_causal_evidence",
+        missingEvidence: ["React commit not observed", "Native database persistence not executed", "Causal owner of divergence UNKNOWN",
+          "Original process exit requires the parent terminal receipt",
+          ...(primaryFailed && !saveCacheFailureTimeline ? ["Bounded Browser timeline unavailable"] : []),
+          ...(saveCacheDiagnosticMode === "light" ? ["Deep pre-failure metadata was not recorded in light mode"] : [])],
         timeline: saveCacheFailureTimeline, captureFailed: saveCacheDiagnosticCaptureFailed,
         completedScenarioSummaries: saveCacheDiagnosticSummaries, maxEventsPerScenario: 128,
         mode: saveCacheDiagnosticMode,

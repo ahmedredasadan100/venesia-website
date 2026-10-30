@@ -3326,6 +3326,10 @@ async function verifyQualifiedFormHarnessControls() {
   const browserSource = ts.createSourceFile("actual-form-fixture.js", embedded.rawText ?? embedded.text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const diagnostic = browserSource.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "createSaveCacheDiagnosticTimeline");
   assert.ok(diagnostic, "Diagnostics execute the same bounded collector embedded in the canonical Browser fixture.");
+  const capture = source.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "snapshotSaveCacheDiagnostic");
+  assert.ok(capture, "Failure snapshots share the actual bounded fixture callback.");
+  const captureCode = ts.transpileModule(capture.getText(source), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const captureCallback = new Function(captureCode + ";return snapshotSaveCacheDiagnostic;")() as (input: Record<string, unknown>) => unknown;
   const createTimeline = new Function(ts.transpileModule(diagnostic.getText(browserSource), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
     + ";return createSaveCacheDiagnosticTimeline;")() as (now: () => number, mode?: string) => {
       record(kind: string, facts?: Record<string, unknown>): void;
@@ -3371,6 +3375,32 @@ async function verifyQualifiedFormHarnessControls() {
     assert.equal(JSON.stringify(timeline.snapshot()).includes("private"), false);
     assert.throws(() => createTimeline(() => 0, "unreviewed"), /UNQUALIFIED_DIAGNOSTIC_MODE/u);
   });
+  check("the existing ring distinguishes an observed contract mismatch without promoting light history to deep metadata", () => {
+    for (const mode of ["light", "deep"] as const) {
+      const timeline = createTimeline(() => 1, mode);
+      timeline.record("contract_divergence", { dirty: false, value: "private-value", owner: "invented-cause" });
+      const row = timeline.snapshot().events[0]; assert.equal(row.kind, "contract_divergence");
+      assert.equal(Object.hasOwn(row, "dirty"), mode === "deep");
+      if (mode === "deep") assert.equal(row.dirty, false);
+      assert.equal(JSON.stringify(row).includes("private"), false); assert.equal(JSON.stringify(row).includes("invented"), false);
+    }
+  });
+  check("the actual shared snapshot callback records only requested observed boundaries and missing evidence stays null", () => {
+    for (const mode of ["light", "deep"] as const) {
+      const timeline = createTimeline(() => 1, mode);
+      timeline.record("input", { valueLength: 9 });
+      const snapshot = new Function("window", captureCode + ";return snapshotSaveCacheDiagnostic;")({
+        __ADMIN_FORM_GUARDED_NAV_QA__: { saveCacheDiagnostic: timeline },
+      }) as (input: Record<string, unknown>) => ReturnType<typeof timeline.snapshot>;
+      const first = snapshot({ assertionFailure: false, assertionOrdinal: 5, contractDivergence: true, dirty: false });
+      assert.deepEqual(first.events.map(row => row.kind), ["input", "contract_divergence"]);
+      assert.equal(Object.hasOwn(first.events[1], "dirty"), mode === "deep");
+      const terminal = snapshot({ assertionFailure: true, assertionOrdinal: 8 });
+      assert.equal(terminal.events.at(-1)?.kind, "assertion_failure"); assert.equal(terminal.events.at(-1)?.assertionOrdinal, 8);
+    }
+    const missing = new Function("window", captureCode + ";return snapshotSaveCacheDiagnostic;")({}) as (input: object) => unknown;
+    assert.equal(missing({ assertionFailure: true, assertionOrdinal: 1 }), null);
+  });
   check("diagnostic collector cost is measured independently from fixture preparation and Browser scheduling", () => {
     const count = 20_000, costs: Record<"light" | "deep", number[]> = { light: [], deep: [] };
     const facts = { valueLength: 9, trusted: true, pending: false, dirty: true, status: "success", actionCalls: 1, reads: 0 };
@@ -3412,11 +3442,12 @@ async function verifyQualifiedFormHarnessControls() {
   });
   check("qualified diagnostic observation adds no timers microtasks React state setters or DOM writes", () => {
     const forbidden = new Set(["setTimeout", "setInterval", "queueMicrotask", "requestAnimationFrame", "setState", "setControlledTitle"]);
-    const inspect = (node: ts.Node) => {
-      if (ts.isCallExpression(node)) assert.equal(forbidden.has(node.expression.getText(browserSource)), false);
-      ts.forEachChild(node, inspect);
+    const inspect = (node: ts.Node, tree: ts.SourceFile) => {
+      if (ts.isCallExpression(node)) assert.equal(forbidden.has(node.expression.getText(tree)), false);
+      ts.forEachChild(node, child => inspect(child, tree));
     };
-    inspect(diagnostic);
+    inspect(diagnostic, browserSource);
+    inspect(capture, source);
     const mount = browserSource.statements.find(node => ts.isExpressionStatement(node) && ts.isBinaryExpression(node.expression)
       && node.expression.left.getText(browserSource) === "qa.mountSaveCache");
     assert.ok(mount && ts.isExpressionStatement(mount) && ts.isBinaryExpression(mount.expression) && ts.isArrowFunction(mount.expression.right));
@@ -3487,12 +3518,15 @@ async function verifyQualifiedFormHarnessControls() {
     let inspected: Record<string, unknown> | undefined;
     const compiled = ts.transpileModule(`return (async () => {
       let primaryFailed=false,saveCacheObservedAssertionFailure=false,saveCacheFailureTimeline=null,saveCacheDiagnosticCaptureFailed=false;
-      const fixtureTimings={diagnosticCollectionMs:0};
+      let saveCacheFirstDivergence=null,saveCacheOriginalFailure=null;
+      const fixtureTimings={diagnosticCollectionMs:0},fixtureStarted=performance.now();
       const saveCacheOnly=true,saveCacheDiagnosticPage=ports.page,passed=4,error=ports.original;
-      try ${mainCatch.block.getText(source)} finally { ports.inspect({primaryFailed,saveCacheObservedAssertionFailure,saveCacheFailureTimeline,saveCacheDiagnosticCaptureFailed}); }
+      const snapshotSaveCacheDiagnostic=ports.capture;
+      try ${mainCatch.block.getText(source)} finally { ports.inspect({primaryFailed,saveCacheObservedAssertionFailure,saveCacheFailureTimeline,saveCacheDiagnosticCaptureFailed,saveCacheOriginalFailure}); }
     })();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
     const run = new Function("assert", "ports", compiled) as (assertPort: typeof assert, ports: Record<string, unknown>) => Promise<void>;
-    await assert.rejects(run(assert, { original, page: { isClosed: () => false, evaluate: async (_callback: unknown, args: { assertionFailure: boolean; assertionOrdinal: number }) => {
+    await assert.rejects(run(assert, { original, capture: captureCallback, page: { isClosed: () => false, evaluate: async (callback: unknown, args: { assertionFailure: boolean; assertionOrdinal: number }) => {
+      assert.equal(callback, captureCallback);
       assert.deepEqual(args, { assertionFailure: true, assertionOrdinal: 5 });
       if (captureFails) throw Error("controlled unavailable page");
       return { events: [{ kind: "assertion_failure", assertionOrdinal: 5 }], totalObserved: 1, dropped: 0, limit: 128 };
@@ -3500,8 +3534,105 @@ async function verifyQualifiedFormHarnessControls() {
     assert.equal(inspected?.primaryFailed, true); assert.equal(inspected?.saveCacheObservedAssertionFailure, true);
     assert.equal(inspected?.saveCacheDiagnosticCaptureFailed, captureFails);
     assert.equal(inspected?.saveCacheFailureTimeline === null, captureFails);
+    const failure = inspected?.saveCacheOriginalFailure as Record<string, unknown>;
+    assert.ok(typeof failure.observedElapsedMs === "number" && Number.isFinite(failure.observedElapsedMs) && failure.observedElapsedMs >= 0);
+    assert.deepEqual({ ...failure, observedElapsedMs: undefined }, { name: "AssertionError", code: "ERR_ASSERTION", assertionOrdinal: 5, observedElapsedMs: undefined });
     cases.push("Qualified diagnostics preserve the original assertion when failure capture " + (captureFails ? "fails" : "succeeds"));
   }
+  const early: ts.IfStatement[] = [];
+  const findEarly = (node: ts.Node) => {
+    if (ts.isIfStatement(node) && node.expression.getText(source) === 'dirty !== "true"'
+      && ts.isBlock(node.thenStatement) && node.thenStatement.statements.some(statement => ts.isExpressionStatement(statement)
+        && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(source) === "secondSaveFailures.push")) early.push(node);
+    ts.forEachChild(node, findEarly);
+  };
+  findEarly(source); assert.equal(early.length, 1, "The original deferred second-save contract has one observation boundary.");
+  const observeEarly = async (dirty: string | null, captureFails = false, existing?: { first: unknown; timeline: unknown }) => {
+    let observed: Record<string, unknown> | undefined, captures = 0;
+    const execute = new Function("ports", ts.transpileModule(`return (async()=>{
+      const dirty=ports.dirty,secondSaveFailures=[],secondLabel="controlled-second-save",saveCacheOnly=true;
+      const saveCacheScenariosStarted=10,scenario={controlled:true,secondFailure:"error"},passed=4,fixtureStarted=performance.now();
+      const fixtureTimings={diagnosticCollectionMs:0},snapshotSaveCacheDiagnostic=ports.capture;
+      let saveCacheFirstDivergence=ports.first??null,saveCacheFailureTimeline=ports.timeline??null,saveCacheDiagnosticCaptureFailed=false;
+      const page=ports.page;
+      try { ${early[0].getText(source)} } finally {ports.inspect({secondSaveFailures,saveCacheFirstDivergence,saveCacheFailureTimeline,saveCacheDiagnosticCaptureFailed});}
+    })();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText) as (ports: Record<string, unknown>) => Promise<void>;
+    await execute({ dirty, capture: captureCallback, first: existing?.first, timeline: existing?.timeline,
+      page: { evaluate: async (callback: unknown, args: Record<string, unknown>) => {
+        captures++; assert.equal(callback, captureCallback); assert.equal(args.contractDivergence, true); assert.equal(args.assertionFailure, false);
+        if (captureFails) throw Error("controlled unavailable snapshot");
+        return { events: [{ kind: "contract_divergence" }], totalObserved: 1, dropped: 0, limit: 128, mode: "light" };
+      } }, inspect: (value: Record<string, unknown>) => { observed = value; } });
+    assert.ok(observed); return { observed, captures };
+  };
+  for (const captureFails of [false, true]) {
+    const { observed, captures } = await observeEarly("false", captureFails);
+    assert.equal(captures, 1); const first = observed.saveCacheFirstDivergence as Record<string, unknown>;
+    assert.equal(first.boundary, "dirty_state_dom"); assert.equal(first.scenarioIndex, 10); assert.equal(first.expected, "true"); assert.equal(first.observed, "false");
+    assert.equal(first.observedAfterAssertions, 4); assert.equal(observed.saveCacheDiagnosticCaptureFailed, captureFails);
+    assert.ok(typeof first.elapsedMs === "number" && Number.isFinite(first.elapsedMs) && first.elapsedMs >= 0);
+    assert.equal(observed.saveCacheFailureTimeline === null, captureFails);
+    assert.deepEqual(observed.secondSaveFailures, ["controlled-second-save: dirty=false"]);
+    cases.push("Qualified diagnostics retain first proven dirty divergence when immediate capture " + (captureFails ? "fails" : "succeeds"));
+  }
+  const normal = await observeEarly("true");
+  assert.equal(normal.captures, 0); assert.equal(normal.observed.saveCacheFirstDivergence, null); assert.deepEqual(normal.observed.secondSaveFailures, []);
+  cases.push("Qualified normal successful dirty state adds no diagnostic await or capture");
+  const originalFirst = { boundary: "dirty_state_dom", scenarioIndex: 9 }, originalTimeline = { events: [{ sequence: 1, kind: "input" }] };
+  const later = await observeEarly("false", false, { first: originalFirst, timeline: originalTimeline });
+  assert.equal(later.captures, 0); assert.equal(later.observed.saveCacheFirstDivergence, originalFirst); assert.equal(later.observed.saveCacheFailureTimeline, originalTimeline);
+  const absent = await observeEarly(null), unknown = await observeEarly("private-unexpected-attribute");
+  assert.equal((absent.observed.saveCacheFirstDivergence as Record<string, unknown>).observed, "missing");
+  assert.equal((unknown.observed.saveCacheFirstDivergence as Record<string, unknown>).observed, "unexpected");
+  assert.equal(JSON.stringify(unknown.observed.saveCacheFirstDivergence).includes("private"), false);
+  cases.push("Qualified diagnostics never replace the first timeline or disclose unexpected raw DOM values");
+  const original = new assert.AssertionError({ message: "controlled aggregate failure after closed page" });
+  let retained: Record<string, unknown> | undefined;
+  const preserve = new Function("assert", "ports", ts.transpileModule(`return (async()=>{
+    let primaryFailed=false,saveCacheObservedAssertionFailure=false,saveCacheDiagnosticCaptureFailed=false,saveCacheOriginalFailure=null;
+    let saveCacheFirstDivergence=ports.first,saveCacheFailureTimeline=ports.timeline;
+    const fixtureTimings={diagnosticCollectionMs:0},fixtureStarted=performance.now(),saveCacheOnly=true,saveCacheDiagnosticPage=ports.page,passed=7,error=ports.original,snapshotSaveCacheDiagnostic=ports.capture;
+    try ${mainCatch.block.getText(source)} finally {ports.inspect({saveCacheFirstDivergence,saveCacheFailureTimeline,saveCacheOriginalFailure});}
+  })();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText) as (assertPort: typeof assert, ports: Record<string, unknown>) => Promise<void>;
+  await assert.rejects(preserve(assert, { original, first: originalFirst, timeline: originalTimeline, capture: captureCallback,
+    page: { isClosed: () => true, evaluate: () => { assert.fail("A later closed page must not replace earlier evidence."); } },
+    inspect: (value: Record<string, unknown>) => { retained = value; } }), error => error === original);
+  assert.equal(retained?.saveCacheFirstDivergence, originalFirst); assert.equal(retained?.saveCacheFailureTimeline, originalTimeline);
+  const aggregate = retained?.saveCacheOriginalFailure as Record<string, unknown>;
+  assert.ok(typeof aggregate.observedElapsedMs === "number" && Number.isFinite(aggregate.observedElapsedMs) && aggregate.observedElapsedMs >= 0);
+  assert.deepEqual({ ...aggregate, observedElapsedMs: undefined }, { name: "AssertionError", code: "ERR_ASSERTION", assertionOrdinal: 8, observedElapsedMs: undefined });
+  cases.push("Qualified aggregate assertion preserves original Error and earlier proof after its page closes");
+  const inaccessibleName = Object.defineProperty(new Error("private original error text"), "name", { get() { throw Error("secondary metadata getter failure"); } });
+  await assert.rejects(preserve(assert, { original: inaccessibleName, first: originalFirst, timeline: originalTimeline, capture: captureCallback,
+    page: { isClosed: () => true }, inspect: (value: Record<string, unknown>) => { retained = value; } }), error => error === inaccessibleName);
+  const fallback = retained?.saveCacheOriginalFailure as Record<string, unknown>;
+  assert.ok(typeof fallback.observedElapsedMs === "number" && Number.isFinite(fallback.observedElapsedMs) && fallback.observedElapsedMs >= 0);
+  assert.deepEqual({ ...fallback, observedElapsedMs: undefined }, { name: "UNKNOWN", code: null, assertionOrdinal: null, observedElapsedMs: undefined });
+  cases.push("Qualified diagnostics keep the original Error when optional error metadata cannot be read");
+  const diagnosticReceipts: ts.ObjectLiteralExpression[] = [];
+  const findReceipt = (node: ts.Node) => {
+    if (ts.isPropertyAssignment(node) && node.name.getText(source) === "diagnostics" && ts.isObjectLiteralExpression(node.initializer))
+      diagnosticReceipts.push(node.initializer);
+    ts.forEachChild(node, findReceipt);
+  };
+  findReceipt(source); assert.equal(diagnosticReceipts.length, 1);
+  check("actual diagnostic receipt separates first observation original failure native exit and unavailable causal evidence", () => {
+    const values = { primaryFailed: true, saveCacheFailureTimeline: originalTimeline, saveCacheObservedAssertionFailure: true,
+      saveCacheFirstDivergence: originalFirst, passed: 7, saveCacheOriginalFailure: { name: "AssertionError", code: "ERR_ASSERTION", assertionOrdinal: 8, observedElapsedMs: 25 },
+      process: { version: "controlled-node", versions: { v8: "controlled-v8" }, platform: "controlled-platform", arch: "controlled-arch", env: { SECRET: "private" } },
+      saveCacheDiagnosticCaptureFailed: false, saveCacheDiagnosticSummaries: [], saveCacheDiagnosticMode: "light" };
+    const evaluate = new Function(...Object.keys(values), "return (" + diagnosticReceipts[0].getText(source) + ");");
+    const receipt = evaluate(...Object.values(values)) as Record<string, unknown>;
+    assert.equal(receipt.firstProvenDivergence, originalFirst); assert.deepEqual(receipt.originalFailure, values.saveCacheOriginalFailure);
+    assert.deepEqual(receipt.originalExit, { value: null, owner: "canonical_parent_process_receipt", status: "NOT_YET_OBSERVED_BY_FIXTURE" });
+    assert.equal(receipt.owner, "src/components/admin/ui/AdminFormRuntime.tsx");
+    assert.equal(receipt.consumer, "scripts/qa-admin-form-guarded-navigation.mts#SaveCacheFlow");
+    assert.equal(receipt.evidenceConfidence, "observed_dom_contract_boundary_only");
+    assert.ok((receipt.missingEvidence as string[]).includes("Causal owner of divergence UNKNOWN"));
+    assert.ok((receipt.missingEvidence as string[]).includes("Deep pre-failure metadata was not recorded in light mode"));
+    assert.equal(JSON.stringify(receipt).includes("private"), false);
+    assert.equal(receipt.fieldContentsRecorded, false); assert.equal(receipt.schedulingAdded, false);
+  });
   type CleanupResource = { resource: "browser" | "server" | "temp"; close: () => Promise<void> };
   type CleanupResult = { resource: CleanupResource["resource"]; status: "PASS" | "FAIL"; error?: unknown };
   type DeniedRequest = { method: string; origin: string | null; resourceType: string };
@@ -5655,6 +5786,9 @@ async function verifyQualifiedSelectionControls() {
   });
   check("unknown fixture bytes cannot silently renew their own effect qualification", () => {
     const result = qualify(scripts, analysis(), "f".repeat(64)); assert.equal(result.targets.length, 0); assert.ok(result.blockers.includes("qualified_fixture_bytes_changed_review_effect_contract"));
+    const previous = qualify(scripts, analysis(), "26d296745885d0d590e03bf1e0db37d6484871d8c26ba9545ed38eba8f133142");
+    assert.equal(previous.targets.some(target => target.family === "admin-form-save-cache"), false);
+    assert.ok(previous.blockers.includes("qualified_fixture_bytes_changed_review_effect_contract"));
   });
   check("missing current owner evidence blocks qualification rather than copying a registry", () => {
     const value = analysis(); value.ownerBindings = []; const result = qualify(scripts, value, fixtureHash);

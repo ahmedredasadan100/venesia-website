@@ -505,6 +505,16 @@ unavailable and causal divergence stays UNKNOWN. The parent receipt's existing
 hashes/source binding cover this evidence. Broader consumers and native
 persistence are not qualified by the thirteen controlled scenarios.
 
+When that existing fixture observes a failed second-save dirty DOM contract
+before a later aggregate assertion, it retains the first safe scenario and
+expected/observed enum while the page still exists. Failure-only collection
+uses the same bounded ring; a later assertion or a failed snapshot cannot
+overwrite that boundary or the original error. The terminal fixture receipt
+declares its consumer/contract, observed runtime, missing React commit/native
+persistence/causal-owner evidence and the parent's ownership of actual exit
+status. A light-mode event history is never relabeled as deep metadata, and a
+controlled DOM counterexample is not a Product root-cause claim.
+
 Before Docker allocation, the existing isolated lifecycle invokes the existing
 owned-child process owner to qualify creation and cancellation in the actual
 caller context. The approved Windows creation/handle capability is implemented
@@ -834,6 +844,78 @@ Relevant proof may include:
 - storage rejection;
 - optimistic mutation failure and exact rollback;
 - non-mutating failure before side effects.
+
+### 5.1 Bounded six-type content behavioral coverage — One-Shot 02
+
+This classification covers the six current `content-types` adapters only:
+Article uses `ArticleCreateEditor`/`ArticleEditor`; News, Press, Site Updates,
+Video and Gallery use `MediaContentForm`. Their shared lifecycle remains
+`ContentEditorShell`/`AdminFormRuntime`; primary images use
+`ContentBasicDataPanel -> TopicImageField -> AdminMediaImageField`, and Gallery
+retains `AdminMediaGalleryField` for ordered item state. The existing Form
+manifest entries are `topic-article-create-edit` and `topic-media-create-edit`.
+This is not a new consumer registry or an inventory of the entire Admin system.
+
+The current local checkpoint for this audit is `ff1640d6857b865ce5b1e07643a94f3fb67f8e6b`.
+The old published `b771` CI/Preview checkpoint remains historical and does not
+qualify this local source. No new Product, Browser, database or Alt investigation
+was executed for this read-only audit.
+
+Legend: **P** = Partially Covered: actual historical behavior exists within the
+stated fixture scope, but its current consumed source/runtime closure has not
+been fully requalified. **S** = Source-Only: owner/test/adoption linkage is
+present, without current behavioral proof. **N** = Not Covered in the bounded
+audited execution receipts; this does not assert that no repository test exists.
+**NA** = Not Applicable to this consumer contract. **Covered** requires actual
+behavior within a fully matched or explicitly qualified input/runtime scope;
+none of the combined current six-type rows below receives that label merely
+from a source guard, one consumer fixture, or an old CI result.
+
+| Behavior | Article | News | Press | Site Updates | Video | Gallery |
+| --- | --- | --- | --- | --- | --- | --- |
+| Create / Edit | P | P | P | P | P | P |
+| Save / Failed Save | P | P | P | P | P | P |
+| Readback / Persistence | P | P | P | P | P | P |
+| Delete | N | N | N | N | N | N |
+| Duplicate Prevention | P | P | P | P | P | P |
+| Permissions / Authorization | S | S | S | S | S | S |
+| Form State / Draft Recovery | P | P | P | P | P | P |
+| Alt / Caption | P | P | P | P | P | P |
+| Gallery Ordering | NA | NA | NA | NA | NA | P |
+| Shared Component Adoption | S | S | S | S | S | S |
+
+The existing test owners and actual assertion boundaries are:
+
+| Behavior | Existing owner → test / assertion | Raw scoped evidence and current limit |
+| --- | --- | --- |
+| Create / Edit | Article/Media save owners → `qa-home-story-presentation.mjs --full-form-draft-only`; actual action result and PGlite row rehydrate the Edit consumer, then native tuples are compared. | [Full Form raw Browser proof](../.tmp-qa/admin-development-batch-01/full-form-draft-recovery-20261024/full-form-draft-browser.json): 24 six-type Create/Edit RTL cases. It is historical fixture proof, not every current field/status or Production. |
+| Save / Failed Save | `ContentEditorShell`/`AdminFormRuntime` and canonical save owners → failed result, unchanged native tuples, Dirty state and retained draft; successful retry is explicit. | The same [Full Form report](../.tmp-qa/admin-development-batch-01/full-form-draft-recovery-20261024/final-report.json) records 49 isolated save-adapter calls. The generic `qa-admin-form-guarded-navigation.mts --save-cache-only` family has its own controlled shared-owner scope; one such fixture cannot prove all six content consumers. |
+| Readback / Persistence | `createTopicSlugSaveHarness` plus actual save owners → saved slug/canonical values and explicit Edit remount from the read row. | [Domain raw proof](../.tmp-qa/admin-development-batch-01/full-form-draft-recovery-20261024/domain-slug-save-proof.json): actual owner execution against disposable PGlite/finite infrastructure ports. Authenticated hosted/Production DB persistence and public HTTP publication remain unproved by these fixtures. |
+| Delete | `actions.ts#softDeleteUnifiedContentImpl`/`runAtomicTopicsBatch` → existing adoption journey source checks acknowledged delete, row absence after reload and stale-reference rejection. | No current per-six-type executed delete/readback receipt was established in this bounded audit. A selected Topic fixture does not establish every content-type lifecycle. |
+| Duplicate Prevention | Canonical save owners/`topics_slug_key` → actual PGlite `23505` maps only the slug constraint to field/focus; non-slug uniqueness remains general. Shared Runtime pending controls have separate single-action assertions. | The domain raw proof contains 13 vectors per type, including Create/Edit conflict and occupied/trashed preflight. These are not a current all-consumer double-submit/concurrency claim. Logical draft-candidate deduplication and the explicit Duplicate command are distinct contracts. |
+| Permissions / Authorization | `requireAdminSession`, mutation owner and existing domain-permission journeys → canonical session/permission boundary. | The finite save harness replaces `requireAdminSession` with a synthetic actor. Draft actor/session isolation is not server Auth/RLS; no authenticated policy PASS is inferred from an injected database-error response. |
+| Form State / Draft Recovery | `TopicFormDraftRecovery`/`topic-revision`/`AdminFormRuntime` → explicit Restore, native parity, Dirty/Close/Navigation, failure retention and exact accepted-draft cleanup after success. | Full Form raw proof includes four historical cases per type and separate identity/version/opaque/CAS boundaries. Restore does not save to the DB; remote revocation and closed-browser physical deletion are outside that proof. |
+| Alt / Caption | `TopicImageField`/`AdminMediaImageField`; Gallery item metadata stays with `AdminMediaGalleryField` → applicable native tuple parity and item metadata persistence. | [Unified Image raw proof](../.tmp-qa/admin-development-batch-01/unified-image-system-20261024/unified-image-browser-combined.json): Article/Gallery only, eight Create/Edit RTL cases and 16 isolated attempts. Other adapters are not inferred from those eight cases. Primary-image Caption is NA for the five non-Gallery payloads; Gallery item Caption applies. This audit does not reopen Alt RCA. |
+| Gallery Ordering | `AdminMediaGalleryField`/existing reorder handle → trusted desktop drag, arrows/keyboard, URL/Alt/Caption moved together, persisted image tuple equality and Edit readback. | Unified Image and [Content Panel/Gallery raw report](../.tmp-qa/admin-development-batch-01/content-panel-gallery-final-20261024/final-report.json) prove their bounded historical Gallery scope. They do not claim Touch Drag, hosted publication or current all-owner equivalence. |
+| Shared Component Adoption | Current Form manifest and canonical owners → `verify-admin-row-actions-capability.mts --consumer-capability-audit`/existing Form source guards. | [Scoped actual Adoption reuse](../.tmp-qa/qa-foundation-closure-01-20261030/adoption-private-discovery-scope-actor-addendum.json) retains source-proof scope only. Component linkage, applicable capability adoption, observed behavior, visual presentation and Owner approval remain separate. |
+
+The current-vs-recorded raw input comparison finds 16/34 differences in Full
+Form, 20/55 in Unified Image and 13/16 in Content Panel/Gallery. This preserves
+the old executions and their exact scopes; it prevents treating them as one
+whole-current-source PASS. No semantic equivalence is invented merely from a
+hash mismatch or a shared component name. The detailed per-type source/evidence
+bindings and legitimate exceptions are retained in the phase
+[coverage proposal](../.tmp-qa/qa-engineering-completion-02-20261030/behavioral-coverage-matrix-proposal.json);
+that JSON is evidence for this existing QA classification, not a new registry
+or live Admission authority.
+
+The first proven evidence gaps are current input-closure renewal, authenticated
+permissions/DB proof, and current per-type delete execution. These are evidence
+gaps, not newly established Product defects. Reuse valid unaffected proof under
+Section 3.4; execute existing affected modes only when authorized and necessary.
+Owner Functional/Visual approval, release approval and global closure remain
+pending independently.
+
 
 ## 6. Browser QA rules
 

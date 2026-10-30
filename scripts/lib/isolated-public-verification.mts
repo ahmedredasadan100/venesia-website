@@ -1790,7 +1790,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   sourceGuardSha256: Readonly<Record<string, string>> = {}) {
   const entry = "scripts/qa-admin-form-guarded-navigation.mts";
   const step = "node --experimental-strip-types " + entry + " --save-cache-only";
-  const fixtureApproved = fixtureSha256 === "26d296745885d0d590e03bf1e0db37d6484871d8c26ba9545ed38eba8f133142";
+  const fixtureApproved = fixtureSha256 === "2209ce6ae21e7c3ed2855cad5f5a6a904971735084d0f90aafce066fe71d7dbf";
   const bindings = (analysis.ownerBindings ?? []).filter(binding => binding.capability === "form_runtime");
   const commands = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(step)).sort();
   // This exact native port executes the existing Browser leaf. A QA lifecycle
