@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { constants as fsConstants, unlinkSync } from "node:fs";
+import * as asyncFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createServer, type IncomingMessage } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
@@ -1034,14 +1036,66 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
   assert.equal(launch.length, 1); const args = (launch[0] as ts.CallExpression).arguments;
   assert.equal(args.length, 4); assert.deepEqual(args.slice(0, 3).map(node => node.getText(lifecycle)), ["publicContext", "request", "publicJobAbort.signal"]);
   assert.ok(ts.isArrowFunction(args[3])); assert.equal(run.parameters[3].name.getText(publicFile), "drainControlPulse");
-  const sourceCalls = all(run, node => ts.isCallExpression(node) && node.expression.getText(publicFile) === "verifySource") as ts.CallExpression[];
-  assert.equal(sourceCalls.length, 3);
-  for (const call of sourceCalls) {
-    assert.ok(ts.isExpressionStatement(call.parent) && ts.isBlock(call.parent.parent));
-    const statements = call.parent.parent.statements, index = statements.indexOf(call.parent);
-    assert.equal(statements[index - 1].getText(publicFile), "await drainControlPulse();", "Every source pass must immediately follow the completed control drain.");
+  const inspectDrainBoundaries = (file: ts.SourceFile) => {
+    assert.equal((file as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
+    const candidates = all(file, node => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification") as ts.FunctionDeclaration[];
+    assert.equal(candidates.length, 1); const candidate = candidates[0];
+    const sourceCalls = all(candidate, node => ts.isCallExpression(node) && node.expression.getText(file) === "verifySource") as ts.CallExpression[];
+    assert.equal(sourceCalls.length, 3);
+    const sourceDrains: ts.CallExpression[] = [];
+    for (const call of sourceCalls) {
+      assert.ok(ts.isExpressionStatement(call.parent) && ts.isBlock(call.parent.parent));
+      const statements = call.parent.parent.statements, index = statements.indexOf(call.parent);
+      assert.equal(statements[index - 1].getText(file), "await drainControlPulse();", "Every source pass must immediately follow the completed control drain.");
+      const preceding = statements[index - 1] as ts.ExpressionStatement;
+      assert.ok(ts.isAwaitExpression(preceding.expression) && ts.isCallExpression(preceding.expression.expression));
+      sourceDrains.push(preceding.expression.expression);
+    }
+    const stages = all(candidate, node => ts.isVariableDeclaration(node) && node.name.getText(file) === "stageInstalledDependencies") as ts.VariableDeclaration[];
+    assert.equal(stages.length, 1); const stage = stages[0];
+    assert.equal(stage.parent.parent.parent === candidate.body, true);
+    assert.ok(stage.initializer && ts.isArrowFunction(stage.initializer) && ts.isBlock(stage.initializer.body));
+    const steps = stage.initializer.body.statements.flatMap(statement => ts.isVariableStatement(statement)
+      ? [...statement.declarationList.declarations].filter(value => value.name.getText(file) === "step") : []);
+    assert.equal(steps.length, 1); const step = steps[0];
+    assert.ok(step.initializer && ts.isArrowFunction(step.initializer) && ts.isBlock(step.initializer.body));
+    assert.ok(step.initializer.modifiers?.some(value => value.kind === ts.SyntaxKind.AsyncKeyword));
+    assert.deepEqual(step.initializer.body.statements.map(statement => statement.getText(file)), [
+      "checkpoint();", "await drainControlPulse();", "checkpoint();",
+      "const value = await operation();", "checkpoint();", "return value;",
+    ], "The sole additional drain belongs to the awaited dependency step before the operation and between its checkpoints.");
+    const stagingDrain = all(step.initializer.body, node => ts.isCallExpression(node) && node.expression.getText(file) === "drainControlPulse") as ts.CallExpression[];
+    assert.equal(stagingDrain.length, 1);
+    const bound = all(candidate, node => (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node))
+      && node.name?.getText(file) === "drainControlPulse");
+    assert.equal(bound.length, 1, "The private drain port cannot be shadowed by a local binding.");
+    assert.equal(bound[0] === candidate.parameters[3], true, "The sole drain binding must be the actual private parameter.");
+    const drains = all(candidate, node => ts.isCallExpression(node) && node.expression.getText(file) === "drainControlPulse") as ts.CallExpression[];
+    assert.deepEqual(drains.map(node => node.getStart(file)).sort((a, b) => a - b),
+      [...sourceDrains, ...stagingDrain].map(node => node.getStart(file)).sort((a, b) => a - b), "Every drain must belong to an original source pass or the one checked dependency step.");
+    return { sourceDrains, stagingDrain: stagingDrain[0], stage, step, candidate };
+  };
+  const drainBoundaries = inspectDrainBoundaries(publicFile);
+  const replaceNode = (node: ts.Node, replacement: string) => publicFile.text.slice(0, node.getStart(publicFile)) + replacement + publicFile.text.slice(node.end);
+  const rejectBoundary = (name: string, changed: string) => {
+    assert.notEqual(changed, publicFile.text);
+    assert.throws(() => inspectDrainBoundaries(ts.createSourceFile("isolated-public-verification.mts", changed, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)), name);
+  };
+  for (const [index, drain] of drainBoundaries.sourceDrains.entries())
+    rejectBoundary(`omitted original source drain ${index + 1}`, replaceNode(drain.parent.parent, ""));
+  rejectBoundary("unawaited dependency drain", replaceNode(drainBoundaries.stagingDrain.parent, "drainControlPulse()"));
+  const stepBody = (drainBoundaries.step.initializer as ts.ArrowFunction).body as ts.Block;
+  for (const [index, statement] of stepBody.statements.entries()) {
+    if (index === 0 || index === 2 || index === 4)
+      rejectBoundary(`omitted dependency checkpoint ${index}`, replaceNode(statement, ""));
   }
-  assert.equal(all(run, node => ts.isCallExpression(node) && node.expression.getText(publicFile) === "drainControlPulse").length, 3);
+  rejectBoundary("unawaited dependency operation", replaceNode(stepBody.statements[3], "const value = operation();"));
+  const stageBody = (drainBoundaries.stage.initializer as ts.ArrowFunction).body as ts.Block;
+  rejectBoundary("shadowed private dependency drain", replaceNode(stageBody, "{ const drainControlPulse = async () => {};" + stageBody.getText(publicFile).slice(1)));
+  rejectBoundary("extra dependency drain outside step", replaceNode(stageBody, stageBody.getText(publicFile).slice(0, -1) + "await drainControlPulse(); }"));
+  const runBody = drainBoundaries.candidate.body!;
+  rejectBoundary("extra drain outside qualified boundaries", replaceNode(runBody, runBody.getText(publicFile).slice(0, -1) + "await drainControlPulse(); }"));
+  cases.push("source pulse boundaries retain three original awaited drains and reject omitted, unawaited, shadowed or extra dependency-step drains and checkpoints");
   cases.push("admission, per-gate and final source passes await the private pulse drain immediately; context/request/signal identities stay unchanged");
   const verify = all(run, node => ts.isVariableDeclaration(node) && node.name.getText(publicFile) === "verifySource")[0] as ts.VariableDeclaration;
   const timer = all(lifecycle, node => ts.isCallExpression(node) && node.expression.getText(lifecycle) === "setInterval" && node.getText(lifecycle).includes("public-job-heartbeat")) as ts.CallExpression[];
@@ -3202,10 +3256,30 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
   const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "GATES")); assert.ok(gates);
   const deadline = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "localVerificationQualityPrefixDeadlineMs"); assert.ok(deadline);
   const compile = (value: string) => ts.transpileModule(value, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const stageDeclaration = declaration("stageInstalledDependencies", run.body.statements);
+  const inspectStageBranch = (source: string) => {
+    const parsed = ts.createSourceFile("actual-dependency-branch.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    assert.equal(parsed.statements.length, 1); const branch = parsed.statements[0]; assert.ok(branch && ts.isIfStatement(branch));
+    assert.equal(branch.expression.getText(parsed), 'process.platform === "win32"');
+    assert.ok(ts.isExpressionStatement(branch.thenStatement) && ts.isAwaitExpression(branch.thenStatement.expression)
+      && ts.isCallExpression(branch.thenStatement.expression.expression));
+    const call = branch.thenStatement.expression.expression;
+    assert.equal(call.expression.getText(parsed), "stageInstalledDependencies"); assert.equal(call.arguments.length, 0);
+    assert.ok(branch.elseStatement && ts.isExpressionStatement(branch.elseStatement));
+    assert.equal(branch.elseStatement.getText(parsed), 'symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");');
+    return branch.getText(parsed);
+  };
+  const stageCalls = body.tryBlock.statements.filter(node => ts.isIfStatement(node)
+    && node.expression.getText(file) === 'process.platform === "win32"');
+  assert.equal(stageCalls.length, 1, "The actual platform branch must stage once on Windows and preserve the original Linux link.");
+  const stageBranch = inspectStageBranch(stageCalls[0]!.getText(file));
+  const stagePosition = body.tryBlock.statements.indexOf(stageCalls[0]!);
+  assert.ok(stagePosition < body.tryBlock.statements.indexOf(loop));
   const factory = new Function("ports", compile(`return async () => {
     const { assert, join, sep, digest, context, runChild, receipt, children, retainedAdmission,
       stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext } = ports;
     const request = {}, heroCompatibility = false, measurement = undefined, ROOT = "controlled-root";
+    const stageInstalledDependencies = ports.stageInstalledDependencies;
     const qualityScripts = ports.prefix, npmCli = "controlled-npm-cli", env = {};
     const reports = [], qualityReports = []; let buildIdSha256 = null, appPort = null, appFailed = false;
     ${declaration("nativeApplications", run.body.statements)}
@@ -3218,6 +3292,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     ${declaration("qualityPrefix", body.tryBlock.statements)}
     ${declaration("executionGates", body.tryBlock.statements)}
     try {
+      if (stageInstalledDependencies) { const process = { platform: "win32" }; ${stageBranch} }
       for (const gate of executionGates) {
         const gateApp = undefined;
         ${gateStatements.slice(begin, end).map(node => node.getText(file)).join("\n")}
@@ -3225,7 +3300,8 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     } ${body.catchClause.getText(file)} finally ${body.finallyBlock.getText(file)}
     return { reports, qualityReports, buildIdSha256 };
   };`)) as (ports: Record<string, unknown>) => () => Promise<{ reports: Array<{ name: string; code: number }>; qualityReports: Array<{ script: string; code: number }> }>;
-  const fixture = (options: { failedChild?: string; driverFailure?: Error; skippedE2E?: boolean; failedCleanup?: boolean; failedWorker?: boolean } = {}) => {
+  const fixture = (options: { failedChild?: string; driverFailure?: Error; skippedE2E?: boolean; failedCleanup?: boolean; failedWorker?: boolean;
+    stageInstalledDependencies?: () => Promise<void> } = {}) => {
     const events: string[] = [], launched: string[] = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
     let removed = false, stopped = false, workerStopped = false;
     const sourceDirectory = path.join("owned", "source");
@@ -3235,7 +3311,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     } };
     const context = { runDirectory: "owned", cleanEnvironment: () => ({}), record: (event: string, data: { gate: string }) => events.push(event + ":" + data.gate) };
     const activeLocalVerifications = new WeakSet([context]);
-    const ports = { assert, join: path.join, sep: path.sep, digest: sha256, prefix,
+    const ports = { assert, join: path.join, sep: path.sep, digest: sha256, prefix, stageInstalledDependencies: options.stageInstalledDependencies,
       context, originalContext: context, activeLocalVerifications,
       async runChild(_args: string[], _env: object, name: string) {
         launched.push(name);
@@ -3299,6 +3375,173 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     assert.ok(secondary?.value instanceof Error); assert.match(secondary.value.message, /owned Public process could not be stopped/u);
     assert.equal(secondary.enumerable, false);
     assert.equal(value.receipts.some(row => row.name === "public-process-cleanup.json"), false);
+  });
+  const buildStage = new Function("ports", compile(`const {assert,asyncFs,fsConstants,performance,join,sep,ROOT,sourceDirectory,context,signal,process,
+    drainControlPulse,manifest,digest,receipt,localVerificationAdmissionRuntimeIdentity}=ports;
+    ${stageDeclaration}
+    return async()=>{${stageBranch}};`)) as (ports: Record<string, unknown>) => () => Promise<void>;
+  type StageFault = "source-link" | "hard-link" | "destination-hard-link" | "escape" | "run-boundary" | "path-name" | "entry-bound" | "file-byte-bound"
+    | "source-mutation" | "late-source-mutation" | "destination-mutation" | "existing-destination" | "lock-mismatch" | "runtime-mutation" | "cancel" | "already-cancelled" | "exact-deadline" | "deadline";
+  const deferred = () => { let release!: () => void; const promise = new Promise<void>(done => { release = done; }); return { promise, release }; };
+  const stageFixture = async (options: { fault?: StageFault; operationFailure?: Error; closeFailure?: Error; receiptFailure?: Error;
+    closeGate?: ReturnType<typeof deferred>; closeEntered?: ReturnType<typeof deferred>; pulseGate?: ReturnType<typeof deferred>;
+    pulseEntered?: ReturnType<typeof deferred> } = {}) => {
+    const directory = realpathSync(mkdtempSync(path.join(root, ".tmp-qa", "owned-dependency-controls-")));
+    const installation = path.join(directory, "installation"), runDirectory = path.join(directory, "run"), workspace = path.join(runDirectory, "source");
+    const installed = path.join(installation, "node_modules"), pkg = path.join(installed, "control-package");
+    for (const at of [installation, runDirectory, workspace, installed, pkg]) mkdirSync(at);
+    const locked = JSON.stringify({ packages: { "node_modules/control-package": { version: "1.0.0", integrity: "controlled-lock" } } });
+    writeFileSync(path.join(workspace, "package-lock.json"), locked); writeFileSync(path.join(installed, ".package-lock.json"), locked);
+    writeFileSync(path.join(pkg, "package.json"), '{"name":"control-package","version":"1.0.0"}');
+    const original = Buffer.from("export const original = 'same installed bytes';\n");
+    writeFileSync(path.join(pkg, "a.js"), original); writeFileSync(path.join(pkg, "z.js"), "export const final = true;\n");
+    if (options.fault === "source-link") { const foreign = path.join(directory, "foreign"); mkdirSync(foreign); symlinkSync(foreign, path.join(pkg, "linked"), "junction"); }
+    if (options.fault === "hard-link") await asyncFs.link(path.join(pkg, "a.js"), path.join(directory, "hard-link-peer.js"));
+    const controller = new AbortController(), cancelled = Error("Controlled dependency-stage cancellation");
+    const target = path.join(workspace, "node_modules"), copiedA = path.join(target, "control-package", "a.js");
+    const events: string[] = [], handles: Array<{ file: string; closed: boolean }> = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
+    let clock = 0, pulses = 0, operations = 0, identities = 0;
+    const actualIdentity = { node: "controlled-node", installedLockSha256: sha256(locked), projectLockSha256: sha256(locked), packages: [] };
+    const fsPort = new Proxy(asyncFs, { get(namespace, key) {
+      if (key === "lstat") return async (at: string) => { operations++; events.push("fs:lstat"); const stat = await asyncFs.lstat(at);
+        return options.fault === "file-byte-bound" && at === path.join(pkg, "a.js") ? new Proxy(stat, { get(actual, property) {
+          if (property === "size") return 512 * 1024 * 1024 + 1;
+          const value = Reflect.get(actual, property, actual); return typeof value === "function" ? value.bind(actual) : value;
+        } }) : stat; };
+      if (key === "realpath") return async (at: string) => { operations++; events.push("fs:realpath"); const value = await asyncFs.realpath(at);
+        return options.fault === "escape" && at === workspace ? path.join(directory, "outside-owned-run") : value; };
+      if (key === "readdir") return async (at: string) => { operations++; events.push("fs:readdir"); const values = await asyncFs.readdir(at);
+        if (options.fault === "entry-bound" && at === installed) return Array.from({ length: 200_000 }, (_value, index) => "controlled-" + index);
+        return options.fault === "path-name" && at === installed ? [...values, "../escape"] : values; };
+      if (key === "mkdir") return async (at: string) => { operations++; events.push("fs:mkdir"); await asyncFs.mkdir(at);
+        if (options.fault === "existing-destination" && at === target) await asyncFs.writeFile(path.join(at, ".package-lock.json"), "owned existing destination sentinel"); };
+      if (key === "readFile") return async (at: string) => { operations++; events.push("fs:readFile");
+        if (options.fault === "destination-mutation" && at === copiedA) await asyncFs.writeFile(at, "changed destination bytes");
+        return asyncFs.readFile(at); };
+      if (key === "open") return async (...args: Parameters<typeof asyncFs.open>) => {
+        operations++; events.push("fs:open"); const handle = await asyncFs.open(...args), at = String(args[0]);
+        const row = { file: at, closed: false }; handles.push(row);
+        return new Proxy(handle, { get(actual, property) {
+          if (property === "readFile") return async () => { const bytes = await actual.readFile();
+            if (options.fault === "source-mutation" && at === path.join(pkg, "a.js")) await asyncFs.writeFile(at, "changed source bytes");
+            if (options.fault === "late-source-mutation" && at === path.join(pkg, "z.js")) await asyncFs.writeFile(path.join(pkg, "a.js"), "changed earlier source bytes");
+            return bytes; };
+          if (property === "writeFile") return async (bytes: Uint8Array) => {
+            if (options.operationFailure) throw options.operationFailure;
+            await actual.writeFile(bytes);
+            if (options.fault === "destination-hard-link") await asyncFs.link(at, path.join(directory, "destination-hard-link-peer.js"));
+            if (options.fault === "cancel") controller.abort(cancelled);
+            if (options.fault === "exact-deadline") clock = 600_000;
+            if (options.fault === "deadline") clock = 600_001;
+          };
+          if (property === "close") return async () => { options.closeEntered?.release(); if (options.closeGate) await options.closeGate.promise;
+            await actual.close(); row.closed = true; events.push("handle-closed"); if (options.closeFailure) throw options.closeFailure; };
+          const value = Reflect.get(actual, property, actual); return typeof value === "function" ? value.bind(actual) : value;
+        } });
+      };
+      const value = Reflect.get(namespace, key, namespace);
+      return typeof value === "function" ? (...args: unknown[]) => { operations++; events.push("fs:" + String(key)); return Reflect.apply(value, namespace, args); } : value;
+    } });
+    const context = { runDirectory: options.fault === "run-boundary" ? installation : runDirectory, async assertOwned() { events.push("ownership-verified"); } };
+    if (options.fault === "already-cancelled") controller.abort(cancelled);
+    const execute = buildStage({ assert, asyncFs: fsPort, fsConstants, performance: { now: () => clock }, process: { platform: "win32" }, join: path.join, sep: path.sep,
+      ROOT: installation, sourceDirectory: workspace, context, signal: controller.signal,
+      async drainControlPulse() { pulses++; events.push("pulse-start"); if (options.pulseGate && pulses === 1) { options.pulseEntered?.release(); await options.pulseGate.promise; }
+        events.push("pulse-end"); }, manifest: [{ file: "package-lock.json", sha256: sha256(locked) }], digest: sha256,
+      receipt(_context: unknown, name: string, value: Record<string, unknown>) { if (options.receiptFailure) throw options.receiptFailure; receipts.push({ name, value }); },
+      localVerificationAdmissionRuntimeIdentity() { identities++; return { ...actualIdentity,
+        projectLockSha256: options.fault === "lock-mismatch" || options.fault === "runtime-mutation" && identities > 1 ? "b".repeat(64) : actualIdentity.projectLockSha256 }; } });
+    return { execute, events, handles, receipts, cancelled, copiedA, original, sourceA: path.join(pkg, "a.js"), target, installation, workspace,
+      operations: () => operations, pulses: () => pulses,
+      cleanup() { assert.equal(handles.every(row => row.closed), true, "All opened file handles settle before fixture removal.");
+        assert.equal(path.dirname(directory), realpathSync(path.join(root, ".tmp-qa"))); assert.equal(lstatSync(directory).isSymbolicLink(), false);
+        const link = path.join(pkg, "linked"); if (existsSync(link) && lstatSync(link).isSymbolicLink()) unlinkSync(link);
+        rmSync(directory, { recursive: true, force: false }); assert.equal(existsSync(directory), false); } };
+  };
+  const buildStageBranch = new Function("ports", compile(`const {process,stageInstalledDependencies,symlinkSync,join,ROOT,sourceDirectory}=ports;
+    return async()=>{${stageBranch}};`)) as (ports: Record<string, unknown>) => () => Promise<void>;
+  await control("actual dependency platform branch awaits only Windows physical staging and preserves the exact original Linux link", async () => {
+    const entered = deferred(), release = deferred(); let copies = 0, links = 0, settled = false;
+    const ports = { process: { platform: "win32" }, ROOT: "controlled-root", sourceDirectory: "controlled-owned-copy", join: path.join,
+      async stageInstalledDependencies() { copies++; entered.release(); await release.promise; },
+      symlinkSync(...args: unknown[]) { links++; assert.deepEqual(args, [path.join("controlled-root", "node_modules"), path.join("controlled-owned-copy", "node_modules"), "junction"]); } };
+    const pending = buildStageBranch(ports)(); pending.then(() => { settled = true; }, () => { settled = true; });
+    await entered.promise; assert.equal(copies, 1); assert.equal(links, 0); assert.equal(settled, false);
+    release.release(); await pending;
+    await buildStageBranch({ ...ports, process: { platform: "linux" }, stageInstalledDependencies() { throw Error("Linux cannot execute the Windows dependency copy."); } })();
+    assert.equal(copies, 1); assert.equal(links, 1);
+  });
+  for (const [name, mutate] of [
+    ["wrong platform", (text: string) => text.replace('process.platform === "win32"', 'process.platform === "linux"')],
+    ["missing await", (text: string) => text.replace("await stageInstalledDependencies()", "stageInstalledDependencies()")],
+    ["widened source root", (text: string) => text.replace('join(ROOT, "node_modules")', 'join(ROOT, "..", "node_modules")')],
+    ["multiple copy calls", (text: string) => text.replace("await stageInstalledDependencies();", "{ await stageInstalledDependencies(); await stageInstalledDependencies(); }")],
+    ["missing original else", (text: string) => text.replace(/else\s+symlinkSync\([^;]+;/u, "")],
+  ] as const) await control("actual dependency platform source rejects " + name, async () => {
+    const changed = mutate(stageBranch); assert.notEqual(changed, stageBranch); assert.throws(() => inspectStageBranch(changed));
+  });
+  await control("actual physical dependency staging preserves private bytes lock modes and a complete verified manifest", async () => {
+    const value = await stageFixture();
+    try {
+      await value.execute(); assert.equal(lstatSync(value.target).isSymbolicLink(), false); assert.equal(realpathSync(value.target), value.target);
+      assert.deepEqual(readFileSync(value.copiedA), value.original); assert.equal(lstatSync(value.copiedA).nlink, 1);
+      assert.equal(lstatSync(value.copiedA).mode & 0o777, lstatSync(value.sourceA).mode & 0o777);
+      assert.deepEqual(readFileSync(path.join(value.target, ".package-lock.json")), readFileSync(path.join(value.workspace, "package-lock.json")));
+      const receipt = value.receipts.find(row => row.name === "public-installed-dependencies.json"); assert.ok(receipt);
+      assert.equal(receipt.value.status, "PASS"); assert.equal(receipt.value.method, "physical-same-installed-tree");
+      assert.equal(receipt.value.sourceAndDestinationBytesVerified, true); assert.equal(receipt.value.noLinksOrHardlinks, true);
+      assert.equal(receipt.value.networkUsed, false); assert.equal(receipt.value.reinstallPerformed, false);
+      assert.ok(Array.isArray(receipt.value.manifest)); assert.equal(receipt.value.manifestSha256, sha256(JSON.stringify(receipt.value.manifest)));
+      assert.ok(value.handles.length > 0 && value.handles.every(row => row.closed)); assert.ok(value.pulses() >= value.operations());
+    } finally { value.cleanup(); }
+  });
+  for (const fault of ["source-link", "hard-link", "destination-hard-link", "escape", "run-boundary", "path-name", "entry-bound", "file-byte-bound",
+    "source-mutation", "late-source-mutation", "destination-mutation", "existing-destination", "lock-mismatch", "runtime-mutation", "cancel", "already-cancelled", "exact-deadline", "deadline"] as const) {
+    await control("actual physical dependency staging rejects " + fault + " without publishing success or leaving handles open", async () => {
+      const value = await stageFixture({ fault });
+      try {
+        await assert.rejects(value.execute(), error => fault === "cancel" || fault === "already-cancelled" ? error === value.cancelled : error instanceof Error);
+        assert.equal(value.receipts.some(row => row.name === "public-installed-dependencies.json"), false);
+        assert.equal(value.receipts.filter(row => row.name === "public-installed-dependencies-failure.json").length, 1);
+        assert.ok(value.handles.every(row => row.closed));
+        if (fault === "existing-destination") assert.equal(readFileSync(path.join(value.target, ".package-lock.json"), "utf8"), "owned existing destination sentinel");
+        if (fault === "already-cancelled") assert.equal(value.operations(), 0);
+      } finally { value.cleanup(); }
+    });
+  }
+  await control("actual physical dependency staging awaits the existing control pulse before filesystem work", async () => {
+    const pulseGate = deferred(), pulseEntered = deferred(), value = await stageFixture({ pulseGate, pulseEntered });
+    try { const pending = value.execute(); await pulseEntered.promise; assert.equal(value.operations(), 0); pulseGate.release(); await pending;
+      assert.ok(value.events.indexOf("pulse-end") < value.events.findIndex(event => event.startsWith("fs:")));
+    } finally { pulseGate.release(); value.cleanup(); }
+  });
+  await control("actual staging failure settles both handles before outer cleanup and preserves the first error over secondary failures", async () => {
+    const original = Error("Controlled first dependency copy failure"), closeFailure = Error("Controlled secondary close failure"), closeGate = deferred(), closeEntered = deferred();
+    const stage = await stageFixture({ operationFailure: original, closeFailure, receiptFailure: Error("Controlled secondary receipt failure"), closeGate, closeEntered });
+    const value = fixture({ stageInstalledDependencies: stage.execute, failedCleanup: true });
+    try {
+      let settled = false; const pending = value.execute(); pending.then(() => { settled = true; }, () => { settled = true; });
+      await closeEntered.promise; assert.equal(settled, false); assert.equal(value.stopped(), false); assert.equal(value.removed(), false);
+      closeGate.release(); await assert.rejects(pending, error => error === original);
+      assert.ok(stage.handles.every(row => row.closed)); assert.ok(value.stopped() && value.workerStopped()); assert.equal(value.launched.length, 0);
+      const closes = Object.getOwnPropertyDescriptor(original, "dependencyStagingCloseFailures");
+      assert.ok(Array.isArray(closes?.value)); assert.equal(closes.value.length, 2); assert.ok(closes.value.every((error: unknown) => error === closeFailure));
+      assert.equal(closes.enumerable, false);
+      assert.ok(Object.getOwnPropertyDescriptor(original, "publicCleanupFailure")?.value instanceof Error);
+      assert.equal(value.receipts.some(row => row.name === "public-process-cleanup.json"), false);
+    } finally { closeGate.release(); stage.cleanup(); }
+  });
+  await control("actual physical staging refuses a success close failure and preserves a frozen original failure", async () => {
+    const closeFailure = Error("Controlled file close failure"), closed = await stageFixture({ closeFailure });
+    try { await assert.rejects(closed.execute(), error => error === closeFailure);
+      assert.equal(closed.receipts.some(row => row.name === "public-installed-dependencies.json"), false);
+      const failure = closed.receipts.find(row => row.name === "public-installed-dependencies-failure.json"); assert.ok(failure);
+      assert.deepEqual(failure.value.closeFailures, [{ name: "Error", code: null }, { name: "Error", code: null }]);
+    } finally { closed.cleanup(); }
+    const original = Object.freeze(Error("Controlled frozen original file failure"));
+    const frozen = await stageFixture({ operationFailure: original, closeFailure, receiptFailure: Error("Controlled secondary receipt failure") });
+    try { await assert.rejects(frozen.execute(), error => error === original); assert.equal(Object.hasOwn(original, "dependencyStagingCloseFailures"), false); }
+    finally { frozen.cleanup(); }
   });
 }
 

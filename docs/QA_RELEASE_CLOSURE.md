@@ -638,6 +638,45 @@ substitution must remain rejected under that historical contract. This fixture
 cannot authorize retained evidence for the current Native adoption; current
 execution still requires fresh Admission and the complete canonical sequence.
 
+The complete Quality prefix also runs the default verifier from the owned
+Windows source copy. Its installed dependency distributions must resolve physically
+inside that copy, with the same project/installed locks and executable bytes;
+a junction to the original project does not satisfy that boundary. The fourth
+Engineering03 run on `a292b3d2` passed56 gates, then exited1 at gate57 in the
+unchanged Infrastructure footprint control. A bounded unchanged-control
+reproduction reached its first assertion and retained
+`unresolved_executable_import_closure`; native package resolution crossed the
+copied project's strict installed-root boundary. Original inner CLI error
+details remain unavailable; this is a proved staging-context conflict, not a
+Product regression or evidence that the footprint assertion is stale.
+Provisioning belongs to `runOwnedPublicVerification`: its Windows private dependency
+copy must yield for the existing control pulse, honor cancellation and a bounded
+setup deadline, retain source/lock/file-byte identity, reject unqualified links
+or escapes, and settle filesystem work before owned cleanup. Do not relax the
+physical package boundary or the controlled installed-package byte mutation.
+The original56-pass/one-fail/eighteen-not-run result and complete10-resource,
+zero-process cleanup remain separate from any corrected source or later run.
+The exact helper copied24,929 files/652,881,707 bytes in369624.4508ms and
+the unchanged named footprint control passed its positive and mutation cases.
+Original dependency bytes, source and Git were preserved; owned-copy removal
+and zero-process cleanup passed. The616,011 awaited callbacks/max996.9541ms
+gap are copy observations, not actual PostgreSQL continuity or a hard I/O
+interrupt guarantee. The source-stat512MiB ceiling is not an adversarial
+concurrent-growth memory guarantee. Existing Linux dependency linking remains
+unchanged; the earlier Linux transport/process receipt does not qualify Linux
+Full E staging. Final affected checks and renewed whole-run evidence belong in
+the existing Engineering03 report; no fifth Full E is inferred here.
+
+The existing `verifyPublicSourceHeartbeatBoundary` must distinguish the three
+unchanged source-verification pulse sites from the additional awaited pulse
+inside private Windows dependency staging. Its old lexical total of three
+rejects that fourth call. A bounded default-tail execution reproduced4-versus-3;
+the original default09 CLI still lacks its inner error and remains a separate
+failure. Preserve all three source-site adjacency checks, require the private
+step's ordered checkpoints/awaited pulse and operation, and reject unclassified
+or shadowed pulses. Lease policy and runtime scheduling stay unchanged. Actual
+negative-control timing is scoped to this guard, never overall QA speed.
+
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory
 from an exclusive captured C# snapshot. Source/compiler/explicit Framework input

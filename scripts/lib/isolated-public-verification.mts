@@ -4,7 +4,8 @@ import { validateCoreJourneySelection } from "../fixtures/admin-core-domain-form
 import assert from "node:assert/strict";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { constants as fsConstants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, type Stats } from "node:fs";
+import * as asyncFs from "node:fs/promises";
 import * as nodeModule from "node:module";
 import net from "node:net";
 import { Worker } from "node:worker_threads";
@@ -5309,6 +5310,134 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   };
   const runChild = (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) =>
     runOwnedVerificationChild({ sourceDirectory, context, children, signal }, args, env, name, limitMs);
+  const stageInstalledDependencies = async () => {
+    const started = performance.now(), deadlineMs = 600_000;
+    const sourceRoot = join(ROOT, "node_modules"), targetRoot = join(sourceDirectory, "node_modules");
+    const entries: Array<{ file: string; kind: "directory" | "file"; mode: number; bytes?: number; sha256?: string }> = [];
+    const closeFailures: Array<{ name: string; code: string | null }> = [];
+    let filesCopied = 0, bytesCopied = 0;
+    const checkpoint = () => {
+      signal.throwIfAborted();
+      assert.ok(performance.now() - started < deadlineMs, "Owned dependency staging exceeded its preparation deadline.");
+    };
+    const step = async <T,>(operation: () => Promise<T>) => {
+      checkpoint(); await drainControlPulse(); checkpoint();
+      const value = await operation(); checkpoint(); return value;
+    };
+    const identity = (stat: Stats) => ({ dev: stat.dev, ino: stat.ino, mode: stat.mode,
+      size: stat.size, nlink: stat.nlink, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs });
+    const checkedStat = async (file: string, boundary: string, directory: boolean) => {
+      assert.ok(file === boundary || file.startsWith(boundary + sep), "Owned dependency path escaped its physical root.");
+      const stat = await step(() => asyncFs.lstat(file));
+      assert.equal(stat.isSymbolicLink(), false, "Owned dependencies cannot contain a symlink or junction.");
+      assert.equal(directory ? stat.isDirectory() : stat.isFile(), true, "Owned dependencies require ordinary directories and files.");
+      if (!directory) assert.equal(stat.nlink, 1, "Owned dependencies cannot contain a hard-linked file.");
+      assert.equal(await step(() => asyncFs.realpath(file)), file, "Owned dependencies cannot traverse an indirect physical path.");
+      return stat;
+    };
+    try {
+      assert.equal(await step(() => asyncFs.realpath(ROOT)), ROOT);
+      assert.equal(await step(() => asyncFs.realpath(sourceDirectory)), sourceDirectory);
+      assert.ok(sourceDirectory.startsWith(await step(() => asyncFs.realpath(context.runDirectory)) + sep));
+      const lockRow = manifest.find(row => row.file === "package-lock.json"); assert.ok(lockRow, "Owned dependencies require the frozen project lock.");
+      const before = localVerificationAdmissionRuntimeIdentity([]);
+      assert.equal(before.projectLockSha256, lockRow.sha256, "Installed dependencies do not match the frozen project lock.");
+      assert.equal(digest(await step(() => asyncFs.readFile(join(sourceDirectory, "package-lock.json")))), lockRow.sha256);
+      await checkedStat(sourceRoot, sourceRoot, true);
+      await step(() => asyncFs.mkdir(targetRoot));
+      const walk = async (relative: string): Promise<void> => {
+        const source = relative ? join(sourceRoot, relative) : sourceRoot, target = relative ? join(targetRoot, relative) : targetRoot;
+        const initial = await checkedStat(source, sourceRoot, true);
+        await checkedStat(target, targetRoot, true);
+        const names = (await step(() => asyncFs.readdir(source))).sort();
+        assert.ok(entries.length + names.length + 1 <= 200_000, "Owned dependency inventory exceeded its finite entry bound.");
+        entries.push({ file: relative.replaceAll("\\", "/"), kind: "directory", mode: initial.mode & 0o777 });
+        for (const name of names) {
+          assert.ok(entries.length + 1 <= 200_000, "Owned dependency inventory exceeded its finite entry bound.");
+          assert.ok(name !== "." && name !== ".." && !/[\\/]/u.test(name));
+          const file = relative ? join(relative, name) : name, inputPath = join(sourceRoot, file), outputPath = join(targetRoot, file);
+          const stat = await step(() => asyncFs.lstat(inputPath));
+          assert.equal(stat.isSymbolicLink(), false, "Owned dependencies cannot contain a symlink or junction.");
+          if (stat.isDirectory()) { await step(() => asyncFs.mkdir(outputPath)); await walk(file); continue; }
+          const original = await checkedStat(inputPath, sourceRoot, false);
+          assert.ok(original.size <= 512 * 1024 * 1024 && bytesCopied + original.size <= 4 * 1024 * 1024 * 1024,
+            "Owned dependency bytes exceeded their finite preparation bound.");
+          let input: Awaited<ReturnType<typeof asyncFs.open>> | undefined, output: Awaited<ReturnType<typeof asyncFs.open>> | undefined, failure: unknown, failed = false;
+          try {
+            await step(async () => { input = await asyncFs.open(inputPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)); });
+            assert.deepEqual(identity(await step(() => input!.stat())), identity(original), "Owned dependency source identity changed before reading.");
+            const bytes = await step(() => input!.readFile()), sha256 = digest(bytes);
+            assert.equal(bytes.length, original.size);
+            await step(async () => { output = await asyncFs.open(outputPath,
+              fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0), 0o600); });
+            await step(() => output!.writeFile(bytes));
+            await step(() => output!.chmod(original.mode & 0o777));
+            const copied = await checkedStat(outputPath, targetRoot, false);
+            assert.deepEqual(identity(await step(() => output!.stat())), identity(copied), "Owned dependency destination identity changed during copying.");
+            assert.equal(copied.mode & 0o777, original.mode & 0o777, "Owned dependency file mode changed during copying.");
+            assert.equal(copied.size, original.size);
+            assert.equal(digest(await step(() => asyncFs.readFile(outputPath))), sha256, "Owned dependency destination bytes changed during copying.");
+            assert.deepEqual(identity(await checkedStat(inputPath, sourceRoot, false)), identity(original), "Owned dependency source identity changed during copying.");
+            assert.equal(digest(await step(() => asyncFs.readFile(inputPath))), sha256, "Owned dependency source bytes changed during copying.");
+            assert.deepEqual(identity(await step(() => input!.stat())), identity(original), "Owned dependency source handle changed during copying.");
+            entries.push({ file: file.replaceAll("\\", "/"), kind: "file", mode: original.mode & 0o777, bytes: bytes.length, sha256 });
+            filesCopied++; bytesCopied += bytes.length;
+          } catch (error) { failed = true; failure = error; throw error; }
+          finally {
+            // Handle closure must settle even after cancellation; only then may the outer workspace cleanup begin.
+            const closed = await Promise.allSettled([...(output ? [output.close()] : []), ...(input ? [input.close()] : [])]);
+            const rejected = closed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+            for (const result of rejected) closeFailures.push({ name: result.reason instanceof Error ? result.reason.name : "Error",
+              code: result.reason && typeof result.reason === "object" && "code" in result.reason && typeof result.reason.code === "string"
+                && /^[A-Z0-9_]{1,64}$/u.test(result.reason.code) ? result.reason.code : null });
+            if (failed && rejected.length && failure instanceof Error && Object.isExtensible(failure)
+              && !Object.hasOwn(failure, "dependencyStagingCloseFailures")) {
+              try { Object.defineProperty(failure, "dependencyStagingCloseFailures", { value: rejected.map(result => result.reason) }); }
+              catch { /* preserve the original staging failure even when secondary annotation is unavailable */ }
+            }
+            if (!failed && rejected.length) throw rejected[0]!.reason;
+          }
+        }
+        assert.deepEqual((await step(() => asyncFs.readdir(source))).sort(), names, "Owned dependency membership changed during copying.");
+        assert.deepEqual(identity(await checkedStat(source, sourceRoot, true)), identity(initial), "Owned dependency directory changed during copying.");
+        await step(() => asyncFs.chmod(target, initial.mode & 0o777));
+      };
+      await walk("");
+      const membership = new Map<string, string[]>();
+      for (const entry of entries) {
+        if (entry.kind === "directory") membership.set(entry.file, []);
+        if (entry.file) {
+          const slash = entry.file.lastIndexOf("/"), parent = slash === -1 ? "" : entry.file.slice(0, slash);
+          membership.get(parent)!.push(entry.file.slice(slash + 1));
+        }
+      }
+      for (const boundary of [sourceRoot, targetRoot]) for (const entry of entries) {
+        const file = entry.file ? join(boundary, entry.file) : boundary;
+        const stat = await checkedStat(file, boundary, entry.kind === "directory");
+        assert.equal(stat.mode & 0o777, entry.mode, "Owned dependency mode changed after copying.");
+        if (entry.kind === "directory") assert.deepEqual((await step(() => asyncFs.readdir(file))).sort(), membership.get(entry.file)!.sort(),
+          "Owned dependency membership changed after copying.");
+        else {
+          assert.equal(stat.size, entry.bytes);
+          assert.equal(digest(await step(() => asyncFs.readFile(file))), entry.sha256, "Owned dependency bytes changed after copying.");
+        }
+      }
+      assert.deepEqual(localVerificationAdmissionRuntimeIdentity([]), before, "Installed dependency locks or runtime changed during copying.");
+      assert.equal(digest(await step(() => asyncFs.readFile(join(targetRoot, ".package-lock.json")))), before.installedLockSha256);
+      assert.equal(digest(await step(() => asyncFs.readFile(join(sourceDirectory, "package-lock.json")))), before.projectLockSha256);
+      await step(() => context.assertOwned());
+      receipt(context, "public-installed-dependencies.json", { status: "PASS", method: "physical-same-installed-tree", sourceRoot, targetRoot,
+        deadlineMs, durationMs: performance.now() - started, filesCopied, bytesCopied, manifestSha256: digest(JSON.stringify(entries)), manifest: entries,
+        installedIdentity: before, sourceAndDestinationBytesVerified: true, noLinksOrHardlinks: true, networkUsed: false, reinstallPerformed: false });
+      checkpoint();
+    } catch (error) {
+      try { receipt(context, "public-installed-dependencies-failure.json", { status: "BLOCKED", method: "physical-same-installed-tree", deadlineMs,
+        durationMs: performance.now() - started, filesCopied, bytesCopied, partialManifestSha256: digest(JSON.stringify(entries)), closeFailures,
+        failure: { name: error instanceof Error ? error.name : "Error", code: error && typeof error === "object" && "code" in error
+          && typeof error.code === "string" && /^[A-Z0-9_]{1,64}$/u.test(error.code) ? error.code : null } }); } catch { /* preserve the original staging failure */ }
+      throw error;
+    }
+  };
   try {
     for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(sourcePath(row.file)), { flag: "wx" }); }
     await context.assertOwned();
@@ -5335,7 +5464,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         sha256: digest(fixtureSource), isolatedOnly: true, deployed: false, templateId: 900003 });
     }
     writeFileSync(join(sourceDirectory, imageConfig.file), imageConfigSource, { flag: "wx", mode: 0o600 });
-    symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
+    if (process.platform === "win32") await stageInstalledDependencies();
+    else symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
     const headSha = await gitHead(context);
     const collectorSha256 = manifest.find(row => row.file === "scripts/lib/isolated-public-verification.mts")?.sha256;
     assert.match(collectorSha256 ?? "", /^[a-f0-9]{64}$/u, "Snapshot omits its own verification collector.");

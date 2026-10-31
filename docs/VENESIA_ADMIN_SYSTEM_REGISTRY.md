@@ -2451,6 +2451,41 @@ consumer's original exit1 and zero-process cleanup are preserved separately
 from targeted corrections and any future Full E. No fourth Full E is inferred
 from this Source/Offline invocation or from earlier partial passes.
 
+**Affected installed-dependency staging:** the fourth Full E on `a292b3d2`
+passed56 gates, then exited1 at Admin Runtime's default Infrastructure footprint
+control. The copied project's dependency junction resolved the actual package
+outside its strict installed-root boundary; that provisioner and predicate
+predate Native application adoption. The unchanged named-control reproduction
+reached its first assertion and retained `unresolved_executable_import_closure`.
+This proves a staging-context conflict; the original CLI's hidden inner error
+remains unavailable. The correction owner is `runOwnedPublicVerification`,
+using Windows private physical same-lock installed bytes with yielding/cancellation,
+bounded preparation, path/link rejection and settled cleanup. The footprint
+owner and actual installed-package-byte mutation stay strict. The exact helper's
+actual24,929-file/652,881,707-byte copy passed in369624.4508ms, followed by the
+unchanged named positive/mutation control. Original dependency bytes, source
+and Git stayed unchanged; the private copy was removed and owned processes
+reached zero. Copy callbacks and their bounded observed gap are distinct from
+actual PostgreSQL continuity. Linux retains its original dependency-linking
+statement; historical Linux transport/process evidence does not establish Linux
+Full E staging. Current final-source checks and any fifth Full E are reported
+separately. Gate57's original
+exit1, native helper success with301 lifetime processes and zero before/after
+cleanup, complete10-resource removal and preserved Treasury metadata remain
+independent facts. Targeted results, any fifth run and final source/CI outcomes
+are recorded separately in the Engineering03 report; no partial run is promoted.
+
+**Affected heartbeat source guard:** a bounded default-tail execution directly
+reproduced the old three-call total rejecting the additional awaited staging
+pulse. Default09's suppressed original inner error remains unknown. The guard
+retains all three original source-site/await-adjacency constraints, separately
+qualifies the private step's checkpoints/pulse/awaited operation, and rejects
+unclassified calls or local shadowing. The runtime lease and scheduling owners
+are unchanged. Scalar counts and exact node-identity predicates avoid rendering
+large AST graphs on rejected variants without relaxing acceptance. Targeted
+guard timings remain separate from system-wide QA performance. Current full
+default acceptance, source protection and release outcomes belong to the report.
+
 **Coverage / approval / release:** the existing sixty-row behavioral matrix in
 QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.
 Only executed current gates may renew their specific behavior rows; source
