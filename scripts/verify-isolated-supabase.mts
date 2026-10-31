@@ -1144,8 +1144,26 @@ function verifyAdminMeasurementRestartPolicy() {
       "childEnvironment", '"hero-compatibility-typegen"', "180_000",
     ], "The extra child is exactly the fixed Next typegen prerequisite.");
     const declarationStatement = (call: ts.CallExpression, name: string) => {
-      assert.ok(ts.isAwaitExpression(call.parent) && ts.isVariableDeclaration(call.parent.parent));
-      const declaration = call.parent.parent;
+      let awaited: ts.Node = call;
+      if (name === "result") {
+        const access = call.parent;
+        assert.ok(ts.isPropertyAccessExpression(access) && access.expression === call && access.name.text === "catch",
+          "The driver may add only the canonical first-failure rejection boundary.");
+        const caught = access.parent;
+        assert.ok(ts.isCallExpression(caught) && caught.expression === access && caught.arguments.length === 1);
+        const callback = caught.arguments[0];
+        assert.ok(ts.isArrowFunction(callback) && ts.isBlock(callback.body));
+        assert.deepEqual(callback.parameters.map(parameter => parameter.getText(file)), ["error"]);
+        assert.deepEqual(callback.body.statements.map(statement => statement.getText(file).replace(/\s+/gu, " ")), [
+          "const first = gateApp ? nativeApplications.get(gateApp)?.failure : undefined;",
+          "if (first === undefined) throw error;",
+          'if (first instanceof Error && Object.isExtensible(first) && !Object.hasOwn(first, "applicationDriverFailure")) Object.defineProperty(first, "applicationDriverFailure", { value: error });',
+          "throw first;",
+        ], "The driver must preserve its original failure or the already-recorded application failure without recovery or another launch.");
+        awaited = caught;
+      }
+      assert.ok(ts.isAwaitExpression(awaited.parent) && ts.isVariableDeclaration(awaited.parent.parent));
+      const declaration = awaited.parent.parent;
       assert.equal(declaration.name.getText(file), name);
       assert.ok(ts.isVariableDeclarationList(declaration.parent) && ts.isVariableStatement(declaration.parent.parent));
       return declaration.parent.parent;
@@ -1166,15 +1184,22 @@ function verifyAdminMeasurementRestartPolicy() {
     const successIndex = gateBody.statements.findIndex(statement => ts.isExpressionStatement(statement)
       && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "assert.equal"
       && statement.expression.arguments[0]?.getText(file) === "result.code" && statement.expression.arguments[1]?.getText(file) === "0");
+    const nativeStopIndex = gateBody.statements.findIndex(statement => ts.isIfStatement(statement)
+      && statement.expression.getText(file) === "gateApp && nativeApplications.has(gateApp)"
+      && statement.thenStatement.getText(file) === "await stopNativeApplication(nativeApplications.get(gateApp)!);");
     const stopIndex = gateBody.statements.findIndex(statement => ts.isIfStatement(statement)
-      && statement.expression.getText(file) === "gateApp"
+      && statement.expression.getText(file) === "gateApp && !nativeApplications.has(gateApp)"
       && statement.thenStatement.getText(file) === "await stopChild(gateApp, context.cleanEnvironment());");
+    const passIndex = gateBody.statements.findIndex(statement => ts.isExpressionStatement(statement)
+      && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "context.record"
+      && statement.expression.arguments[0]?.getText(file) === '"public-gate-pass"');
     const driverIndex = gateBody.statements.indexOf(driverStatement), policyIndex = gateBody.statements.indexOf(policy), resetIndex = gateBody.statements.indexOf(reset);
-    assert.ok(driverIndex < policyIndex && policyIndex < successIndex && successIndex < stopIndex && stopIndex < resetIndex,
-      "Typegen can run only after canonical failure rejection, successful completion and app shutdown.");
-    return { file, policy, reset, prerequisiteStatement };
+    assert.ok(driverIndex < policyIndex && policyIndex < successIndex && successIndex < nativeStopIndex
+      && nativeStopIndex < passIndex && passIndex < stopIndex && stopIndex < resetIndex,
+      "Typegen follows failure rejection, success and both qualified shutdown branches; Native cleanup precedes PASS and Linux shutdown retains its original boundary.");
+    return { file, policy, reset, prerequisiteStatement, nativeStop: gateBody.statements[nativeStopIndex], linuxStop: gateBody.statements[stopIndex] };
   };
-  const { file, policy, reset, prerequisiteStatement } = inspectLaunches(source);
+  const { file, policy, reset, prerequisiteStatement, nativeStop, linuxStop } = inspectLaunches(source);
   const replaceOnce = (before: string, after: string) => {
     assert.equal(source.split(before).length, 2);
     return source.replace(before, after);
@@ -1187,6 +1212,12 @@ function verifyAdminMeasurementRestartPolicy() {
     ["prerequisite moved outside reset", moved.slice(0, resetEndAfterRemoval) + "\n" + prerequisiteStatement.getText(file) + moved.slice(resetEndAfterRemoval)],
     ["duplicated prerequisite", replaceOnce(prerequisiteStatement.getText(file), prerequisiteStatement.getText(file) + "\n" + prerequisiteStatement.getText(file))],
     ["missing success boundary", replaceOnce('assert.equal(result.code, 0, `Required Public gate failed: ${gate.name}`);', '')],
+    ["unqualified driver rejection wrapper", replaceOnce("await runChild(args, env, gate.name, gate.limitMs).catch(error =>", "await runChild(args, env, gate.name, gate.limitMs).then(error =>")],
+    ["discarded first application failure", replaceOnce("throw first;", "throw error;")],
+    ["missing Native app shutdown", replaceOnce(nativeStop.getText(file), "")],
+    ["Native app shutdown moved after PASS", replaceOnce(nativeStop.getText(file), "").replace(linuxStop.getText(file), nativeStop.getText(file) + "\n" + linuxStop.getText(file))],
+    ["widened Linux app shutdown", replaceOnce(linuxStop.getText(file), "if (gateApp) await stopChild(gateApp, context.cleanEnvironment());")],
+    ["missing Linux app shutdown", replaceOnce(linuxStop.getText(file), "")],
   ]) assert.throws(() => inspectLaunches(changed), name);
   cases.push("child launch guard permits only one generic driver and one fixed typegen after successful Hero reset; changed command, scope, placement, duplication and missing success boundary are rejected");
   const events: unknown[] = [];
@@ -3157,7 +3188,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const run = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification") as ts.FunctionDeclaration;
   assert.ok(run?.body);
-  const body = run.body.statements.find(ts.isTryStatement); assert.ok(body?.finallyBlock);
+  const body = run.body.statements.find(ts.isTryStatement); assert.ok(body?.finallyBlock && body.catchClause);
   const declaration = (name: string, nodes: ts.NodeArray<ts.Statement>) => {
     const result = nodes.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
     assert.ok(result, "Missing canonical execution declaration: " + name); return result.getText(file);
@@ -3177,6 +3208,9 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     const request = {}, heroCompatibility = false, measurement = undefined, ROOT = "controlled-root";
     const qualityScripts = ports.prefix, npmCli = "controlled-npm-cli", env = {};
     const reports = [], qualityReports = []; let buildIdSha256 = null, appPort = null, appFailed = false;
+    ${declaration("nativeApplications", run.body.statements)}
+    ${declaration("stopNativeApplication", run.body.statements)}
+    ${declaration("publicFailed", run.body.statements)}
     ${deadline.getText(file).replace(/^export /u, "")}
     ${gates.getText(file)}
     const gates = GATES;
@@ -3188,10 +3222,10 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
         const gateApp = undefined;
         ${gateStatements.slice(begin, end).map(node => node.getText(file)).join("\n")}
       }
-    } finally ${body.finallyBlock.getText(file)}
+    } ${body.catchClause.getText(file)} finally ${body.finallyBlock.getText(file)}
     return { reports, qualityReports, buildIdSha256 };
   };`)) as (ports: Record<string, unknown>) => () => Promise<{ reports: Array<{ name: string; code: number }>; qualityReports: Array<{ script: string; code: number }> }>;
-  const fixture = (options: { failedChild?: string; skippedE2E?: boolean; failedCleanup?: boolean; failedWorker?: boolean } = {}) => {
+  const fixture = (options: { failedChild?: string; driverFailure?: Error; skippedE2E?: boolean; failedCleanup?: boolean; failedWorker?: boolean } = {}) => {
     const events: string[] = [], launched: string[] = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
     let removed = false, stopped = false, workerStopped = false;
     const sourceDirectory = path.join("owned", "source");
@@ -3204,7 +3238,9 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
     const ports = { assert, join: path.join, sep: path.sep, digest: sha256, prefix,
       context, originalContext: context, activeLocalVerifications,
       async runChild(_args: string[], _env: object, name: string) {
-        launched.push(name); return { code: options.failedChild === name ? 1 : 0, stdout: options.skippedE2E && name === "public-e2e" ? "1 skipped\n" : "", stderr: "" };
+        launched.push(name);
+        if (options.failedChild === name && options.driverFailure) throw options.driverFailure;
+        return { code: options.failedChild === name ? 1 : 0, stdout: options.skippedE2E && name === "public-e2e" ? "1 skipped\n" : "", stderr: "" };
       },
       receipt: (_context: unknown, name: string, value: Record<string, unknown>) => receipts.push({ name, value }),
       children: new Set([{}]), retainedAdmission,
@@ -3252,6 +3288,17 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[]) {
   await control("retained worker cleanup rejection remains fatal after owned workspace removal", async () => {
     const value = fixture({ failedWorker: true }); await assert.rejects(value.execute(), /controlled worker cleanup failure/u);
     assert.ok(value.stopped() && value.workerStopped() && value.removed()); assert.equal(value.active(), false);
+  });
+  await control("actual outer catch and finally preserve the first driver error when subsequent owned cleanup rejects", async () => {
+    const original = Error("controlled first driver failure");
+    const value = fixture({ failedChild: "quality-2-typecheck", driverFailure: original, failedCleanup: true });
+    await assert.rejects(value.execute(), error => error === original);
+    assert.deepEqual(value.launched, ["quality-1-lint", "quality-2-typecheck"]);
+    assert.ok(value.stopped() && value.workerStopped()); assert.equal(value.active(), false);
+    const secondary = Object.getOwnPropertyDescriptor(original, "publicCleanupFailure");
+    assert.ok(secondary?.value instanceof Error); assert.match(secondary.value.message, /owned Public process could not be stopped/u);
+    assert.equal(secondary.enumerable, false);
+    assert.equal(value.receipts.some(row => row.name === "public-process-cleanup.json"), false);
   });
 }
 

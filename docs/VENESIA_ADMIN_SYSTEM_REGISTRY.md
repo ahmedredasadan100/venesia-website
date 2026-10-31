@@ -2422,6 +2422,23 @@ disconnect classification for this assertion failure. A later source must
 renew Admission and complete its own Full E; earlier partial passes are not
 promoted. Current result and preservation remain in the final report.
 
+**Affected adoption-guard maintenance:** the third attempt on`a574bffc` passed42
+prefix gates, including the complete existing content-editor Browser aggregate,
+then exited1 in the platform-performance command's Admin control-lease verifier.
+Direct unchanged-body controls reproduced an obsolete immediate-await/old-stop
+AST expectation in `verifyAdminMeasurementRestartPolicy` and missing current
+lifecycle ports in `verifyLocalRiskExecutionControls`. The existing verifier is
+the correction owner; native capability and application execution stay intact.
+Its maintained contracts retain the exact driver and fixed Hero prerequisite,
+first-failure-preserving catch, failed-measurement restart refusal, qualified
+native cleanup and Linux shutdown ordering. Projection locals must faithfully
+represent the current owner rather than omit cleanup or suppress its failures.
+Original negatives and cleanup/error assertions remain mandatory. Actual
+targeted results, renewed Admission and any subsequent whole Full E remain
+separate in the final report. The failed third attempt, its native root1/helper
+success/zero-membership receipt and complete10-resource cleanup are preserved;
+no runtime crash, transport outage or Product defect follows from this failure.
+
 **Coverage / approval / release:** the existing sixty-row behavioral matrix in
 QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.
 Only executed current gates may renew their specific behavior rows; source

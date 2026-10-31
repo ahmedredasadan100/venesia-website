@@ -611,6 +611,22 @@ cleanup succeeded independently. A new source still requires fresh live
 Admission and the complete canonical gate sequence; partial attempts cannot
 be combined into a passing Full E.
 
+The third attempt on`a574bffc` passed42 prefix gates, including the complete
+content-editor Browser aggregate, then failed the platform-performance
+command's existing Admin control-lease verifier. Direct execution of its
+unchanged guard bodies reproduced two adoption-maintenance gaps: the restart
+guard expected an immediate bare awaited driver and the former plain shutdown,
+and a controlled execution projection omitted the new native lifecycle locals.
+Maintenance belongs to those existing verifier helpers. It must bind the exact
+first-failure-preserving catch, native and Linux shutdown branches, original
+launch count/arguments, failed-measurement rejection and successful Hero typegen
+ordering. Controlled cleanup must receive the actual lifecycle ports and retain
+its original failure and cleanup assertions. No runtime policy, canonical
+command, Product contract or timeout changes to satisfy these checks. Original
+gate43 exit1, native queried-zero and complete owned-resource cleanup remain
+independent evidence; later targeted or Full E results belong to their own
+source and execution.
+
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory
 from an exclusive captured C# snapshot. Source/compiler/explicit Framework input
