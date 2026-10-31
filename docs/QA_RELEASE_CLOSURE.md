@@ -601,6 +601,15 @@ adoption controls and Full E results must qualify this consumer separately from
 native capability tests. An interrupted attempt without an owner terminal
 receipt remains incomplete even after separately verified owned-resource
 recovery; neither recovery nor preserved partial gates converts it to PASS.
+The second Engineering03 attempt reached a genuine diagnostic assertion failure:
+the existing client-config expectation omitted the approved `query_timeout`
+of30000ms while the actual owner already supplied it. Maintenance adds that
+required field to the exact comparison and retains every previous field and
+assertion. It changes no connection policy. Original gate exit1 and its raw
+failure remain preserved; native zero-process cleanup and owned-resource
+cleanup succeeded independently. A new source still requires fresh live
+Admission and the complete canonical gate sequence; partial attempts cannot
+be combined into a passing Full E.
 
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory

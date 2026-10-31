@@ -2409,6 +2409,19 @@ qualified terminal result. Separate existing-owner recovery removed ten owned
 resources with zero remaining and preserved the original foreign inventory;
 it does not manufacture the missing original Full E or process receipt.
 
+**Affected diagnostic maintenance:** the second attempt's fresh Admission and
+Automatic Preflight passed on `291ec30e`; six prefix gates passed, then the
+existing connect diagnostic rejected a client-config object solely because its
+expected object omitted the already approved `query_timeout: 30000` policy.
+That expectation predates the bounded-query correction. Its exact comparison
+now requires the field while preserving every earlier assertion and option;
+the connection owner and Product remain unchanged. The original gate exit1,
+native completed/root1/zero-membership evidence, and complete10-resource
+cleanup remain separate from any later run. There is no V8-crash or PostgreSQL
+disconnect classification for this assertion failure. A later source must
+renew Admission and complete its own Full E; earlier partial passes are not
+promoted. Current result and preservation remain in the final report.
+
 **Coverage / approval / release:** the existing sixty-row behavioral matrix in
 QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.
 Only executed current gates may renew their specific behavior rows; source
