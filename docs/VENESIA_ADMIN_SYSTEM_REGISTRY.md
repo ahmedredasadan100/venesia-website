@@ -2383,7 +2383,7 @@ bounded identity/PPID enrichment preserves partial/unavailable observations,
 and all acquired handles close. PPID is never ownership authority. No ordinary
 success polling, new native wrapper or timeout increase is added.
 
-**Verification / adoption boundaries:** the final existing shared-owner control
+**Verification / adoption boundaries:** the native-correction shared-owner control
 mode passes110 checks, including the twelve native acceptance cases, original
 Success/Nonzero/Timeout/Cancellation, known descendant handle completion, an
 actual zero/one-retained positive and seventeen malformed/omitted ownership
@@ -2392,6 +2392,22 @@ zero owned children and the earlier failing runs remain separate. Windows-only
 branches leave Linux execution unchanged; qualified earlier Linux evidence is
 reused only for its unchanged consumed scope. Native cleanup success does not
 resolve historical V8/PostgreSQL causation or establish future client endurance.
+
+**Consumer adoption correction:** a subsequent source review proved that the
+long-lived `next start` server still used plain Windows spawn, independently
+of its native-owned test driver. The existing public verification owner now
+adopts the same native capability directly for Public E2E, Admin interactions,
+Admin adoption, media upload and Hero compatibility. Root/helper outcomes,
+unexpected exit, close/log completion and native cleanup stay distinct from
+driver results; the same `stopChild` owns termination. Existing arguments,
+preloads, environments, readiness/driver bounds and Linux direct execution are
+preserved. This bounded consumer correction adds no owner, wrapper, runtime or
+canonical command. The final report must bind its actual targeted adoption
+evidence and renewed source admission. The first Full E attempt remains
+externally interrupted after six closed prefix gates; its seventh gate has no
+qualified terminal result. Separate existing-owner recovery removed ten owned
+resources with zero remaining and preserved the original foreign inventory;
+it does not manufacture the missing original Full E or process receipt.
 
 **Coverage / approval / release:** the existing sixty-row behavioral matrix in
 QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.

@@ -587,6 +587,21 @@ console setting is introduced. The scoped evidence and original failures live
 in the [Engineering03 report](../.tmp-qa/qa-engineering-final-closure-03-20261031/final-engineering-closure-report.json);
 this correction alone does not qualify PostgreSQL, Full E, CI or human review.
 
+The same native capability also owns the long-lived Windows `next start` child
+inside `runOwnedPublicVerification`, for Public E2E, Admin interactions/adoption,
+media upload and Hero compatibility. Its existing decorated child goes directly
+to `stopChild`; no plain Windows spawn fallback or historical PID claim is
+allowed. Server root/helper results and native cleanup evidence remain separate
+from the test driver's result. Unexpected completion fails the active gate;
+intentional cleanup awaits the server close/log lifecycle and preserves an
+earlier failure when cleanup also fails. The native lifetime includes the
+existing120-second readiness window, unchanged driver limit and existing
+20-second cleanup allowance. Linux retains its direct process branch. Actual
+adoption controls and Full E results must qualify this consumer separately from
+native capability tests. An interrupted attempt without an owner terminal
+receipt remains incomplete even after separately verified owned-resource
+recovery; neither recovery nor preserved partial gates converts it to PASS.
+
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory
 from an exclusive captured C# snapshot. Source/compiler/explicit Framework input

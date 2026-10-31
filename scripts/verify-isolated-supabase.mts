@@ -4526,6 +4526,188 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
         failure: failures[0], stderrSha256: sha256(result.stderr), cleanup: result.cleanup, actualResult: result, applicationOutputSupplied: false });
     });
     if (!options?.admissionOnly) {
+    const applicationOwner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
+      && node.name?.text === "runOwnedPublicVerification");
+    assert.ok(applicationOwner?.body);
+    const applicationVariables = ["nativeApplications", "stopNativeApplication"].map(name => {
+      const declaration = applicationOwner.body!.statements.find((node): node is ts.VariableStatement => ts.isVariableStatement(node)
+        && node.declarationList.declarations.some(value => ts.isIdentifier(value.name) && value.name.text === name));
+      assert.ok(declaration, "Use the actual application lifecycle declaration: " + name); return declaration.getText(file);
+    });
+    const appBlocks: ts.Block[] = [];
+    const findAppBlock = (node: ts.Node) => {
+      if (ts.isBlock(node) && node.statements.some(statement => ts.isVariableStatement(statement)
+        && statement.declarationList.declarations.some(value => ts.isIdentifier(value.name) && value.name.text === "appArgs"))) appBlocks.push(node);
+      ts.forEachChild(node, findAppBlock);
+    };
+    findAppBlock(applicationOwner); assert.equal(appBlocks.length, 1);
+    const appStatements = appBlocks[0]!.statements;
+    const appStart = appStatements.findIndex(node => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some(value => ts.isIdentifier(value.name) && value.name.text === "appArgs"));
+    const appEnd = appStatements.findIndex(node => ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)
+      && node.expression.expression.getText(file) === "assert.ok" && node.expression.arguments[0]?.getText(file) === "ready");
+    assert.ok(appStart >= 0 && appEnd > appStart);
+    const applicationBody = appStatements.slice(appStart, appEnd + 1).map(node => node.getText(file)).join("\n");
+    type ApplicationProjection = { ready: Promise<void>; children: Set<ChildProcess>; stop(): Promise<void>;
+      states: Map<ChildProcess, { failure?: unknown; stopping: boolean; windows: ReturnType<typeof spawnWindowsOwnedProcess> }> };
+    const applicationCode = ts.transpileModule(applicationVariables.join("\n") + "\nreturn {start:()=>{const ready=(async()=>{"
+      + applicationBody + "})();ready.catch(()=>undefined);return {ready,children,states:nativeApplications,stop:async()=>{for(const state of nativeApplications.values())await stopNativeApplication(state);}};}};",
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const buildApplication = (ports: { directory: string; name: string; port: number; signal?: AbortSignal; platform?: string;
+      environment?: NodeJS.ProcessEnv; measurement?: { study?: string; controlDirectory: string }; coreFault?: boolean;
+      write?: typeof writeFileSync; launch?: typeof spawn; native?: typeof spawnWindowsOwnedProcess; }) => {
+      const appContext = { ...context, runDirectory: ports.directory };
+      const projected = new Function("assert", "process", "spawnWindowsOwnedProcess", "spawn", "stopChild", "ownedPath", "receipt", "writeFileSync", "join", "resolve",
+        "context", "sourceDirectory", "ROOT", "gate", "appPort", "childEnvironment", "measurement", "coreFault", "coreControl", "adoption", "signal", "fetch",
+        "const children=new Set();let appFailed=false,gateApp;" + applicationCode)(assert, { platform: ports.platform ?? process.platform, execPath: process.execPath },
+        ports.native ?? launchWindows, ports.launch ?? spawn, api.stop, (value: { runDirectory: string }, name: string) => path.join(value.runDirectory, name),
+        (value: { runDirectory: string }, name: string, data: unknown) => (ports.write ?? writeFileSync)(path.join(value.runDirectory, name), JSON.stringify(data), { flag: "wx", mode: 0o600 }),
+        ports.write ?? writeFileSync, path.join, path.resolve, appContext, ports.directory, root, { name: ports.name, limitMs: 10_000 }, ports.port,
+        { ...environment, ...ports.environment }, ports.measurement, ports.coreFault ?? false, ports.coreFault ? path.join(ports.directory, "core-control.json") : null,
+        false, ports.signal ?? new AbortController().signal, fetch) as { start(): ApplicationProjection };
+      return projected.start();
+    };
+    await control("application source preserves all five Linux selectors arguments environment and spawn options", async () => {
+      for (const name of ["public-e2e", "admin-interactions", "admin-adoption", "media-upload-limit", "hero-compatibility"]) {
+        let observedArgs: readonly string[] | undefined, observedOptions: unknown;
+        const coreFault = name === "admin-adoption", measurement = name === "admin-interactions" ? { study: "heavy-editor-performance", controlDirectory: directory } : undefined;
+        const fake = new EventEmitter() as ChildProcess;
+        Object.assign(fake, { stdout: new EventEmitter(), stderr: new EventEmitter(), exitCode: null, signalCode: null, pid: 1 });
+        const launch = ((executable: string, args: readonly string[], options: unknown) => { assert.equal(executable, process.execPath);
+          observedArgs = args; observedOptions = options; return fake; }) as typeof spawn;
+        const controller = new AbortController(); controller.abort(Error("Controlled pre-readiness stop"));
+        const projected = buildApplication({ directory, name, port: 1, platform: "linux", coreFault, measurement, launch,
+          signal: controller.signal, native: (() => { assert.fail("Linux must preserve its existing direct spawn path."); }) as typeof spawnWindowsOwnedProcess });
+        await assert.rejects(projected.ready, /Controlled pre-readiness stop/u);
+        const expectedArgs = [...(coreFault ? ["--require", path.join(directory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []),
+          ...(measurement ? ["--require", path.join(root, "scripts/fixtures/admin-interaction-server-trace.cjs")] : []),
+          path.join(directory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", "1"];
+        assert.deepEqual(observedArgs, expectedArgs);
+        assert.deepEqual(observedOptions, { cwd: directory, env: measurement ? { ...environment,
+          QA_ADMIN_SERVER_TRACE_PATH: path.join(directory, "admin-server-trace.jsonl"), QA_ADMIN_TRACE_CONTROL_PATH: path.join(directory, "server-trace-mode.json") }
+          : coreFault ? { ...environment, QA_ADMIN_CORE_CACHE_CONTROL: path.join(directory, "core-control.json") } : environment,
+          windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+        assert.equal(projected.states.size, 0); projected.children.clear();
+      }
+      const ownerText = applicationOwner.getText(file);
+      assert.ok(ownerText.indexOf('context.record("public-gate-pass", { gate: gate.name });\n      if (gateApp && !nativeApplications.has(gateApp)) await stopChild') >= 0);
+    });
+    if (process.platform === "win32") {
+      const makeApplication = async (name: string, mode: string, overrides: Partial<Parameters<typeof buildApplication>[0]> = {}) => {
+        const appDirectory = path.join(directory, "application-" + name); mkdirSync(appDirectory);
+        const target = path.join(appDirectory, "node_modules/next/dist/bin"); mkdirSync(target, { recursive: true });
+        writeFileSync(path.join(target, "next"), "const http=require('node:http');const mode=process.env.QA_OWNED_HTTP_MODE;"
+          + "if(mode==='exit-zero')process.exit(0);if(mode==='exit-seven')process.exit(7);"
+          + "const port=Number(process.argv[process.argv.indexOf('--port')+1]);"
+          + "const server=http.createServer((req,res)=>{res.statusCode=200;res.end('owned');});"
+          + "if(mode!=='never-ready')server.listen(port,'127.0.0.1',()=>process.stdout.write('ready private-sentinel'));"
+          + "process.stderr.write('server private-sentinel');setInterval(()=>{},1000);", { flag: "wx" });
+        const port = await new Promise<number>((done, reject) => { const server = createNetServer(); server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => { const port = (server.address() as AddressInfo).port; server.close(error => error ? reject(error) : done(port)); }); });
+        const projected = buildApplication({ directory: appDirectory, name, port, environment: { NODE_ENV: "test", QA_OWNED_HTTP_MODE: mode }, ...overrides });
+        return { projected, appDirectory };
+      };
+      await control("actual adopted native application serves HTTP and intentional stop proves root helper and terminal cleanup separately", async () => {
+        let requestedLimit = 0;
+        const { projected, appDirectory } = await makeApplication("http", "ready", { native: options => {
+          requestedLimit = options.limitMs; return launchWindows(options);
+        } });
+        try {
+          await projected.ready; const state = [...projected.states.values()][0]!;
+          const identity = state.windows.readIdentity(); assert.ok(identity?.rootPid && identity.ownerJobAssignedBeforeResume);
+          assert.equal(state.windows.readReceipt(), null); assert.equal(requestedLimit, 120_000 + 10_000 + 20_000);
+          await projected.stop(); const terminal = state.windows.readReceipt()!;
+          assert.equal(terminal.reason, "owner_shutdown"); assert.equal(terminal.cleanup.activeProcessesAfterCleanup, 0);
+          assert.equal(terminal.cleanup.retainedOwnedHandlesSignaled, true); assert.equal(state.windows.child.exitCode, 0);
+          assert.equal(projected.children.size, 0);
+          assert.match(readFileSync(path.join(appDirectory, "public-server.log"), "utf8"), /ready \[redacted\]/u);
+          runtimeProofs.push({ control: "actual_adopted_native_application", sourceProjectionSha256: sha256(applicationBody), requestedLimit,
+            identity, terminal, helperExit: state.windows.child.exitCode, applicationDirectory: path.basename(appDirectory) });
+        } finally { await projected.stop(); }
+      });
+      for (const [mode, code] of [["exit-zero", 0], ["exit-seven", 7]] as const) await control("adopted native application rejects unexpected already-closed root " + code, async () => {
+        const { projected } = await makeApplication(mode, mode);
+        await assert.rejects(projected.ready, /Owned application exited/u);
+        await assert.rejects(projected.stop(), /Owned application exited/u);
+        const state = [...projected.states.values()][0]!, terminal = state.windows.readReceipt()!;
+        assert.equal(terminal.rootExitCode, code); assert.equal(state.windows.child.exitCode, 0);
+        assert.equal(terminal.reason, "completed"); assert.equal(terminal.cleanup.activeProcessesAfterCleanup, 0);
+      });
+      await control("adopted native application cancellation and actual timeout still drain their known owned handles", async () => {
+        const controller = new AbortController(), aborted = await makeApplication("cancel", "ready", { signal: controller.signal });
+        await aborted.projected.ready; controller.abort(Error("Original driver cancellation")); await aborted.projected.stop();
+        assert.equal([...aborted.projected.states.values()][0]!.windows.readReceipt()!.cleanup.activeProcessesAfterCleanup, 0);
+        const timed = await makeApplication("timeout", "never-ready", { native: options => launchWindows({ ...options, limitMs: 1_500 }) });
+        await assert.rejects(timed.projected.ready, /Owned application exited/u);
+        await assert.rejects(timed.projected.stop(), /Owned application exited/u);
+        assert.equal([...timed.projected.states.values()][0]!.windows.readReceipt()!.reason, "timeout");
+      });
+      await control("actual adopted application keeps native setup failure when its log writer also fails", async () => {
+        const original = Error("Original native helper startup failure"), secondary = Error("Secondary server log failure");
+        const launch = ((options: Parameters<typeof spawnWindowsOwnedProcess>[0]) => {
+          const fake = new EventEmitter() as ChildProcess; Object.assign(fake, { stdout: new EventEmitter(), stderr: new EventEmitter(), exitCode: null, signalCode: null });
+          Object.defineProperty(fake, "verificationWindowsCleanup", { value: async () => { throw secondary; } });
+          queueMicrotask(() => fake.emit("error", original));
+          return { child: fake, readIdentity: () => null, readReceipt: () => null, native: { sourceSha256: sha256(String(options.limitMs)) } } as unknown as ReturnType<typeof spawnWindowsOwnedProcess>;
+        });
+        const { projected } = await makeApplication("startup-error", "ready", { native: launch, write: (() => { throw secondary; }) as typeof writeFileSync });
+        await assert.rejects(projected.ready, error => error === original); await assert.rejects(projected.stop(), error => error === original);
+        assert.equal(Object.getOwnPropertyDescriptor(original, "applicationCleanupFailure")?.value, secondary);
+      });
+      await control("actual adopted application rejects completed root despite intentional-stop flag racing close", async () => {
+        const terminal = JSON.parse(readFileSync(path.join(directory, "application-exit-zero/public-exit-zero-server.native-result.json"), "utf8"));
+        const identity = JSON.parse(readFileSync(path.join(directory, "application-exit-zero/public-exit-zero-server.native-identity.json"), "utf8"));
+        const child = { exitCode: 0, signalCode: null, verificationWindowsCleanup: async () => ({ status: "PASS" }) } as unknown as ChildProcess;
+        const state = { child, name: "completed-race", windows: { readIdentity: () => identity, readReceipt: () => terminal }, stopping: false, closed: Promise.resolve() };
+        const body = ts.transpileModule(applicationVariables[1]!, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+        const stop = new Function("stopChild", "context", "assert", "receipt", body + ";return stopNativeApplication;")(api.stop, context, assert, () => undefined) as (value: typeof state) => Promise<void>;
+        await assert.rejects(stop(state), /before its intentional shutdown/u); assert.equal(state.stopping, true);
+      });
+      await control("actual application stop rejects missing identity missing terminal and corrupt stop reason", async () => {
+        const body = ts.transpileModule(applicationVariables[1]!, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+        const identity = JSON.parse(readFileSync(path.join(directory, "application-http/public-http-server.native-identity.json"), "utf8"));
+        const terminal = JSON.parse(readFileSync(path.join(directory, "application-http/public-http-server.native-result.json"), "utf8"));
+        for (const missing of ["identity", "terminal", "reason"]) {
+          const stop = new Function("stopChild", "context", "assert", "receipt", body + ";return stopNativeApplication;")(
+            async () => ({ status: "PASS" }), context, assert, () => { assert.fail("Missing evidence cannot publish a lifecycle PASS."); }) as (value: unknown) => Promise<void>;
+          const changed = structuredClone(terminal); if (missing === "reason") delete changed.reason;
+          const state = { child: { exitCode: 0, signalCode: null }, name: "missing", stopping: false, closed: Promise.resolve(),
+            windows: { readIdentity: () => missing === "identity" ? null : identity, readReceipt: () => missing === "terminal" ? null : changed } };
+          await assert.rejects(stop(state), missing === "reason" ? /before its intentional shutdown/u : /identity and terminal evidence are required/u);
+        }
+      });
+      await control("actual public cleanup boundary preserves the first driver error and retains secondary cleanup privately", async () => {
+        const mainTry = applicationOwner.body!.statements.find((node): node is ts.TryStatement => ts.isTryStatement(node) && Boolean(node.finallyBlock));
+        const cleanupTry = mainTry?.finallyBlock?.statements.find((node): node is ts.TryStatement => ts.isTryStatement(node));
+        assert.ok(cleanupTry?.catchClause);
+        const catchCode = ts.transpileModule("try { throw secondary; } " + cleanupTry.catchClause.getText(file), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+        const original = Error("Original driver assertion"), secondary = Error("Secondary cleanup failure");
+        const settle = new Function("publicFailure", "secondary", "context", "const publicFailed=true;" + catchCode);
+        settle(original, secondary, { record: () => { throw Error("Secondary receipt failure"); } });
+        assert.equal(Object.getOwnPropertyDescriptor(original, "publicCleanupFailure")?.value, secondary);
+        assert.equal(Object.keys(original).includes("publicCleanupFailure"), false);
+        const frozen = Object.freeze(Error("Frozen original driver failure"));
+        assert.doesNotThrow(() => settle(frozen, secondary, { record: () => { throw secondary; } }));
+      });
+      await control("actual pending-driver rejection preserves the already observed native application failure", async () => {
+        const callbacks: ts.ArrowFunction[] = [];
+        const findDriverCatch = (node: ts.Node) => {
+          if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "catch"
+            && ts.isCallExpression(node.expression.expression) && node.expression.expression.expression.getText(file) === "runChild") {
+            const callback = node.arguments[0]; assert.ok(callback && ts.isArrowFunction(callback)); callbacks.push(callback);
+          }
+          ts.forEachChild(node, findDriverCatch);
+        };
+        findDriverCatch(applicationOwner); assert.equal(callbacks.length, 1);
+        const original = Error("Earlier application root exit"), later = Error("Later driver timeout"), gateApp = {};
+        const body = ts.transpileModule("const onFailure=" + callbacks[0]!.getText(file) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+        const onFailure = new Function("gateApp", "nativeApplications", body + ";return onFailure;")(gateApp,
+          new Map([[gateApp, { failure: original }]])) as (error: Error) => never;
+        assert.throws(() => onFailure(later), error => error === original);
+        assert.equal(Object.getOwnPropertyDescriptor(original, "applicationDriverFailure")?.value, later);
+        assert.equal(Object.keys(original).includes("applicationDriverFailure"), false);
+      });
+    }
     await control("Full E cleanup qualification requires the current platform ownership capability", async () => {
       const verifyQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "ownedProcessCleanupQualification">) => {
         const qualification = ownerApi.ownedProcessCleanupQualification();

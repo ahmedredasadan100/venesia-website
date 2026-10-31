@@ -5263,6 +5263,30 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const children = new Set<ChildProcess>();
   let appPort: number | null = null;
   let appFailed = false;
+  type NativeApplication = { child: ChildProcess; name: string; windows: ReturnType<typeof spawnWindowsOwnedProcess>;
+    stopping: boolean; closed: Promise<void>; failure?: unknown; logFailure?: unknown; stop?: Promise<void> };
+  const nativeApplications = new Map<ChildProcess, NativeApplication>();
+  const stopNativeApplication = (state: NativeApplication) => state.stop ??= (async () => {
+    // Mark intent before requesting closure, but the original native reason still decides whether the root exited unexpectedly.
+    state.stopping = true;
+    let cleanupFailure: unknown;
+    try {
+      const cleanup = await stopChild(state.child, context.cleanEnvironment());
+      await state.closed;
+      const identity = state.windows.readIdentity(), terminal = state.windows.readReceipt();
+      assert.ok(identity && terminal, "Owned application native identity and terminal evidence are required.");
+      assert.equal(terminal.reason, "owner_shutdown", "Owned application exited before its intentional shutdown.");
+      receipt(context, `public-${state.name}-server-lifecycle.json`, { status: "PASS", intentionalStop: true,
+        nativeJobIdentity: identity, nativeJobReceipt: terminal, helperExit: { code: state.child.exitCode, signal: state.child.signalCode }, cleanup });
+    } catch (error) { cleanupFailure = error; }
+    const failure = state.failure ?? state.logFailure ?? cleanupFailure;
+    if (failure !== undefined) {
+      if (failure instanceof Error && cleanupFailure !== undefined && failure !== cleanupFailure && Object.isExtensible(failure)
+        && !Object.hasOwn(failure, "applicationCleanupFailure")) Object.defineProperty(failure, "applicationCleanupFailure", { value: cleanupFailure });
+      throw failure;
+    }
+  })();
+  let publicFailed = false, publicFailure: unknown;
   const reports: Array<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
@@ -5383,24 +5407,54 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         const coreFault = gate.name === "admin-adoption" && request.adoptionScope === "core-closure";
         const coreControl = coreFault ? ownedPath(context, "admin-core-cache-control.json") : null;
         if (coreControl) writeFileSync(coreControl, JSON.stringify({ schemaVersion: 1, mode: "off" }), { flag: "wx", mode: 0o600 });
-        const app = spawn(process.execPath, [...(coreFault ? ["--require", join(sourceDirectory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []), ...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
-          { cwd: sourceDirectory, env: measurement ? {...childEnvironment,
+        const appArgs = [...(coreFault ? ["--require", join(sourceDirectory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []), ...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)];
+        const appEnvironment = measurement ? {...childEnvironment,
             QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl"),
-            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : coreControl ? { ...childEnvironment, QA_ADMIN_CORE_CACHE_CONTROL: coreControl } : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : coreControl ? { ...childEnvironment, QA_ADMIN_CORE_CACHE_CONTROL: coreControl } : childEnvironment;
+        const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args: appArgs, cwd: sourceDirectory, env: appEnvironment,
+          identityPath: ownedPath(context, `public-${gate.name}-server.native-identity.json`), receiptPath: ownedPath(context, `public-${gate.name}-server.native-result.json`),
+          limitMs: 120_000 + gate.limitMs + 20_000 }) : undefined;
+        const app = process.platform === "win32" ? windows!.child : spawn(process.execPath, appArgs,
+          { cwd: sourceDirectory, env: appEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
         gateApp = app;
         children.add(app); let appOutput = "";
+        let nativeApplication: NativeApplication | undefined;
+        let appClosed: (() => void) | undefined;
+        if (windows) {
+          const closed = new Promise<void>(done => { appClosed = done; });
+          nativeApplication = { child: app, name: gate.name, windows, stopping: false, closed };
+          nativeApplications.set(app, nativeApplication);
+        }
+        const finishAppLog = () => {
+          if (!appClosed && nativeApplication) return;
+          try { writeFileSync(ownedPath(context, adoption ? `public-${gate.name}-server.log` : "public-server.log"), context.sanitize(appOutput), { mode: 0o600 }); }
+          catch (error) { if (!nativeApplication) throw error; nativeApplication.logFailure ??= error; }
+          finally { appClosed?.(); appClosed = undefined; }
+        };
         const captureAppOutput = (value: Buffer) => {
           if (appFailed) return;
           appOutput += String(value);
-          if (appOutput.length > 8_000_000) { appFailed = true; void stopChild(app, context.cleanEnvironment()).catch(() => undefined); }
+          if (appOutput.length > 8_000_000) {
+            appFailed = true;
+            if (nativeApplication) nativeApplication.failure ??= new Error("Owned application output exceeded its bound.");
+            void (nativeApplication ? stopNativeApplication(nativeApplication) : stopChild(app, context.cleanEnvironment())).catch(() => undefined);
+          }
         };
         app.stdout!.on("data", captureAppOutput); app.stderr!.on("data", captureAppOutput);
-        app.once("error", () => { appFailed = true; });
-        app.once("close", () => { children.delete(app); writeFileSync(ownedPath(context, adoption ? `public-${gate.name}-server.log` : "public-server.log"), context.sanitize(appOutput), { mode: 0o600 }); });
+        app.once("error", error => { appFailed = true; if (nativeApplication) { nativeApplication.failure ??= error; if (!app.pid) finishAppLog(); } });
+        app.once("close", () => {
+          children.delete(app);
+          if (nativeApplication && !nativeApplication.stopping) {
+            appFailed = true;
+            nativeApplication.failure ??= new Error("Owned application exited before its intentional shutdown.");
+          }
+          finishAppLog();
+        });
         const origin = `http://127.0.0.1:${appPort}`; let ready = false;
         const deadline = Date.now() + 120_000;
         while (!ready && Date.now() < deadline) {
-          signal.throwIfAborted(); assert.equal(appFailed, false, "Owned application process failed.");
+          signal.throwIfAborted(); if (nativeApplication?.failure !== undefined) throw nativeApplication.failure;
+          assert.equal(appFailed, false, "Owned application process failed.");
           assert.equal(app.exitCode, null, "Owned application exited before readiness.");
           try { const result = await fetch(`${origin}/admin/login`, { redirect: "error", signal: AbortSignal.timeout(3_000) }); ready = result.status === 200; await result.body?.cancel(); } catch { /* bounded startup polling only */ }
           if (!ready) await new Promise(done => setTimeout(done, 500));
@@ -5419,9 +5473,15 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
           QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)) };
       }
       context.record("public-gate-start", { gate: gate.name });
-      const args = "qualityScript" in gate ? [npmCli!, "run", gate.qualityScript] : "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
+      const args: string[] = "qualityScript" in gate ? [npmCli!, "run", gate.qualityScript] : "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
-      const result = await runChild(args, env, gate.name, gate.limitMs);
+      const result: Awaited<ReturnType<typeof runChild>> = await runChild(args, env, gate.name, gate.limitMs).catch(error => {
+        const first = gateApp ? nativeApplications.get(gateApp)?.failure : undefined;
+        if (first === undefined) throw error;
+        if (first instanceof Error && Object.isExtensible(first) && !Object.hasOwn(first, "applicationDriverFailure"))
+          Object.defineProperty(first, "applicationDriverFailure", { value: error });
+        throw first;
+      });
       if ("qualityScript" in gate) {
         const report = { script: gate.qualityScript, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
         qualityReports.push(report); receipt(context, `${gate.name}.json`, report);
@@ -5436,14 +5496,16 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         });
         assert.fail("Admin measurement driver failed; the owned fixture must be recreated before any further job. No repair child was launched.");
       }
+      if (gateApp && nativeApplications.get(gateApp)?.failure !== undefined) throw nativeApplications.get(gateApp)!.failure;
       assert.equal(appFailed, false, "Owned application process failed during Public verification.");
       const report = { name: gate.name, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
       reports.push(report); receipt(context, `public-${gate.name}.json`, report);
       assert.equal(result.code, 0, `Required Public gate failed: ${gate.name}`);
       if (gate.name === "public-e2e") assert.equal(/(?:^|\n)\s*[1-9][0-9]*\s+(?:skipped|flaky)\b/iu.test(result.stdout), false, "Public E2E skipped/flaky coverage cannot pass.");
       if (gate.name === "normal-build" || gate.name === "hero-compatibility-build") buildIdSha256 = digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID")));
+      if (gateApp && nativeApplications.has(gateApp)) await stopNativeApplication(nativeApplications.get(gateApp)!);
       context.record("public-gate-pass", { gate: gate.name });
-      if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
+      if (gateApp && !nativeApplications.has(gateApp)) await stopChild(gateApp, context.cleanEnvironment());
       if (heroCompatibility && request.finalQualityGate && gate.name === "hero-compatibility") {
         // The targeted preview must not become part of canonical final-HEAD coverage.
         const fixtureDirectory = join(sourceDirectory, "src/app/qa-isolated-hero-compatibility");
@@ -5478,13 +5540,17 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     if (!frozenManifest) assert.deepEqual(await gitSourceInventory(context, request), files, "Git source membership changed during the source snapshot gates.");
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
     else completed.add(originalContext);
-  } finally {
+  } catch (error) { publicFailed = true; publicFailure = error; throw error; }
+  finally {
+    try {
     activeLocalVerifications.delete(originalContext);
-    const [workerCleanup, childCleanup] = await Promise.all([
+    const [workerCleanup, childCleanup, applicationCleanup] = await Promise.all([
       Promise.allSettled(retainedAdmission ? [retainedAdmission.close()] : []),
-      Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment()))),
+      Promise.allSettled([...children].filter(child => !nativeApplications.has(child)).map(child => stopChild(child, context.cleanEnvironment()))),
+      Promise.allSettled([...nativeApplications.values()].map(stopNativeApplication)),
     ]);
     assert.ok(childCleanup.every(result => result.status === "fulfilled"), "An owned Public process could not be stopped.");
+    for (const settled of applicationCleanup) if (settled.status === "rejected") throw settled.reason;
     if (appPort !== null) {
       const releasedPort = appPort;
       await new Promise<void>((done, reject) => { const probe = net.createServer(); probe.once("error", reject);
@@ -5497,6 +5563,12 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       ...(retainedAdmission ? { retainedEvidenceWorkerStopped: retainedAdmission.workerStopped } : {}) });
     if (retainedAdmission) assert.equal(retainedAdmission.workerStopped, true, "Retained evidence worker must stop before cleanup completes.");
     for (const settled of workerCleanup) if (settled.status === "rejected") throw settled.reason;
+    } catch (cleanupFailure) {
+      if (!publicFailed) throw cleanupFailure;
+      if (publicFailure instanceof Error && Object.isExtensible(publicFailure) && !Object.hasOwn(publicFailure, "publicCleanupFailure"))
+        Object.defineProperty(publicFailure, "publicCleanupFailure", { value: cleanupFailure });
+      try { context.record("public-cleanup-failure", { originalFailurePreserved: true, cleanupFailed: true }); } catch { /* preserve the original failure */ }
+    }
   }
   const result = { status: "pass", gates: reports, buildIdSha256, isolatedImageConfigurationSha256: imageConfig.sha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
   if (localPlan?.mode === "bounded") {
