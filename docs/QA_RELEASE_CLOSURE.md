@@ -190,6 +190,31 @@ affected checks, failure classifications, corrections, retained evidence, and
 remaining blockers. An affected mandatory Development Verification check that
 is failed, blocked, skipped, or unverified prevents claiming local completion.
 
+The existing local verification selection and execution owner must enforce
+Syntax → ESLint → TypeScript → affected Governance/Contracts → targeted
+behavioral QA → fresh Admission/Automatic Preflight → Full E only after
+qualification. A failed early stage prevents dependent heavier work and retains
+the original exit, stage and raw diagnostics. Independent safe checks may
+finish without rerunning successful leaves. Exact leaf identity includes argv
+and its execution/source context; a differently named npm lifecycle is not
+automatically interchangeable. Existing canonical commands, their failure
+conditions and Required Checks remain mandatory. Added source/targeted stages
+must not execute the same qualified leaf twice, and unsupported or missing
+positive qualification keeps the conservative fallback rather than granting
+permission to execute. Controlled rejection must prove that TypeScript failure
+starts no heavier dependent leaf and preserves cancellation/owned cleanup.
+The targeted recovery after the retained TypeScript exit 2 and V8 exit 134
+does not itself authorize Admission, long Build/Admin, or Full E.
+
+The first ordered recovery invocation retained four Syntax passes and a strict
+ESLint pass, then stopped at TypeScript exit 2: two newly added controlled
+ProcessEnv fixtures lack required NODE_ENV. Its original nine diagnostics were
+absent, but that does not make the project type check PASS. Governance,
+Infrastructure, Fixture34, ordering and preparation behavior remained NOT RUN.
+All six owned child Jobs queried zero. Preserve this new failure separately
+from the earlier TypeScript nine-error receipt and V8 exit 134; no retry or
+commit follows an incomplete required targeted verification.
+
 Classify each failure from evidence before changing an expectation:
 
 | Cause | Required response |
@@ -676,6 +701,58 @@ failure. Preserve all three source-site adjacency checks, require the private
 step's ordered checkpoints/awaited pulse and operation, and reject unclassified
 or shadowed pulses. Lease policy and runtime scheduling stay unchanged. Actual
 negative-control timing is scoped to this guard, never overall QA speed.
+
+The combined-source recovery after `c80fd87f` retains Full05's74 passes and
+Admin Adoption failure as one failed run. Its caller saved the prepared fixture
+only under `execution`, while the existing public owner supplies the Driver
+`QA_ADMIN_FIXTURES` from the owned runtime directory. The temporary caller fix
+proved that delivery boundary; it did not durably repair the tracked producer.
+`prepareAdminInteractions` now owns publication of its returned `result.fixtures`
+to the constant runtime `admin-adoption-fixtures.json` before reporting readiness.
+The returned credential envelope is never serialized. Sanitization must leave
+the exact JSON bytes unchanged; receipts expose only basename, size and SHA256.
+The account-only Media study still returns before fixture publication.
+
+Publication creates the first file exclusively with private requested mode,
+rejects links, multiple links, reparse paths and foreign preexisting files, and
+retains only the run-local accepted file identity and content hash.
+File identity uses exact BigInt device/inode and nanosecond birth time from the
+held descriptor and pathname; it never rounds Windows identifiers through a
+JavaScript Number. Requested private file mode does not establish Windows ACLs.
+Later preparation preserves the existing API's legitimate fixture/study changes:
+identical bytes do not rewrite the file; changed returned fixtures update only
+the verified owned descriptor after its previous hash matches. Identity is
+checked before and after the operation, bytes are read back, and every opened
+descriptor closes. The Media CLI consumes this producer file instead of
+overwriting it. Repeated Heavy Editor preparation, Hero/Public fixture consumers,
+Admin Browser and native readback consumers retain their existing contracts.
+Descriptor closure errors surface; if publication and closure both fail, an
+aggregate retains the publication failure first and as its cause. Path checks
+qualify the private owned task boundary, not immunity to hostile concurrent
+filesystem changes.
+The existing verifier owns the producer/path/rejection controls; there is no new
+command, runner, registry, runtime, Product behavior or credential transport.
+
+The first bounded source verification of this correction is BLOCKED. Syntax,
+strict ESLint, Executable Governance and Verification Infrastructure passed;
+TypeScript exited 2 with nine errors introduced by the correction. The existing
+current-infrastructure selector exited 134 with an explicit V8 semi-space commit
+allocation failure, before a completed control receipt. The 34 new controls
+remain unqualified. Native cleanup queried zero processes without forced
+termination. A cyclic-AST identity assertion was separately identified in source;
+its error-formatting hazard does not establish the actual crash location.
+Preserve these original failures; no second correction/retry, fresh Admission,
+Build/Admin selection or Full E is authorized by this incomplete result.
+Raw evidence is retained under
+`.tmp-qa/combined-source-recovery-20261031/targeted-source-verification-01/`.
+
+Current targeted verification, fresh Admission/Automatic Preflight, Environment
+qualification and the single newly authorized Full E remain separate evidence
+requirements. The later targeted Build's`0xC000013A` is preserved with unknown
+termination actor; neither the fixture repair nor Windows Job cleanup explains
+that exit or establishes a V8 defect. Owner reviews remain independently pending
+until actually completed. Earlier failed runs and preservation gaps are retained;
+they cannot be merged into a passing run or erased by this correction.
 
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory

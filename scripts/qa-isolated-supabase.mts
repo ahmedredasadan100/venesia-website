@@ -260,7 +260,7 @@ async function mediaUploadLimitProof(argv: string[]) {
       assert.equal(Number(bucket.file_size_limit), 50 * 1024 * 1024);
       await handle.preparePublicVerification();
       const relocationFixtures = await handle.prepareAdminInteractions();
-      writeFileSync(resolve(output, "run/admin-adoption-fixtures.json"), JSON.stringify(relocationFixtures));
+      assert.deepEqual(JSON.parse(readFileSync(resolve(output, "run/admin-adoption-fixtures.json"), "utf8")), relocationFixtures);
       const sharedImage = String((await handle.query("select image from public.projects where id=$1", [(relocationFixtures.project as { id: number }).id])).rows[0].image);
       await handle.query("update public.topics set status='unpublished' where id=$1", [(relocationFixtures.topic as { id: number }).id]);
       await handle.query("insert into public.hero_templates(id,name,slug,variant,status,source_type,config) values (900002,'QA Multi-owner','qa-multi-owner','home-cinematic','unpublished','manual',$1::jsonb)", [JSON.stringify({title:"QA Multi-owner",images:[sharedImage],mobileImages:[]})]);

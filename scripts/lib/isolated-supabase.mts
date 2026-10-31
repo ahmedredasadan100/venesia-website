@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, existsSync, fstatSync, ftruncateSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import net from "node:net";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -282,6 +282,64 @@ export function describeOwnedPgConnectFailure(error: unknown, elapsedMs: number,
 }
 
 const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+type OwnedAdminFixtureFile = { dev: bigint; ino: bigint; birthtimeNs: bigint; sha256: string; bytes: number };
+/** The existing run owns this one canonical handoff file; callers only mirror returned fixtures. */
+function persistOwnedAdminFixtures(context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize">,
+  fixtures: Record<string, unknown>, accepted?: OwnedAdminFixtureFile): OwnedAdminFixtureFile {
+  requireThat(fixtures !== null && typeof fixtures === "object" && !Array.isArray(fixtures)
+    && !Object.hasOwn(fixtures, "credentials"), "ADMIN_FIXTURE_ENVELOPE_INVALID", "admin-measurement");
+  const text = `${JSON.stringify(fixtures, null, 2)}\n`, bytes = Buffer.from(text);
+  requireThat(context.sanitize(text) === text, "ADMIN_FIXTURE_CONTAINS_CREDENTIAL", "admin-measurement");
+  const directory = context.runDirectory, file = resolve(directory, "admin-adoption-fixtures.json");
+  requireThat(resolve(directory) === directory && realpathSync(directory) === directory
+    && lstatSync(directory).isDirectory() && !lstatSync(directory).isSymbolicLink(), "ADMIN_FIXTURE_DIRECTORY_INVALID", "admin-measurement");
+  const sameIdentity = (a: Pick<OwnedAdminFixtureFile, "dev" | "ino" | "birthtimeNs">, b: Pick<OwnedAdminFixtureFile, "dev" | "ino" | "birthtimeNs">) =>
+    a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+  if (accepted) requireThat(lstatSync(file, { bigint: true }).isFile() && !lstatSync(file, { bigint: true }).isSymbolicLink()
+    && realpathSync(file) === file && lstatSync(file, { bigint: true }).nlink === BigInt(1) && sameIdentity(lstatSync(file, { bigint: true }), accepted), "ADMIN_FIXTURE_IDENTITY_CHANGED", "admin-measurement");
+  const fd = openSync(file, fsConstants.O_RDWR | fsConstants.O_NOFOLLOW
+    | (accepted ? 0 : fsConstants.O_CREAT | fsConstants.O_EXCL), 0o600);
+  let primaryFailure: { error: unknown } | undefined;
+  try {
+    const identity = fstatSync(fd, { bigint: true });
+    const checkIdentity = () => requireThat(identity.isFile() && identity.nlink === BigInt(1) && fstatSync(fd, { bigint: true }).nlink === BigInt(1)
+      && sameIdentity(fstatSync(fd, { bigint: true }), identity) && (!accepted || sameIdentity(identity, accepted))
+      && realpathSync(directory) === directory && !lstatSync(directory).isSymbolicLink()
+      && lstatSync(file, { bigint: true }).isFile() && !lstatSync(file, { bigint: true }).isSymbolicLink() && lstatSync(file, { bigint: true }).nlink === BigInt(1)
+      && realpathSync(file) === file && sameIdentity(lstatSync(file, { bigint: true }), identity), "ADMIN_FIXTURE_IDENTITY_CHANGED", "admin-measurement");
+    const read = (expectedBytes: number) => {
+      requireThat(fstatSync(fd, { bigint: true }).size === BigInt(expectedBytes), "ADMIN_FIXTURE_CONTENT_CHANGED", "admin-measurement");
+      const value = Buffer.alloc(expectedBytes);
+      for (let offset = 0; offset < value.length;) {
+        const count = readSync(fd, value, offset, value.length - offset, offset);
+        requireThat(count > 0, "ADMIN_FIXTURE_READ_INCOMPLETE", "admin-measurement"); offset += count;
+      }
+      return value;
+    };
+    checkIdentity();
+    const previous = read(accepted?.bytes ?? 0);
+    requireThat(accepted ? previous.length === accepted.bytes && sha256(previous) === accepted.sha256 : previous.length === 0,
+      "ADMIN_FIXTURE_CONTENT_CHANGED", "admin-measurement");
+    if (!previous.equals(bytes)) {
+      for (let offset = 0; offset < bytes.length;) {
+        const count = writeSync(fd, bytes, offset, bytes.length - offset, offset);
+        requireThat(count > 0, "ADMIN_FIXTURE_WRITE_INCOMPLETE", "admin-measurement"); offset += count;
+      }
+      ftruncateSync(fd, bytes.length);
+    }
+    checkIdentity();
+    requireThat(read(bytes.length).equals(bytes), "ADMIN_FIXTURE_WRITE_MISMATCH", "admin-measurement");
+    checkIdentity();
+    return { dev: identity.dev, ino: identity.ino, birthtimeNs: identity.birthtimeNs, sha256: sha256(bytes), bytes: bytes.length };
+  } catch (error) { primaryFailure = { error }; throw error; }
+  finally {
+    try { closeSync(fd); }
+    catch (error) {
+      if (primaryFailure) throw new AggregateError([primaryFailure.error, error], "Owned Admin fixture publication and descriptor closure failed.", { cause: primaryFailure.error });
+      throw error;
+    }
+  }
+}
 const sleep = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 const object = (value: unknown): JsonObject => {
   requireThat(value !== null && typeof value === "object" && !Array.isArray(value), "INVALID_OBJECT", "contract");
@@ -1451,6 +1509,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         record: safeRecord,
       });
       let acceptedAdminFixtureHash: string | undefined;
+      let acceptedAdminFixtureFile: OwnedAdminFixtureFile | undefined;
       handle = Object.freeze({ identity: Object.freeze({ runId, projectName: run.projectName, database: "postgres" as const, host: "127.0.0.1" as const, port: run.pgPort, databaseContainerId: serviceResource("db").identity.id }),
         query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
           requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
@@ -1619,8 +1678,10 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle!,credentials,request ? {
             study: request.study, apiPort: publicContext.apiPort, serviceKey: publicContext.serviceKey,
           } : undefined);
+          acceptedAdminFixtureFile = persistOwnedAdminFixtures(publicContext, result.fixtures, acceptedAdminFixtureFile);
           acceptedAdminFixtureHash=fixtureHash;
-          safeRecord("admin-fixture-ready",{fixtureHash});
+          safeRecord("admin-fixture-ready",{fixtureHash, file: "admin-adoption-fixtures.json",
+            fixtureContentSha256: acceptedAdminFixtureFile.sha256, fixtureBytes: acceptedAdminFixtureFile.bytes});
           return result.fixtures;
           });
         },

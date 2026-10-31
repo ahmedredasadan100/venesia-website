@@ -2496,3 +2496,143 @@ remains PENDING, with `globalClosed=false`. The current request authorizes Full 
 after fresh qualification and one conditional Push followed by exact-SHA CI and
 Preview; all mandatory gates and preservation still apply. PR229 stays Draft;
 Ready, merge and Production deployment require separate Owner approval.
+
+### 27.31 Current — Combined-source fixture delivery recovery — 31 October 2026
+
+**Previous to current / proven defect:** the Owner resumes the combined source at
+`c80fd87f952aebdd22a77578276b64975c69ed3c`, preserving all nineteen local commits
+and abandoning the proposed Track A/Track B split. Full05's74PASS/1FAIL remains a
+failed complete attempt: its task caller mirrored prepared Admin fixtures under
+`execution`, but `runOwnedPublicVerification` and the Admin Driver consumed the
+constant runtime file. The later ignored caller correction established delivery;
+it was not tracked producer adoption. Its subsequent Build terminated with
+`0xC000013A`; the termination actor remains UNKNOWN and is not reclassified as a
+Product, V8, PostgreSQL or Windows Job defect.
+
+**Existing owner / bounded adoption:** `prepareAdminInteractions` in
+`scripts/lib/isolated-supabase.mts` now persists only `result.fixtures` to the
+owned runtime's `admin-adoption-fixtures.json` before Ready/Return. A private
+helper in that same module performs exclusive first creation, checks the task
+directory and descriptor/path identity, rejects links/multiple links and foreign
+files, verifies previous and returned content hashes, and closes its descriptor.
+Descriptor/path identity uses exact BigInt device/inode and nanosecond birth
+time, without Number rounding; requested private mode is not Windows ACL proof.
+Close failures surface; a simultaneous publication/close failure retains both
+errors, with the original publication failure first and as the aggregate cause.
+These checks qualify private task ownership, not hostile filesystem race immunity.
+The credential envelope is excluded; the existing sanitizer rejects generated
+credentials before allocation. Only basename/hash/size enter the safe receipt.
+Per-run accepted file identity does not introduce another registry or runtime.
+The existing API still permits legitimate changed fixture payloads during later
+preparation: unchanged bytes are not rewritten, while changed bytes update only
+the same verified owned descriptor after checking the previously accepted hash.
+
+**Affected consumers / preserved differences:** the Media Upload CLI now reads
+and compares the producer's file rather than rewriting it. Heavy Editor's
+calibration/reset may repeatedly prepare fixtures; Hero Compatibility and Public
+Read Completeness continue consuming the returned model. Admin Adoption and
+Media Browser drivers receive the same canonical runtime path; the isolated
+Admin readback collector continues reading that file. Account-only Media
+preparation remains an early return without a fixture file. Caller evidence
+mirrors are separate from the canonical handoff. Product consumers, adoption
+manifests, assertions, canonical gate commands and Native process ownership are
+unchanged; this correction develops the existing fixture delivery capability.
+
+**Proof / approval boundary:** implementation is present in tracked source but
+adoption acceptance is BLOCKED by the first bounded verification attempt. Its
+three Syntax checks, strict ESLint, Executable Governance and Verification
+Infrastructure passed. TypeScript exited 2 with nine new errors: eight BigInt
+literal target incompatibilities and one TS7022 verifier annotation error.
+The existing current-infrastructure selector exited 134 after 77 seconds with
+V8 `Committing semi space failed` / heap allocation failure; it emitted no
+completed result, so none of the 34 added controls is claimed PASS. Native Job
+cleanup queried zero active processes without forced termination. Source review
+also found a cyclic-AST identity assertion whose failure formatting can consume
+memory; it is a candidate for correction, not a proved crash site. No second
+repair cycle or rerun was started. The unchanged three executable inputs, raw
+exits and diagnostics are retained under
+`.tmp-qa/combined-source-recovery-20261031/targeted-source-verification-01/`.
+Fresh Admission/Automatic, targeted Build/Admin and Full E were NOT RUN; the
+new Full E allowance remains unused. The correction remains uncommitted for
+review, with the incoming nineteen local commits intact. Source proof is not
+Browser, hosted save/readback, six-type Owner
+Desktop/Mobile/RTL approval, Environment stability, or a successful Full E.
+Fresh final-source Admission/Automatic Preflight and one qualified complete
+75-gate run remain mandatory before any conditional delivery. Historical passes,
+failures, raw-document and evidence-preservation gaps retain their original
+scope. Human Owner reviews remain PENDING; no release step may bypass them.
+`globalClosed=false`. Final execution evidence and release disposition must be
+reported separately on the actual final SHA.
+
+### 27.32 Current — Targeted QA recovery and ordered verification — 31 October 2026
+
+**Previous to current:** the five uncommitted fixture changes at c80fd87f
+remain preserved, together with all nineteen local commits and original raw
+TypeScript exit 2 / V8 exit 134. Eight new BigInt literals were incompatible
+with the unchanged ES2017 target; one inferred values binding required an
+explicit TypeScript property-array annotation. Exact native BigInt device,
+inode and birth-time identity remains required. The AST ownership predicate
+remains strict node identity, but its assertion receives booleans so a failed
+negative cannot format the cyclic AST. This correction does not prove the
+cause or actual site of the earlier V8 allocation failure.
+
+**Existing ownership / affected consumers:** the isolated fixture producer and
+CLI runtime handoff retain Section 27.31's capability and private-file contract.
+The existing public verification owner owns source-floor and dependency order
+for selection, Admission profiles and Public execution, including bare and
+Hero requests. Existing isolated verification controls own the 34 fixture
+cases, bounded AST refusal and source-order failure/cancellation coverage.
+Canonical Full commands, npm lifecycle distinctions, conservative risk
+selection, Required Checks and process ownership remain authoritative.
+There is no parallel runner, guard, registry, Product change or new runtime.
+
+**Conservative qualification boundary:** bare Public, Build Contracts, Media
+Upload Limit and Hero proof CLI consumers, and Heavy Editor before/after
+consumers, currently omit live Admission qualification. They remain blocked for
+fresh qualified execution; an old or serialized receipt does not authorize
+their Build or Browser. This task does not invent a baseline, automatically run
+Admission, or change their canonical commands to bypass that boundary. The
+existing combined-source task caller already passes the live object explicitly.
+
+**Actual proof / STOP:** the single frozen ordered invocation passed all four
+Syntax leaves and strict ESLint, then TypeScript exited 2. The earlier nine
+diagnostics are absent, but two new TS2741 errors remain in the ordering test
+fixture: both controlled ProcessEnv values omit NODE_ENV, required by the
+installed Next ambient type. This is an introduced verification-fixture defect;
+no global TypeScript or runtime setting was changed. The actual sequence stopped
+at that failure: affected Governance/Infrastructure, all 34 Fixture controls,
+the 14 new ordering controls and preparation cancellation proof were NOT RUN.
+Thus AST refusal and the new owner's call-site controls remain unqualified.
+All six launched owned children ended with Native Job cleanup PASS/zero.
+The original V8 exit 134 and its unknown cause remain unchanged; it was not
+rerun or attributed to AST.
+
+Raw exits, source fingerprints and NOT RUN dispositions are retained under
+.tmp-qa/targeted-qa-recovery-20261031/ordered-targeted-verification-01/.
+No second correction or repeat leaf followed the mandatory failure. The six
+changed tracked files remain uncommitted at c80fd87f; all nineteen prior local
+commits remain intact. No Admission, long Build/Admin, Full E, remote CI,
+Preview or release action was executed. A local independent commit still
+requires passing targeted proof; globalClosed=false, with final release and
+human reviews separate.
+
+### 27.33 Current — Final targeted ProcessEnv correction — 31 October 2026
+
+The final bounded correction adds only NODE_ENV: "test" to the two controlled
+ProcessEnv objects at verifier lines 931 and 1015. Their PATH difference,
+credential-filtering input, AST identity predicate, 34 Fixture cases, rejection
+conditions and existing execution order remain unchanged. ES2017, ambient types,
+runtime settings, canonical commands and Required Checks are preserved.
+
+Executable acceptance belongs only to the fresh ordered result and raw exits at
+.tmp-qa/final-targeted-qa-correction-20261031/ordered-targeted-verification-01/:
+Syntax/ESLint/TypeScript must precede AST/Fixture controls, then Governance and
+Infrastructure, then preparation cancellation/cleanup. An early required failure
+prevents dependent stages. The earlier nine-error and two-error TypeScript runs
+and V8 exit 134 retain their original evidence/status; no historical V8 cause
+is inferred from this correction. No new runner, guard or assertion is added.
+
+The original nineteen local commits and six-file worktree are preserved. Only a
+fully passing targeted result permits an independent local commit, bound to the
+same tested executable bytes and source snapshot. Admission, long Build/Admin,
+Full E, CI, Push and release remain outside this task; globalClosed=false.

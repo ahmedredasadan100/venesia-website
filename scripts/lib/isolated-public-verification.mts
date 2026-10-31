@@ -110,6 +110,7 @@ export type LocalVerificationAdmissionQualification = {
 // a correct hash or nonce copied from a former run, cannot recreate this authority.
 const localVerificationAdmissionInvocations = new WeakMap<LocalVerificationAdmissionQualification,
   { sha256: string; snapshot: () => { finalHead: string; sourceSha256: string; runtime: unknown };
+    sourceFloor: Awaited<ReturnType<typeof runLocalVerificationSourceFloor>>; sourceFloorSha256: string;
     sourceDiscoverySha256: string;
     sourceDiscovery: { baselineHead: string; finalHead: string; sourceSha256: string; additionalSourceFiles: readonly string[];
       changes: LocalVerificationInputs["changes"]; changeImpact: LocalVerificationSourceImpact } }>();
@@ -125,6 +126,105 @@ export type LocalVerificationInputObservations = {
 
 /** One existing prefix budget, also used by its measured Adoption caller. */
 export function localVerificationQualityPrefixDeadlineMs(): number { return 1_800_000; }
+
+/** One source floor inside the existing execution owner, before any dependent behavioral leaf.
+ * A prior floor is private live invocation state, never a serialized receipt or a path-based waiver. */
+async function runLocalVerificationSourceFloor(options: {
+  sourceDirectory: string;
+  context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
+  signal: AbortSignal; sources: ReadonlyMap<string, string | Buffer>; changedFiles: readonly string[];
+  verifySource: () => void; governance: readonly { step: string; limitMs: number; successMarker?: string }[]; governanceQualified: boolean;
+  canonical?: { npmCli: string; environment: NodeJS.ProcessEnv; childNames: readonly [string, string]; onStart?: (name: string) => void };
+  prior?: { contextSha256: string; sourceSha256: string; syntaxFiles: string[];
+    checks: Array<{ stage: string; step: string; limitMs: number; result: Awaited<ReturnType<typeof runOwnedVerificationChild>> }> };
+}) {
+  options.signal.throwIfAborted(); options.verifySource();
+  let environment: NodeJS.ProcessEnv = { NODE_ENV: "test", CI: "1" };
+  const clean = options.context.cleanEnvironment();
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"])
+    if (clean[key] !== undefined) environment[key] = clean[key];
+  if (options.canonical) environment = { ...options.canonical.environment };
+  const sourceSha256 = digest(JSON.stringify([...options.sources].map(([file, bytes]) => ({ file, sha256: digest(bytes) }))
+    .sort((left, right) => left.file.localeCompare(right.file))));
+  const contextSha256 = digest(JSON.stringify({ sourceDirectory: options.sourceDirectory, sourceSha256, environment,
+    executable: process.execPath, node: process.version, v8: process.versions.v8, execArgv: process.execArgv }));
+  const scripts = JSON.parse(options.sources.get("package.json")!.toString()).scripts as Record<string, string>;
+  assert.equal(scripts.lint, "eslint --max-warnings=0", "Ordered source floor requires the canonical lint command.");
+  assert.equal(scripts.typecheck, "tsc --noEmit", "Ordered source floor requires the canonical TypeScript command.");
+  const syntaxFiles = [...new Set((options.changedFiles.length ? options.changedFiles : [...options.sources.keys()])
+    .filter(file => /\.[cm]?[jt]sx?$/u.test(file) && options.sources.has(file)))].sort();
+  const checks: Array<{ stage: string; step: string; limitMs: number; result: Awaited<ReturnType<typeof runOwnedVerificationChild>> }> = [];
+  const prior = options.prior?.contextSha256 === contextSha256 && options.prior.sourceSha256 === sourceSha256 ? options.prior : undefined;
+  for (const file of syntaxFiles) {
+    options.signal.throwIfAborted(); options.verifySource();
+    const parsed = ts.createSourceFile(file, options.sources.get(file)!.toString(), ts.ScriptTarget.Latest, false,
+      /\.[cm]?tsx?$/u.test(file) ? (/\.tsx$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS) : /\.jsx$/u.test(file) ? ts.ScriptKind.JSX : ts.ScriptKind.JS);
+    const diagnostics = (parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics;
+    assert.equal(diagnostics.length, 0, "Ordered Syntax check failed: " + file + "; diagnostic=" + (diagnostics[0]?.code ?? "none"));
+  }
+  receipt(options.context, "ordered-source-syntax.json", { status: "PASS", sourceSha256, syntaxFiles,
+    fallback: options.changedFiles.length ? "affected_source" : "complete_source_without_affected_qualification", behaviorExecuted: false });
+  const children = new Set<ChildProcess>(), seen = new Set<string>();
+  let firstFailure: unknown;
+  const run = async (stage: string, step: string, args: string[], limitMs: number) => {
+    options.signal.throwIfAborted(); options.verifySource();
+    if (seen.has(step)) {
+      assert.equal(checks.find(check => check.step === step)?.limitMs, limitMs, "Duplicate leaf has an ambiguous deadline.");
+      return;
+    }
+    seen.add(step);
+    const retained = prior?.checks.find(check => check.step === step && check.limitMs === limitMs);
+    let result: Awaited<ReturnType<typeof runOwnedVerificationChild>>;
+    if (retained) result = retained.result;
+    else {
+      const name = options.canonical && checks.length < 2 ? options.canonical.childNames[checks.length]! : "ordered-" + (checks.length + 1) + "-" + stage;
+      options.canonical?.onStart?.(name);
+      result = await runOwnedVerificationChild({ sourceDirectory: options.sourceDirectory, context: options.context, children, signal: options.signal },
+        args, environment, name, limitMs);
+    }
+    checks.push({ stage, step, limitMs, result });
+    receipt(options.context, "ordered-source-" + checks.length + ".json", { stage, step, sourceSha256, contextSha256,
+      sameLiveContextReused: Boolean(retained), result });
+    if (result.code !== 0 || result.rawExit.code !== 0 || result.rawExit.signal !== null || result.cleanup.status !== "PASS"
+      || result.cleanup.liveProcesses !== 0 || !result.cleanup.processTreeVerified) {
+      const failure = new Error("Ordered " + stage + " check failed; dependent verification was not started.");
+      Object.defineProperty(failure, "childResult", { value: result }); throw failure;
+    }
+    options.signal.throwIfAborted(); options.verifySource();
+  };
+  try {
+    await run("eslint", options.canonical ? "npm run lint" : "eslint --max-warnings=0", options.canonical
+      ? [options.canonical.npmCli, "run", "lint"] : [join(options.sourceDirectory, "node_modules/eslint/bin/eslint.js"), "--max-warnings=0"], localVerificationQualityPrefixDeadlineMs());
+    await run("typescript", options.canonical ? "npm run typecheck" : "tsc --noEmit", options.canonical
+      ? [options.canonical.npmCli, "run", "typecheck"] : [join(options.sourceDirectory, "node_modules/typescript/bin/tsc"), "--noEmit"], localVerificationQualityPrefixDeadlineMs());
+    assert.equal(options.governanceQualified, true, "Affected Governance / Contracts lack qualified execution; conservative Full Gate fallback remains required.");
+    for (const target of options.governance) {
+      assert.ok(/^node (?:--experimental-strip-types )?[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)(?: [a-zA-Z0-9_./:=+,-]+)*$/u.test(target.step),
+        "Ordered Governance requires an existing qualified literal Node leaf.");
+      await run("governance", target.step, target.step.split(" ").slice(1), target.limitMs);
+      if (target.successMarker !== undefined) assert.equal(checks.find(check => check.step === target.step)!.result.stdout.includes(target.successMarker), true,
+        "Qualified Governance leaf lacks its original success marker.");
+    }
+  } catch (error) {
+    firstFailure = error;
+    try { receipt(options.context, "ordered-source-floor-failure.json", { status: "BLOCKED", sourceSha256, contextSha256,
+      completed: checks.map(check => ({ stage: check.stage, step: check.step, code: check.result.code })),
+      childResult: error instanceof Error && "childResult" in error ? error.childResult : null, dependentVerificationStarted: false }); }
+    catch { /* preserve the original source check failure */ }
+    throw error;
+  }
+  finally {
+    const cleanup = await Promise.allSettled([...children].map(async child => { await stopChild(child, options.context.cleanEnvironment(), "owner_shutdown"); children.delete(child); }));
+    const failed = cleanup.find(result => result.status === "rejected");
+    if (failed?.status === "rejected") {
+      if (firstFailure !== undefined) {
+        if (firstFailure instanceof Error && Object.isExtensible(firstFailure) && !Object.hasOwn(firstFailure, "sourceFloorCleanupFailure"))
+          Object.defineProperty(firstFailure, "sourceFloorCleanupFailure", { value: failed.reason });
+      } else throw failed.reason;
+    }
+  }
+  return { contextSha256, sourceSha256, syntaxFiles, checks };
+}
 export type LocalVerificationSourceImpact = {
   proofBoundary: "source_discovery_only";
   sourceSha256: string; deltaSha256: string;
@@ -1845,7 +1945,8 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
       fixtureSha256: guard.sha256, effects: ["source_read", "owned_temp_filesystem", "owned_process"], supportedPlatforms: ["win32", "linux"], limitMs: 180_000,
       proofLevel: "source_guard_execution", successMarker: guard.marker, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false });
   }
-  return { targets: [...new Map(targets.map(target => [target.step, target])).values()], blockers: [...new Set([...blockers, ...qualityBlockers])],
+  return { targets: [...new Map(targets.map(target => [target.step, target])).values()]
+    .sort((left, right) => Number(left.kind === "browser_behavior") - Number(right.kind === "browser_behavior")), blockers: [...new Set([...blockers, ...qualityBlockers])],
     blocking: [...new Set([...(reasons.length ? blockers : []), ...qualityBlockers])], selections,
     applicable: reasons.length > 0 || qualityReasons.length > 0, unqualifiedRemainUnderExistingGates: true as const };
 }
@@ -2097,6 +2198,7 @@ function assertLocalVerificationAdmissionQualification(value: LocalVerificationA
   assert.ok(invocation, "Admission requires this owner's live qualified execution; serialized or old receipts cannot authorize it.");
   assert.equal(value.status, "PASS");
   assert.equal(digest(JSON.stringify(value)), invocation.sha256, "Admission receipt was altered after qualification.");
+  assert.equal(digest(JSON.stringify(invocation.sourceFloor)), invocation.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
   for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const) assert.equal(value[key], binding[key], "Admission receipt has a stale source or baseline.");
   const current = invocation.snapshot();
   assert.equal(current.finalHead, binding.finalHead); assert.equal(current.sourceSha256, binding.sourceSha256);
@@ -2194,6 +2296,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
   const assertionsRaw: unknown[] = [], artifacts = new Map<string, string>(), failures: string[] = [];
   let inputRaw: LocalVerificationInputObservations | undefined;
   let assertions: LocalVerificationAdmissionQualification["assertions"] = null, inputs: LocalVerificationAdmissionQualification["inputs"] = null;
+  let sourceFloor: Awaited<ReturnType<typeof runLocalVerificationSourceFloor>> | undefined;
   const addArtifact = (absolute: string, expected?: string) => {
     assert.ok(absolute.startsWith(evidenceRoot + sep) && lstatSync(absolute).isFile() && realpathSync(absolute) === absolute,
       "Admission artifact is not an owned regular evidence file.");
@@ -2219,6 +2322,12 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     } else assert.equal(process.platform, "linux", "Admission cleanup is unqualified for this platform.");
   };
   try {
+    const targets = "qualifiedTargets" in initial ? initial.qualifiedTargets : undefined;
+    sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory: ROOT, context, signal, sources: currentSources,
+      changedFiles: initial.actualDelta.map(change => change.file), verifySource: assertSnapshot,
+      governance: targets?.targets.filter(target => target.kind === "source_guard") ?? [],
+      governanceQualified: targets ? targets.selections.every(selection => !selection.selected || selection.qualified)
+        : !initial.actualDelta.some(change => /^(?:scripts|tests)\//u.test(change.file)) });
     for (const [index, profile] of profiles.entries()) {
       signal.throwIfAborted(); assertSnapshot();
       const args = ["--experimental-strip-types", profile.entry, ...profile.args];
@@ -2250,7 +2359,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     assertSnapshot();
   } catch (error) {
     failures.push(error instanceof Error ? error.message : "Admission qualification failed.");
-    if (error instanceof Error && "childResult" in error) executions.push({ entry: profiles[executions.length]?.entry ?? "unknown",
+    if (sourceFloor && error instanceof Error && "childResult" in error) executions.push({ entry: profiles[executions.length]?.entry ?? "unknown",
       args: profiles[executions.length]?.args ?? [], result: error.childResult });
   } finally {
     for (const child of children) {
@@ -2273,9 +2382,10 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     failures, runDirectory, durationMs: performance.now() - started, behavioralPass: false, releaseEvidence: false };
   receipt(context, "admission-result.json", value);
   if (value.status === "PASS") {
+    assert.ok(sourceFloor, "Admission cannot pass without its ordered source floor.");
     const sourceDiscovery = structuredClone({ baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
       additionalSourceFiles: [...additional], changes: initial.actualDelta, changeImpact: initial.changeImpact });
-    localVerificationAdmissionInvocations.set(value, { sha256: digest(JSON.stringify(value)), snapshot,
+    localVerificationAdmissionInvocations.set(value, { sha256: digest(JSON.stringify(value)), snapshot, sourceFloor, sourceFloorSha256: digest(JSON.stringify(sourceFloor)),
       sourceDiscovery, sourceDiscoverySha256: digest(JSON.stringify(sourceDiscovery)) });
   }
   return value;
@@ -2498,6 +2608,24 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
       failurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Owned process readiness failed", fullGatesPreserved: true };
   }
   const results: Array<Record<string, unknown>> = [];
+  const sourceFloorContext = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
+  const sourceFloorSources = new Map(selectSourceInventory(git("ls-files", "-z").split("\0").filter(Boolean), [])
+    .filter(file => existsSync(safeSourcePath(file))).map(file => [file, readFileSync(safeSourcePath(file))] as const));
+  let sourceFloor: Awaited<ReturnType<typeof runLocalVerificationSourceFloor>>;
+  try {
+    const prior = input.admissionQualification ? assertLocalVerificationAdmissionQualification(input.admissionQualification,
+      { baselineHead: input.baselineHead, finalHead: input.finalHead, sourceSha256: input.sourceSha256 }).sourceFloor : undefined;
+    sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory: ROOT, context: sourceFloorContext, signal,
+      sources: sourceFloorSources, changedFiles: input.actualDelta.map(change => change.file), verifySource,
+      governance: qualified.targets.filter(target => target.kind === "source_guard"), governanceQualified: qualified.blocking.length === 0, prior });
+  } catch (error) {
+    const childResult = error instanceof Error && "childResult" in error ? error.childResult : null;
+    return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1, results: [], runId: invocationId,
+      commitSha: input.finalHead, sourceSha256: input.sourceSha256, executedCommands: 0, commandAttempts: 0,
+      attempt: 0, retry: 0, flakyStatus: "NOT_RUN", browserExecuted: false, durationMs: performance.now() - started,
+      reason: ["ordered_source_floor_failed"], originalChildResult: childResult,
+      failurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Ordered source floor failed", fullGatesPreserved: true };
+  }
   let browserExecuted = false, executedCommands = 0;
   for (const [targetIndex, target] of qualified.targets.entries()) {
   const targetName = `targeted-${targetIndex + 1}-${target.kind}`;
@@ -2515,7 +2643,8 @@ export async function executeLocalVerificationTargets(options: { baselineHead: s
     timings?: { preparationMs: number; executionMs: number; cleanupMs: number } } | undefined;
   try {
     signal.throwIfAborted(); verifySource();
-    child = await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, target.step.split(" ").slice(1),
+    child = target.kind === "source_guard" ? sourceFloor.checks.find(check => check.stage === "governance" && check.step === target.step)?.result : undefined;
+    child ??= await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, target.step.split(" ").slice(1),
       environment, targetName, target.limitMs);
     phaseTimings.executionMs += child.durationMs;
     assert.equal(child.code, 0, "Qualified canonical leaf failed; retain its original stdout/stderr and exit code.");
@@ -5118,6 +5247,12 @@ export async function verifyOwnedProcessReadiness(options: {
 }
 
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
+  assert.ok(request.admissionQualification, "Public execution requires fresh live source qualification before dependency staging or Build; conservative Full Gate fallback remains required.");
+  const preallocationAdmission = localVerificationAdmissionInvocations.get(request.admissionQualification);
+  assert.ok(preallocationAdmission, "Public execution requires this owner's live source qualification; serialized or old receipts cannot authorize it.");
+  assert.equal(request.admissionQualification.status, "PASS");
+  assert.equal(digest(JSON.stringify(request.admissionQualification)), preallocationAdmission.sha256, "Admission receipt was altered after qualification.");
+  assert.equal(digest(JSON.stringify(preallocationAdmission.sourceFloor)), preallocationAdmission.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
   if (request.localVerification && request.finalQualityGate === true)
     assert.ok(request.admissionQualification,
       "Final Quality source admission requires this owner's preallocation live qualification before an active database control connection.");
@@ -5513,9 +5648,34 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (localPlan?.mode === "bounded") { await drainControlPulse(); verifySource(); assert.equal(localInputs!.finalHead, headSha); activeLocalVerifications.add(originalContext); }
     }
     const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: localVerificationQualityPrefixDeadlineMs() }));
+    const liveAdmission = request.admissionQualification ? assertLocalVerificationAdmissionQualification(request.admissionQualification,
+      { baselineHead: request.admissionQualification.baselineHead, finalHead: headSha, sourceSha256: digest(JSON.stringify(manifest)) }) : undefined;
+    if (qualityPrefix.length) assert.deepEqual(qualityScripts.slice(0, 2), ["lint", "typecheck"], "Canonical quality must start with ESLint then TypeScript.");
+    const sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory, context, signal,
+      sources: new Map(manifest.map(row => [row.file, readFileSync(join(sourceDirectory, row.file))] as const)),
+      changedFiles: liveAdmission?.sourceDiscovery.changes.map(change => change.file) ?? localInputs?.changes.map(change => change.file) ?? [],
+      verifySource, governance: [],
+      governanceQualified: Boolean(liveAdmission),
+      ...(qualityPrefix.length ? { canonical: { npmCli: npmCli!, environment: qualityEnvironment,
+        childNames: [qualityPrefix[0]!.name, qualityPrefix[1]!.name] as const,
+        onStart: (name: string) => context.record("public-gate-start", { gate: name }) } } : {}) });
+    receipt(context, "ordered-public-prerequisites.json", { sourceSha256: digest(JSON.stringify(manifest)),
+      sourceFloorContextSha256: sourceFloor.contextSha256, governance: liveAdmission!.sourceFloor.checks
+        .filter(check => check.stage === "governance").map(check => ({ step: check.step, code: check.result.code })),
+      governanceContextSha256: liveAdmission!.sourceFloor.contextSha256, governanceExecutionContext: "original-live-admission-source",
+      governanceClaimedAsCopiedContextExecution: false, canonicalCopiedContextLeavesPreserved: true });
+    // These two canonical npm leaves already executed above in this exact copy,
+    // environment and lifecycle. Keep all named gates/receipts, never run them twice.
+    for (const [index, check] of sourceFloor.checks.slice(0, qualityPrefix.length ? 2 : 0).entries()) {
+      const gate = qualityPrefix[index]!, result = check.result;
+      const report = { script: gate.qualityScript, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
+      qualityReports.push(report); receipt(context, `${gate.name}.json`, report);
+      context.record("public-gate-pass", { gate: gate.name });
+    }
+    const pendingQualityPrefix = qualityPrefix.slice(qualityPrefix.length ? 2 : 0);
     const executionGates = heroCompatibility && request.finalQualityGate
-      ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...qualityPrefix, ...GATES]
-      : [...qualityPrefix, ...gates];
+      ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...pendingQualityPrefix, ...GATES]
+      : [...pendingQualityPrefix, ...gates];
     for (const gate of executionGates) {
       await drainControlPulse(); verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
