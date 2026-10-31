@@ -7281,7 +7281,32 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const p = "scripts/lib/isolated-public-verification.mts", l = "scripts/lib/isolated-supabase.mts", c = "scripts/verify-isolated-supabase.mts", n = "scripts/verify-admin-core-navigation-permission-join.mjs";
     const i = "scripts/lib/verification-source-inventory.mts", f = "scripts/verify-verification-infrastructure.mts", q = "scripts/verify-isolated-application-cli-pulse.mjs";
     const workerNames = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
-    const priorPublic = [undo(text("isolatedPublicImageConfigSource")), undo(text("assertRetainedFinalQualitySource")), text("loadRetainedFinalQualityAdmission"), undo(text("runOwnedPublicVerification")), text("GATES")].join("\n\n");
+    // This controlled source fixture exercises the historical async correction,
+    // whose finite authority predates Native application ownership and cleanup.
+    const currentRunSource = text("runOwnedPublicVerification");
+    const run = declaration("runOwnedPublicVerification"); assert.ok(ts.isFunctionDeclaration(run) && run.body);
+    const runTries = run.body.statements.filter(ts.isTryStatement); assert.equal(runTries.length, 1);
+    const nativeFinally = runTries[0].finallyBlock; assert.ok(nativeFinally); assert.equal(nativeFinally.statements.length, 1);
+    const cleanupTry = nativeFinally.statements[0]; assert.ok(ts.isTryStatement(cleanupTry) && cleanupTry.catchClause && !cleanupTry.finallyBlock);
+    const cleanupStatements = cleanupTry.tryBlock.statements;
+    const nativeCleanup = cleanupStatements.filter(node => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some(value => value.name.getText(ownerFile) === "[workerCleanup, childCleanup, applicationCleanup]"));
+    assert.equal(nativeCleanup.length, 1);
+    assert.equal(nativeCleanup[0].getText(ownerFile).replace(/\r\n/gu, "\n"), 'const [workerCleanup, childCleanup, applicationCleanup] = await Promise.all([\n      Promise.allSettled(retainedAdmission ? [retainedAdmission.close()] : []),\n      Promise.allSettled([...children].filter(child => !nativeApplications.has(child)).map(child => stopChild(child, context.cleanEnvironment()))),\n      Promise.allSettled([...nativeApplications.values()].map(stopNativeApplication)),\n    ]);');
+    const applicationCleanup = cleanupStatements.filter(node => ts.isForOfStatement(node) && node.expression.getText(ownerFile) === "applicationCleanup");
+    assert.equal(applicationCleanup.length, 1);
+    assert.equal(applicationCleanup[0].getText(ownerFile), 'for (const settled of applicationCleanup) if (settled.status === "rejected") throw settled.reason;');
+    const cleanupRule = transformations.filter(row => row.from === "    const childCleanup = await Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment())));");
+    assert.equal(cleanupRule.length, 1);
+    const historicalFinally = "{\n    " + cleanupStatements.filter(node => node !== applicationCleanup[0]).map(node => node === nativeCleanup[0]
+      ? cleanupRule[0].to.trimStart() : node.getText(ownerFile).replace(/\r\n/gu, "\n")).join("\n    ") + "\n  }";
+    const nativeFinallySource = nativeFinally.getText(ownerFile).replace(/\r\n/gu, "\n");
+    assert.equal(currentRunSource.split(nativeFinallySource).length, 2);
+    const historicalRunSource = currentRunSource.replace(nativeFinallySource, historicalFinally);
+    assert.equal(historicalRunSource.split(cleanupRule[0].to).length, 2);
+    const terminalRule = transformations.filter(row => row.from === "otherResourcesTouched: false });\n  }\n  const result = { status:");
+    assert.equal(terminalRule.length, 1); assert.equal(historicalRunSource.split(terminalRule[0].to).length, 2);
+    const priorPublic = [undo(text("isolatedPublicImageConfigSource")), undo(text("assertRetainedFinalQualitySource")), text("loadRetainedFinalQualityAdmission"), undo(historicalRunSource), text("GATES")].join("\n\n");
     const oldMetadata = "memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
     const newMetadata = "memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
     const priorControls = 'function retainedAssertion() { assert.equal("preserved", "preserved"); }\n'
@@ -7346,7 +7371,7 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const nextPublic = ['import { Worker } from "node:worker_threads";', 'import ts from "typescript";', ...workerNames.map(text),
       text("RetainedQualityLifecycleCorrection"), text("assertRetainedFinalQualityLifecycleSource"),
       "const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze(" + JSON.stringify(authority) + ");",
-      text("isolatedPublicImageConfigSource"), text("assertRetainedFinalQualitySource"), text("loadRetainedFinalQualityAdmission"), text("runOwnedPublicVerification"), text("GATES")].join("\n\n");
+      text("isolatedPublicImageConfigSource"), text("assertRetainedFinalQualitySource"), text("loadRetainedFinalQualityAdmission"), historicalRunSource, text("GATES")].join("\n\n");
     const owners: Owner[] = [[p, priorPublic, nextPublic], [l, priorLifecycle, nextLifecycle], [c, priorControls, nextControls], [n, priorNavigation, nextNavigation], [i, priorInventory, nextInventory], [f, priorInfrastructure, nextInfrastructure], [q, priorCliPulse, nextCliPulse]]
       .map(([file, beforeSource, afterSource]) => ({ path: file, beforeSource, afterSource, beforeSha256: sha256(beforeSource), afterSha256: sha256(afterSource) }));
     const retained: Source = { invocationHeadSha: "a".repeat(40), sourceSha256: authority.sourceSha256, manifest: baselineManifest };
@@ -7399,6 +7424,7 @@ function verifyRetainedPublicControlEligibility(source: string) {
       const originalGenerator = text("isolatedPublicImageConfigSource"); assert.ok(originalGenerator.includes(from));
       edit(value, p, originalGenerator, originalGenerator.replace(from, to));
     };
+    rejectSource("retained lifecycle source rejects after-only Native cleanup adoption despite resealed fixture manifests", value => edit(value, p, historicalRunSource, currentRunSource));
     rejectSource("retained source rejects missing exact CLI pulse owner evidence", value => { value.impact.qualityLifecycleCorrection!.owners = value.impact.qualityLifecycleCorrection!.owners.filter(row => row.path !== q); });
     rejectSource("retained source rejects reverting the CLI CRLF correction", value => edit(value, q, "assert.ok(source.replace(/\\r\\n/gu,'\\n').includes('cliJobAbort?.abort();\\n        if (handle) activeHandles.delete(handle)'));", "assert.ok(source.includes('cliJobAbort?.abort();\\n        if (handle) activeHandles.delete(handle)'));"));
     rejectSource("retained source rejects broader CLI newline normalization", value => edit(value, q, "source.replace(/\\r\\n/gu,'\\n').includes", "source.replace(/\\r\\n?/gu,'\\n').includes"));

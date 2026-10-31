@@ -2439,6 +2439,18 @@ separate in the final report. The failed third attempt, its native root1/helper
 success/zero-membership receipt and complete10-resource cleanup are preserved;
 no runtime crash, transport outage or Product defect follows from this failure.
 
+**Affected historical-fixture boundary:** before a fourth Full E, the default
+Source/Offline verifier exposed a further controlled-fixture mismatch: its
+nineteen-transform retained-lifecycle scenario inferred the former Async cleanup
+predecessor from the later Native envelope. The unchanged retained-source guard
+correctly rejected that seed. Only the finite fixture may reconstruct the
+historical cleanup shape; the current runtime, retained-source guard, pinned
+production authority and existing negative cases stay unchanged. Substituting
+Native cleanup into that historical candidate must still reject. The default
+consumer's original exit1 and zero-process cleanup are preserved separately
+from targeted corrections and any future Full E. No fourth Full E is inferred
+from this Source/Offline invocation or from earlier partial passes.
+
 **Coverage / approval / release:** the existing sixty-row behavioral matrix in
 QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.
 Only executed current gates may renew their specific behavior rows; source

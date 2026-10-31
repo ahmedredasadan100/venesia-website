@@ -627,6 +627,17 @@ gate43 exit1, native queried-zero and complete owned-resource cleanup remain
 independent evidence; later targeted or Full E results belong to their own
 source and execution.
 
+The affected default Source/Offline verifier must also pass before another
+Full E. Its historical retained-lifecycle fixture derives a finite predecessor
+from current declarations; a later Native cleanup envelope is not the earlier
+nineteen-transform Async correction. The retained-source guard correctly rejects
+that mismatched seed. Fixture maintenance may reconstruct the exact historical
+cleanup shape for this controlled test only, preserving the original guard,
+production baseline, authority and every existing rejection. A Native cleanup
+substitution must remain rejected under that historical contract. This fixture
+cannot authorize retained evidence for the current Native adoption; current
+execution still requires fresh Admission and the complete canonical sequence.
+
 Distribution is source-only: the installed Windows10+ x64 .NET Framework compiler
 builds a fresh executable in an ignored `.tmp-qa/windows-native-build-*` directory
 from an exclusive captured C# snapshot. Source/compiler/explicit Framework input
