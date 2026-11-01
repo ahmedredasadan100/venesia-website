@@ -2836,3 +2836,36 @@ fresh live Admission and conditional release outcomes, are recorded in
 [this task's evidence](../.tmp-qa/line-endings-release-20261101-01/final-handoff-report.md).
 The existing 48 contract bindings and six pending human reviews remain separate;
 no scoped preparation proof establishes Full E or `globalClosed=true`.
+
+### 27.38 Governance Admission — reviewed Infrastructure effect maintenance
+
+The live Admission on `6f521002` passed Syntax, ESLint and TypeScript, then
+stopped before Governance execution at `governanceQualified === true`.
+Current source-bound inspection identifies only Verification Infrastructure as
+selected but unqualified. Form and Executable Governance remain qualified.
+The complete approved/current effect comparison has one changed input: the
+CLI-pulse read-only adopter source gained the existing observer diagnostic port
+in correction `10153fdb`. Runtime, installed dependencies, eager closure,
+producers, generated selectors and every other input remain identical. The
+resulting Infrastructure effect fingerprint was not maintained after that
+approved source correction. This is not a failed Governance execution, borrowed
+receipt, serialization defect or circular Admission dependency.
+
+The existing `qualifyLocalVerificationTargets` owner renews only that reviewed
+Infrastructure fingerprint. Its consumers in `verify-isolated-supabase.mts`
+retain all original assertions and stale/unknown/missing/runtime/cleanup
+rejections; the previous fingerprint becomes an explicit rejected value. The
+existing Infrastructure footprint control binds the actual changed adopter
+input, and existing Admission fixture controls cover selected qualified,
+unqualified, missing, failed and missing-marker Governance paths. No new owner,
+registry authority, harness, profile, command, deadline or required gate exists.
+
+The Admission owner also writes its source-bound eligibility decision and safe
+selection/effect reasons before the source floor. This receipt is explicitly
+eligibility only; the unchanged source-floor exit, marker, source/runtime and
+native-cleanup requirements still precede live authority. A qualifying effect
+with failed execution cannot admit the source. Current ordered verification,
+48-contract correspondence, raw/Git binding and conditional release outcomes
+are retained in [this task's evidence](../.tmp-qa/governance-admission-release-20261101-01/final-handoff-report.md).
+The original failed Admission and historical evidence remain unchanged; six
+human reviews stay pending and `globalClosed=false` until their own conditions.

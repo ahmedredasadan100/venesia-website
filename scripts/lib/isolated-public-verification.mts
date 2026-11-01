@@ -1935,7 +1935,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
   const sourceGuards = [
     { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", marker: "Executable governance PASS" },
-    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2", marker: "PASS verification infrastructure:" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b", marker: "PASS verification infrastructure:" },
   ];
   const qualityBlockers: string[] = [];
   const selections = [{ family: "admin-form-save-cache", selected: reasons.length > 0, qualified: targets.length > 0,
@@ -2338,11 +2338,17 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
   };
   try {
     const targets = "qualifiedTargets" in initial ? initial.qualifiedTargets : undefined;
+    const governanceQualified = targets ? targets.selections.every(selection => !selection.selected || selection.qualified)
+      : !initial.actualDelta.some(change => /^(?:scripts|tests)\//u.test(change.file));
+    receipt(context, "governance-qualification.json", { status: governanceQualified ? "PASS" : "BLOCKED", proofBoundary: "source_effect_eligibility_only",
+      baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
+      selections: targets?.selections.map(({ family, selected, qualified, reason }) => ({ family, selected, qualified, reason })) ?? [],
+      blocking: targets?.blocking ?? [],
+      sourceGuardEffects: "sourceGuardEffects" in initial ? initial.sourceGuardEffects.map(({ entry, fingerprint, unresolved }) => ({ entry, fingerprint, unresolved })) : [] });
     sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory: ROOT, context, signal, sources: currentSources,
       changedFiles: initial.actualDelta.map(change => change.file), verifySource: assertSnapshot,
       governance: targets?.targets.filter(target => target.kind === "source_guard") ?? [],
-      governanceQualified: targets ? targets.selections.every(selection => !selection.selected || selection.qualified)
-        : !initial.actualDelta.some(change => /^(?:scripts|tests)\//u.test(change.file)) });
+      governanceQualified });
     for (const [index, profile] of profiles.entries()) {
       signal.throwIfAborted(); assertSnapshot();
       const args = ["--experimental-strip-types", profile.entry, ...profile.args];

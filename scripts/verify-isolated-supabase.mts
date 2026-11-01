@@ -6340,7 +6340,8 @@ async function verifyAdmissionQualificationControls() {
   const executorCode = compile(orderedSourceFloorControlSource(tree) + "\n" + ["localVerificationAdmissionInvocations", "localVerificationCommandSteps", "registeredVerificationNodeEntries",
     "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission", "readLocalVerificationInputs"].map(declaration).join("\n"));
   const executorFixture = (options: { raw?: "wrong-nonce" | "missing-schema" | "corrupt"; nonzero?: boolean; nativeFailure?: boolean; validatorFailure?: boolean;
-    childFailure?: boolean; cleanupFailure?: boolean; floorTypeScriptFailure?: boolean; mutateAdditional?: () => void } = {}) => {
+    childFailure?: boolean; cleanupFailure?: boolean; floorTypeScriptFailure?: boolean;
+    governance?: "qualified" | "unqualified" | "missing" | "failed" | "missing-marker"; mutateAdditional?: () => void } = {}) => {
     const files = new Map<string, Buffer>(), links = new Set<string>(), fs = memory(files, links), baselineHead = "a".repeat(40);
     const entries = ["scripts/verify-admin-form-system.mts", "scripts/verify-page-block-editor-presentation.mts", "scripts/verify-isolated-supabase.mts"];
     const sources = new Map<string, Buffer>(entries.map(entry => [entry, Buffer.from('import value from "jiti"; export const controlled = value;')]));
@@ -6370,17 +6371,23 @@ async function verifyAdmissionQualificationControls() {
         if (args[0] === "diff") return Buffer.from(changedFiles.length ? changedFiles.join("\0") + "\0" : "");
         if (args[0] === "show") { const bytes = sources.get(args[1]!.slice(41)); assert.ok(bytes); return bytes; }
         throw Error("Unexpected controlled Git operation.");
-      }, () => { inspections++; return { ...binding(), changeImpact: discovered, fast: { correspondence: [{ protected: true }] }, actualDelta: [] }; },
+      }, () => { inspections++; return { ...binding(), changeImpact: discovered, fast: { correspondence: [{ protected: true }] }, actualDelta: [],
+        ...(options.governance ? { qualifiedTargets: {
+          selections: [{ family: "controlled-source-guard", selected: true, qualified: !["unqualified", "missing"].includes(options.governance), reason: options.governance }],
+          blocking: ["unqualified", "missing"].includes(options.governance) ? ["controlled_unqualified_effect"] : [],
+          targets: ["unqualified", "missing"].includes(options.governance) ? [] : [{ kind: "source_guard", step: "node --experimental-strip-types scripts/controlled-governance.mts", limitMs: 180_000, successMarker: "GOVERNANCE_CONTROL_PASS" }],
+        } } : {}) }; },
       () => selected, (file: string) => entries.includes(file), (file: string) => path.join(memoryRoot, file), fs.exists, fs.stat, fs.real, fs.read,
       () => new Map(entries.map(entry => [entry, ts.createSourceFile(entry, sources.get(entry)!.toString(), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)])),
       ts, { isBuiltin }, (names: Iterable<string>) => { observedPackages.push([...names].sort()); return { ...runtime }; }, path.resolve, path.join, path.sep,
       fs.mkdir, (prefix: string) => { const directory = prefix + "controlled"; fs.mkdir(directory); return directory; },
       async (ports: { children: Set<ChildProcess> }, args: string[], env: Record<string, string>, name: string, limitMs: number) => {
         if (name.startsWith("ordered-")) {
-          assert.ok(name === "ordered-1-eslint" || name === "ordered-2-typescript");
+          assert.ok(name === "ordered-1-eslint" || name === "ordered-2-typescript" || options.governance && name === "ordered-3-governance");
           floorLaunches.push(name);
-          const code = options.floorTypeScriptFailure && name === "ordered-2-typescript" ? 2 : 0;
-          return { code, rawExit: { code, signal: null }, cleanup: { status: "PASS", liveProcesses: 0, processTreeVerified: true } };
+          const code = options.floorTypeScriptFailure && name === "ordered-2-typescript" ? 2 : options.governance === "failed" && name === "ordered-3-governance" ? 9 : 0;
+          return { code, rawExit: { code, signal: null }, stdout: name === "ordered-3-governance" && options.governance !== "missing-marker" ? "GOVERNANCE_CONTROL_PASS" : "",
+            cleanup: { status: "PASS", liveProcesses: 0, processTreeVerified: true } };
         }
         launches.push({ args, limitMs }); const entry = args[1]!, nonce = options.raw === "wrong-nonce" ? "old-nonce" : env.VENESIA_QA_ADMISSION_NONCE;
         if (launches.length === 1) options.mutateAdditional?.();
@@ -6442,6 +6449,24 @@ async function verifyAdmissionQualificationControls() {
     assert.equal(saved.childResult.code, 2); assert.deepEqual(saved.childResult.rawExit, { code: 2, signal: null });
     assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /live qualified execution/u);
   });
+  await control("actual Admission records qualified Governance before executing its selected leaf and profiles", async () => {
+    const fixture = executorFixture({ governance: "qualified" }), value = await qualify(fixture.api);
+    assert.equal(value.status, "PASS"); fixture.api.assertQualified(value, fixture.binding());
+    assert.deepEqual(fixture.floorLaunches, ["ordered-1-eslint", "ordered-2-typescript", "ordered-3-governance"]); assert.equal(fixture.launches.length, 3);
+    const evidence = JSON.parse(fixture.files.get(path.join(value.runDirectory, "governance-qualification.json"))!.toString()) as Binding & { status: string; selections: Array<{ qualified: boolean }> };
+    assert.equal(evidence.status, "PASS"); assert.equal(evidence.selections[0]!.qualified, true);
+    assert.equal(evidence.finalHead, value.finalHead); assert.equal(evidence.sourceSha256, value.sourceSha256);
+  });
+  for (const governance of ["unqualified", "missing", "failed", "missing-marker"] as const) {
+    await control("actual Admission refuses " + governance + " Governance without starting profiles or granting live authority", async () => {
+      const fixture = executorFixture({ governance }), value = await qualify(fixture.api);
+      assert.equal(value.status, "BLOCKED"); assert.deepEqual(value.executions, []); assert.deepEqual(fixture.launches, []);
+      assert.equal(fixture.floorLaunches.includes("ordered-3-governance"), governance === "failed" || governance === "missing-marker");
+      assert.ok(value.failures.length > 0); assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /live qualified execution/u);
+      const evidence = JSON.parse(fixture.files.get(path.join(value.runDirectory, "governance-qualification.json"))!.toString()) as { status: string };
+      assert.equal(evidence.status, governance === "unqualified" || governance === "missing" ? "BLOCKED" : "PASS");
+    });
+  }
   await control("actual Admission authority rejects mutated receipts stale bindings runtime dependencies and altered native artifacts", async () => {
     const fixture = executorFixture(), value = await qualify(fixture.api); assert.equal(value.status, "PASS");
     const invocation = fixture.api.privateInvocation(value), sourceCode = invocation.sourceFloor.checks[0].result.code;
@@ -6777,7 +6802,7 @@ async function verifyQualifiedSelectionControls() {
   };
   const verifyActualSourceGuardQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationTargets">) => {
   const nativePortEffects = { ...sourceGuardHashes,
-    "scripts/verify-verification-infrastructure.mts": "b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2" };
+    "scripts/verify-verification-infrastructure.mts": "c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b" };
   const nativePortAnalysis = (file: string, semanticChange = true): Analysis => {
     const value = qualityAnalysis(); value.changes = [{ ...value.changes[0]!, file, semanticChange }]; return value;
   };
@@ -6843,7 +6868,7 @@ async function verifyQualifiedSelectionControls() {
     assert.ok(redirected.blocking.includes("missing_exact_registered_source_guard:scripts/verify-executable-governance.mts"));
   });
   check("both reviewed direct quality leaves qualify once while invented hashes and markers leave Infrastructure blocked", () => {
-    const actual = { ...sourceGuardHashes, "scripts/verify-verification-infrastructure.mts": "b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2" };
+    const actual = { ...sourceGuardHashes, "scripts/verify-verification-infrastructure.mts": "c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b" };
     const selected = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, actual);
     assert.equal(selected.targets.length, 2); assert.deepEqual(selected.blocking, []);
     assert.equal(new Set(selected.targets.map(target => target.step)).size, 2);
@@ -6854,7 +6879,7 @@ async function verifyQualifiedSelectionControls() {
     assert.equal(previousEffect.targets.some(target => target.entry === "scripts/verify-verification-infrastructure.mts"), false);
     assert.ok(previousEffect.selections.some(row => row.family === "scripts/verify-verification-infrastructure.mts" && row.selected && !row.qualified));
     assert.ok(previousEffect.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:scripts/verify-verification-infrastructure.mts"));
-    for (const invented of ["UNQUALIFIED_DYNAMIC_EXECUTION_CLOSURE", "PASS verification infrastructure:", "a".repeat(64)]) {
+    for (const invented of ["b5f55231c35b155658dbae826595e980c74230b0d51b364710bf1a579c9af1c2", "UNQUALIFIED_DYNAMIC_EXECUTION_CLOSURE", "PASS verification infrastructure:", "a".repeat(64)]) {
       const rejected = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash,
         { ...actual, "scripts/verify-verification-infrastructure.mts": invented });
       assert.equal(rejected.targets.some(target => target.entry === "scripts/verify-verification-infrastructure.mts"), false);
@@ -6907,6 +6932,8 @@ async function verifyQualifiedSelectionControls() {
     assert.equal(original.generated?.fragments.filter(row => row.selector === "actual_assertion_statement").length, 4);
     assert.ok(original.generated?.fragments.some(row => row.selector === "actual_controlled_fixture_loop"));
     assert.ok(original.generated?.runtimePackages.some(row => row.root === "node_modules/js-yaml" && row.files > 0));
+    assert.equal(original.generated?.fragments.find(row => row.selector === "read_only_adopter_source" && row.file === "scripts/verify-isolated-application-cli-pulse.mjs")?.sha256,
+      "0f6c7d258f8acb1c43e6e3c84c6b826ba6d224b20d20467cd9d401967d315b94", "The reviewed observer diagnostic port must remain bound to its actual Infrastructure input.");
     for (const [file, mutate] of [
       ["scripts/lib/verification-module-loader.mjs", (source: string) => source.replace('createRequire(file)(dependency.target)', 'createRequire(file)("unreviewed-package")')],
       ["scripts/fixtures/verification-text-contract.mjs", (source: string) => source.replace("const guard = new Function(", "const guard = Reflect.construct(Function, [")],
