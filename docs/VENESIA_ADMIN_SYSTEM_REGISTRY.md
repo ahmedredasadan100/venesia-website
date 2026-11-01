@@ -2808,3 +2808,31 @@ unique. Diagnostics passed 37 cases including both injected contract mutations;
 lease controls passed 95 and transport passed 31. All ten native child receipts
 closed with zero active processes. This scoped result does not claim live
 Admission, Automatic Preflight, Targeted Admin, Full E or human approval.
+
+### 27.37 Existing Git representation / raw-source binding recovery
+
+The previous task-local preparation compared the tested CRLF checkout SHA256
+directly with the LF Git blob SHA256 and stopped before Admission. The original
+failed assertion and evidence remain sealed. This was a cross-domain comparison
+in preparation, not a failure of the 48 protected contracts or transport behavior.
+
+The existing policy is unchanged: `.gitattributes` fixes LF only for SQL
+migrations; this checkout inherits `core.autocrlf=true` and has no root
+`.editorconfig`. QA Section 3.3 keeps the complete source snapshot bound to raw
+file bytes; its canonical-LF effect fingerprints do not replace those hashes.
+Section 3.4 requires explicit input-equivalence accounting. Earlier transport
+recovery already mapped source through `git hash-object --path` and compared the
+mapped identity with index/final blobs while separately retaining the raw SHA.
+
+The fresh copy of the same task-local preparation uses that existing Git mapping
+on the exact tested buffer, then requires mapped blob = index blob = Final HEAD
+blob. It retains independent raw working-tree, immutable blob and raw-evidence
+identities. No source manifest or historical evidence is normalized; no attributes,
+Git configuration, Product, owner API, guard, registry authority or required gate
+is changed. LF/CRLF inputs, actual blob, real mutation, missing/stale input, raw
+evidence mismatch and standalone-CR boundaries are checked at this preparation
+owner. Current source correspondence and ordered targeted results, followed by
+fresh live Admission and conditional release outcomes, are recorded in
+[this task's evidence](../.tmp-qa/line-endings-release-20261101-01/final-handoff-report.md).
+The existing 48 contract bindings and six pending human reviews remain separate;
+no scoped preparation proof establishes Full E or `globalClosed=true`.
