@@ -2760,3 +2760,51 @@ historical raw errors or claim a deployed PG outage/disk-failure recovery.
 Only this terminal documentation update followed qualification; runtime inputs
 remain frozen for the authorized independent commit. Release closure and human
 approval remain outside this bounded result. STOP — OWNER TARGETED TRANSPORT REVIEW.
+
+### 27.36 Current — Client diagnostic contract correspondence — 1 November 2026
+
+**Previous → current:** source qualification on `10153fdb` preserved all 47
+existing maintenance predicates, but the newly exported
+`describeOwnedPgClientFailure` had no assertion-level contract reference.
+Behavioral diagnostics passed while source correspondence remained unqualified;
+file reachability alone did not satisfy the existing protection owner.
+
+**Existing owner and consumer:** `isolated-supabase.mts` still owns the helper,
+observer, safe projection and durable collector. The existing
+`verify-isolated-connect-diagnostics.mjs` now imports the actual helper and adds
+one executable frame-equality assertion inside its existing ordinary-stack
+case. It compares candidate-source execution with the real exported owner;
+the original literal frame/privacy/cause/boundary assertions remain intact.
+Candidate-source execution is retained rather than replaced by a canonical
+import. The existing registered `verify:admin-core-closure` and
+`verify:isolated-connect-diagnostics` commands consume this same entry.
+
+**Regression protection:** two bounded negative sources use TypeScript AST
+transforms in the existing diagnostics entry: deleting only the helper must
+fail original extraction, and emptying only its safe-frame projection must fail
+the original observer behavior assertion. Both fail before loopback/client
+connection cases. No production source, guard, registry, harness, assertion
+threshold, transport/lease setting, package registration or CI workflow changes.
+
+Targeted qualification is ordered Syntax, affected ESLint, TypeScript,
+Executable Governance, Verification Infrastructure, real source correspondence,
+error/privacy diagnostics and affected transport controls. Original assertions
+and the previous 47 contract bindings must remain valid. A successful targeted
+commit still requires a new live Admission, Targeted Admin and complete Full E
+for release; no prior receipt grants that authority. Actual results, power
+measurements and the conditional release handoff belong to
+[this task's evidence](../.tmp-qa/correspondence-release-20261101-01/final-handoff-report.json).
+Battery operation is authorized by the Owner; `AC Offline` alone is not a
+canonical rejection condition. Current power/energy/Sleep/resource observations
+and monitored cancellation remain required. Human six-type reviews remain
+separate and pending; `globalClosed=false`.
+
+**Targeted result:** the single ordered invocation passed all ten leaves with
+actual outer exit 0: Syntax (two inputs), strict affected ESLint, project
+TypeScript, Executable Governance, Verification Infrastructure, scoped contract
+correspondence, diagnostics/privacy, control lease and transport. Correspondence
+now protects 48/48 contracts; all previous 47 exact assertion fingerprints remain
+unique. Diagnostics passed 37 cases including both injected contract mutations;
+lease controls passed 95 and transport passed 31. All ten native child receipts
+closed with zero active processes. This scoped result does not claim live
+Admission, Automatic Preflight, Targeted Admin, Full E or human approval.

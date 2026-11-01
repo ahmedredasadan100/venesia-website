@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import pg from 'pg';
 import { waitForOwnedDatabaseCapacity } from './lib/isolated-supabase-transport.mjs';
+import { describeOwnedPgClientFailure } from './lib/isolated-supabase.mts';
 
 function extract(source){
  const ast=ts.createSourceFile('owner.ts',source,ts.ScriptTarget.Latest,true),wanted=new Set(['OWNER','IsolatedSupabaseError','fail','requireThat','classifyOwnedPgConnectMessage','describeOwnedPgConnectFailure','describeOwnedPgClientFailure','observeApplicationClient','createAdminMeasurementControlLease','transportCodes','ownerTransportCodes','asSafeError','connect']),parts=new Map();
@@ -77,6 +78,7 @@ export async function verifyIsolatedConnectDiagnostics(source){
   assert.equal(native.originalStackRetainedPrivately,true);assert.equal(JSON.stringify(native).includes(marker),false);
   const data=new Error(marker);Object.defineProperty(data,'stack',{value:'Error: '+marker+'\n    at Socket.emit (node:events:518:28)',configurable:true});
   const projected=actualOwner.describeOwnedPgClientFailure(data);
+  assert.deepEqual(projected.safeStackFrames,describeOwnedPgClientFailure(data).safeStackFrames);
   assert.equal(projected.originalStackRetainedPrivately,true);assert.deepEqual(projected.safeStackFrames,[{source:'node-events',line:518,column:28}]);
  });
  await test('Diagnostic projection bounds cycles, cause depth, frames and accessor fields',()=>{
@@ -143,6 +145,37 @@ export async function verifyIsolatedConnectDiagnostics(source){
    finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}
   });
  }
+ // Mutate only the actual helper in memory. Each rejected source stops at the
+ // original extraction/first observer assertion, before loopback connections.
+ const projectionMutant=kind=>{
+  const ast=ts.createSourceFile('owner.mts',source,ts.ScriptTarget.Latest,true);let changes=0;
+  const transformed=ts.transform(ast,[context=>root=>ts.visitNode(root,function visit(node){
+   if(ts.isFunctionDeclaration(node)&&node.name?.text==='describeOwnedPgClientFailure'){
+    if(kind==='delete'){changes++;return undefined;}
+    const body=ts.visitNode(node.body,function change(part){
+     if(ts.isPropertyAssignment(part)&&part.name.getText(ast)==='safeStackFrames'
+      &&part.initializer.getText(ast)==='Object.freeze(frames)'){
+      changes++;return ts.factory.updatePropertyAssignment(part,part.name,
+       ts.factory.createCallExpression(ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier('Object'),'freeze'),undefined,[ts.factory.createArrayLiteralExpression()]));
+     }
+     return ts.visitEachChild(part,change,context);
+    });
+    return ts.factory.updateFunctionDeclaration(node,node.modifiers,node.asteriskToken,node.name,node.typeParameters,node.parameters,node.type,body);
+   }
+   return ts.visitEachChild(node,visit,context);
+  })]);
+  try{assert.equal(changes,1);return ts.createPrinter({newLine:ts.NewLineKind.LineFeed}).printFile(transformed.transformed[0]);}
+  finally{transformed.dispose();}
+ };
+ await test('Deleting the actual client diagnostic contract fails existing extraction before any client starts',async()=>{
+  await assert.rejects(verifyIsolatedConnectDiagnostics(projectionMutant('delete')),error=>error instanceof assert.AssertionError
+   &&error.operator==='strictEqual'&&error.actual===error.expected-1);
+ });
+ await test('Changing the actual safe stack projection fails the original observer behavior assertion',async()=>{
+  await assert.rejects(verifyIsolatedConnectDiagnostics(projectionMutant('frames')),error=>error instanceof assert.AssertionError
+   &&error.operator==='deepStrictEqual'&&Array.isArray(error.actual)&&error.actual.length===0
+   &&Array.isArray(error.expected)&&error.expected.some(frame=>frame.source==='pg-client'));
+ });
  return {status:'pass',checks:checks.length,cases:checks,boundary:'Actual owner functions and installed-pg loopback failures; no Docker/Production, transport retry, timeout, lease or capacity modification.'};
 }
 
