@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { EventEmitter } from 'node:events';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
@@ -8,7 +9,7 @@ import pg from 'pg';
 import { waitForOwnedDatabaseCapacity } from './lib/isolated-supabase-transport.mjs';
 
 function extract(source){
- const ast=ts.createSourceFile('owner.ts',source,ts.ScriptTarget.Latest,true),wanted=new Set(['OWNER','IsolatedSupabaseError','fail','requireThat','classifyOwnedPgConnectMessage','describeOwnedPgConnectFailure','createAdminMeasurementControlLease','transportCodes','ownerTransportCodes','asSafeError','connect']),parts=new Map();
+ const ast=ts.createSourceFile('owner.ts',source,ts.ScriptTarget.Latest,true),wanted=new Set(['OWNER','IsolatedSupabaseError','fail','requireThat','classifyOwnedPgConnectMessage','describeOwnedPgConnectFailure','describeOwnedPgClientFailure','observeApplicationClient','createAdminMeasurementControlLease','transportCodes','ownerTransportCodes','asSafeError','connect']),parts=new Map();
  function visit(node){
   const name=(ts.isFunctionDeclaration(node)||ts.isClassDeclaration(node))&&node.name?.text;
   if(name&&wanted.has(name)){assert.ok(!parts.has(name));parts.set(name,node.getText(ast));}
@@ -28,6 +29,75 @@ export async function verifyIsolatedConnectDiagnostics(source){
   new Function(...Object.keys(ports),'module','exports',compiled)(...Object.values(ports),loaded,loaded.exports);return loaded.exports;
  }
  const actualOwner=owner();const test=async(name,work)=>{await work();checks.push(name);};
+ const failureWrite=(()=>{
+  const ast=ts.createSourceFile('owner.mts',source,ts.ScriptTarget.Latest,true),writes=[];
+  function visit(node){if(ts.isCallExpression(node)&&node.expression.getText(ast)==='recordFile'&&node.arguments[0]?.getText(ast)==='"failure.json"')writes.push(node);ts.forEachChild(node,visit);}
+  visit(ast);assert.equal(writes.length,1);
+  return new Function('primaryFailure','preparation','recordFile',ts.transpileModule(writes[0].getText(ast)+';', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText);
+ })();
+ await test('Actual observer and lifecycle evidence retain bounded first cause and safe stack positions',async()=>{
+  const client=new EventEmitter(),facts=[],privateCause=Object.assign(new Error(marker),{code:'ECONNRESET'});
+  privateCause.stack='Error: '+marker+'\n    at privateFunction (C:\\private-user\\node_modules\\pg\\lib\\connection.js:64:12)';
+  const original=Object.assign(new Error('Connection terminated unexpectedly',{cause:privateCause}),{code:'EPIPE'});
+  original.stack='Error: '+marker+'\n    at privateFunction (C:\\private-user\\node_modules\\pg\\lib\\client.js:175:19)\n    at Socket.emit (node:events:518:28)\n    at privateFunction (C:\\private-user\\private-file.js:1:2)';
+  const observer=actualOwner.observeApplicationClient(client,row=>facts.push(row),()=>({phase:'ordered-source-floor',clientScope:'control',clientState:'current'}));
+  const pending=observer.run(()=>new Promise(()=>{}));client.emit('error',original);
+  await assert.rejects(pending,error=>{
+   assert.equal(error.cause,original);assert.equal(error.cause.cause,privateCause);
+   assert.equal(Object.getOwnPropertyDescriptor(error,'transportDiagnostic').enumerable,false);
+   assert.equal(JSON.stringify(error).includes(marker),false);
+   const diagnostic=error.transportDiagnostic,writes=[];
+   failureWrite(error,undefined,(name,value)=>writes.push({name,value}));
+   assert.equal(writes.length,1);assert.equal(writes[0].name,'failure.json');assert.equal(writes[0].value.rawErrorRetained,false);
+   assert.deepEqual(JSON.parse(JSON.stringify(writes[0].value.transportDiagnostic)),JSON.parse(JSON.stringify(diagnostic)));
+   assert.equal(diagnostic.pgCode,'EPIPE');assert.equal(diagnostic.pgMessageClass,'pg_unexpected_end');
+   assert.equal(diagnostic.phase,'ordered-source-floor');assert.equal(diagnostic.clientScope,'control');assert.equal(diagnostic.clientState,'current');
+   assert.equal(new Date(diagnostic.observedAtUtc).toISOString(),diagnostic.observedAtUtc);
+   assert.equal(diagnostic.originalErrorRetainedPrivately,true);assert.equal(diagnostic.originalStackRetainedPrivately,true);
+   assert.deepEqual(diagnostic.safeStackFrames,[{source:'pg-client',line:175,column:19},{source:'node-events',line:518,column:28}]);
+   assert.equal(diagnostic.causes.length,1);assert.equal(diagnostic.causes[0].pgCode,'ECONNRESET');
+   assert.deepEqual(diagnostic.causes[0].safeStackFrames,[{source:'pg-connection',line:64,column:12}]);
+   assert.equal(diagnostic.causeChainTruncated,false);
+   for(const value of [diagnostic,writes]){const text=JSON.stringify(value);for(const forbidden of [marker,'private-user','privateFunction','private-file','Error:','postgresql://'])assert.equal(text.includes(forbidden),false);}
+   client.emit('error',new Error('later'));assert.throws(()=>observer.assertHealthy(),retained=>retained===error);assert.equal(facts.length,1);
+   assert.deepEqual(facts,[{pgCode:'EPIPE',pgMessageClass:'pg_unexpected_end'}]);return true;
+  });
+ });
+ await test('Receipt failure preserves original diagnostic and exact private error identities',async()=>{
+  const client=new EventEmitter(),original=new Error('Connection terminated unexpectedly'),secondary=new Error(marker);
+  const observer=actualOwner.observeApplicationClient(client,()=>{throw secondary;},()=>({phase:'inactive',clientScope:'control',clientState:'non_current'}));
+  const pending=observer.run(()=>new Promise(()=>{}));client.emit('error',original);
+  await assert.rejects(pending,error=>{assert.equal(error.code,'APPLICATION_CLIENT_RECEIPT_FAILED');assert.equal(error.cause.cause,original);assert.equal(error.receiptCause,secondary);assert.equal(error.transportDiagnostic,error.cause.transportDiagnostic);assert.equal(error.transportDiagnostic.clientState,'non_current');assert.equal(JSON.stringify(error.transportDiagnostic).includes(marker),false);return true;});
+ });
+ await test('Runtime intrinsic Error stack accessor and ordinary stack data remain readable',()=>{
+  const original=new Error(marker),descriptor=Object.getOwnPropertyDescriptor(original,'stack');
+  assert.ok(descriptor);
+  if(descriptor.get)assert.equal(descriptor.get,Object.getOwnPropertyDescriptor(new Error(),'stack').get);
+  const native=actualOwner.describeOwnedPgClientFailure(original);
+  assert.equal(native.originalStackRetainedPrivately,true);assert.equal(JSON.stringify(native).includes(marker),false);
+  const data=new Error(marker);Object.defineProperty(data,'stack',{value:'Error: '+marker+'\n    at Socket.emit (node:events:518:28)',configurable:true});
+  const projected=actualOwner.describeOwnedPgClientFailure(data);
+  assert.equal(projected.originalStackRetainedPrivately,true);assert.deepEqual(projected.safeStackFrames,[{source:'node-events',line:518,column:28}]);
+ });
+ await test('Diagnostic projection bounds cycles, cause depth, frames and accessor fields',()=>{
+  const original=new Error(marker);let previous=original;
+  for(let index=0;index<5;index++){const cause=new Error(marker);Object.defineProperty(previous,'cause',{value:cause});previous=cause;}
+  original.stack='Error: '+marker+'\n'+Array.from({length:40},()=> '    at Socket.emit (node:events:518:28)').join('\n');
+  Object.defineProperty(original,'code',{get(){throw Error('must not read code accessor');}});
+  const diagnostic=actualOwner.describeOwnedPgClientFailure(original,{phase:marker,clientScope:'scoped',clientState:'scoped'});
+  assert.equal(diagnostic.pgCode,null);assert.equal(diagnostic.phase,'application-handoff');assert.equal(diagnostic.causes.length,3);assert.equal(diagnostic.causeChainTruncated,true);assert.equal(diagnostic.safeStackFrames.length,8);
+  const cycle=new Error(marker);Object.defineProperty(cycle,'cause',{value:cycle});const circular=actualOwner.describeOwnedPgClientFailure(cycle);assert.equal(circular.causes.length,0);assert.equal(circular.causeChainTruncated,true);assert.equal(circular.clientState,'unknown');
+  const accessors=new Error();for(const key of ['stack','cause'])Object.defineProperty(accessors,key,{get(){throw Error(marker);}});
+  const safe=actualOwner.describeOwnedPgClientFailure(accessors);assert.deepEqual(safe.safeStackFrames,[]);assert.equal(safe.causes.length,0);assert.equal(safe.originalStackRetainedPrivately,false);
+ });
+ await test('Healthy observer performs no diagnostic context work or failure evidence write',async()=>{
+  const client=new EventEmitter();let calls=0,records=0;
+  const observer=actualOwner.observeApplicationClient(client,()=>{records++;},()=>{calls++;throw Error(marker);});
+  assert.equal(await observer.run(async()=>42),42);assert.equal(calls,0);assert.equal(records,0);
+  const pending=observer.run(()=>new Promise(()=>{}));client.emit('error',new Error('Connection terminated unexpectedly'));
+  await assert.rejects(pending,error=>error.code==='APPLICATION_CLIENT_DISCONNECTED'&&error.transportDiagnostic.clientState==='unknown');
+  assert.equal(calls,1);assert.equal(records,1);
+ });
  for(const [message,code,kind]of [['timeout expired','DB_CONNECTION_TIMEOUT','pg_timeout_expired'],['Connection terminated unexpectedly','DB_CONNECTION_EOF','pg_unexpected_end'],['Connection terminated','DB_CONNECTION_ENDED','pg_requested_end'],['Connection terminated due to connection timeout','DB_CONNECTION_TIMEOUT','pg_legacy_timeout']]){
   await test('Exact '+kind+' classified without retaining text',()=>{const value=actualOwner.classifyOwnedPgConnectMessage(new Error(message));assert.deepEqual(value,{code,messageClass:kind});assert.equal(actualOwner.asSafeError(new Error(message),'database-connect').code,code);assert.equal(actualOwner.asSafeError(new Error(message),'application-query').code,message.includes('due to connection timeout')?'DB_CONNECTION_TIMEOUT':'PREREQUISITE_OR_OPERATION_FAILED');});
  }

@@ -37,6 +37,7 @@ type HostBridge = { close(): Promise<void>; snapshot(): { accepted: number; reje
 export class IsolatedSupabaseError extends Error {
   readonly code: string;
   readonly stage: string;
+  declare readonly transportDiagnostic?: ReturnType<typeof describeOwnedPgClientFailure>;
   constructor(code: string, stage: string) {
     super(`${stage}: ${code}`);
     this.name = "IsolatedSupabaseError";
@@ -53,7 +54,8 @@ function requireThat(condition: unknown, code: string, stage: string): asserts c
 // pg emits idle socket failures outside query promises. Keep an error listener
 // through end(), and reject the handoff instead of letting EventEmitter crash
 // the process before the lifecycle's finally block can release owned resources.
-export function observeApplicationClient(client: Pick<PgConnection, "on">, recordFailure: (facts: { pgCode: string | null; pgMessageClass: string }) => void) {
+export function observeApplicationClient(client: Pick<PgConnection, "on">, recordFailure: (facts: { pgCode: string | null; pgMessageClass: string }) => void,
+  context?: (watched: Pick<PgConnection, "on">) => { phase: string; clientScope: "control" | "scoped"; clientState: "current" | "non_current" | "scoped" }) {
   let failure: IsolatedSupabaseError | undefined;
   let rejectFailure: (error: IsolatedSupabaseError) => void = () => undefined;
   const failed = new Promise<never>((_resolve, reject) => { rejectFailure = reject; });
@@ -62,14 +64,18 @@ export function observeApplicationClient(client: Pick<PgConnection, "on">, recor
     if (failure) return;
     failure = new IsolatedSupabaseError("APPLICATION_CLIENT_DISCONNECTED", "application-handoff");
     Object.defineProperty(failure, "cause", { value: error, enumerable: false });
+    let observedContext: ReturnType<NonNullable<typeof context>> | undefined;
+    try { observedContext = context?.(watched); } catch { /* Context cannot replace the original socket failure. */ }
+    const diagnostic = describeOwnedPgClientFailure(error, observedContext);
+    Object.defineProperty(failure, "transportDiagnostic", { value: diagnostic, enumerable: false });
     // A failed receipt write must also remain inside the awaited failure path.
-    const pgCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
-      && /^(?:[0-9A-Z]{5}|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENETUNREACH|EHOSTUNREACH)$/u.test(error.code) ? error.code : null;
+    const pgCode = diagnostic.pgCode;
     try { recordFailure({ pgCode, pgMessageClass: classifyOwnedPgConnectMessage(error)?.messageClass ?? "unclassified" }); } catch (receiptError) {
       const originalDisconnect = failure;
       failure = new IsolatedSupabaseError("APPLICATION_CLIENT_RECEIPT_FAILED", "application-handoff");
       Object.defineProperty(failure, "cause", { value: originalDisconnect, enumerable: false });
       Object.defineProperty(failure, "receiptCause", { value: receiptError, enumerable: false });
+      Object.defineProperty(failure, "transportDiagnostic", { value: diagnostic, enumerable: false });
     }
     rejectFailure(failure);
   });
@@ -279,6 +285,62 @@ export function describeOwnedPgConnectFailure(error: unknown, elapsedMs: number,
     }
   }
   return record;
+}
+
+/** Durable facts from the existing pg observer. Raw Error/cause/stack stay private;
+ * published frames contain only fixed source labels and numeric positions. */
+export function describeOwnedPgClientFailure(error: unknown, context?: {
+  phase: string; clientScope: "control" | "scoped"; clientState: "current" | "non_current" | "scoped";
+}) {
+  // Node may expose each Error's stack through its intrinsic accessor. Accept
+  // only that exact getter; an arbitrary supplied accessor is never invoked.
+  const intrinsicStackGetter = Object.getOwnPropertyDescriptor(new Error(), "stack")?.get;
+  const field = (value: unknown, key: string): unknown => {
+    try {
+      if (value === null || typeof value !== "object") return undefined;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor && "value" in descriptor) return descriptor.value;
+      return key === "stack" && intrinsicStackGetter && descriptor?.get === intrinsicStackGetter
+        ? intrinsicStackGetter.call(value) : undefined;
+    }
+    catch { return undefined; }
+  };
+  const details = (value: unknown) => {
+    const code = field(value, "code"), stack = field(value, "stack");
+    const frames: Array<{ source: string; line: number; column: number }> = [];
+    if (typeof stack === "string") for (const frame of stack.slice(0, 32_768).split(/\r?\n/u).slice(1, 33)) {
+      for (const [source, expression] of [
+        ["pg-client", /(?:^|[ (])[^\r\n()]*node_modules[\\/]pg[\\/]lib[\\/]client\.js:(\d+):(\d+)\)?$/u],
+        ["pg-connection", /(?:^|[ (])[^\r\n()]*node_modules[\\/]pg[\\/]lib[\\/]connection\.js:(\d+):(\d+)\)?$/u],
+        ["owned-lifecycle", /(?:^|[ (])[^\r\n()]*scripts[\\/]lib[\\/]isolated-supabase\.mts:(\d+):(\d+)\)?$/u],
+        ["node-events", /(?:^|[ (])node:events:(\d+):(\d+)\)?$/u],
+        ["node-net", /(?:^|[ (])node:net:(\d+):(\d+)\)?$/u],
+        ["node-streams", /(?:^|[ (])node:internal\/streams\/(?:readable|destroy):(\d+):(\d+)\)?$/u],
+      ] as const) {
+        const match = expression.exec(frame);
+        if (match && frames.length < 8) {
+          const line = Number(match[1]), column = Number(match[2]);
+          if (Number.isSafeInteger(line) && line > 0 && Number.isSafeInteger(column) && column > 0) frames.push(Object.freeze({ source, line, column }));
+        }
+      }
+    }
+    return Object.freeze({ pgCode: typeof code === "string"
+      && /^(?:[0-9A-Z]{5}|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENETUNREACH|EHOSTUNREACH)$/u.test(code) ? code : null,
+    pgMessageClass: classifyOwnedPgConnectMessage(value)?.messageClass ?? "unclassified",
+    originalErrorRetainedPrivately: value instanceof Error,
+    originalStackRetainedPrivately: value instanceof Error && typeof stack === "string",
+    safeStackFrames: Object.freeze(frames) });
+  };
+  const causes: Array<ReturnType<typeof details>> = [], seen = new Set<unknown>([error]);
+  let cause = field(error, "cause");
+  while (cause !== undefined && !seen.has(cause) && causes.length < 3) {
+    seen.add(cause); causes.push(details(cause)); cause = field(cause, "cause");
+  }
+  return Object.freeze({ schema: 1, observedAtUtc: new Date().toISOString(),
+    phase: context && /^[a-z0-9_.-]{1,80}$/u.test(context.phase) ? context.phase : "application-handoff",
+    clientScope: context?.clientScope === "scoped" ? "scoped" : "control",
+    clientState: context && ["current", "non_current", "scoped"].includes(context.clientState) ? context.clientState : "unknown",
+    ...details(error), causes: Object.freeze(causes), causeChainTruncated: cause !== undefined });
 }
 
 const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
@@ -1456,7 +1518,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         if (handle) activeHandles.delete(handle);
         safeRecord("application-client-disconnected", { code: "APPLICATION_CLIENT_DISCONNECTED", errorDetailsRetained: false,
           ...facts, ...(preparation?.snapshot() ?? {}) });
-      });
+      }, watched => ({ phase: preparation?.snapshot().phase ?? currentStage, clientScope: "control",
+        clientState: watched === appConnection ? "current" : "non_current" }));
       const applicationLease=createAdminMeasurementControlLease(boundConnection,{
         connect:()=>connect("postgres"),assertHealthy:()=>applicationClient.assertHealthy(),watch:client=>applicationClient.watch(client),
         assertOwned:async()=>{assertOwnedLocalHandle(handle);requireThat(!interrupted&&!cleaning,"INACTIVE_ADMIN_CONTROL_LEASE","admin-measurement");await inspectCaptured(serviceResource("db"));},
@@ -1591,7 +1654,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
             scopedConnections.add(client);
           } finally { pendingScopedConnections--; }
           let open = true;
-          const observer = observeApplicationClient(client, () => { open = false; });
+          const observer = observeApplicationClient(client, () => { open = false; }, () => ({
+            phase: preparation?.snapshot().phase ?? currentStage, clientScope: "scoped", clientState: "scoped" }));
           const connection: OwnedDatabaseConnection = Object.freeze({
             query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
               requireThat(open, "EXPIRED_DATABASE_CONNECTION", "application-query");
@@ -1743,6 +1807,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   } catch (error) {
     primaryFailure = preparation?.failure ?? asSafeError(error, currentStage);
     recordFile("failure.json", { stage: primaryFailure.stage, code: primaryFailure.code, rawErrorRetained: false,
+      ...(primaryFailure.transportDiagnostic ? { transportDiagnostic: primaryFailure.transportDiagnostic } : {}),
       ...(preparation ? { preparation: preparation.snapshot() } : {}) });
   } finally {
     preparation?.close();

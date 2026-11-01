@@ -916,6 +916,7 @@ async function verifyOrderedLocalVerificationControls() {
   type Floor = { contextSha256: string; sourceSha256: string; syntaxFiles: string[]; checks: Array<{ stage: string; step: string; result: Child }> };
   type Options = { sourceDirectory: string; context: { runDirectory: string; sanitize(value: string): string; cleanEnvironment(): NodeJS.ProcessEnv };
     signal: AbortSignal; sources: Map<string, string | Buffer>; changedFiles: readonly string[]; verifySource(): void;
+    drainControlPulse?: () => Promise<void>;
     governance: readonly { step: string; limitMs: number; successMarker?: string }[]; governanceQualified: boolean; prior?: Floor };
   const fixture = (fault: { stage?: string; code?: number; childError?: Error; cleanupError?: Error; abortAfter?: string; driftAt?: number } = {}) => {
     const events: string[] = [], launches: Array<{ name: string; args: string[]; environment: NodeJS.ProcessEnv; limitMs: number }> = [];
@@ -1022,6 +1023,47 @@ async function verifyOrderedLocalVerificationControls() {
     await assert.rejects(value.run(), /conservative Full Gate fallback remains required/u);
     assert.deepEqual(value.launches.map(launch => launch.name), ["ordered-1-eslint", "ordered-2-typescript"]);
     assert.equal(value.saved[0].value.fallback, "complete_source_without_affected_qualification");
+  });
+  await control("live source units yield to queued heartbeat work before draining the existing pulse", async () => {
+    const value = fixture(); let ready = false, pulses = 0;
+    setImmediate(() => { ready = true; });
+    value.options.drainControlPulse = async () => { assert.equal(ready, true); pulses++; value.events.push("pulse"); };
+    const result = await value.run();
+    assert.ok(pulses >= result.syntaxFiles.length + result.checks.length);
+    for (let index = 0; index < value.events.length; index++) if (value.events[index] === "snapshot")
+      assert.equal(value.events[index - 1], "pulse");
+    assert.deepEqual(value.launches.map(row => row.name), ["ordered-1-eslint", "ordered-2-typescript", "ordered-3-governance"]);
+  });
+  await control("synchronous source work remains ordered while queued heartbeat callbacks run between units", async () => {
+    const value = fixture(); let beats = 0, stopped = false;
+    const beat = () => { if (!stopped) { beats++; setImmediate(beat); } };
+    setImmediate(beat);
+    const verify = value.options.verifySource;
+    value.options.verifySource = () => { verify(); const end = performance.now() + 4; while (performance.now() < end) { /* bounded synchronous source unit */ } };
+    value.options.drainControlPulse = async () => { assert.ok(beats > 0); };
+    try { await value.run(); assert.ok(beats > value.options.sources.size); }
+    finally { stopped = true; await new Promise<void>(done => setImmediate(done)); }
+    assert.deepEqual(value.saved.filter(row => /^ordered-source-\d+\.json$/u.test(row.name)).map(row => row.value.stage), ["eslint", "typescript", "governance"]);
+  });
+  await control("failed existing heartbeat retains its exact error and starts no dependent child", async () => {
+    const value = fixture(), failure = Error("Controlled existing heartbeat failure");
+    value.options.drainControlPulse = async () => { throw failure; };
+    await assert.rejects(value.run(), error => error === failure);
+    assert.deepEqual(value.launches, []); assert.deepEqual(value.saved, []); assert.equal(value.children.size, 0);
+  });
+  await control("cancellation during heartbeat drain prevents the next source unit and child", async () => {
+    const value = fixture();
+    value.options.drainControlPulse = async () => { value.controller.abort(value.cancelled); };
+    await assert.rejects(value.run(), error => error === value.cancelled);
+    assert.deepEqual(value.launches, []); assert.deepEqual(value.saved, []); assert.deepEqual(value.events, []);
+  });
+  await control("actual public source floor adopts the existing private heartbeat drain", async () => {
+    const publicRun = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification");
+    assert.ok(publicRun); const calls: ts.CallExpression[] = [];
+    const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && node.expression.getText(tree) === "runLocalVerificationSourceFloor") calls.push(node); ts.forEachChild(node, visit); };
+    visit(publicRun); assert.equal(calls.length, 1); assert.ok(ts.isObjectLiteralExpression(calls[0].arguments[0]));
+    const drains = calls[0].arguments[0].properties.filter(node => ts.isShorthandPropertyAssignment(node) && node.name.text === "drainControlPulse");
+    assert.equal(drains.length, 1);
   });
   assert.equal(readSource("scripts/lib/isolated-public-verification.mts"), source, "Ordered execution owner changed during controlled verification.");
 }
@@ -3614,7 +3656,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
   const orderedPreparation = body.tryBlock.statements.slice(qualityPosition, body.tryBlock.statements.indexOf(loop)).map(node => node.getText(file)).join("\n");
   const factory = new Function("ports", compile(`return async () => {
     const { assert, ts, join, sep, digest, context, runChild, receipt, children, retainedAdmission,
-      stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext } = ports;
+      stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext, drainControlPulse } = ports;
     const request = {admissionQualification:{baselineHead:"controlled-baseline"}}, heroCompatibility = false, measurement = undefined, ROOT = "controlled-root";
     const headSha = "controlled-head", localInputs = undefined, signal = new AbortController().signal;
     const manifest = [{file:"package.json"},{file:"controlled.mts"}], qualityEnvironment = {};
@@ -3653,7 +3695,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     const context = { runDirectory: "owned", sanitize: (value: string) => value, cleanEnvironment: () => ({}), record: (event: string, data: { gate: string }) => events.push(event + ":" + data.gate) };
     const activeLocalVerifications = new WeakSet([context]);
     const ports = { assert, ts, join: path.join, sep: path.sep, digest: sha256, prefix, stageInstalledDependencies: options.stageInstalledDependencies,
-      context, originalContext: context, activeLocalVerifications,
+      context, originalContext: context, activeLocalVerifications, async drainControlPulse() {},
       async runChild(_args: string[], _env: object, name: string) {
         launched.push(name);
         if (options.failedChild === name && options.driverFailure) throw options.driverFailure;
@@ -8160,4 +8202,39 @@ async function retainedFinalQualityOnly() {
 const verification = process.argv.includes("--ci-change-impact") || process.argv.includes("--change-impact-only") ? changeImpactOnly : process.argv.includes("--local-risk-verification-only") ? localRiskVerificationOnly : process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 const selectedVerification = process.argv.includes("--admission-qualification-only") ? admissionQualificationOnly
   : process.argv.includes("--owned-child-controls-only") ? ownedChildControlsOnly : verification;
-(process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : selectedVerification)().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
+(process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : selectedVerification)().catch((error: unknown) => {
+  if (process.argv.includes("--current-infrastructure-only")) {
+    // Keep the original rejection and the first failing location. Never print
+    // arbitrary messages, stack text, actual/expected strings or connection data.
+    try {
+      const value = error instanceof Error ? error : undefined;
+      const data = (key: string) => value && Object.getOwnPropertyDescriptor(value, key)?.value;
+      const scalar = (input: unknown): unknown => typeof input === "boolean" || input === null ? input
+        : typeof input === "number" && Number.isFinite(input) ? input
+        : typeof input === "string" ? { type: "string", length: input.length, sha256: sha256(input) }
+        : Array.isArray(input) ? { type: "array", length: input.length }
+        : { type: typeof input };
+      const message = data("message"), stack = value?.stack;
+      const locations = typeof stack === "string" ? stack.split("\n").slice(1).flatMap(line => {
+        const owned = /verify-isolated-supabase\.mts:(\d+):(\d+)/u.exec(line);
+        const projected = /<anonymous>:(\d+):(\d+)/u.exec(line);
+        return owned ? [{ source: "scripts/verify-isolated-supabase.mts", line: Number(owned[1]), column: Number(owned[2]) }]
+          : projected ? [{ source: "projected-current-owner", line: Number(projected[1]), column: Number(projected[2]) }] : [];
+      }).slice(0, 6) : [];
+      const operator = data("operator"), code = data("code");
+      console.error(JSON.stringify({ status: "FAIL", scope: "current-infrastructure-only", completedControls: cases.length,
+        lastCompletedControl: cases.at(-1) ?? null,
+        error: { name: value instanceof assert.AssertionError ? "AssertionError" : value instanceof ReferenceError ? "ReferenceError"
+          : value instanceof TypeError ? "TypeError" : value instanceof SyntaxError ? "SyntaxError" : "Error",
+          code: code === "ERR_ASSERTION" ? code : null,
+          operator: typeof operator === "string" && /^(?:strictEqual|notStrictEqual|deepStrictEqual|notDeepStrictEqual|==|!=|throws|rejects|match|doesNotMatch)$/u.test(operator) ? operator : null,
+          actual: scalar(data("actual")), expected: scalar(data("expected")), locations,
+          message: scalar(message), safeMessage: value instanceof ReferenceError && message === "drainControlPulse is not defined" ? message : null },
+        rawDetailsSuppressed: true }));
+    } catch {
+      console.error(JSON.stringify({ status: "FAIL", scope: "current-infrastructure-only", completedControls: cases.length,
+        diagnosticProjectionFailed: true, rawDetailsSuppressed: true }));
+    }
+  } else console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed.");
+  process.exitCode = 1;
+});

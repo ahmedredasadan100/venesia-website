@@ -2636,3 +2636,127 @@ The original nineteen local commits and six-file worktree are preserved. Only a
 fully passing targeted result permits an independent local commit, bound to the
 same tested executable bytes and source snapshot. Admission, long Build/Admin,
 Full E, CI, Push and release remain outside this task; globalClosed=false.
+
+### 27.34 Current — PostgreSQL transport recovery — 1 November 2026
+
+**Previous → current:** the preserved Targeted attempt on `7b610acf` stopped
+before Build with `APPLICATION_CLIENT_DISCONNECTED`. Its original bridge
+receipt records one `idle_timeout`, and the last successful heartbeat precedes
+the observed PG unexpected end by 61,924ms. The following child was cancelled
+before Resume; its `0xE0000001` exit is a consequence, not the disconnect cause.
+The dependency copy passed with active heartbeats and an earlier healthy lease
+renewal. Aggregate bridge counters do not identify the precise historical socket
+or prove exact CPU timing; those limits remain explicit in
+[the recovery evidence](../.tmp-qa/transport-recovery-20261101-01/audit-causal-chain.json).
+
+**Existing owners and adoption:** `runLocalVerificationSourceFloor` in
+`isolated-public-verification.mts` previously repeated synchronous source checks
+without yielding between syntax units. The live Public caller now supplies its
+existing private `drainControlPulse`; the same source units yield before that
+drain. Source predicates, order, leaf arguments, limits, failure propagation and
+same-live-context reuse remain mandatory. Root Admission and the qualified
+executor have no active PG socket and do not acquire a new heartbeat or timer.
+This is adoption of the existing lifecycle pulse, not a new verification owner.
+
+`observeApplicationClient` in `isolated-supabase.mts` already retained the raw
+Error and cause privately. The old stage/caller projections did not persist its
+safe cause/stack facts. The existing lifecycle now persists a bounded
+`transportDiagnostic` in `failure.json`: fixed codes/message classes, UTC,
+phase, control/scoped identity, a bounded cause chain and symbolic allowlisted
+stack positions. Raw errors, messages, connection strings, paths and credentials
+remain private; `rawErrorRetained=false` stays truthful. Receipt-write failures
+retain the original cause and secondary error without replacing either.
+
+**Affected consumers and verification:** the control observer and renewed/scoped
+clients share the same owner. The existing CLI pulse fixture supplies the added
+diagnostic helper; existing connection diagnostic controls add durable-evidence,
+privacy and boundary cases. The existing ordered-source controls add heartbeat
+yield, failure, cancellation and direct Public adoption proof. Governance and
+Infrastructure, the existing lease/cleanup/transport controls, and bounded live
+read-only PostgreSQL heartbeat/renewal proof remain required in that order.
+Existing package/CI registrations consume these owners unchanged; no Required
+Check, assertion, timeout, transport setting or workflow is relaxed.
+
+Actual results and preserved exits belong to
+[the targeted recovery report](../.tmp-qa/transport-recovery-20261101-01/final-handoff-report.json).
+Historical Admission/Preflight PASS stays valid only for its original inputs;
+it grants no live authority to this modified source. A passing targeted result
+can support the authorized independent local commit. Targeted Admin, Full E,
+remote CI/Preview, all six human content reviews and release closure remain
+separate and unexecuted here. No Alt, Fixture, Windows, Product, migration,
+Auth/permissions, Treasury or global runtime setting change is authorized by
+this correction. `globalClosed=false`; STOP — OWNER TRANSPORT RECOVERY REVIEW.
+
+**Terminal targeted result:** the single ordered invocation passed six Syntax
+leaves, affected strict ESLint, project TypeScript, Executable Governance and
+Verification Infrastructure. It then stopped at the existing
+`--current-infrastructure-only` entry with root exit 1. That entry emitted only
+its existing suppressed-error message and no internal assertion diagnostic;
+the failing internal predicate is UNKNOWN. Connect diagnostics, lease controls,
+transport controls, dedicated cleanup controls and the bounded live PostgreSQL
+proof were NOT RUN. No retry or second correction followed the failure. All
+eleven launched native Jobs queried zero remaining processes and closed their
+handles; no Docker/DB test resources were allocated. The candidate correction
+therefore remains unqualified and uncommitted on `7b610acf`, preserving all
+twenty existing local commits. Only safe final evidence/resource preservation
+and this terminal registry update followed the mandatory stop.
+
+### 27.35 Current — Infrastructure consumer binding recovery — 1 November 2026
+
+**Previous → current:** Section 27.34 retains the original failed invocation.
+The subsequent single authorized diagnostic completed 53 controls and proved
+`ReferenceError: drainControlPulse is not defined` in the first positive
+`verifyLocalRiskExecutionControls` projection, before its result assertions.
+The actual Public ordered-preparation call had adopted the existing private
+pulse, but the existing projected consumer omitted its binding and fixture port.
+This is incomplete verification-consumer adoption, not a Product, Fixture,
+Windows, PostgreSQL configuration, or transport-limit failure.
+
+**Owner correction:** `scripts/verify-isolated-supabase.mts` binds that same port
+in its existing factory and controlled fixture. All existing assertions remain
+intact. The existing current-infrastructure rejection handler now preserves the
+first owned source positions, error kind, assertion operator and bounded safe
+scalar/hash facts; arbitrary messages, stack text and actual/expected strings
+remain private. The original rejection is not replaced. This maintains the
+existing entry rather than introducing a diagnostic engine or runner.
+
+**Preserved adoption and consumers:** the source-floor `drainControlPulse`
+checkpoints and bounded transport cause/stack projection from 27.34 remain in
+their current owners. Existing ordered-floor, local-risk, connection-diagnostic,
+CLI pulse, lease, transport and cleanup controls are the affected consumers.
+Required checks, CI/package registrations, native ownership, transport/lease
+limits, Product, Alt and Fixtures remain unchanged. Historical evidence and all
+twenty commits are preserved; no historical PASS qualifies changed source.
+
+**Qualification:** the current source must pass Syntax, strict ESLint,
+TypeScript, Executable Governance, Verification Infrastructure, current
+infrastructure and transport/error controls before the bounded live read-only
+PG preparation/heartbeat/renewal proof. Cancellation/timeout and cleanup keep
+their existing owners and scoped evidence. Actual results belong to
+[the final recovery handoff](../.tmp-qa/final-infrastructure-transport-recovery-20261101-01/final-handoff-report.json).
+No long Build/Admin, Full E, Push, CI, Vercel, Ready, Merge or deployment is
+authorized here. Commit eligibility depends on all required targeted controls
+passing. Owner review remains pending; `globalClosed=false`.
+
+**Terminal scoped qualification:** the fresh ordered invocation passed all
+fourteen leaves (six Syntax inputs, affected strict ESLint, project TypeScript,
+Executable Governance, Verification Infrastructure, current infrastructure,
+connection diagnostics, control lease and transport). The single live PG proof
+then passed normal/read-only-transaction/active-query behavior, verified-idle
+renewal, 26 synchronous source units totalling 78 seconds, 13 real heartbeat
+samples and due renewal after 241.386 seconds. The maximum measured heartbeat
+gap was 21.831 seconds against the unchanged 60-second idle limit. It used the
+exact current source-floor declaration with controlled downstream leaves; it
+did not rerun Build/Admin or canonical downstream checks.
+
+Active-query cancellation retained its expected native `PREPARATION_CANCELLED`
+result, and the owner cleanup completed with zero owned resources, originals
+unchanged and private environment removed. The final existing cleanup entry
+passed 107 controls. All three qualification invocations exited 0, with no
+automatic retry. Diagnostic/cause/privacy controls use controlled observer
+faults and the actual collector statement with JSON serialization; installed-PG
+EOF/timeout controls cover connection establishment. They do not reconstruct
+historical raw errors or claim a deployed PG outage/disk-failure recovery.
+Only this terminal documentation update followed qualification; runtime inputs
+remain frozen for the authorized independent commit. Release closure and human
+approval remain outside this bounded result. STOP — OWNER TARGETED TRANSPORT REVIEW.

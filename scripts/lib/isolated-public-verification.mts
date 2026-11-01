@@ -134,10 +134,22 @@ async function runLocalVerificationSourceFloor(options: {
   context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
   signal: AbortSignal; sources: ReadonlyMap<string, string | Buffer>; changedFiles: readonly string[];
   verifySource: () => void; governance: readonly { step: string; limitMs: number; successMarker?: string }[]; governanceQualified: boolean;
+  drainControlPulse?: () => Promise<void>;
   canonical?: { npmCli: string; environment: NodeJS.ProcessEnv; childNames: readonly [string, string]; onStart?: (name: string) => void };
   prior?: { contextSha256: string; sourceSha256: string; syntaxFiles: string[];
     checks: Array<{ stage: string; step: string; limitMs: number; result: Awaited<ReturnType<typeof runOwnedVerificationChild>> }> };
 }) {
+  // Public preparation owns a live PG socket. Yield between the existing
+  // synchronous source units so its existing heartbeat/renewal can settle;
+  // draining alone cannot run a timer while this event loop is monopolized.
+  const checkpoint = async () => {
+    options.signal.throwIfAborted();
+    await new Promise<void>(done => setImmediate(done));
+    options.signal.throwIfAborted();
+    await options.drainControlPulse!();
+    options.signal.throwIfAborted();
+  };
+  if (options.drainControlPulse) await checkpoint();
   options.signal.throwIfAborted(); options.verifySource();
   let environment: NodeJS.ProcessEnv = { NODE_ENV: "test", CI: "1" };
   const clean = options.context.cleanEnvironment();
@@ -156,6 +168,7 @@ async function runLocalVerificationSourceFloor(options: {
   const checks: Array<{ stage: string; step: string; limitMs: number; result: Awaited<ReturnType<typeof runOwnedVerificationChild>> }> = [];
   const prior = options.prior?.contextSha256 === contextSha256 && options.prior.sourceSha256 === sourceSha256 ? options.prior : undefined;
   for (const file of syntaxFiles) {
+    if (options.drainControlPulse) await checkpoint();
     options.signal.throwIfAborted(); options.verifySource();
     const parsed = ts.createSourceFile(file, options.sources.get(file)!.toString(), ts.ScriptTarget.Latest, false,
       /\.[cm]?tsx?$/u.test(file) ? (/\.tsx$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS) : /\.jsx$/u.test(file) ? ts.ScriptKind.JSX : ts.ScriptKind.JS);
@@ -167,6 +180,7 @@ async function runLocalVerificationSourceFloor(options: {
   const children = new Set<ChildProcess>(), seen = new Set<string>();
   let firstFailure: unknown;
   const run = async (stage: string, step: string, args: string[], limitMs: number) => {
+    if (options.drainControlPulse) await checkpoint();
     options.signal.throwIfAborted(); options.verifySource();
     if (seen.has(step)) {
       assert.equal(checks.find(check => check.step === step)?.limitMs, limitMs, "Duplicate leaf has an ambiguous deadline.");
@@ -190,6 +204,7 @@ async function runLocalVerificationSourceFloor(options: {
       const failure = new Error("Ordered " + stage + " check failed; dependent verification was not started.");
       Object.defineProperty(failure, "childResult", { value: result }); throw failure;
     }
+    if (options.drainControlPulse) await checkpoint();
     options.signal.throwIfAborted(); options.verifySource();
   };
   try {
@@ -5654,7 +5669,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     const sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory, context, signal,
       sources: new Map(manifest.map(row => [row.file, readFileSync(join(sourceDirectory, row.file))] as const)),
       changedFiles: liveAdmission?.sourceDiscovery.changes.map(change => change.file) ?? localInputs?.changes.map(change => change.file) ?? [],
-      verifySource, governance: [],
+      verifySource, drainControlPulse, governance: [],
       governanceQualified: Boolean(liveAdmission),
       ...(qualityPrefix.length ? { canonical: { npmCli: npmCli!, environment: qualityEnvironment,
         childNames: [qualityPrefix[0]!.name, qualityPrefix[1]!.name] as const,
