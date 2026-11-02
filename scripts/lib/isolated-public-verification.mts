@@ -1933,10 +1933,13 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   const qualityReasons = analysis.changes.filter(change => /^(?:scripts|tests)\//u.test(change.file) && change.semanticChange);
   // These are reviewed effect contracts for two existing direct source leaves, not their npm composites.
   // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
+  // Exact Windows24/Linux22 contexts share this order; an unknown or mixed context is never inherited.
   const sourceGuards = [
-    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", marker: "Executable governance PASS" },
-    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: "c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b", marker: "PASS verification infrastructure:" },
+    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", "f5f8d2bdd3b5bc3fc9970c8635e481ce2d3577783adec7d474fd46e73e899dee"], marker: "Executable governance PASS" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: ["c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b", "96c02fd6676dfc6140a75f618fb240613091cf63bf27d8ff0c6c1a52ceaaba33"], marker: "PASS verification infrastructure:" },
   ];
+  const knownContexts = sourceGuards.map(guard => guard.sha256.indexOf(sourceGuardSha256[guard.entry])).filter(index => index >= 0);
+  const mixedContexts = new Set(knownContexts).size > 1;
   const qualityBlockers: string[] = [];
   const selections = [{ family: "admin-form-save-cache", selected: reasons.length > 0, qualified: targets.length > 0,
     reason: reasons.length ? blockers.length ? "effect_contract_blocked" : "affected_qualified_form_runtime" : "no_affected_form_runtime",
@@ -1946,7 +1949,8 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
     const canonicalChecks = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(command)).sort();
     const affected = qualityReasons.filter(change => change.candidateChecks.includes(guard.check)
       || canonicalChecks.some(check => change.candidateChecks.includes(check)));
-    const failures = [...(!/^[a-f0-9]{64}$/u.test(guard.sha256) || sourceGuardSha256[guard.entry] !== guard.sha256 ? ["qualified_source_guard_bytes_changed_review_effect_contract:" + guard.entry] : []),
+    const failures = [...(!guard.sha256.every(value => /^[a-f0-9]{64}$/u.test(value)) || new Set(guard.sha256).size !== guard.sha256.length
+      || !guard.sha256.includes(sourceGuardSha256[guard.entry]) || mixedContexts ? ["qualified_source_guard_bytes_changed_review_effect_contract:" + guard.entry] : []),
       ...(!canonicalChecks.length ? ["missing_exact_registered_source_guard:" + guard.entry] : []),
       ...(analysis.changes.some(change => ["package.json", "package-lock.json"].includes(change.file) && change.semanticChange) ? ["dependency_or_command_contract_changed"] : [])];
     if (affected.length) qualityBlockers.push(...failures);
@@ -1957,7 +1961,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
       canonicalChecks, owners: [guard.entry], capabilities: ["verification_quality"], contracts: ["docs/QA_RELEASE_CLOSURE.md#3.2.2"],
       consumers: [...new Set(affected.map(change => change.file))].sort(),
       reasons: affected.map(change => ({ file: change.file, owners: change.owners, capabilities: change.capabilities, contracts: change.contracts, consumers: change.consumers })),
-      fixtureSha256: guard.sha256, effects: ["source_read", "owned_temp_filesystem", "owned_process"], supportedPlatforms: ["win32", "linux"], limitMs: 180_000,
+      fixtureSha256: sourceGuardSha256[guard.entry], effects: ["source_read", "owned_temp_filesystem", "owned_process"], supportedPlatforms: ["win32", "linux"], limitMs: 180_000,
       proofLevel: "source_guard_execution", successMarker: guard.marker, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false });
   }
   return { targets: [...new Map(targets.map(target => [target.step, target])).values()]

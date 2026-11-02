@@ -6969,6 +6969,49 @@ async function verifyQualifiedSelectionControls() {
       assert.ok(rejected.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:scripts/verify-verification-infrastructure.mts"));
     }
   });
+  const linuxSourceGuardHashes = {
+    "scripts/verify-executable-governance.mts": "f5f8d2bdd3b5bc3fc9970c8635e481ce2d3577783adec7d474fd46e73e899dee",
+    "scripts/verify-verification-infrastructure.mts": "96c02fd6676dfc6140a75f618fb240613091cf63bf27d8ff0c6c1a52ceaaba33",
+  };
+  check("the reviewed Linux context selects both actual source leaves with their matching supplied fingerprints", () => {
+    const result = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, linuxSourceGuardHashes);
+    assert.deepEqual(result.blocking, []); assert.equal(result.targets.length, 2);
+    assert.equal(result.selections.filter(row => row.selected && row.qualified).length, 2);
+    assert.equal(new Set(result.targets.map(target => target.step)).size, 2);
+    for (const [entry, fingerprint] of Object.entries(linuxSourceGuardHashes)) {
+      const target = result.targets.find(row => row.entry === entry); assert.ok(target);
+      assert.equal(target.fixtureSha256, fingerprint); assert.equal(target.step, "node --experimental-strip-types " + entry);
+      assert.equal(target.kind, "source_guard"); assert.equal(target.proofLevel, "source_guard_execution");
+      assert.equal(target.nativePersistenceVerified, false); assert.equal(target.businessConsumerAdoptionVerified, false);
+    }
+    assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+  });
+  for (const [name, mixed] of [
+    ["Windows Governance with Linux Infrastructure", { ...nativePortEffects, "scripts/verify-verification-infrastructure.mts": linuxSourceGuardHashes["scripts/verify-verification-infrastructure.mts"] }],
+    ["Linux Governance with Windows Infrastructure", { ...linuxSourceGuardHashes, "scripts/verify-verification-infrastructure.mts": nativePortEffects["scripts/verify-verification-infrastructure.mts"] }],
+  ] as const) check("recognized mixed source guard contexts cannot authorize execution: " + name, () => {
+    const result = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, mixed);
+    assert.deepEqual(result.targets, []); assert.equal(result.selections.filter(row => row.selected).length, 2);
+    for (const entry of Object.keys(linuxSourceGuardHashes)) {
+      const selection = result.selections.find(row => row.family === entry); assert.ok(selection);
+      assert.equal(selection.selected, true); assert.equal(selection.qualified, false); assert.equal(selection.reason, "effect_contract_blocked");
+      assert.ok(result.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:" + entry));
+    }
+    assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+  });
+  for (const [context, reviewed] of [["Windows", nativePortEffects], ["Linux", linuxSourceGuardHashes]] as const) {
+    for (const unknownEntry of Object.keys(linuxSourceGuardHashes)) check(context + " retains only its known source leaf when the other fingerprint is unknown: " + unknownEntry, () => {
+      const supplied = { ...reviewed, [unknownEntry]: "f".repeat(64) };
+      const result = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, supplied);
+      assert.equal(result.targets.length, 1); assert.equal(result.selections.filter(row => row.selected).length, 2);
+      assert.equal(result.targets.some(row => row.entry === unknownEntry), false);
+      assert.equal(result.selections.find(row => row.family === unknownEntry)?.qualified, false);
+      assert.ok(result.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:" + unknownEntry));
+      const known = result.targets[0]!; assert.equal(known.fixtureSha256, supplied[known.entry as keyof typeof supplied]);
+      assert.equal(result.selections.find(row => row.family === known.entry)?.qualified, true);
+      assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+    });
+  }
   };
   verifyActualSourceGuardQualification({ qualifyLocalVerificationTargets: qualify });
   check("complete native closure includes unused eager imports re-exports and transitive owners while preserving default graph behavior", () => {
@@ -7010,6 +7053,16 @@ async function verifyQualifiedSelectionControls() {
       executableSha256: sha256(readFileSync(process.execPath)), installedLockSha256: sha256(lock), execArgv: ["--experimental-strip-types"] };
     const entry = "scripts/verify-verification-infrastructure.mts", original = effects(entry, sources, runtime, lock);
     assert.deepEqual(original.unresolved, []); assert.match(original.fingerprint!, /^[a-f0-9]{64}$/u);
+    const governanceEntry = "scripts/verify-executable-governance.mts", governance = effects(governanceEntry, sources, runtime, lock);
+    assert.deepEqual(governance.unresolved, []); assert.match(governance.fingerprint!, /^[a-f0-9]{64}$/u);
+    const actualSourceGuardHashes: Record<string, string> = { [governanceEntry]: governance.fingerprint!, [entry]: original.fingerprint! };
+    const actualSelection = qualify(scripts, qualityAnalysis(), fixtureHash, actualSourceGuardHashes);
+    assert.deepEqual(actualSelection.blocking, []); assert.equal(actualSelection.targets.length, 2);
+    assert.equal(actualSelection.selections.filter(row => row.selected && row.qualified).length, 2);
+    for (const target of actualSelection.targets) {
+      assert.equal(target.fixtureSha256, actualSourceGuardHashes[target.entry]);
+      assert.equal(target.kind, "source_guard"); assert.equal(target.step, "node --experimental-strip-types " + target.entry);
+    }
     assert.equal(original.generated?.producers.length, 4); assert.equal(original.generated?.dynamicSourceEntries.length, 17);
     assert.equal(original.generated?.fragments.filter(row => row.selector === "actual_assertion_statement").length, 4);
     assert.ok(original.generated?.fragments.some(row => row.selector === "actual_controlled_fixture_loop"));

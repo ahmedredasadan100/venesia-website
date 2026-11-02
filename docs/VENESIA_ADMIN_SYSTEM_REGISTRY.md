@@ -2869,3 +2869,180 @@ with failed execution cannot admit the source. Current ordered verification,
 are retained in [this task's evidence](../.tmp-qa/governance-admission-release-20261101-01/final-handoff-report.md).
 The original failed Admission and historical evidence remain unchanged; six
 human reviews stay pending and `globalClosed=false` until their own conditions.
+
+### 27.39 Control Lease — pending connection error preservation
+
+**Previous → current:** Full E on `21079143` passed 24 gates, then its control
+heartbeat's replacement `pg.Client.connect()` timed out while Gate 25 was
+running. The 5000ms connection budget produced the retained 5010ms observation;
+the child was cancelled afterwards. The operational reason for the stalled
+handshake remains UNKNOWN. Original Admission/Preflight and Targeted Admin5/5
+remain scoped to their original runtime and source; no historical receipt or
+later projection reconstructs the missing failure-time evidence.
+
+**Existing owner and consumers:** the pending-connect catch in
+`scripts/lib/isolated-supabase.mts` previously kept its safe classification,
+elapsed time and bridge counters, but discarded the original pg Error before
+the established-client observer could be attached. That catch now privately
+retains the original Error and reuses `describeOwnedPgClientFailure`, with
+phase `database-connect` and the same bounded elapsed observation. Both cause
+and frozen diagnostic are nonenumerable; existing causes/diagnostics remain
+intact and no self-cause is created. The shared factory's client state stays
+unknown: initial, readiness, scoped and replacement calls are not all labeled
+as established/current control sockets.
+
+The existing `failure.json` collector publishes the safe diagnostic while
+`rawErrorRetained=false` remains the truthful raw-evidence privacy boundary.
+Raw messages, paths, stack text, SQL and credentials are not serialized. The
+generic `asSafeError` policy is unchanged, including application-query privacy.
+Connection classification, capacity/connection/query/lease deadlines, healthy
+return path, fail-closed renewal, cancellation and cleanup remain authoritative.
+There is no new owner, adapter, harness, command, retry or transport setting.
+
+The existing connection diagnostics consumer maintains original assertions and
+adds pending Error/cause/elapsed/privacy/collector and actual-connect lease
+proof. Existing lease and transport controls retain their cancellation/cleanup
+coverage. Canonical package and CI consumers, including Admin Core Closure,
+are unchanged; the first 24 Full E gates and Full E are not rerun here.
+Ordered targeted results, current correspondence, raw/Git binding and final
+resource preservation belong to
+[this recovery evidence](../.tmp-qa/control-lease-recovery-20261101-01/final-handoff-report.md).
+This is diagnostic-gap qualification, not a claimed repair of the historical
+timeout. Six human reviews and release closure remain separate;
+`globalClosed=false`. STOP — OWNER CONTROL LEASE RECOVERY REVIEW.
+
+### 27.40 Consolidated QA Recovery — 2 November 2026
+
+**Previous → current / T1:** the retained Correspondence attempt on the
+`21079143` worktree crossed a directly recorded system Sleep interval from
+06:40:54Z to 07:40:54Z on 1 November, with a hardware-clock resynchronization
+at resume. The suspended host could not execute the existing 30-minute child
+deadline or native watchdog during that interval. The helper's exit5 matches
+the existing watchdog hard-stop path; no source path doubles the deadline.
+The child did start its dependency import path, but its precise later source
+analysis stage and native main-thread/cleanup ordering remain UNKNOWN.
+The missing terminal receipt, root exit UNKNOWN and cleanup FAIL are preserved;
+neither current PID absence nor a later successful control repairs that history.
+
+The existing `runOwnedVerificationChild` collector also discarded a direct,
+cause-less cleanup Error from its safe projection. Its bounded projection now
+retains the cleanup stage, fixed error class, finite code/exit facts and native
+receipt availability without reading arbitrary getters or serializing messages,
+stack text, credentials or raw cause objects. The exact original cleanup Error
+remains private in the rejection's existing cause. Native creation/ownership,
+deadlines, watchdog, cancellation, receipt validation and fail-closed cleanup
+requirements are unchanged. Existing child lifecycle controls cover this
+projection at their real missing-receipt and controlled failure boundaries.
+
+**Dependent scope:** T2 belongs to the existing `qualifyLocalVerificationTargets`
+effect qualification, including exact source/runtime/dependency and command
+bindings for the declared Windows24/Linux22 contexts. No computed hash alone
+is approval and no unknown runtime borrows another context's qualification.
+T3 remains the pending-connect diagnostic candidate in Section27.39; its
+historical PostgreSQL operational initiating cause stays UNKNOWN. No dependent
+package starts before the preceding required qualification succeeds.
+
+Current source identities, ordered positive/negative/boundary outcomes,
+cross-runtime limits, final Git binding and preservation belong to
+[the consolidated recovery handoff](../.tmp-qa/consolidated-qa-recovery-20261102-01/final-handoff-report.md).
+This entry grants no pending result, no Full E, CI or release authority. All
+previous assertions/contracts and the six pending human reviews remain;
+`globalClosed=false`. STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
+
+**Current bounded outcome:** T1 passed its ordered Syntax/ESLint/TypeScript,
+Governance/Infrastructure, 120 owned-child controls, one Correspondence48/48
+execution, and the existing Admission input profile containing the twelve new
+cleanup diagnostic/primary-failure cases. These are scoped current-source
+controls, not a fresh release Admission or Full E. Their terminal Native
+receipts and zero-owned-process cleanup are retained.
+
+The single T2 Linux preparation stopped before either canonical quality leaf:
+`git --version` could not launch (`spawnSync git ENOENT`). The exact safe
+message was recovered by matching its SHA256 to the original failure record;
+no new runtime attempt or calculated fingerprint was accepted. No Linux
+effect was approved and the existing qualifier remains unchanged. The owned
+container was removed, original Docker/Treasury metadata remained unchanged,
+and source preservation passed. T3 and integrated execution remain BLOCKED;
+their candidate source is retained, with no new commit or release action.
+The terminal outcome and later documentation-only source delta are bound in
+the linked recovery handoff. Historical missing-receipt/cleanup gaps remain
+separate and unresolved as historical evidence.
+
+### 27.41 Consolidated QA Final Continuation — 2 November 2026
+
+**Previous → current:** the prior T2 `spawnSync git ENOENT` is now isolated to
+the exact cached `node:22-alpine` image. One actual bounded image diagnostic
+proved that Git is absent from every actual PATH candidate and from the APK
+installed database. Alpine3.24.2 has its musl loader; Node22.23.3's actual
+binary identity is retained. This is a missing executable dependency, not a
+proved PATH or loader defect. T1's qualified code/dependencies and48/48 source
+correspondence remain unchanged and were not rerun.
+
+Git provisioning was attempted only inside an owned container derived from
+that same cached image, with official matching Alpine repository/key/index
+inputs and no host source, Git, credentials, dependencies or Docker socket
+mounted. It stopped before download/install: the task caller required the old
+`--no-network` spelling, while actual APK3.0.8 help documents `--network[=BOOL]`.
+This is a proven task-caller API representation error; it is not evidence that
+APK lacks network-disable capability. The failed input, original safe error,
+four help results and proposed option-only correction are preserved. The
+review correction was not executed and the remaining provisioning paths are
+unqualified. No post-failure provisioning retry was performed.
+
+No derived image or package installation was created. The exact diagnostic
+and provisioning containers were removed, and original Docker/Treasury
+metadata remained unchanged. T2 qualification, its Linux owner/negative
+controls, T3 and Integrated Verification did not begin. Manually reviewed
+Linux effect candidates remain NOT QUALIFIED and were never added to
+`qualifyLocalVerificationTargets`; no tracked QA or Product code changed.
+Two task-only optional metadata reader faults before any container allocation
+are retained separately from the single actual image diagnostic and single
+provisioning attempt. No failed attempt was relabeled PASS.
+
+Current source binding, raw artifacts, preservation and remaining work belong
+to [the final-continuation handoff](../.tmp-qa/consolidated-qa-final-continuation-20261102-01/final-handoff-report.md).
+The five existing modified tracked files and24 local commits are retained,
+with no new commit, CI, Full E or release action. The six human reviews and
+historical PostgreSQL initiating cause remain independent; `globalClosed=false`.
+STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
+
+### 27.42 Autonomous Consolidated QA Recovery — 2 November 2026
+
+**Previous → current / bounded maintenance:** Section27.41's APK3 caller
+spelling was corrected to the executable's documented `--network=no` form.
+The first fetch exposed stale signed indexes with eight official-mirror404s;
+those original errors remain preserved. One explicit signed index refresh
+and offline installation of verified new packages provided real Git2.54.0 in
+an exact-owned derivative of the same cached Alpine/Node22 image. All original
+package versions, Node bytes, trusted keys and original Docker/Treasury
+resources were preserved. Provisioning is dependency preparation, not effect
+qualification; the derived image is task-owned and reversible.
+
+The existing `qualifyLocalVerificationTargets` owns both exact reviewed
+Windows24 and Linux22 effect contexts. Its two source guards retain their
+source/runtime/lock/command binding and original180s limits. Emitted targets
+bind the actual accepted effect fingerprint. Unknown or mixed known contexts
+remain unqualified; partial known/unknown selection retains the original
+per-leaf blocking behavior. Existing selector/actual-footprint controls add
+Linux and mixed-context vectors without removing earlier assertions. Direct
+consumers remain current Infrastructure, Admission and local verification;
+no parallel owner, capability, registry or release approval was introduced.
+
+T1 remains scoped retained PASS only where the exact named executable
+witnesses, Native owner and dependencies are unchanged. Whole-file hashes
+changed by T2 are not presented as a fresh T1 receipt or live Admission.
+T3 remains within `runIsolatedSupabase/connect`: the original pending-connect
+Error stays private in Runtime while bounded stage/elapsed/code/cause facts
+use the existing safe diagnostic projection. Connection5000ms, lease policy,
+retry policy, timeout/cancellation and native cleanup contracts are retained.
+The initiating operational cause of historical Gate25 remains UNKNOWN.
+
+The exact current-source/runtime execution status, positive/negative/boundary
+controls, Correspondence48/48, integrated binding, Native receipts, owned
+cleanup, Git commits and preservation are recorded in
+[the autonomous recovery handoff](../.tmp-qa/autonomous-qa-recovery-20261102-01/final-handoff-report.md).
+This entry grants no qualification from a calculated fingerprint, no new
+live release Admission and no release authority. Historical failed receipts
+remain failed; six human content reviews remain Pending. Product consumers,
+presentation and preserved capabilities are unchanged; `globalClosed=false`.
+STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
