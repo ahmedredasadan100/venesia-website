@@ -5802,10 +5802,16 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
         assert.equal((identity as NativeIdentity & { jobHandleNonInheritable: boolean }).jobHandleNonInheritable, true);
         assert.equal(helper.kill(), true); const error = await outcome; assert.ok(error instanceof Error && /cleanup failed/u.test(error.message));
         const retained = (error as Error & { childResult: { code: number | null; signal: NodeJS.Signals | null;
-          helperExit: { code: number | null; signal: NodeJS.Signals | null }; nativeJobReceipt: NativeReceipt | null; cleanup: { status: string } } }).childResult;
+          helperExit: { code: number | null; signal: NodeJS.Signals | null }; nativeJobReceipt: NativeReceipt | null; cleanup: { status: string };
+          cleanupFailure: { stage: string; name: string; code: string | null; exitCode: number | null; nativeReceipt: string } } }).childResult;
         assert.equal(retained.nativeJobReceipt, null); assert.equal(retained.cleanup.status, "FAIL");
         assert.deepEqual(retained.helperExit, { code: helper.exitCode, signal: helper.signalCode });
         assert.equal(retained.code, null); assert.equal(retained.signal, null); await treeProof(identities, identity);
+        assert.deepEqual(retained.cleanupFailure, { stage: "owned-child-cleanup", name: "AssertionError", code: "ERR_ASSERTION",
+          exitCode: null, nativeReceipt: "unavailable" });
+        assert.ok(error.cause instanceof assert.AssertionError);
+        assert.equal(Object.getOwnPropertyDescriptor(error, "cause")?.enumerable, false);
+        assert.equal(JSON.stringify(error).includes("Native job cleanup evidence is missing."), false);
         await absent([identity.helperPid]); children.delete(helper);
         runtimeProofs.push({ control: "windows_native_last_handle_close", identities, nativeJobIdentity: identity, result: retained,
           knownContainedProcessesAbsent: true, zeroMembershipReceiptAvailable: false, expectedMissingReceiptRejected: true });
@@ -6612,7 +6618,7 @@ async function verifyAdoptionDeadlineControls() {
   type ControlledChild = EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; pid: number; exitCode: number | null; signalCode: NodeJS.Signals | null };
   const code = compile(["ownedPath", "runOwnedVerificationChild"].map(name => declaration(name).getText(file).replace(/^export /u, "")).join("\n"));
   const proofs: Array<Record<string, unknown>> = [];
-  const fixture = () => {
+  const fixture = (fault?: { cleanupFailure?: Error; receiptFailure?: Error; missingReceipt?: boolean }) => {
     const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), pid: 701,
       exitCode: null as number | null, signalCode: null as NodeJS.Signals | null }) as ControlledChild;
     const writes = new Map<string, string>(), children = new Set<ChildProcess>(), scheduled: Array<{ callback: () => void; delay: number }> = [];
@@ -6626,8 +6632,10 @@ async function verifyAdoptionDeadlineControls() {
       assert, path.isAbsolute, path.resolve, path.sep, () => false, forbidden,
       (options: Record<string, unknown>) => { launches.push(options); return { child,
         readIdentity: () => ({ rootPid: 702, rootPpid: child.pid, rootCreationTimeUtc: "2026-10-30T00:00:00.0000000Z" }),
-        readReceipt: () => ({ ...nativeState }), native: { executable: "controlled-no-native-executable" } }; },
-      async (_child: unknown, _environment: unknown, reason?: string) => { assert.equal(_child, child); stopped.push(reason ?? null); return cleanup; },
+        readReceipt: () => { if (fault?.receiptFailure) throw fault.receiptFailure; return fault?.missingReceipt ? null : { ...nativeState }; },
+        native: { executable: "controlled-no-native-executable" } }; },
+      async (_child: unknown, _environment: unknown, reason?: string) => { assert.equal(_child, child); stopped.push(reason ?? null);
+        if (fault?.cleanupFailure) throw fault.cleanupFailure; return cleanup; },
       (name: string, text: string) => { assert.equal(writes.has(name), false); writes.set(name, text); },
       (callback: () => void, delay: number) => { const timer = { callback, delay }; scheduled.push(timer); return timer; },
       (timer: unknown) => cleared.push(timer), { platform: "win32", pid: process.pid }) as typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
@@ -6635,8 +6643,8 @@ async function verifyAdoptionDeadlineControls() {
       cleanEnvironment: (): NodeJS.ProcessEnv => ({ NODE_ENV: "test" }) };
     const invoke = (signal = new AbortController().signal, limitMs = requireActualBudget(budgetApi)) => run({ sourceDirectory: root, context, children, signal },
       ["--experimental-strip-types", "scripts/verify-admin-row-actions-capability.mts", "--consumer-capability-audit"], { NODE_ENV: "test" }, "controlled-adoption", limitMs);
-    const close = (rootCode: number, reason = "completed") => { nativeState.rootExitCode = rootCode; nativeState.reason = reason;
-      child.exitCode = 0; child.emit("close", 0); };
+    const close = (rootCode: number, reason = "completed", helperCode = 0) => { nativeState.rootExitCode = rootCode; nativeState.reason = reason;
+      child.exitCode = helperCode; child.emit("close", helperCode); };
     return { invoke, close, child, writes, children, scheduled, cleared, stopped, launches };
   };
   const bounded = async <T,>(pending: Promise<T>) => {
@@ -6676,6 +6684,80 @@ async function verifyAdoptionDeadlineControls() {
     assert.deepEqual(value.stopped, [reason]); assert.equal(value.children.size, 0); assert.deepEqual(value.cleared, [value.scheduled[0]]);
     proofs.push({ control: "owned_" + reason, originalRootExit: { code: error.childResult.code, signal: error.childResult.signal },
       helperExit: error.childResult.helperExit, cleanup: error.childResult.cleanup, actualNativeProcessExecuted: false });
+  });
+  type CleanupDiagnostic = { stage: string; name: string; code: string | null; exitCode: number | null; nativeReceipt: string };
+  type CleanupRejection = Error & { childResult: { code: number | null; signal: NodeJS.Signals | null; reason: string | null;
+    cleanup: { status: string; processTreeVerified: boolean }; cleanupFailure: CleanupDiagnostic;
+    helperExit: { code: number | null; signal: NodeJS.Signals | null }; nativeJobReceipt: unknown } };
+  const privateDetail = "postgres://private-user:private-password@private-host/private-database";
+  const originalAssertion = new assert.AssertionError({ message: "Native job cleanup evidence is missing." });
+  const malformedReceipt = new SyntaxError("Malformed native receipt contains " + privateDetail);
+  const hostile = Object.assign(new Error(privateDetail, { cause: { code: privateDetail, exitCode: privateDetail } }),
+    { name: privateDetail, code: privateDetail, stack: privateDetail });
+  let getterReads = 0;
+  const noGetter = () => { getterReads++; throw Error("Private cleanup getter must never run."); };
+  const hostileGetters = new Error(privateDetail);
+  hostileGetters.stack = privateDetail;
+  Object.defineProperties(hostileGetters, { name: { get: noGetter }, code: { get: noGetter }, cause: { get: noGetter } });
+  const causeGetters = new Error(privateDetail, { cause: Object.defineProperties({}, { code: { get: noGetter }, exitCode: { get: noGetter } }) });
+  const diagnosticCases: Array<{ name: string; error: Error; expected: Omit<CleanupDiagnostic, "stage">; receiptFailure?: Error; missingReceipt?: boolean }> = [
+    { name: "direct cause-less native receipt assertion", error: originalAssertion, missingReceipt: true,
+      expected: { name: "AssertionError", code: "ERR_ASSERTION", exitCode: null, nativeReceipt: "unavailable" } },
+    { name: "direct cause-less cleanup error", error: new Error("Native job owner exceeded its independent cleanup bound."), missingReceipt: true,
+      expected: { name: "Error", code: null, exitCode: null, nativeReceipt: "unavailable" } },
+    { name: "original malformed native receipt SyntaxError", error: malformedReceipt, receiptFailure: malformedReceipt,
+      expected: { name: "SyntaxError", code: null, exitCode: null, nativeReceipt: "unavailable" } },
+    { name: "existing safe cause code and exit", error: new Error(privateDetail, { cause: { code: "ECONNRESET", exitCode: 37 } }),
+      expected: { name: "Error", code: "ECONNRESET", exitCode: 37, nativeReceipt: "present" } },
+    { name: "direct safe code takes precedence over cause code", error: Object.assign(new TypeError(privateDetail, { cause: { code: "EPIPE", exitCode: 0 } }), { code: "ERR_DIRECT" }),
+      expected: { name: "TypeError", code: "ERR_DIRECT", exitCode: 0, nativeReceipt: "present" } },
+    { name: "safe code retains its exact 64-character boundary", error: Object.assign(new RangeError(privateDetail), { code: "E".repeat(64) }),
+      expected: { name: "RangeError", code: "E".repeat(64), exitCode: null, nativeReceipt: "present" } },
+    { name: "oversized code and nonfinite exit are omitted", error: Object.assign(new Error(privateDetail, { cause: { exitCode: Number.POSITIVE_INFINITY } }), { code: "E".repeat(65) }),
+      expected: { name: "Error", code: null, exitCode: null, nativeReceipt: "present" } },
+    { name: "hostile name code message stack and cause strings stay private", error: hostile,
+      expected: { name: "Error", code: null, exitCode: null, nativeReceipt: "present" } },
+    { name: "hostile error accessors never execute", error: hostileGetters,
+      expected: { name: "Error", code: null, exitCode: null, nativeReceipt: "present" } },
+    { name: "hostile cause accessors never execute", error: causeGetters,
+      expected: { name: "Error", code: null, exitCode: null, nativeReceipt: "present" } },
+  ];
+  for (const item of diagnosticCases) await control("actual child cleanup diagnostic preserves " + item.name, async () => {
+    const value = fixture({ cleanupFailure: item.error, receiptFailure: item.receiptFailure, missingReceipt: item.missingReceipt });
+    const pending = value.invoke(), rejected = bounded(pending).then(() => assert.fail("Cleanup failure must reject."), error => error as CleanupRejection);
+    value.close(37); const error = await rejected;
+    assert.ok(error instanceof Error && /cleanup failed/u.test(error.message));
+    assert.equal(error.cause, item.error); assert.equal(Object.getOwnPropertyDescriptor(error, "cause")?.enumerable, false);
+    assert.deepEqual(error.childResult.cleanupFailure, { stage: "owned-child-cleanup", ...item.expected });
+    assert.equal(error.childResult.cleanup.status, "FAIL"); assert.equal(error.childResult.cleanup.processTreeVerified, false);
+    assert.deepEqual(error.childResult.helperExit, { code: 0, signal: null });
+    assert.equal(error.childResult.code, item.expected.nativeReceipt === "present" ? 37 : null); assert.equal(error.childResult.signal, null);
+    assert.equal(error.childResult.reason, item.expected.nativeReceipt === "present" ? "nonzero_exit" : null);
+    assert.deepEqual(value.stopped, [null]); assert.equal(value.children.size, 1); assert.equal(value.launches.length, 1);
+    assert.equal(value.scheduled.length, 1); assert.deepEqual(value.cleared, [value.scheduled[0]]); assert.equal(value.writes.size, 2);
+    assert.equal(JSON.stringify(error).includes(privateDetail), false); assert.equal(JSON.stringify(error.childResult).includes("Malformed native receipt"), false);
+    assert.equal([...value.writes.values()].some(text => text.includes(privateDetail)), false); assert.equal(getterReads, 0);
+    proofs.push({ control: "cleanup_diagnostic_" + item.name, cleanupFailure: error.childResult.cleanupFailure,
+      cleanup: error.childResult.cleanup, rawPrivateErrorRetained: error.cause === item.error, actualNativeProcessExecuted: false });
+  });
+  for (const reason of ["timeout", "cancelled"] as const) await control("actual child retains primary " + reason + " when native cleanup evidence is unavailable", async () => {
+    const original = new assert.AssertionError({ message: "Native job cleanup evidence is missing." });
+    const value = fixture({ cleanupFailure: original, missingReceipt: true }), controller = new AbortController();
+    const pending = value.invoke(controller.signal), rejected = bounded(pending).then(() => assert.fail("Termination and cleanup failure must reject."), error => error as CleanupRejection);
+    if (reason === "timeout") value.scheduled[0]!.callback(); else controller.abort(Error("Controlled deadline cancellation"));
+    value.close(37, reason, 5); const error = await rejected;
+    assert.ok(error instanceof Error && /aborted or exceeded its bound/u.test(error.message));
+    assert.equal(error.childResult.reason, reason); assert.equal(error.cause, original);
+    assert.equal(Object.getOwnPropertyDescriptor(error, "cause")?.enumerable, false);
+    assert.deepEqual(error.childResult.cleanupFailure, { stage: "owned-child-cleanup", name: "AssertionError", code: "ERR_ASSERTION",
+      exitCode: null, nativeReceipt: "unavailable" });
+    assert.equal(error.childResult.nativeJobReceipt, null); assert.equal(error.childResult.code, null); assert.equal(error.childResult.signal, null);
+    assert.equal(error.childResult.cleanup.status, "FAIL"); assert.equal(error.childResult.cleanup.processTreeVerified, false);
+    assert.deepEqual(error.childResult.helperExit, { code: 5, signal: null });
+    assert.deepEqual(value.stopped, [reason]); assert.equal(value.children.size, 1); assert.equal(value.launches.length, 1);
+    assert.equal(value.scheduled.length, 1); assert.deepEqual(value.cleared, [value.scheduled[0]]); assert.equal(value.writes.size, 2);
+    proofs.push({ control: "primary_" + reason + "_with_missing_native_receipt", cleanupFailure: error.childResult.cleanupFailure,
+      primaryReason: error.childResult.reason, actualNativeProcessExecuted: false });
   });
   await control("actual child rejects pre-cancellation and every timer-unsafe budget before allocation", async () => {
     const preaborted = fixture(), controller = new AbortController(), original = Error("Controlled pre-cancelled Adoption"); controller.abort(original);

@@ -5129,14 +5129,26 @@ export function runOwnedVerificationChild(ports: {
         writeFileSync(stdoutPath, cleanOutput, { mode: 0o600, flag: "wx" });
         writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
       } catch (error) { evidenceFailure = error; }
+      // Keep bounded cleanup facts even when the original native/FS Error has no cause.
+      // The exact Error remains private on the rejection; never project its message/stack.
+      const cleanupError = cleanupFailure instanceof Error ? cleanupFailure : undefined;
+      const cleanupCause = cleanupError && Object.getOwnPropertyDescriptor(cleanupError, "cause")?.value;
+      const cleanupData = (value: unknown, key: string): unknown => value !== null && typeof value === "object"
+        ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined;
+      const cleanupCode = cleanupData(cleanupError, "code") ?? cleanupData(cleanupCause, "code");
+      const cleanupExit = cleanupData(cleanupCause, "exitCode");
       const childResult = { code: rootCode ?? null, signal: rootSignal,
         identity, ...nativeProof, durationMs: performance.now() - started,
         reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
         cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
           forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
-        cleanupFailure: cleanupFailure instanceof Error && cleanupFailure.cause && typeof cleanupFailure.cause === "object" ? {
-          code: "code" in cleanupFailure.cause && typeof cleanupFailure.cause.code === "string" && /^[A-Z0-9_]+$/u.test(cleanupFailure.cause.code) ? cleanupFailure.cause.code : null,
-          exitCode: "exitCode" in cleanupFailure.cause && typeof cleanupFailure.cause.exitCode === "number" ? cleanupFailure.cause.exitCode : null,
+        cleanupFailure: cleanupError ? {
+          stage: "owned-child-cleanup", name: cleanupError instanceof assert.AssertionError ? "AssertionError"
+            : cleanupError instanceof TypeError ? "TypeError" : cleanupError instanceof SyntaxError ? "SyntaxError"
+              : cleanupError instanceof RangeError ? "RangeError" : "Error",
+          code: typeof cleanupCode === "string" && /^[A-Z0-9_]{1,64}$/u.test(cleanupCode) ? cleanupCode : null,
+          exitCode: typeof cleanupExit === "number" && Number.isFinite(cleanupExit) ? cleanupExit : null,
+          nativeReceipt: windows ? nativeJobReceipt ? "present" : "unavailable" : "not-applicable",
         } : null,
         evidence: { stdout: `public-${name}.stdout.log`, stderr: `public-${name}.stderr.log`, sanitized: cleanOutput !== null && cleanErrors !== null } };
       const error = failed ? new Error(`Public ${name} was aborted or exceeded its bound.`, { cause: cleanupFailure ?? evidenceFailure })
