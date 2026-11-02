@@ -24,7 +24,7 @@ export async function verifyIsolatedConnectDiagnostics(source){
  const marker='postgresql://private-user:private-value@example.invalid/postgres';
  class CliFailure extends Error{constructor(){super('private-message');this.code='CLI_CONTROLLED';this.stage='cli';}}
  const options=[],capacityBudgets=[];
- class ControlledClient{constructor(config){options.push(config);}async connect(){attempts++;if(failure)throw failure;}async end(){ended++;}}
+ class ControlledClient{constructor(config){options.push(config);this.backendPid=options.length;this.queries=[];this.closed=false;}async connect(){attempts++;if(failure)throw failure;}async query(sql){this.queries.push(sql);return {rows:[{database:'postgres',role:'postgres',backend_pid:this.backendPid}]};}async end(){ended++;this.closed=true;}}
  function owner(extra={}){
   const loaded={exports:{}},ports={waitForOwnedDatabaseCapacity:async bridge=>{const budget=await waitForOwnedDatabaseCapacity(bridge);capacityBudgets.push(budget);return budget;},pg:{Client:ControlledClient},inspectCaptured:async()=>{inspections++;},serviceResource:()=>({owned:true}),databaseUrl:()=>marker,hostBridge:{snapshot:()=>{snapshots++;return {accepted:snapshots,rejected:0,failed:0,closed:0,active:1,localProcesses:1,stopping:false,listeners:[{host:marker,port:99}]};}},safeRecord:(stage,metadata)=>{if(recordFailure)throw Error(marker);records.push({stage,...metadata});},performance:{now:()=>{time+=4.8;return time;}},IsolatedSupabaseCliError:CliFailure,...extra};
   new Function(...Object.keys(ports),'module','exports',compiled)(...Object.values(ports),loaded,loaded.exports);return loaded.exports;
@@ -127,6 +127,64 @@ export async function verifyIsolatedConnectDiagnostics(source){
  await test('Transport codes and SQLSTATE retain precedence over message classification',()=>{for(const code of ['ECONNRESET','ECONNREFUSED','42501']){const error=Object.assign(new Error('timeout expired'),{code});assert.equal(actualOwner.asSafeError(error,'database-connect').code,code);}});
  await test('No arbitrary code/message or CLI private text is copied into safe errors',()=>{assert.equal(actualOwner.asSafeError(Object.assign(new Error(marker),{code:marker}),'database-connect').code,'PREREQUISITE_OR_OPERATION_FAILED');assert.equal(actualOwner.asSafeError(new CliFailure(),'database-connect').code,'CLI_CONTROLLED');});
  await test('A successful first attempt adds no failure receipt or retry',async()=>{failure=null;const before=attempts,saved=records.length,closed=ended;const client=await actualOwner.connect('postgres');assert.equal(attempts,before+1);assert.equal(records.length,saved);assert.equal(ended,closed);await client.end();});
+ await test('Actual connect retains private cause and bounded failure evidence without publishing credentials',async()=>{
+  const privateCause=Object.assign(new Error(marker),{code:'ECONNRESET'}),original=new Error('timeout expired',{cause:privateCause});
+  original.stack='Error: '+marker+'\n    at privateFunction (C:\\private-user\\node_modules\\pg\\lib\\client.js:175:19)';
+  privateCause.stack='Error: '+marker+'\n    at privateFunction (C:\\private-user\\node_modules\\pg\\lib\\connection.js:64:12)';
+  failure=original;const before=attempts,closed=ended,saved=records.length;
+  await assert.rejects(actualOwner.connect('postgres'),error=>{
+   assert.equal(error.code,'DB_CONNECTION_TIMEOUT');assert.equal(error.stage,'database-connect');assert.equal(error.cause,original);assert.equal(error.cause.cause,privateCause);
+   for(const key of ['cause','transportDiagnostic'])assert.equal(Object.getOwnPropertyDescriptor(error,key).enumerable,false);
+   const diagnostic=error.transportDiagnostic,writes=[];assert.equal(Object.isFrozen(diagnostic),true);
+   assert.equal(diagnostic.phase,'database-connect');assert.equal(diagnostic.clientState,'unknown');assert.equal(diagnostic.pgCode,null);assert.equal(diagnostic.pgMessageClass,'pg_timeout_expired');assert.equal(diagnostic.elapsedMs,4);
+   assert.equal(new Date(diagnostic.observedAtUtc).toISOString(),diagnostic.observedAtUtc);assert.equal(diagnostic.originalErrorRetainedPrivately,true);assert.equal(diagnostic.originalStackRetainedPrivately,true);
+   assert.deepEqual(diagnostic.safeStackFrames,[{source:'pg-client',line:175,column:19}]);assert.equal(diagnostic.causes.length,1);assert.equal(diagnostic.causes[0].pgCode,'ECONNRESET');assert.deepEqual(diagnostic.causes[0].safeStackFrames,[{source:'pg-connection',line:64,column:12}]);assert.equal(diagnostic.causeChainTruncated,false);
+   failureWrite(error,undefined,(name,value)=>writes.push({name,value}));assert.equal(writes.length,1);assert.equal(writes[0].name,'failure.json');assert.equal(writes[0].value.rawErrorRetained,false);
+   assert.deepEqual(JSON.parse(JSON.stringify(writes[0].value.transportDiagnostic)),JSON.parse(JSON.stringify(diagnostic)));
+   for(const value of [error,diagnostic,writes]){const text=JSON.stringify(value);for(const forbidden of [marker,'private-user','privateFunction','Error:','postgresql://'])assert.equal(text.includes(forbidden),false);}return true;
+  });
+  assert.equal(attempts,before+1);assert.equal(ended,closed+1);assert.equal(records.length,saved+1);assert.equal(records.at(-1).elapsedMs,4);failure=null;
+ });
+ await test('Actual connect preserves owned error fields and never creates its own cause cycle',async()=>{
+  const privateCause=new Error(marker),diagnostic=actualOwner.describeOwnedPgClientFailure(privateCause);
+  for(const existing of [true,false]){
+   const original=new actualOwner.IsolatedSupabaseError('DB_CONNECTION_TIMEOUT','database-connect');
+   if(existing){Object.defineProperty(original,'cause',{value:privateCause,enumerable:false});Object.defineProperty(original,'transportDiagnostic',{value:diagnostic,enumerable:false});}
+   failure=original;const before=attempts,closed=ended,saved=records.length;
+   await assert.rejects(actualOwner.connect('postgres'),error=>{
+    assert.equal(error,original);assert.notEqual(error.cause,error);
+    if(existing){assert.equal(error.cause,privateCause);assert.equal(error.transportDiagnostic,diagnostic);for(const key of ['cause','transportDiagnostic'])assert.equal(Object.getOwnPropertyDescriptor(error,key).enumerable,false);}
+    else{assert.equal(Object.hasOwn(error,'cause'),false);assert.equal(error.transportDiagnostic.phase,'database-connect');assert.equal(error.transportDiagnostic.clientState,'unknown');assert.deepEqual(error.transportDiagnostic.causes,[]);assert.equal(Object.getOwnPropertyDescriptor(error,'transportDiagnostic').enumerable,false);}
+    assert.equal(Object.isFrozen(error.transportDiagnostic),true);assert.equal(JSON.stringify(error).includes(marker),false);assert.equal(JSON.stringify(error.transportDiagnostic).includes(marker),false);return true;
+   });
+   assert.equal(attempts,before+1);assert.equal(ended,closed+1);assert.equal(records.length,saved+1);
+  }
+  failure=null;
+ });
+ await test('Actual connect supplies one healthy lease replacement and closes its previous client',async()=>{
+  failure=null;const initial=await actualOwner.connect('postgres'),renewals=[],published=[],watched=[];let clock=0;
+  const lease=actualOwner.createAdminMeasurementControlLease(initial,{connect:()=>actualOwner.connect('postgres'),assertHealthy(){},assertOwned:async()=>{},watch:client=>watched.push(client),replaced:client=>published.push(client),record:row=>renewals.push(row),now:()=>clock});
+  const before=attempts,closed=ended,saved=records.length;clock=240_000;
+  try{
+   await lease.renewIfDue(true);const replacement=lease.client;
+   assert.equal(attempts,before+1);assert.equal(ended,closed+1);assert.equal(records.length,saved);assert.notEqual(replacement,initial);assert.equal(initial.closed,true);assert.equal(replacement.closed,false);assert.deepEqual(initial.queries,[]);
+   assert.deepEqual(replacement.queries,['select current_database() as database,current_user as role,pg_backend_pid() as backend_pid']);assert.deepEqual(watched,[replacement]);assert.deepEqual(published,[replacement]);assert.equal(lease.ageMs(),0);
+   assert.deepEqual(renewals,[{backendPid:replacement.backendPid,previousAgeMs:240_000,proactive:true,transportLifetimeUnchanged:true,previousSocketClosed:true}]);
+  }finally{await lease.client.end();}
+ });
+ await test('Actual connect lease replacement timeout retains evidence and never queries or publishes a fallback',async()=>{
+  failure=null;const initial=await actualOwner.connect('postgres'),original=new Error('timeout expired');let clock=0,published=0,watched=0,renewals=0;
+  const lease=actualOwner.createAdminMeasurementControlLease(initial,{connect:()=>actualOwner.connect('postgres'),assertHealthy(){},assertOwned:async()=>{},watch(){watched++;},replaced(){published++;},record(){renewals++;},now:()=>clock});
+  const before=attempts,closed=ended,saved=records.length;failure=original;clock=240_000;
+  try{
+   await assert.rejects(lease.renewIfDue(true),error=>{
+    assert.equal(error.code,'DB_CONNECTION_TIMEOUT');assert.equal(error.stage,'database-connect');assert.equal(error.cause,original);assert.equal(Object.getOwnPropertyDescriptor(error,'cause').enumerable,false);
+    const diagnostic=error.transportDiagnostic,writes=[];assert.equal(diagnostic.phase,'database-connect');assert.equal(diagnostic.clientState,'unknown');assert.equal(diagnostic.elapsedMs,4);assert.equal(diagnostic.pgMessageClass,'pg_timeout_expired');assert.equal(Object.isFrozen(diagnostic),true);
+    failureWrite(error,undefined,(name,value)=>writes.push({name,value}));assert.equal(writes.length,1);assert.equal(writes[0].name,'failure.json');assert.equal(writes[0].value.rawErrorRetained,false);assert.deepEqual(writes[0].value.transportDiagnostic,diagnostic);assert.equal(JSON.stringify(writes).includes(marker),false);return true;
+   });
+   assert.equal(attempts,before+1);assert.equal(ended,closed+1);assert.equal(records.length,saved+1);assert.equal(lease.client,initial);assert.equal(initial.closed,false);assert.deepEqual(initial.queries,[]);assert.equal(watched,0);assert.equal(published,0);assert.equal(renewals,0);
+  }finally{failure=null;await initial.end();}
+ });
  for(const code of ['DB_CONNECTION_TIMEOUT','DB_CONNECTION_EOF','DB_CONNECTION_ENDED','PREREQUISITE_OR_OPERATION_FAILED']){
   await test('Lease still fails closed on '+code+' without current-socket fallback or retry',async()=>{
    let clock=0,opens=0,queries=0;const client={connect:async()=>{},query:async()=>{queries++;return {rows:[]};},end:async()=>{},on:()=>{}};
@@ -139,9 +197,16 @@ export async function verifyIsolatedConnectDiagnostics(source){
  for(const kind of ['eof','timeout']){
   await test('Installed pg code-less '+kind+' reaches the exact safe diagnostic boundary',async()=>{
    const sockets=new Set(),server=createServer(socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));socket.on('error',()=>{});if(kind==='eof')socket.once('data',()=>socket.end());});
-   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port,observed=[];let opened=0;
-   const actual=owner({pg:{Client:class extends pg.Client{constructor(config){opened++;super(config);}}},databaseUrl:()=> 'postgresql://diagnostic@127.0.0.1:'+port+'/postgres',performance,hostBridge:undefined,safeRecord:(stage,metadata)=>observed.push({stage,...metadata})});
-   try{await assert.rejects(actual.connect('postgres'),error=>error.code===(kind==='eof'?'DB_CONNECTION_EOF':'DB_CONNECTION_TIMEOUT'));assert.equal(opened,1);assert.equal(observed.length,1);assert.equal(observed[0].pgMessageClass,kind==='eof'?'pg_unexpected_end':'pg_timeout_expired');assert.ok(observed[0].elapsedMs>=0);if(kind==='timeout')assert.ok(observed[0].elapsedMs>=4500);assert.ok(!JSON.stringify(observed).includes('postgresql'));}
+   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port,observed=[];let opened=0,original,retained;
+   const actual=owner({pg:{Client:class extends pg.Client{constructor(config){opened++;super(config);}async connect(){try{return await super.connect();}catch(error){original=error;throw error;}}}},databaseUrl:()=> 'postgresql://diagnostic@127.0.0.1:'+port+'/postgres',performance,hostBridge:undefined,safeRecord:(stage,metadata)=>observed.push({stage,...metadata})});
+   const connect=actual.connect;actual.connect=async username=>{try{return await connect(username);}catch(error){retained=error;throw error;}};
+   try{
+    await assert.rejects(actual.connect('postgres'),error=>error.code===(kind==='eof'?'DB_CONNECTION_EOF':'DB_CONNECTION_TIMEOUT'));assert.equal(opened,1);assert.equal(observed.length,1);assert.equal(observed[0].pgMessageClass,kind==='eof'?'pg_unexpected_end':'pg_timeout_expired');assert.ok(observed[0].elapsedMs>=0);if(kind==='timeout')assert.ok(observed[0].elapsedMs>=4500);assert.ok(!JSON.stringify(observed).includes('postgresql'));
+    const error=retained;assert.ok(error instanceof Error);assert.ok(original instanceof Error);assert.equal(error.cause,original);assert.equal(Object.getOwnPropertyDescriptor(error,'cause').enumerable,false);assert.equal(Object.getOwnPropertyDescriptor(error,'transportDiagnostic').enumerable,false);
+    const diagnostic=error.transportDiagnostic,writes=[];assert.equal(Object.isFrozen(diagnostic),true);assert.equal(diagnostic.phase,'database-connect');assert.equal(diagnostic.clientState,'unknown');assert.equal(diagnostic.pgCode,null);assert.equal(diagnostic.pgMessageClass,observed[0].pgMessageClass);assert.equal(diagnostic.elapsedMs,observed[0].elapsedMs);assert.ok(Number.isSafeInteger(diagnostic.elapsedMs));assert.equal(diagnostic.originalErrorRetainedPrivately,true);assert.equal(diagnostic.originalStackRetainedPrivately,true);assert.equal(new Date(diagnostic.observedAtUtc).toISOString(),diagnostic.observedAtUtc);assert.deepEqual(diagnostic.causes,[]);
+    failureWrite(error,undefined,(name,value)=>writes.push({name,value}));assert.equal(writes.length,1);assert.equal(writes[0].name,'failure.json');assert.equal(writes[0].value.rawErrorRetained,false);assert.deepEqual(JSON.parse(JSON.stringify(writes[0].value.transportDiagnostic)),JSON.parse(JSON.stringify(diagnostic)));
+    for(const value of [error,diagnostic,writes]){const text=JSON.stringify(value);for(const forbidden of [marker,'postgresql://','diagnostic@','127.0.0.1','Error:'])assert.equal(text.includes(forbidden),false);}
+   }
    finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}
   });
  }

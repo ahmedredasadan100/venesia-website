@@ -37,7 +37,9 @@ type HostBridge = { close(): Promise<void>; snapshot(): { accepted: number; reje
 export class IsolatedSupabaseError extends Error {
   readonly code: string;
   readonly stage: string;
-  declare readonly transportDiagnostic?: ReturnType<typeof describeOwnedPgClientFailure>;
+  declare readonly transportDiagnostic?: ReturnType<typeof describeOwnedPgClientFailure> & {
+    readonly elapsedMs?: number | null;
+  };
   constructor(code: string, stage: string) {
     super(`${stage}: ${code}`);
     this.name = "IsolatedSupabaseError";
@@ -1136,6 +1138,16 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     } catch (error) {
       const elapsedMs = performance.now() - started, safe = asSafeError(error, "database-connect");
       const observation = describeOwnedPgConnectFailure(error, elapsedMs, bridgeBefore, bridgeSnapshot());
+      // Pending clients have not reached the established-client observer. Keep
+      // their original Error private and reuse its bounded projection without
+      // claiming that this shared connection factory identifies a current lease.
+      if (safe !== error && error instanceof Error && !Object.hasOwn(safe, "cause"))
+        Object.defineProperty(safe, "cause", { value: error, enumerable: false });
+      if (!Object.hasOwn(safe, "transportDiagnostic")) Object.defineProperty(safe, "transportDiagnostic", {
+        value: Object.freeze({ ...describeOwnedPgClientFailure(error), phase: "database-connect",
+          elapsedMs: typeof observation.elapsedMs === "number" ? observation.elapsedMs : null }),
+        enumerable: false,
+      });
       // Preserve the classified original failure even if its optional receipt
       // cannot be written. This never retries or recovers the failed attempt.
       try { safeRecord("database-connect-failed", { safeCode: safe.code, ...observation }); }
