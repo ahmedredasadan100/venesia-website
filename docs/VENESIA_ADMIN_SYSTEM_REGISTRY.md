@@ -3046,3 +3046,77 @@ live release Admission and no release authority. Historical failed receipts
 remain failed; six human content reviews remain Pending. Product consumers,
 presentation and preserved capabilities are unchanged; `globalClosed=false`.
 STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
+
+### 27.43 Gate57 default verifier recovery — 2 November 2026
+
+**Previous → current / owner:** Full E on`193d8b83070f1a2477c589fd5a02cbb2770596fc`
+retains56 PASS, Gate57`verify:admin-runtime` exit1 and18 NOT RUN. Its default
+`verify-isolated-supabase.mts` failure exposed no first assertion. One bounded
+offline reproduction, using the existing physical dependency stager and
+`runOwnedVerificationChild` with the canonical copied-source/Git environment,
+identified`ReferenceError: pendingQualityPrefix is not defined` after81 controls.
+The exception occurred in`verifyFinalQualityGatePlan`'s generated execution
+projection, not in PostgreSQL, Product or the actual scheduler.
+
+The existing verifier now includes the actual pending-prefix declaration and
+keeps completed source-floor lint/typecheck distinct from the pending queue.
+Its complete named ledger still conserves every original canonical prefix and
+Public tail, uniqueness and Hero prerequisite ordering after the source floor.
+Effective missing-binding, duplicated-floor and missing-pending-leaf controls
+protect the correction. Runtime scheduling, deadlines and acceptance gates
+are unchanged. Direct consumers remain Verification Infrastructure, Executable
+Governance and Admin Runtime; no separate guard, runner or registry is added.
+
+The same verifier's existing bounded catch projection now covers its default
+path while retaining exit1 and the original generic failure headline. Default
+control names and string error fields are hashed; raw messages, arbitrary stack
+paths, actual/expected strings and private Cause objects are not emitted.
+Its existing pure control verifies default/current modes, private Cause identity,
+non-Error rejection and projection-failure fallback. The current-infrastructure
+profile's existing proof boundary remains distinct from the complete default path.
+
+Source-bound ordered checks, default/targeted Gate57 outcomes, positive/negative/
+boundary controls, Correspondence/Coverage, Native cleanup, source/Git identity
+and raw preservation belong to [the Gate57 handoff](../.tmp-qa/gate57-recovery-20261102-01/final-handoff-report.md).
+Historical Admission, Targeted Admin5/5 and the56 Full gates retain only their
+original-source scope. No new Full E, Push, CI, Vercel, Ready or merge is granted;
+six human content reviews remain Pending and`globalClosed=false`.
+
+### 27.44 Gate57 consolidated retained-admission fixture recovery — 2 November 2026
+
+**Previous → current / existing owners:** The preceding Gate57 attempt retained
+the pending-prefix correction and safe default failure projection, then stopped
+after715 completed controls at the mandatory live `request.admissionQualification`
+assertion. Its two candidate files and all27 prior commits are preserved.
+The full historical release remains56 PASS /1 FAIL /18 NOT RUN.
+
+The bounded consumer audit identifies stale retained/legacy request fixtures
+and missing invocation/digest bindings in `verifyRetainedFinalQualityAdmissionControls`.
+A rejection caused by absent Admission cannot substitute for the intended
+retained/subset/measurement rejection. The maintained fixture reuses the actual
+qualifier and private invocation state already exercised by
+`verifyAdmissionQualificationControls`, with its existing finite in-memory ports.
+It does not create a WeakMap entry from serialized evidence, make Admission
+optional, alter the Public owner, or grant real Runtime/release authority.
+
+The existing focused retained profile consumes the same qualified controlled
+fixture and preserves positive, negative and boundary assertions before default
+and the Canonical Admin Runtime command. All malformed request cases retain
+valid prerequisite qualification so their own predicate remains observable.
+The completed/pending gate ledger and Hero/Public ordering remain unchanged.
+No Product capability, presentation, guard, runner or registry is introduced.
+
+Actual source/runtime binding and live-object acceptance are separate evidence:
+the task uses the existing real Admission API and current-source inspector in
+one process, and a deliberate ownership sentinel before resource allocation.
+That early boundary does not prove full Public fixture readiness or downstream
+retained/legacy request classification. Controlled tests do not replace it.
+Direct consumers remain Executable Governance, Verification Infrastructure and
+Admin Runtime; CI commands, Required Checks and all owner protections stay intact.
+
+Exact ordered results, fixture audit, proof limits, raw Native receipts, current
+source/commit binding and cleanup belong to
+[the consolidated Gate57 handoff](../.tmp-qa/gate57-consolidated-recovery-20261102-01/final-handoff-report.md).
+The prior sealed failure is immutable and is not reclassified. This entry grants
+no Full E, Push, CI, deployment or merge result; human reviews remain Pending
+and`globalClosed=false`.

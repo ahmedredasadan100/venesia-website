@@ -1779,7 +1779,7 @@ async function verifyOwnedPublicImageConfig(network = false) {
 
 
 /** Full admission controls use the maintained function, real SHA256 and memory-only artifact ports. */
-async function verifyRetainedFinalQualityAdmissionControls() {
+async function verifyRetainedFinalQualityAdmissionControls(admissionControls: Awaited<ReturnType<typeof verifyAdmissionQualificationControls>>) {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const statement = (name: string) => {
@@ -2212,13 +2212,32 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   const run = statement("runOwnedPublicVerification") as ts.FunctionDeclaration; assert.ok(run.body);
   const beforeContext = run.body.statements.findIndex(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "originalContext")); assert.ok(beforeContext > 0);
   const requestCode = run.body.statements.slice(0, beforeContext).map(node => node.getText(file)).join("\n");
-  const guard = new Function("assert", "prepared", "adminCredentials", "CORE_PREVIEW_PUBLIC_IMPACT_SELECTION", "validateCorePreviewPublicImpactSelection", "validateCoreJourneySelection", "ownedProcessCleanupQualification", compile(statement("adminAdoptionGate").getText(file).replace(/^export /u, "") + "\nreturn async function(request) { const context={assertOwned:async()=>{}}; " + requestCode + ";return {adoption,retainedQuality}; }"))(assert, { get: () => ({}) }, { get: () => ({}) }, "preview-public-impact", () => undefined, () => undefined,
+  assert.equal(admissionControls.status, "PASS"); assert.equal(admissionControls.actualOsProcessesExecuted, false); assert.equal(admissionControls.actualFilesWritten, false);
+  // This actual executor fixture supplies private in-memory control authority only;
+  // it does not qualify the current runtime, source checkout or any owned resources.
+  const { qualification, privateInvocations } = admissionControls.requestGuardAdmission;
+  assert.equal(qualification.status, "PASS");
+  const guard = new Function("assert", "digest", "localVerificationAdmissionInvocations", "gitHead", "prepared", "adminCredentials", "CORE_PREVIEW_PUBLIC_IMPACT_SELECTION", "validateCorePreviewPublicImpactSelection", "validateCoreJourneySelection", "ownedProcessCleanupQualification", compile(statement("adminAdoptionGate").getText(file).replace(/^export /u, "") + "\nreturn async function(request) { const context={assertOwned:async()=>{}}; " + requestCode + ";return {adoption,retainedQuality}; }"))(assert, sha256, privateInvocations, async () => qualification.finalHead, { get: () => ({}) }, { get: () => ({}) }, "preview-public-impact", () => undefined, () => undefined,
     () => ({ fullEProcessCleanupQualified: true })) as (request: Record<string, unknown>) => Promise<{ adoption: boolean; retainedQuality: boolean }>;
-  const requests = { retained: { additionalSourceFiles: [], finalQualityGate: true, retainedAdminBehaviorAdmissionSha256: "f".repeat(64) }, legacy: { additionalSourceFiles: [], finalQualityGate: true, selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms" } };
+  const requests = { retained: { additionalSourceFiles: [], finalQualityGate: true, retainedAdminBehaviorAdmissionSha256: "f".repeat(64), admissionQualification: qualification }, legacy: { additionalSourceFiles: [], finalQualityGate: true, selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms", admissionQualification: qualification } };
   assert.deepEqual(await guard(requests.retained), { adoption: false, retainedQuality: true }); assert.deepEqual(await guard(requests.legacy), { adoption: true, retainedQuality: false });
-  for (const patch of [{ finalQualityGate: undefined }, { selection: "admin-adoption" }, { selection: "build-contracts" }, { adoptionCohort: "domain-forms" }, { additionalSourceFiles: ["scripts/foreign.mts"] }, { retainedAdminBehaviorAdmissionSha256: "bad" }]) await assert.rejects(guard({ ...requests.retained, ...patch }));
-  await assert.rejects(guard({ additionalSourceFiles: [], finalQualityGate: true }));
+  for (const patch of [{ finalQualityGate: undefined }, { selection: "admin-adoption" }, { selection: "build-contracts" }, { adoptionCohort: "domain-forms" }, { additionalSourceFiles: ["scripts/foreign.mts"] }, { retainedAdminBehaviorAdmissionSha256: "bad" }]) await assert.rejects(guard({ ...requests.retained, ...patch }), assert.AssertionError);
+  await assert.rejects(guard({ additionalSourceFiles: [], finalQualityGate: true, admissionQualification: qualification }), assert.AssertionError);
   cases.push("actual request guard preserves legacy combined Quality and rejects mixed retained/subset/measurement admission");
+  await assert.rejects(guard({ ...requests.retained, admissionQualification: undefined }), error => error instanceof assert.AssertionError && /fresh live source qualification/u.test(error.message));
+  await assert.rejects(guard({ ...requests.retained, admissionQualification: JSON.parse(JSON.stringify(qualification)) }), error => error instanceof assert.AssertionError && /live source qualification/u.test(error.message));
+  const qualifiedReceiptSha256 = sha256(JSON.stringify(qualification));
+  for (const key of ["sourceSha256", "runtime"] as const) {
+    const original = qualification[key];
+    try {
+      if (key === "sourceSha256") qualification.sourceSha256 = "0".repeat(64); else qualification.runtime = { controlledReceiptMutation: true };
+      await assert.rejects(guard(requests.retained), error => error instanceof assert.AssertionError && /altered after qualification/u.test(error.message));
+    } finally {
+      if (key === "sourceSha256") qualification.sourceSha256 = original as string; else qualification.runtime = original;
+    }
+  }
+  assert.equal(sha256(JSON.stringify(qualification)), qualifiedReceiptSha256);
+  cases.push("actual controlled request prefix rejects missing or cloned qualification and altered source/runtime receipt fields without granting real live Admission");
   const gateDeclaration = run.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "gates")); assert.ok(gateDeclaration);
   const gateDependencies = ["mediaUpload", "heroCompatibility", "heroGate"].map(name => {
     const declaration = run.body!.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
@@ -2262,22 +2281,84 @@ function verifyFinalQualityGatePlan() {
   assert.ok(run?.body);
   const body = run.body.statements.find(ts.isTryStatement); assert.ok(body);
   const declaration = (name: string, nodes: ts.NodeArray<ts.Statement>) => {
-    const result = nodes.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
-    assert.ok(result); return result.getText(file);
+    const result = nodes.filter(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
+    assert.equal(result.length, 1); return result[0].getText(file);
   };
-  const executionCode = ts.transpileModule([deadline.getText(file).replace(/^export /u, ""), gates.getText(file), declaration("heroGate", run.body.statements),
-    declaration("qualityPrefix", body.tryBlock.statements), declaration("executionGates", body.tryBlock.statements)].join("\n"),
-  { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const pending = declaration("pendingQualityPrefix", body.tryBlock.statements);
+  const declarations = [deadline.getText(file).replace(/^export /u, ""), gates.getText(file), declaration("heroGate", run.body.statements),
+    declaration("qualityPrefix", body.tryBlock.statements), pending, declaration("executionGates", body.tryBlock.statements)];
   type Gate = { name: string; qualityScript?: string };
-  const execution = new Function("qualityScripts", "heroCompatibility", "request", "gates", executionCode + ";return executionGates;") as (scripts: string[], hero: boolean, request: object, gates: Gate[]) => Gate[];
+  type Execution = { qualityPrefix: Gate[]; pendingQualityPrefix: Gate[]; executionGates: Gate[] };
+  const compileExecution = (parts: readonly string[]) => new Function("qualityScripts", "heroCompatibility", "request", "gates",
+    ts.transpileModule(parts.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+      + ";return {qualityPrefix,pendingQualityPrefix,executionGates};") as (scripts: string[], hero: boolean, request: object, gates: Gate[]) => Execution;
+  const execution = compileExecution(declarations);
   const canonical = new Function(code + ";return GATES;")() as Gate[];
-  const standard = execution(prefix, false, { finalQualityGate: true }, canonical);
-  assert.deepEqual(standard.slice(0, prefix.length).map(gate => gate.qualityScript), prefix);
-  assert.deepEqual(standard.slice(prefix.length), canonical);
-  const hero = execution(prefix, true, { finalQualityGate: true }, []);
+  // The two source-floor leaves already ran in this exact context. Their named
+  // receipts precede the pending queue; they must be conserved, never rerun.
+  const floor = body.tryBlock.statements.findIndex(node => ts.isVariableStatement(node)
+    && node.declarationList.declarations.some(row => row.name.getText(file) === "sourceFloor"));
+  const floorReports = body.tryBlock.statements.findIndex(node => ts.isForOfStatement(node)
+    && node.expression.getText(file) === "sourceFloor.checks.slice(0, qualityPrefix.length ? 2 : 0).entries()");
+  const pendingAt = body.tryBlock.statements.findIndex(node => node.getText(file) === pending);
+  assert.ok(floor >= 0 && floorReports > floor && pendingAt > floorReports);
+  const complete = (value: Execution) => {
+    assert.deepEqual(value.qualityPrefix.map(gate => gate.qualityScript), prefix);
+    assert.deepEqual(value.pendingQualityPrefix.map(gate => gate.qualityScript), prefix.slice(2));
+    return [...value.qualityPrefix.slice(0, 2), ...value.executionGates];
+  };
+  const standardResult = execution(prefix, false, { finalQualityGate: true }, canonical);
+  const standard = standardResult.executionGates, completeStandard = complete(standardResult);
+  assert.deepEqual(completeStandard.slice(0, prefix.length).map(gate => gate.qualityScript), prefix);
+  assert.deepEqual(completeStandard.slice(prefix.length), canonical);
+  assert.equal(completeStandard.length, prefix.length + canonical.length);
+  assert.equal(new Set(completeStandard.map(gate => gate.name)).size, completeStandard.length);
+  const heroResult = execution(prefix, true, { finalQualityGate: true }, []), hero = heroResult.executionGates;
   assert.deepEqual(hero.slice(0, 2).map(gate => gate.name), ["hero-compatibility-build", "hero-compatibility"]);
   assert.deepEqual(hero.slice(2), standard);
-  cases.push("Hero prerequisite build and journey precede the complete unchanged canonical Quality prefix and Public tail");
+  assert.deepEqual(complete(heroResult).slice(0, 2).map(gate => gate.qualityScript), ["lint", "typecheck"]);
+  assert.deepEqual(complete(heroResult).slice(4), completeStandard.slice(2));
+  cases.push("Completed source-floor lint/typecheck retain their named slots before Hero prerequisites, pending Quality prefix and unchanged Public tail");
+  assert.throws(() => compileExecution(declarations.filter(part => part !== pending))(prefix, false, { finalQualityGate: true }, canonical),
+    error => error instanceof ReferenceError && error.message === "pendingQualityPrefix is not defined");
+  for (const start of [0, 3]) {
+    const mutated = pending.replace("qualityPrefix.length ? 2 : 0", String(start)); assert.notEqual(mutated, pending);
+    assert.throws(() => complete(compileExecution(declarations.map(part => part === pending ? mutated : part))(prefix, false, { finalQualityGate: true }, canonical)));
+  }
+  cases.push("Actual pending-prefix projection rejects its missing binding, duplicate source-floor leaves and an omitted pending leaf");
+
+  const verifier = ts.createSourceFile("verify-isolated-supabase.mts", readSource("scripts/verify-isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const tail = verifier.statements.at(-1); assert.ok(tail && ts.isExpressionStatement(tail) && ts.isCallExpression(tail.expression));
+  const callback = tail.expression.arguments[0]; assert.ok(callback && ts.isArrowFunction(callback));
+  const project = (error: unknown, argv: string[], names: string[]) => {
+    const output: string[] = [], controlledProcess = { argv, exitCode: 0 }, mainPort = () => undefined;
+    const handler = new Function("assert", "sha256", "process", "cases", "main", "selectedVerification", "console",
+      ts.transpileModule("return (" + callback.getText(verifier) + ");", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
+      assert, sha256, controlledProcess, names, mainPort, mainPort, { error: (text: string) => output.push(text) }) as (error: unknown) => void;
+    handler(error); assert.equal(controlledProcess.exitCode, 1); return output;
+  };
+  const privateValue = "controlled-private-error://user:password@private.invalid/private-sql";
+  const failure = new assert.AssertionError({ actual: privateValue, expected: [privateValue], operator: "strictEqual", message: privateValue });
+  const privateCause = Error(privateValue); Object.defineProperty(failure, "cause", { value: privateCause });
+  failure.stack = privateValue + "\n at owned (file:///private/verify-isolated-supabase.mts:123:4)\n at foreign (/private/foreign.js:2:3)";
+  const output = project(failure, [], [privateValue]), diagnostic = JSON.parse(output[1]);
+  assert.equal(output.length, 2); assert.equal(diagnostic.scope, "source/offline");
+  assert.equal(output.join("\n").includes(privateValue), false);
+  assert.deepEqual(diagnostic.error.actual, { type: "string", length: privateValue.length, sha256: sha256(privateValue) });
+  assert.deepEqual(diagnostic.error.expected, { type: "array", length: 1 });
+  assert.deepEqual(diagnostic.error.locations, [{ source: "scripts/verify-isolated-supabase.mts", line: 123, column: 4 }]);
+  assert.equal(diagnostic.error.code, "ERR_ASSERTION"); assert.equal(diagnostic.error.operator, "strictEqual");
+  assert.equal(diagnostic.error.safeMessage, null); assert.equal(Object.getOwnPropertyDescriptor(failure, "cause")?.value, privateCause);
+  const current = JSON.parse(project(failure, ["--current-infrastructure-only"], ["controlled-current"])[0]);
+  assert.equal(current.scope, "current-infrastructure-only"); assert.equal(current.lastCompletedControl, "controlled-current");
+  assert.equal(JSON.stringify(current).includes(privateValue), false);
+  const nonError = JSON.parse(project(privateValue, [], [privateValue])[1]); assert.equal(nonError.error.name, "Error");
+  assert.equal(JSON.stringify(nonError).includes(privateValue), false);
+  const unreadable = Error(privateValue); Object.defineProperty(unreadable, "stack", { get() { throw privateCause; } });
+  const fallback = JSON.parse(project(unreadable, [], [privateValue])[1]); assert.equal(fallback.diagnosticProjectionFailed, true);
+  assert.equal(JSON.stringify(fallback).includes(privateValue), false);
+  assert.equal(project(failure, ["--execute-qualified-impact"], [privateValue]).length, 1);
+  cases.push("Actual default/current diagnostic catch preserves exit1, safe assertion facts and private cause identity; non-Error and projection-failure boundaries disclose no private strings");
 }
 
 /** Targeted negative proof over actual retained observations; it never grants a live admission seal. */
@@ -6570,7 +6651,12 @@ async function verifyAdmissionQualificationControls() {
     const fixture = executorFixture(), controller = new AbortController(), original = Error("Pre-aborted Admission"); controller.abort(original);
     await assert.rejects(qualify(fixture.api, controller.signal), error => error === original); assert.equal(fixture.inspections(), 0); assert.equal(fixture.launches.length, 0);
   });
-  return { status: "PASS", actualOsProcessesExecuted: false, actualFilesWritten: false, sourceOwnerSha256: sha256(source) };
+  // Prepare a fresh actual-executor control fixture after every adversary. Keep its
+  // private authority in this process; it is not a current runtime Admission receipt.
+  const requestFixture = executorFixture(), requestQualification = await qualify(requestFixture.api);
+  assert.equal(requestQualification.status, "PASS"); requestFixture.api.assertQualified(requestQualification, requestFixture.binding());
+  return { status: "PASS", actualOsProcessesExecuted: false, actualFilesWritten: false, sourceOwnerSha256: sha256(source),
+    requestGuardAdmission: { qualification: requestQualification, privateInvocations: requestFixture.api.privateInvocations } };
 }
 
 /** Actual deadline/child declarations with controlled ports; no native process or filesystem allocation. */
@@ -7485,10 +7571,10 @@ async function main() {
   await verifyQualifiedFormHarnessControls();
   await verifySharedChildControls();
   await verifyAdoptionDeadlineControls();
-  await verifyAdmissionQualificationControls();
+  const admissionControls = await verifyAdmissionQualificationControls();
   await verifyQualifiedSelectionControls();
   verifyQualifiedResultControls();
-  await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
+  await verifyRetainedFinalQualityAdmissionControls(admissionControls); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
   verifyScanner();
   const provenance = verifyReleaseLock();
@@ -8357,7 +8443,8 @@ function verifyRetainedPublicControlEligibility(source: string) {
 }
 
 async function retainedFinalQualityOnly() {
-  verifyFinalQualityGatePlan(); await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
+  verifyFinalQualityGatePlan(); const admissionControls = await verifyAdmissionQualificationControls();
+  await verifyRetainedFinalQualityAdmissionControls(admissionControls); await verifyRetainedFinalQualityWorkerControls();
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
 }
 
@@ -8365,7 +8452,10 @@ const verification = process.argv.includes("--ci-change-impact") || process.argv
 const selectedVerification = process.argv.includes("--admission-qualification-only") ? admissionQualificationOnly
   : process.argv.includes("--owned-child-controls-only") ? ownedChildControlsOnly : verification;
 (process.argv.includes("--execute-qualified-impact") ? changeImpactOnly : selectedVerification)().catch((error: unknown) => {
-  if (process.argv.includes("--current-infrastructure-only")) {
+  if (process.argv.includes("--current-infrastructure-only") || selectedVerification === main && !process.argv.includes("--execute-qualified-impact")) {
+    const currentInfrastructure = process.argv.includes("--current-infrastructure-only");
+    const scope = currentInfrastructure ? "current-infrastructure-only" : "source/offline";
+    if (!currentInfrastructure) console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed.");
     // Keep the original rejection and the first failing location. Never print
     // arbitrary messages, stack text, actual/expected strings or connection data.
     try {
@@ -8381,20 +8471,20 @@ const selectedVerification = process.argv.includes("--admission-qualification-on
         const owned = /verify-isolated-supabase\.mts:(\d+):(\d+)/u.exec(line);
         const projected = /<anonymous>:(\d+):(\d+)/u.exec(line);
         return owned ? [{ source: "scripts/verify-isolated-supabase.mts", line: Number(owned[1]), column: Number(owned[2]) }]
-          : projected ? [{ source: "projected-current-owner", line: Number(projected[1]), column: Number(projected[2]) }] : [];
+          : projected ? [{ source: currentInfrastructure ? "projected-current-owner" : "projected-owned-control", line: Number(projected[1]), column: Number(projected[2]) }] : [];
       }).slice(0, 6) : [];
       const operator = data("operator"), code = data("code");
-      console.error(JSON.stringify({ status: "FAIL", scope: "current-infrastructure-only", completedControls: cases.length,
-        lastCompletedControl: cases.at(-1) ?? null,
+      console.error(JSON.stringify({ status: "FAIL", scope, completedControls: cases.length,
+        lastCompletedControl: currentInfrastructure ? cases.at(-1) ?? null : scalar(cases.at(-1)),
         error: { name: value instanceof assert.AssertionError ? "AssertionError" : value instanceof ReferenceError ? "ReferenceError"
           : value instanceof TypeError ? "TypeError" : value instanceof SyntaxError ? "SyntaxError" : "Error",
           code: code === "ERR_ASSERTION" ? code : null,
           operator: typeof operator === "string" && /^(?:strictEqual|notStrictEqual|deepStrictEqual|notDeepStrictEqual|==|!=|throws|rejects|match|doesNotMatch)$/u.test(operator) ? operator : null,
           actual: scalar(data("actual")), expected: scalar(data("expected")), locations,
-          message: scalar(message), safeMessage: value instanceof ReferenceError && message === "drainControlPulse is not defined" ? message : null },
+          message: scalar(message), safeMessage: currentInfrastructure && value instanceof ReferenceError && message === "drainControlPulse is not defined" ? message : null },
         rawDetailsSuppressed: true }));
     } catch {
-      console.error(JSON.stringify({ status: "FAIL", scope: "current-infrastructure-only", completedControls: cases.length,
+      console.error(JSON.stringify({ status: "FAIL", scope, completedControls: cases.length,
         diagnosticProjectionFailed: true, rawDetailsSuppressed: true }));
     }
   } else console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed.");
