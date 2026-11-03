@@ -744,6 +744,20 @@ step's ordered checkpoints/awaited pulse and operation, and reject unclassified
 or shadowed pulses. Lease policy and runtime scheduling stay unchanged. Actual
 negative-control timing is scoped to this guard, never overall QA speed.
 
+Native evidence preservation has a separate source-binding boundary after
+owned child/worker closure and before workspace deletion. Its existing owner
+must passively await the current heartbeat pulse before synchronous archive
+validation and copying. A failed pulse still rejects execution through the
+existing lifecycle; it must not prevent cancellation/failure evidence from
+being preserved. The private `archive-preservation` phase is confined to that
+entry. Preserve the three execution-site drains and dependency-stage contract;
+structurally qualify the single archive source check, reject extra, moved or
+shadowed calls, and prohibit a later yield within synchronous preservation.
+Existing owner controls must cover pending/failed pulses, cancellation, source
+rejection, preservation and cleanup failure, and the unchanged error precedence.
+These targeted controls do not establish live Public archive qualification,
+Gate57, Full E, performance closure or release readiness.
+
 The combined-source recovery after `c80fd87f` retains Full05's74 passes and
 Admin Adoption failure as one failed run. Its caller saved the prepared fixture
 only under `execution`, while the existing public owner supplies the Driver

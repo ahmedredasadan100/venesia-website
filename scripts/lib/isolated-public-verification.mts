@@ -5502,7 +5502,7 @@ export async function verifyOwnedProcessReadiness(options: {
   }
 }
 
-export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
+export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: (phase?: "archive-preservation") => Promise<void>) {
   assert.ok(request.admissionQualification, "Public execution requires fresh live source qualification before dependency staging or Build; conservative Full Gate fallback remains required.");
   const preallocationAdmission = localVerificationAdmissionInvocations.get(request.admissionQualification);
   assert.ok(preallocationAdmission, "Public execution requires this owner's live source qualification; serialized or old receipts cannot authorize it.");
@@ -5725,6 +5725,10 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     }
   };
   const preserveClosedNativeArchives = async () => {
+    // Settle the existing pulse before synchronous archive/source reads. Cleanup
+    // must preserve evidence after cancellation; the lifecycle still owns and
+    // propagates heartbeat failure after this preservation-only boundary.
+    await drainControlPulse("archive-preservation");
     const archives: Array<Record<string, unknown>> = [], failures: Array<{ stage: string; code: string | null }> = [];
     let firstFailure: unknown, stage = "closed_child_declaration", bindingChecked = false;
     const record = (value: unknown): Record<string, unknown> => {

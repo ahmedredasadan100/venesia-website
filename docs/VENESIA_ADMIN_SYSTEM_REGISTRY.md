@@ -3343,3 +3343,62 @@ authorized by these scoped passes. This QA/docs delta has no Product/UI change;
 its local development evidence does not grant the pending Product reviews.
 The original fixture failure and all earlier release/Native evidence remain
 historical with their original status. `globalClosed=false`.
+
+### 27.49 PR #229 Heartbeat and Native archive integration — 3 November 2026
+
+**Previous → current / proved scope:** At `aaa4cd6c`, the final authorized
+Gate57 diagnostic stopped after1062 controls at the source heartbeat guard's
+three-call assumption. Its recursive AST traversal also included the Native
+archive source check introduced by `3a895cfd`. The three execution checks still
+had their original awaited drains. The fourth check protects source binding
+before preservation and cannot be deleted. The archive body was synchronous
+but could begin while an existing heartbeat renewal remained pending; the old
+archive fixture's counter/no-op ports did not establish this integration.
+
+**Existing owners / correction1:** `runOwnedPublicVerification` retains the
+fourth source check and adds one passive pulse drain at archive entry. The
+existing Lifecycle callback accepts the private `archive-preservation` phase,
+awaits the same pulse, and defers any recorded heartbeat failure to its
+unchanged outer result boundary. Execution drains still throw that failure.
+No new query, connection, timer, retry, lease, runner or owner is introduced.
+After the archive entry drain, validation and copying remain synchronous.
+Cancellation does not bypass preservation; closed-child identity, live
+Admission, source/runtime/lock binding, raw-file validation and preservation-only
+receipts remain mandatory. Public failures retain priority over archive/cleanup
+failures inside the Public owner; the existing outer lifecycle's heartbeat
+priority remains unchanged.
+
+**Affected consumers / protection:** The existing
+`verifyPublicSourceHeartbeatBoundary` classifies the three execution checks and
+the one archive check structurally, preserving original adjacency, staging,
+shadowing and negative controls. Its bounded scheduling controls and
+`verifyLocalRiskExecutionControls` own the affected positive/negative integration
+proof. Source-floor, Governance/Infrastructure and CI consumers continue to
+reach these same owners; command registration and CI workflows are unchanged.
+No Product, presentation, Auth/RLS, Schema or Treasury behavior is changed.
+
+**Evidence / delivery boundary:** Current task receipts are retained under
+`.tmp-qa/pr229-gate57-heartbeat-archive-20261103-01/`; qualified host snapshots
+are under `.tmp-qa/pr229-gate57-heartbeat-archive-host-20261103-01/`.
+The final executable source passed affected Syntax, strict ESLint, TypeScript
+(19859ms), Governance source (3839ms), Infrastructure source (7104ms),
+`--admin-control-lease-only`100 controls (7050ms), and
+`--local-risk-verification-only`547 controls (76296ms). The latter retains all27
+archive rejection controls and adds11 lifecycle/archive integration cases,
+including the exact lifecycle cancellation signal, source failure, original
+timeout/cancel errors and secondary archive/cleanup failures. Native cleanup
+reported zero live/residual processes, including233 observed processes in the
+local-risk invocation. The first ESLint rejection of a new fixture's `this`
+alias is retained; its constructor factory was corrected without changing
+runtime or assertions. Final verifier ESLint passed in9557ms; the unchanged
+runtime files retain their successful affected ESLint result from13086ms.
+The bounded heartbeat model reproduces source reads during pending renewal
+when only the new archive drain is removed; this is not a live DB failure or
+the historical Gate57 timing diagnosis. Final source, raw evidence and host
+preservation receipts are recorded beside these results.
+Historical evidence remains historical; no older SHA is claimed as
+current execution. This approved task ends at qualified local commit and
+does not authorize Gate57 retry, Full E, Push, Ready, Merge or Production.
+Batch risk remains E. Live Public archive qualification, complete Gate57,
+performance closure, Full E75/75 and subsequent release reviews remain open.
+`globalClosed=false`.

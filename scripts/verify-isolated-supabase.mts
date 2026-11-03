@@ -1415,7 +1415,48 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     assert.equal((file as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0);
     const candidates = all(file, node => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification") as ts.FunctionDeclaration[];
     assert.equal(candidates.length, 1); const candidate = candidates[0];
-    const sourceCalls = all(candidate, node => ts.isCallExpression(node) && node.expression.getText(file) === "verifySource") as ts.CallExpression[];
+    const bindings = (name: string) => all(candidate, node => (ts.isVariableDeclaration(node) || ts.isParameter(node)
+      || ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isBindingElement(node)) && node.name?.getText(file) === name);
+    const sourceBindings = bindings("verifySource"); assert.equal(sourceBindings.length, 1, "The actual source verifier cannot be shadowed.");
+    const sourceBinding = sourceBindings[0]; assert.ok(ts.isVariableDeclaration(sourceBinding));
+    assert.equal(sourceBinding.parent.parent.parent === candidate.body, true);
+    const archives = bindings("preserveClosedNativeArchives"); assert.equal(archives.length, 1);
+    const archive = archives[0]; assert.ok(ts.isVariableDeclaration(archive)); assert.equal(archive.parent.parent.parent === candidate.body, true);
+    assert.ok(archive.initializer && ts.isArrowFunction(archive.initializer) && ts.isBlock(archive.initializer.body));
+    assert.ok(archive.initializer.modifiers?.some(value => value.kind === ts.SyntaxKind.AsyncKeyword));
+    const archiveBody = archive.initializer.body, archiveEntry = archiveBody.statements[0];
+    assert.equal(archiveEntry.getText(file), 'await drainControlPulse("archive-preservation");');
+    assert.ok(ts.isExpressionStatement(archiveEntry) && ts.isAwaitExpression(archiveEntry.expression) && ts.isCallExpression(archiveEntry.expression.expression));
+    const archiveDrain = archiveEntry.expression.expression;
+    const archiveAwaits = all(archiveBody, ts.isAwaitExpression);
+    assert.equal(archiveAwaits.length, 1, "Archive binding and copying must remain synchronous after the sole passive pulse drain.");
+    assert.equal(archiveAwaits[0] === archiveEntry.expression, true);
+    const archiveSources = all(archiveBody, node => ts.isCallExpression(node) && node.expression.getText(file) === "verifySource") as ts.CallExpression[];
+    assert.equal(archiveSources.length, 1); const archiveSource = archiveSources[0];
+    assert.ok(ts.isExpressionStatement(archiveSource.parent) && ts.isBlock(archiveSource.parent.parent));
+    const archiveBinding = archiveSource.parent.parent, archiveCondition = archiveBinding.parent;
+    assert.ok(ts.isIfStatement(archiveCondition) && archiveCondition.thenStatement === archiveBinding && !archiveCondition.elseStatement);
+    assert.equal(archiveCondition.expression.getText(file), "!bindingChecked");
+    const checkedBindings = all(archiveBody, node => (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node))
+      && node.name.getText(file) === "bindingChecked");
+    assert.equal(checkedBindings.length, 1); const checkedBinding = checkedBindings[0];
+    assert.ok(ts.isVariableDeclaration(checkedBinding)); assert.equal(checkedBinding.parent.parent.parent === archiveBody, true);
+    assert.equal(checkedBinding.initializer?.getText(file), "false");
+    const archiveSourceIndex = archiveBinding.statements.indexOf(archiveSource.parent);
+    assert.equal(archiveSourceIndex, archiveBinding.statements.length - 2);
+    assert.equal(archiveBinding.statements[archiveSourceIndex + 1].getText(file), "bindingChecked = true;");
+    const admission = archiveBinding.statements[archiveSourceIndex - 1];
+    assert.ok(ts.isExpressionStatement(admission) && ts.isCallExpression(admission.expression));
+    assert.equal(admission.expression.expression.getText(file), "assertLocalVerificationAdmissionQualification");
+    assert.equal(admission.expression.arguments[0].getText(file), "request.admissionQualification!");
+    const archiveTryBody = archiveCondition.parent; assert.ok(ts.isBlock(archiveTryBody));
+    assert.equal(archiveTryBody.statements[archiveTryBody.statements.indexOf(archiveCondition) - 1].getText(file), 'stage = "source_runtime_binding";');
+    const archiveTry = archiveTryBody.parent; assert.ok(ts.isTryStatement(archiveTry) && archiveTry.tryBlock === archiveTryBody);
+    assert.ok(ts.isBlock(archiveTry.parent) && ts.isForOfStatement(archiveTry.parent.parent));
+    assert.equal(archiveTry.parent.parent.expression.getText(file), "closedVerificationChildren");
+    assert.equal(archiveTry.parent.parent.parent === archiveBody, true);
+    const sourceCalls = (all(candidate, node => ts.isCallExpression(node) && node.expression.getText(file) === "verifySource") as ts.CallExpression[])
+      .filter(node => node !== archiveSource);
     assert.equal(sourceCalls.length, 3);
     const sourceDrains: ts.CallExpression[] = [];
     for (const call of sourceCalls) {
@@ -1441,14 +1482,13 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     ], "The sole additional drain belongs to the awaited dependency step before the operation and between its checkpoints.");
     const stagingDrain = all(step.initializer.body, node => ts.isCallExpression(node) && node.expression.getText(file) === "drainControlPulse") as ts.CallExpression[];
     assert.equal(stagingDrain.length, 1);
-    const bound = all(candidate, node => (ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node))
-      && node.name?.getText(file) === "drainControlPulse");
+    const bound = bindings("drainControlPulse");
     assert.equal(bound.length, 1, "The private drain port cannot be shadowed by a local binding.");
     assert.equal(bound[0] === candidate.parameters[3], true, "The sole drain binding must be the actual private parameter.");
     const drains = all(candidate, node => ts.isCallExpression(node) && node.expression.getText(file) === "drainControlPulse") as ts.CallExpression[];
     assert.deepEqual(drains.map(node => node.getStart(file)).sort((a, b) => a - b),
-      [...sourceDrains, ...stagingDrain].map(node => node.getStart(file)).sort((a, b) => a - b), "Every drain must belong to an original source pass or the one checked dependency step.");
-    return { sourceDrains, stagingDrain: stagingDrain[0], stage, step, candidate };
+      [...sourceDrains, ...stagingDrain, archiveDrain].map(node => node.getStart(file)).sort((a, b) => a - b), "Every drain must belong to an original source pass, the checked dependency step, or the passive archive entry.");
+    return { sourceDrains, stagingDrain: stagingDrain[0], stage, step, candidate, archiveBody, archiveEntry, archiveDrain, archiveSource, archiveBinding, admission };
   };
   const drainBoundaries = inspectDrainBoundaries(publicFile);
   const replaceNode = (node: ts.Node, replacement: string) => publicFile.text.slice(0, node.getStart(publicFile)) + replacement + publicFile.text.slice(node.end);
@@ -1456,8 +1496,10 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     assert.notEqual(changed, publicFile.text);
     assert.throws(() => inspectDrainBoundaries(ts.createSourceFile("isolated-public-verification.mts", changed, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)), name);
   };
-  for (const [index, drain] of drainBoundaries.sourceDrains.entries())
+  for (const [index, drain] of drainBoundaries.sourceDrains.entries()) {
     rejectBoundary(`omitted original source drain ${index + 1}`, replaceNode(drain.parent.parent, ""));
+    rejectBoundary(`original source drain ${index + 1} cannot use the passive archive phase`, replaceNode(drain.parent.parent, 'await drainControlPulse("archive-preservation");'));
+  }
   rejectBoundary("unawaited dependency drain", replaceNode(drainBoundaries.stagingDrain.parent, "drainControlPulse()"));
   const stepBody = (drainBoundaries.step.initializer as ts.ArrowFunction).body as ts.Block;
   for (const [index, statement] of stepBody.statements.entries()) {
@@ -1470,15 +1512,44 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
   rejectBoundary("extra dependency drain outside step", replaceNode(stageBody, stageBody.getText(publicFile).slice(0, -1) + "await drainControlPulse(); }"));
   const runBody = drainBoundaries.candidate.body!;
   rejectBoundary("extra drain outside qualified boundaries", replaceNode(runBody, runBody.getText(publicFile).slice(0, -1) + "await drainControlPulse(); }"));
+  rejectBoundary("omitted passive archive drain", replaceNode(drainBoundaries.archiveEntry, ""));
+  rejectBoundary("unawaited passive archive drain", replaceNode(drainBoundaries.archiveEntry, 'drainControlPulse("archive-preservation");'));
+  rejectBoundary("archive drain cannot use the failing live mode", replaceNode(drainBoundaries.archiveEntry, "await drainControlPulse();"));
+  rejectBoundary("archive drain cannot accept an unknown passive phase", replaceNode(drainBoundaries.archiveEntry, 'await drainControlPulse("unclassified");'));
+  rejectBoundary("archive work cannot yield after its entry drain", replaceNode(drainBoundaries.archiveBody,
+    drainBoundaries.archiveBody.getText(publicFile).slice(0, -1) + "await Promise.resolve(); }"));
+  rejectBoundary("omitted archive source binding", replaceNode(drainBoundaries.archiveSource.parent, ""));
+  rejectBoundary("duplicated archive source binding", replaceNode(drainBoundaries.archiveSource.parent, "verifySource(); verifySource();"));
+  rejectBoundary("archive source binding cannot follow its completion marker", replaceNode(drainBoundaries.archiveBinding,
+    drainBoundaries.archiveBinding.getText(publicFile).replace("verifySource();", "").replace("bindingChecked = true;", "bindingChecked = true; verifySource();")));
+  rejectBoundary("archive source binding cannot move outside its qualified block", replaceNode(drainBoundaries.archiveBody,
+    drainBoundaries.archiveBody.getText(publicFile).replace("verifySource();", "").slice(0, -1) + "verifySource(); }"));
+  rejectBoundary("archive source binding retains live admission qualification", replaceNode(drainBoundaries.admission, ""));
+  rejectBoundary("archive source verifier cannot be shadowed", replaceNode(drainBoundaries.archiveBody,
+    "{ const verifySource = () => {};" + drainBoundaries.archiveBody.getText(publicFile).slice(1)));
+  rejectBoundary("unclassified extra source verification", replaceNode(runBody, runBody.getText(publicFile).slice(0, -1) + "verifySource(); }"));
   cases.push("source pulse boundaries retain three original awaited drains and reject omitted, unawaited, shadowed or extra dependency-step drains and checkpoints");
   cases.push("admission, per-gate and final source passes await the private pulse drain immediately; context/request/signal identities stay unchanged");
+  cases.push("the archive source binding has one passive entry drain, no later await or shadow, and rejects omitted, duplicated, moved or unclassified source checks");
   const verify = all(run, node => ts.isVariableDeclaration(node) && node.name.getText(publicFile) === "verifySource")[0] as ts.VariableDeclaration;
   const timer = all(lifecycle, node => ts.isCallExpression(node) && node.expression.getText(lifecycle) === "setInterval" && node.getText(lifecycle).includes("public-job-heartbeat")) as ts.CallExpression[];
   assert.equal(timer.length, 1); assert.equal(timer[0].arguments[1].getText(lifecycle), "20_000");
+  const launchStatement = launch[0].parent.parent; assert.ok(ts.isExpressionStatement(launchStatement) && ts.isBlock(launchStatement.parent));
+  const lifecycleResult = launchStatement.parent.statements[launchStatement.parent.statements.indexOf(launchStatement) + 1];
+  assert.ok(ts.isTryStatement(lifecycleResult) && lifecycleResult.catchClause && lifecycleResult.finallyBlock);
   const transpile = (code: string) => ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const factory = new Function("applicationLease", "request", "publicContext", "handle", "safeRecord", "publicJobAbort", "asSafeError", "isOwnedLocalVerificationActive",
-    transpile(`let heartbeatActive=true, heartbeatBusy=false, heartbeatFailure; let pulse=Promise.resolve(); const tick=${timer[0].arguments[0].getText(lifecycle)}; const drain=${args[3].getText(lifecycle)}; return {tick,drain,pending:()=>pulse};`));
-  function setup(connectFailure?: Error, scheduled = false) {
+    transpile(`let heartbeatActive=true, heartbeatBusy=false, heartbeatFailure; let pulse=Promise.resolve(); const timer=undefined;
+      const tick=${timer[0].arguments[0].getText(lifecycle)}; const drain=${args[3].getText(lifecycle)};
+      const settle=async(publicJob:Promise<unknown>)=>{${lifecycleResult.getText(lifecycle)}}; return {tick,drain,settle,pending:()=>pulse};`));
+  const archiveSourceBoundary = (drainControlPulse: (phase?: string) => Promise<void>, verifySource: () => void, omitEntry = false) => {
+    const entry = drainBoundaries.archiveEntry.getText(publicFile), sourceCheck = drainBoundaries.archiveSource.parent.getText(publicFile);
+    // These are the actual entry and source call, whose intervening owner body is
+    // required above to stay synchronous. Raw archive behavior is verified at its existing fixture owner.
+    return new Function("drainControlPulse", "verifySource", transpile(`return async()=>{${omitEntry ? "" : entry}\n${sourceCheck}};`))(
+      drainControlPulse, verifySource) as () => Promise<void>;
+  };
+  function setup(connectFailure?: Error, scheduled = false, failAfterRelease = false) {
     let time = 0, connections = 0, heartbeats = 0, sourceReads = 0, connectStarted = false, oldClosed = false;
     const events: string[] = [], abort = new AbortController();
     const client = (pid: number) => Object.assign(new EventEmitter(), { async connect() {}, async query() { return { rows: [{ database: "postgres", role: "postgres", backend_pid: pid }], rowCount: 1 }; }, async end() { if (pid === 1) oldClosed = true; } });
@@ -1486,13 +1557,15 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     let release: (() => void) | undefined;
     const lease = owner.createAdminMeasurementControlLease(first, { now: () => time, assertHealthy() {}, async assertOwned() {}, watch() {}, replaced() {}, record() {},
       connect: async () => { connections++; connectStarted = true; events.push("connect-start");
-        if (connectFailure) throw connectFailure;
+        if (connectFailure && !failAfterRelease) throw connectFailure;
         if (scheduled) await new Promise<void>((resolve, reject) => { const deadline = setTimeout(() => reject(new owner.IsolatedSupabaseError("DB_CONNECTION_TIMEOUT", "database-connect")), 20); setImmediate(() => { clearTimeout(deadline); events.push("connect-ready"); resolve(); }); });
         else await new Promise<void>(resolve => { release = resolve; });
+        if (connectFailure) throw connectFailure;
         return second;
       } });
     time = 240_000;
-    const control = factory(lease, { selection: "admin-adoption" }, { async assertOwned() {} }, { async query() { heartbeats++; events.push("heartbeat"); } }, () => {}, abort, (error: unknown) => error, () => false) as { tick(): void; drain(): Promise<void>; pending(): Promise<void> };
+    const control = factory(lease, { selection: "admin-adoption" }, { async assertOwned() {} }, { async query() { heartbeats++; events.push("heartbeat"); } }, () => {}, abort, (error: unknown) => error, () => false) as {
+      tick(): void; drain(phase?: string): Promise<void>; settle(job: Promise<unknown>): Promise<unknown>; pending(): Promise<void> };
     const bytes = Buffer.from("exact-source"), digest = sha256(bytes), manifest = [{ file: "owner.mts", sha256: digest }];
     let stall = false;
     const sourceGuard = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", "downloadFixture", "localImpact",
@@ -1534,6 +1607,51 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     await new Promise<void>(resolve => setImmediate(resolve));
   }
   cases.push("actual lease/heartbeat/source guard scheduling model reproduces undrained timeout and drained success with identical scaled deadline and injected synchronous stall; no real database claim");
+  for (const omitEntry of [true, false]) {
+    const t = setup(); t.control.tick(); for (let n = 0; n < 8 && !t.started(); n++) await Promise.resolve(); assert.equal(t.started(), true);
+    let finished = false; const pending = archiveSourceBoundary(t.control.drain, t.sourceGuard, omitEntry)().then(() => { finished = true; });
+    await Promise.resolve(); assert.equal(t.state().sourceReads, omitEntry ? 3 : 0); assert.equal(finished, omitEntry);
+    t.control.tick(); assert.equal(t.state().connections, 1); t.release(); await pending; await t.control.pending();
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 1, sourceReads: 3, oldClosed: true });
+    assert.equal(t.events.indexOf("heartbeat") < t.events.indexOf("source-read"), !omitEntry);
+    assert.equal(t.abort.signal.aborted, false);
+  }
+  cases.push("removing only the actual passive archive entry reproduces source reads during pending renewal; the maintained entry waits without another connection or query");
+  {
+    const failure = new owner.IsolatedSupabaseError("DB_CONNECTION_TIMEOUT", "database-connect"), t = setup(failure); t.control.tick();
+    const preservation = archiveSourceBoundary(t.control.drain, t.sourceGuard)();
+    await assert.rejects(t.control.settle(preservation), error => error === failure);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 0, sourceReads: 3, oldClosed: false });
+    assert.equal(t.abort.signal.aborted, true);
+    for (const phase of [undefined, "unclassified"]) await assert.rejects(t.control.drain(phase), error => error === failure);
+    t.control.tick(); assert.equal(t.state().connections, 1);
+  }
+  cases.push("failed heartbeat still permits passive archive source checks but actual outer lifecycle rejects the original heartbeat; default and unknown drain phases never suppress it or retry");
+  {
+    const t = setup(), original = Error("Controlled original Public cancellation"); t.control.tick();
+    for (let n = 0; n < 8 && !t.started(); n++) await Promise.resolve(); assert.equal(t.started(), true);
+    const preservation = archiveSourceBoundary(t.control.drain, t.sourceGuard)();
+    const result = t.control.settle(preservation.then(() => { throw original; })); result.catch(() => {});
+    t.abort.abort(original); await Promise.resolve(); assert.equal(t.state().sourceReads, 0);
+    t.release(); await assert.rejects(result, error => error === original);
+    assert.equal(t.abort.signal.reason, original); assert.deepEqual(t.state(), { connections: 1, heartbeats: 1, sourceReads: 3, oldClosed: true });
+    assert.ok(t.events.indexOf("heartbeat") < t.events.indexOf("source-read")); t.control.tick(); assert.equal(t.state().connections, 1);
+  }
+  cases.push("cancellation during the passive archive wait keeps source reads behind the pending pulse and preserves the original Public error when that pulse succeeds");
+  {
+    const failure = new owner.IsolatedSupabaseError("DB_CONNECTION_TIMEOUT", "database-connect"), original = Error("Controlled earlier Public failure");
+    const t = setup(failure, false, true); t.control.tick();
+    for (let n = 0; n < 8 && !t.started(); n++) await Promise.resolve(); assert.equal(t.started(), true);
+    let publicError: unknown;
+    const preservation = archiveSourceBoundary(t.control.drain, t.sourceGuard)().then(() => { throw original; })
+      .catch(error => { publicError = error; throw error; });
+    const result = t.control.settle(preservation); result.catch(() => {});
+    await Promise.resolve(); assert.equal(t.state().sourceReads, 0); t.release();
+    await assert.rejects(result, error => error === failure); assert.equal(publicError, original);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 0, sourceReads: 3, oldClosed: false });
+    assert.equal(t.abort.signal.aborted, true); t.control.tick(); assert.equal(t.state().connections, 1);
+  }
+  cases.push("a heartbeat failing during the archive wait preserves the Public rejection at its boundary while the unchanged outer lifecycle returns the exact heartbeat error without a success claim");
 }
 
 async function adminControlLeaseOnly() {
@@ -3740,7 +3858,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
       stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext, drainControlPulse,
       lstatSync, readdirSync, writeFileSync, mkdirSync, dirname, isAbsolute, ownedPath, registeredVerificationNodeEntries } = ports;
     const request = ports.request ?? {admissionQualification:{baselineHead:"controlled-baseline"}}, heroCompatibility = false, measurement = undefined, ROOT = ports.ROOT ?? "controlled-root";
-    const headSha = ports.headSha ?? "controlled-head", localInputs = undefined, signal = new AbortController().signal;
+    const headSha = ports.headSha ?? "controlled-head", localInputs = undefined, signal = ports.signal ?? new AbortController().signal;
     const manifest = ports.manifest ?? [{file:"package.json"},{file:"controlled.mts"}], qualityEnvironment = {};
     const verifySource = ports.verifySource ?? (() => {}), process = ports.process ?? {platform:"win32",execPath:"controlled-node",version:"controlled-version",versions:{v8:"controlled-v8"},execArgv:[]};
     const assertLocalVerificationAdmissionQualification = ports.assertLocalVerificationAdmissionQualification
@@ -3911,7 +4029,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
   }).join("\n")) + ";return registeredVerificationNodeEntries;")(assert, sourceIncluded) as
     (scripts: Record<string, string>, check: string) => string[];
   const buildPreservation = new Function("ports", compile(`const {assert,digest,receipt,lstatSync,realpathSync,readFileSync,readdirSync,writeFileSync,mkdirSync,existsSync,
-    join,dirname,isAbsolute,sep,ROOT,process,sourceDirectory,ownedPath,context,request,manifest,verifySource,registeredVerificationNodeEntries,assertLocalVerificationAdmissionQualification}=ports;
+    join,dirname,isAbsolute,sep,ROOT,process,sourceDirectory,ownedPath,context,request,manifest,verifySource,drainControlPulse,registeredVerificationNodeEntries,assertLocalVerificationAdmissionQualification}=ports;
     ${declaration("nativeArchiveBinding", run.body.statements)}
     nativeArchiveBinding=ports.nativeArchiveBinding;
     ${declaration("closedVerificationChildren", run.body.statements)}
@@ -3922,7 +4040,8 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     | "native-exit-mismatch" | "source-manifest-mismatch" | "source-sha-mismatch" | "runtime-mismatch" | "project-lock-mismatch" | "installed-lock-mismatch"
     | "missing-declaration" | "malformed-declaration" | "duplicate-declaration" | "missing-archive" | "path-escape" | "link" | "hard-link"
     | "malformed-index" | "index-hash" | "index-membership" | "index-path" | "index-cleanup" | "archive-mutation" | "destination-mutation" | "existing-copy" | "private-io-failure";
-  const archiveFixture = async (options: { outcome?: "completed" | "nonzero_exit" | "timeout" | "cancelled"; fault?: ArchiveFault; omitDeclaration?: boolean } = {}) => {
+  const archiveFixture = async (options: { outcome?: "completed" | "nonzero_exit" | "timeout" | "cancelled"; fault?: ArchiveFault; omitDeclaration?: boolean;
+    drainControlPulse?: (phase?: "archive-preservation") => Promise<void>; sourceFailure?: Error; cleanupFailure?: Error } = {}) => {
     const directory = realpathSync(mkdtempSync(path.join(root, ".tmp-qa", "native-archive-preservation-controls-")));
     const installation = path.join(directory, "installation"), runDirectory = path.join(directory, "run"), workspace = path.join(runDirectory, "public-build-source");
     const temporary = path.join(workspace, ".tmp-qa"), originalRoot = path.join(temporary, "owned-process-controls-controlled"), preservedRoot = path.join(runDirectory, "native-archives-preserved", path.basename(originalRoot));
@@ -3979,15 +4098,23 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     const closed = [{ name, args, commandSha256: options.fault === "command-mismatch" ? "f".repeat(64) : sha256(JSON.stringify(args)),
       binding: options.fault === "cloned-child-binding" ? { ...binding } : binding, result }];
     const events: string[] = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
-    let removed = false, workerStopped = false, childStopped = false, sourceReads = 0, qualificationChecks = 0, sourceChecks = 0;
+    let removed = false, workerStopped = false, childStopped = false, preservationStarted = false, sourceReads = 0, qualificationChecks = 0, sourceChecks = 0;
     const context = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({}), record: (event: string, data: { gate?: string }) => events.push(event + ":" + (data.gate ?? "")) };
-    const retainedAdmission = { get workerStopped() { return workerStopped; }, async close() { await Promise.resolve(); workerStopped = true; events.push("worker-stopped"); } };
+    const retainedAdmission = { get workerStopped() { return workerStopped; }, async close() {
+      await Promise.resolve(); workerStopped = true; events.push("worker-stopped"); if (options.cleanupFailure) throw options.cleanupFailure;
+    } };
     const ports = { assert, ts, join: path.join, dirname: path.dirname, isAbsolute: path.isAbsolute, sep: path.sep, digest: sha256, ROOT: installation,
       process: { platform: "win32", execPath: "controlled-node", version: "controlled-version", versions: { v8: "controlled-v8" }, execArgv: [] },
       sourceDirectory: workspace, context, originalContext: context, activeLocalVerifications: new WeakSet([context]), children: new Set([{}]), retainedAdmission,
+      signal: undefined as AbortSignal | undefined,
       request: { admissionQualification: qualification }, headSha, manifest, nativeArchiveBinding: options.fault === "missing-binding" ? undefined : binding, closed,
       prefix: ["lint", "typecheck", "verify:admin-runtime"], registeredVerificationNodeEntries: commandEntries, ownedPath: (_context: unknown, file: string) => path.join(runDirectory, file),
-      async drainControlPulse() {}, verifySource() { sourceChecks++; },
+      async drainControlPulse(phase?: "archive-preservation") {
+        if (phase === "archive-preservation") { preservationStarted = true; events.push("archive-pulse-wait"); }
+        await options.drainControlPulse?.(phase);
+        if (phase === "archive-preservation") events.push("archive-pulse-settled");
+      },
+      verifySource() { sourceChecks++; events.push("source-verified"); if (preservationStarted && options.sourceFailure) throw options.sourceFailure; },
       assertLocalVerificationAdmissionQualification(value: unknown) { assert.equal(value, qualification); qualificationChecks++; return { sourceDiscovery: { changes: [] }, sourceFloor: { checks: [] } }; },
       async runChild(_args: string[], _env: object, gate: string) {
         if (gate === name) { if (outcome === "timeout" || outcome === "cancelled") throw original; return result; }
@@ -4012,6 +4139,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     };
     return { execute: factory(ports), preserve: buildPreservation(ports), events, receipts, original, privateFailure, privateMessage, originalRoot, preservedRoot,
       negativeBytes, binaryBytes, directory, workspace, qualificationChecks: () => qualificationChecks, sourceChecks: () => sourceChecks,
+      setSignal(signal: AbortSignal) { ports.signal = signal; }, signal: () => ports.signal,
       stopped: () => childStopped && workerStopped, removed: () => removed,
       cleanup() { if (existsSync(link) && lstatSync(link).isSymbolicLink()) unlinkSync(link);
         assert.equal(path.dirname(directory), realpathSync(path.join(root, ".tmp-qa"))); assert.equal(lstatSync(directory).isSymbolicLink(), false);
@@ -4099,6 +4227,134 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
       assert.equal(value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
     } finally { value.cleanup(); }
   });
+  const lifecycleTree = ts.createSourceFile("isolated-supabase.mts", readSource("scripts/lib/isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const lifecycleMethods: ts.ArrowFunction[] = [];
+  const findLifecycleMethod = (node: ts.Node) => {
+    if (ts.isPropertyAssignment(node) && node.name.getText(lifecycleTree) === "runPublicVerification" && ts.isArrowFunction(node.initializer)) lifecycleMethods.push(node.initializer);
+    ts.forEachChild(node, findLifecycleMethod);
+  };
+  findLifecycleMethod(lifecycleTree); assert.equal(lifecycleMethods.length, 1);
+  const lifecycleMethod = lifecycleMethods[0]!; assert.ok(ts.isBlock(lifecycleMethod.body));
+  const lifecycleStatements = lifecycleMethod.body.statements;
+  const lifecycleStart = lifecycleStatements.findIndex(node => node.getText(lifecycleTree) === "publicJobAbort = new AbortController();");
+  assert.ok(lifecycleStart >= 0); assert.ok(ts.isTryStatement(lifecycleStatements[lifecycleStatements.length - 1]!));
+  const buildArchiveLifecycle = new Function("ports", compile(`return async (request) => {
+    const {AbortController,setInterval,clearInterval,applicationLease,publicContext,handle,safeRecord,asSafeError,isOwnedLocalVerificationActive,runOwnedPublicVerification}=ports;
+    let publicJob,publicJobAbort;
+    ${lifecycleStatements.slice(lifecycleStart).map(node => node.getText(lifecycleTree)).join("\n")}
+  };`)) as (ports: Record<string, unknown>) => (request: object) => Promise<unknown>;
+  const deferredArchivePulse = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
+  const archiveLifecycleFixture = async (options: { pending?: boolean; heartbeatFailure?: Error; outcome?: "completed" | "timeout" | "cancelled";
+    fault?: ArchiveFault; sourceFailure?: Error; cleanupFailure?: Error } = {}) => {
+    const pending = deferredArchivePulse(), entered = deferredArchivePulse(), observed: string[] = [];
+    let tick: (() => void) | undefined, controller: AbortController | undefined, drain: ((phase?: "archive-preservation") => Promise<void>) | undefined;
+    let timerCleared = false, publicSignal: AbortSignal | undefined;
+    const value = await archiveFixture({ ...options, async drainControlPulse(phase) {
+      assert.ok(drain);
+      if (phase === "archive-preservation") { assert.ok(tick); tick(); entered.resolve(); }
+      await drain(phase);
+    } });
+    const timer = Object.freeze({ controlledTimer: true });
+    const execute = buildArchiveLifecycle({
+      AbortController: function ControlledAbortController() { controller = new AbortController(); return controller; },
+      setInterval(callback: () => void, interval: number) { assert.equal(interval, 20_000); assert.equal(tick, undefined); tick = callback; return timer; },
+      clearInterval(value: unknown) { assert.equal(value, timer); timerCleared = true; observed.push("timer-cleared"); },
+      applicationLease: { async renewIfDue() { observed.push("pulse-start"); if (options.pending) await pending.promise;
+        if (options.heartbeatFailure) throw options.heartbeatFailure; observed.push("pulse-renewed"); } },
+      publicContext: { async assertOwned() { observed.push("pulse-owned"); } },
+      handle: { async query(query: string) { assert.equal(query, "select 1 as owned_public_job_heartbeat"); observed.push("pulse-query"); } },
+      safeRecord(event: string) { observed.push(event); }, asSafeError(error: unknown, stage: string) { assert.equal(stage, "public-job-heartbeat"); return error; },
+      isOwnedLocalVerificationActive() { return false; },
+      async runOwnedPublicVerification(_context: unknown, _request: unknown, signal: AbortSignal, callback: (phase?: "archive-preservation") => Promise<void>) {
+        publicSignal = signal; value.setSignal(signal); drain = callback; return value.execute();
+      },
+    });
+    return { value, observed, entered: entered.promise, release: pending.resolve, execute: () => execute({ selection: "admin-adoption" }),
+      timerCleared: () => timerCleared, signal: () => publicSignal,
+      cancel() { assert.ok(controller); controller.abort(value.original); },
+      async defaultDrain() { assert.ok(drain); await drain(); } };
+  };
+  const assertArchiveLifecycle = (value: Awaited<ReturnType<typeof archiveLifecycleFixture>>, status: "PASS_PRESERVATION_ONLY" | "BLOCKED") => {
+    assert.ok(value.timerCleared() && value.value.stopped() && value.value.removed());
+    const receipts = value.value.receipts.filter(row => row.name === "public-native-evidence-preservation.json"); assert.equal(receipts.length, 1);
+    assert.equal(receipts[0]!.value.status, status);
+    for (const key of ["qualificationGranted", "nativePassClaimed", "gatePassClaimed", "liveAdmissionGranted"]) assert.equal(receipts[0]!.value[key], false);
+    assert.equal(value.value.receipts.some(row => row.name === "final-quality-gate.json"), false);
+    assert.ok(value.value.events.indexOf("archive-pulse-settled") < value.value.events.indexOf("native-preservation-receipt"));
+    assert.ok(value.value.events.indexOf("native-preservation-receipt") < value.value.events.indexOf("workspace-removed"));
+  };
+  await control("actual lifecycle healthy pulse settles before Native archive source reads and cleanup", async () => {
+    const value = await archiveLifecycleFixture();
+    try {
+      await value.execute(); assertArchiveLifecycle(value, "PASS_PRESERVATION_ONLY");
+      assert.deepEqual(value.observed, ["pulse-start", "pulse-renewed", "pulse-owned", "pulse-query", "public-job-heartbeat", "timer-cleared"]);
+      assert.ok(value.value.events.indexOf("archive-pulse-settled") < value.value.events.indexOf("native-file-read"));
+    } finally { value.release(); value.value.cleanup(); }
+  });
+  await control("actual lifecycle pending pulse blocks archive reads until settlement without changing gate authority", async () => {
+    const value = await archiveLifecycleFixture({ pending: true });
+    let execution: Promise<unknown> | undefined;
+    try {
+      execution = value.execute(); await value.entered;
+      const sourceChecks = value.value.sourceChecks(); await Promise.resolve();
+      assert.equal(value.value.sourceChecks(), sourceChecks); assert.equal(value.value.events.includes("native-file-read"), false);
+      assert.equal(value.value.removed(), false); assert.equal(value.timerCleared(), false);
+      value.release(); await execution; assertArchiveLifecycle(value, "PASS_PRESERVATION_ONLY");
+      assert.ok(value.value.sourceChecks() > sourceChecks);
+    } finally { value.release(); await execution?.catch(() => undefined); value.value.cleanup(); }
+  });
+  for (const outcome of ["completed", "timeout"] as const) {
+    await control(`actual failed heartbeat preserves ${outcome} archives and rejects at unchanged outer lifecycle and default drain`, async () => {
+      const failure = Error("controlled heartbeat failure"), value = await archiveLifecycleFixture({ heartbeatFailure: failure, outcome });
+      try {
+        await assert.rejects(value.execute(), error => error === failure); assertArchiveLifecycle(value, "PASS_PRESERVATION_ONLY");
+        assert.equal(value.signal()?.aborted, true); await assert.rejects(value.defaultDrain(), error => error === failure);
+        if (outcome === "timeout") {
+          assert.equal(Object.getOwnPropertyDescriptor(value.value.original, "childResult")?.value.reason, "timeout");
+          assert.equal(value.value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
+        }
+      } finally { value.release(); value.value.cleanup(); }
+    });
+  }
+  await control("actual cancellation during a pending archive pulse retains the original cancelled child and finishes preservation", async () => {
+    const value = await archiveLifecycleFixture({ pending: true, outcome: "cancelled" });
+    let rejected: Promise<void> | undefined;
+    try {
+      rejected = assert.rejects(value.execute(), error => error === value.value.original); await value.entered;
+      value.cancel(); assert.equal(value.signal()?.aborted, true); assert.equal(value.value.signal(), value.signal());
+      assert.equal(value.value.signal()?.aborted, true); assert.equal(value.value.events.includes("native-file-read"), false);
+      value.release(); await rejected; assertArchiveLifecycle(value, "PASS_PRESERVATION_ONLY");
+      assert.equal(Object.getOwnPropertyDescriptor(value.value.original, "childResult")?.value.reason, "cancelled");
+      assert.equal(value.value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
+    } finally { value.release(); await rejected?.catch(() => undefined); value.value.cleanup(); }
+  });
+  await control("actual archive source verification failure remains fatal after healthy pulse and awaited cleanup", async () => {
+    const failure = Error("controlled archive source failure"), value = await archiveLifecycleFixture({ sourceFailure: failure });
+    try {
+      await assert.rejects(value.execute(), error => error === failure); assertArchiveLifecycle(value, "BLOCKED");
+      const receipt = value.value.receipts.find(row => row.name === "public-native-evidence-preservation.json")!;
+      assert.deepEqual((receipt.value.failures as Array<{ stage: string }>).map(row => row.stage), ["source_runtime_binding"]);
+    } finally { value.release(); value.value.cleanup(); }
+  });
+  await control("actual lifecycle worker cleanup failure cannot become a pass after healthy pulse and archive preservation", async () => {
+    const failure = Error("controlled worker cleanup rejection"), value = await archiveLifecycleFixture({ cleanupFailure: failure });
+    try {
+      await assert.rejects(value.execute(), error => error === failure); assertArchiveLifecycle(value, "PASS_PRESERVATION_ONLY");
+    } finally { value.release(); value.value.cleanup(); }
+  });
+  for (const outcome of ["timeout", "cancelled"] as const) for (const failureKind of ["archive", "cleanup"] as const) {
+    await control(`actual lifecycle retains original ${outcome} and secondary ${failureKind} failure after passive pulse`, async () => {
+      const cleanupFailure = Error("controlled secondary worker cleanup"), value = await archiveLifecycleFixture({ outcome,
+        ...(failureKind === "archive" ? { fault: "private-io-failure" as const } : { cleanupFailure }) });
+      try {
+        await assert.rejects(value.execute(), error => error === value.value.original);
+        assertArchiveLifecycle(value, failureKind === "archive" ? "BLOCKED" : "PASS_PRESERVATION_ONLY");
+        const secondary = Object.getOwnPropertyDescriptor(value.value.original, "publicCleanupFailure");
+        assert.ok(secondary); assert.equal(secondary.value, failureKind === "archive" ? value.value.privateFailure : cleanupFailure); assert.equal(secondary.enumerable, false);
+        assert.equal(value.value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
+      } finally { value.release(); value.value.cleanup(); }
+    });
+  }
   const buildStage = new Function("ports", compile(`const {assert,asyncFs,fsConstants,performance,join,sep,ROOT,sourceDirectory,context,signal,process,
     drainControlPulse,manifest,digest,receipt,localVerificationAdmissionRuntimeIdentity}=ports;
     ${stageDeclaration}

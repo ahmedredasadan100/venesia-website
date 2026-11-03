@@ -1796,9 +1796,12 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               } finally { heartbeatBusy = false; }
             })();
           }, 20_000);
-          publicJob = runOwnedPublicVerification(publicContext, request, publicJobAbort.signal, async () => {
+          publicJob = runOwnedPublicVerification(publicContext, request, publicJobAbort.signal, async (phase) => {
             await pulse;
-            if (heartbeatFailure) throw heartbeatFailure;
+            // Failed heartbeats still reject execution. Preservation waits for
+            // the same pulse without skipping failure/cancellation evidence;
+            // the unchanged outer boundary propagates heartbeatFailure.
+            if (heartbeatFailure && phase !== "archive-preservation") throw heartbeatFailure;
           });
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
           catch(error) {throw heartbeatFailure ?? error;}
