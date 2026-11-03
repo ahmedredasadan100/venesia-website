@@ -5332,13 +5332,13 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
   };
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const declarations = ["ownedPath", "receipt", "stopChild", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"].map(name => {
+  const declarations = ["ownedPath", "receipt", "stopChild", "localVerificationCommandSteps", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"].map(name => {
     const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
     assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
   });
   const code = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", code + ";return {run:runOwnedVerificationChild,stop:stopChild,verifyOwnedProcessReadiness,ownedProcessCleanupQualification};")(
-    assert, path.isAbsolute, path.resolve, path.sep, launch, write, existsSync, readFileSync, readdirSync, lstatSync, windowsOwnedProcessCapability, launchWindows) as {
+  const buildApi = (write: typeof writeFileSync = writeFileSync, launch: typeof spawn = spawn) => new Function("assert", "isAbsolute", "resolve", "sep", "spawn", "writeFileSync", "existsSync", "readFileSync", "readdirSync", "lstatSync", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", "dirname", "join", "realpathSync", "mkdirSync", "digest", code + ";return {run:runOwnedVerificationChild,stop:stopChild,verifyOwnedProcessReadiness,ownedProcessCleanupQualification};")(
+    assert, path.isAbsolute, path.resolve, path.sep, launch, write, existsSync, readFileSync, readdirSync, lstatSync, windowsOwnedProcessCapability, launchWindows, path.dirname, path.join, realpathSync, mkdirSync, sha256) as {
       run: typeof import("./lib/isolated-public-verification.mts").runOwnedVerificationChild;
       verifyOwnedProcessReadiness: typeof import("./lib/isolated-public-verification.mts").verifyOwnedProcessReadiness;
       ownedProcessCleanupQualification: typeof import("./lib/isolated-public-verification.mts").ownedProcessCleanupQualification;
@@ -5539,6 +5539,305 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
         failure: failures[0], stderrSha256: sha256(result.stderr), cleanup: result.cleanup, actualResult: result, applicationOutputSupplied: false });
     });
     if (!options?.admissionOnly) {
+    // Project the actual private observer with controlled file/clock ports; these fixtures grant no live authority.
+    const childOwner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
+      && node.name?.text === "runOwnedVerificationChild");
+    assert.ok(childOwner?.body);
+    const timingDeclarations: ts.VariableStatement[] = [];
+    const findTiming = (node: ts.Node) => {
+      if (ts.isVariableStatement(node) && node.declarationList.declarations.some(value => ts.isIdentifier(value.name)
+        && value.name.text === "gate57Timing")) timingDeclarations.push(node);
+      ts.forEachChild(node, findTiming);
+    };
+    findTiming(childOwner); assert.equal(timingDeclarations.length, 1);
+    const commandOwner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
+      && node.name?.text === "localVerificationCommandSteps");
+    assert.ok(commandOwner?.body);
+    const pathOwner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ownedPath");
+    assert.ok(pathOwner?.body);
+    const timingCode = ts.transpileModule(pathOwner.getText(file) + "\n" + commandOwner.getText(file).replace(/^export /u, "") + "\n"
+      + timingDeclarations[0]!.getText(file) + "\nreturn gate57Timing;", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    type TimingReference = NonNullable<Awaited<ReturnType<typeof api.run>>["timingEvidence"]>;
+    type TimingFacts = { code: number | null; reason: string | null; stdout: string | null; stderr: string | null;
+      cleanup: { status: "PASS"; liveProcesses: number; processTreeVerified: boolean }; nativeJobIdentity: null; nativeJobReceipt: null };
+    type TimingProjection = { environment: Record<string, string>; observe(stream: "stdout" | "stderr", chunk: string): void;
+      beginDeadline(): void; finish(facts: TimingFacts): TimingReference };
+    type TimingReceipt = { status: string; enabled: boolean; child: { code: number | null; reason: string | null };
+      files: Array<{ file: string; bytes: number; sha256: string }>;
+      timings: Array<{ script: string; commandInclusiveWallMs: number }>; issues: string[]; qualificationGranted: boolean;
+      nativePassGranted: boolean; gatePassGranted: boolean; releaseEvidence: boolean;
+      source: { packageSha256: string; invocationPreorder: Array<{ id: number; script: string; parentId: number | null }>; invocationPostorder: number[] };
+      observations: { starts: Array<{ script: string; planId: number | null; nominalRemainingMs: number | null }>;
+        ends: Array<{ script: string | null; timingFileMatched: boolean }>; unobservedOrUnfinished: unknown[] };
+      clockOrigins: { ownerTimeoutReferenceMonotonicMs: number | null; nominalRemainingIsExactNativeRemaining: boolean } };
+    let timingFixtureNumber = 0;
+    const timingFixture = (options: { package?: { name: string; version: string; scripts: Record<string, string> };
+      npmVersion?: string; ports?: Record<string, unknown>; args?: string[] } = {}) => {
+      const base = realpathSync(mkdtempSync(path.join(directory, "timing-unit-"))), sourceDirectory = path.join(base, "package");
+      const proofDirectory = path.join(base, "proof"), nodeDirectory = path.join(base, "runtime"), executable = path.join(nodeDirectory, "node.exe");
+      const npmRoot = path.join(nodeDirectory, "node_modules", "npm"), npmCli = path.join(npmRoot, "bin", "npm-cli.js");
+      mkdirSync(sourceDirectory); mkdirSync(proofDirectory); mkdirSync(nodeDirectory);
+      const put = (file: string, bytes: string) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, bytes, { flag: "wx" }); };
+      put(executable, "controlled Node bytes; not an executable capability");
+      put(path.join(npmRoot, "package.json"), JSON.stringify({ version: options.npmVersion ?? "11.9.0" }));
+      put(npmCli, "controlled npm CLI bytes; not executed");
+      for (const relative of ["lib/npm.js", "lib/utils/timers.js", "lib/utils/display.js", "lib/utils/log-file.js", "lib/commands/run.js",
+        "node_modules/@npmcli/run-script/lib/run-script-pkg.js", "node_modules/proc-log/lib/index.js"]) put(path.join(npmRoot, relative), "controlled format source " + relative);
+      const pkg = options.package ?? JSON.parse(readSource("package.json")) as { name: string; version: string; scripts: Record<string, string> };
+      const packageFile = path.join(sourceDirectory, "package.json"); put(packageFile, JSON.stringify(pkg));
+      const name = "timing-unit-" + (++timingFixtureNumber), stdoutPath = path.join(proofDirectory, `public-${name}.stdout.log`);
+      const stderrPath = path.join(proofDirectory, `public-${name}.stderr.log`);
+      const fixtureContext = { ...context, runDirectory: proofDirectory }, fixtureProcess = { execPath: executable, version: process.version,
+        versions: { v8: process.versions.v8, modules: process.versions.modules }, platform: "linux", arch: process.arch, execArgv: [] };
+      const ports = { assert, args: options.args ?? [npmCli, "run", "verify:admin-runtime"], name, limitMs: 1_800_000,
+        sourceDirectory, context: fixtureContext, stdoutPath, stderrPath, started: performance.now(), performance, Date, process: fixtureProcess,
+        dirname: path.dirname, join: path.join, resolve: path.resolve, sep: path.sep, existsSync, lstatSync, realpathSync,
+        readFileSync, readdirSync, mkdirSync, writeFileSync, digest: sha256, isAbsolute: path.isAbsolute, ...options.ports };
+      const projected = new Function(...Object.keys(ports), timingCode)(...Object.values(ports)) as TimingProjection | undefined;
+      const preorder: string[] = [], postorder: string[] = [];
+      const visit = (script: string) => { preorder.push(script); for (const step of pkg.scripts[script]!.split("&&")) {
+        const nested = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step.trim()); if (nested) visit(nested[1]!);
+      } postorder.push(script); };
+      visit("verify:admin-runtime");
+      const timingDirectory = path.join(proofDirectory, `public-${name}-npm-timing`);
+      const members = new Map<string, string>(), durations = new Map(postorder.map((script, index) => [script, index + 1]));
+      const populate = () => { for (const [index, script] of postorder.entries()) {
+        const id = `2026-11-03T00_00_00_${String(index).padStart(3, "0")}Z`, file = path.join(timingDirectory, id + "-timing.json");
+        put(file, JSON.stringify({ metadata: { id, command: ["run", script], version: "11.9.0", logfiles: [] },
+          timers: { npm: durations.get(script)! + 5, "command:run": durations.get(script)! }, unfinishedTimers: {} })); members.set(script, file);
+      } };
+      const headers = preorder.map(script => `> ${pkg.name}@${pkg.version} ${script}\n`);
+      const completions = postorder.map(script => `npm timing command:run Completed in ${durations.get(script)}ms\n`);
+      const observe = (starts = headers, ends = completions) => { assert.ok(projected); projected.beginDeadline();
+        for (const value of starts) { projected.observe("stdout", value.slice(0, 3)); projected.observe("stdout", value.slice(3)); }
+        for (const value of ends) { projected.observe("stderr", value.slice(0, 7)); projected.observe("stderr", value.slice(7)); }
+      };
+      const facts: TimingFacts = { code: 0, reason: null, stdout: headers.join(""), stderr: completions.join(""),
+        cleanup: { status: "PASS", liveProcesses: 0, processTreeVerified: true }, nativeJobIdentity: null, nativeJobReceipt: null };
+      const receiptFile = path.join(proofDirectory, `public-${name}.npm-timing.json`);
+      const finish = (patch: Partial<TimingFacts> = {}) => { assert.ok(projected); const finalFacts = { ...facts, ...patch };
+        writeFileSync(stdoutPath, finalFacts.stdout ?? "", { flag: "wx" }); writeFileSync(stderrPath, finalFacts.stderr ?? "", { flag: "wx" });
+        const reference = projected.finish(finalFacts), bytes = readFileSync(receiptFile);
+        assert.equal(reference.sha256, sha256(bytes)); return { reference, value: JSON.parse(bytes.toString()) as TimingReceipt }; };
+      const rewrite = (script: string, edit: (value: { metadata: { version: string; command: string[] }; timers: Record<string, number>;
+        unfinishedTimers: Record<string, number[]> }) => void) => { const at = members.get(script); assert.ok(at);
+        const value = JSON.parse(readFileSync(at, "utf8")); edit(value); writeFileSync(at, JSON.stringify(value)); };
+      return { base, sourceDirectory, executable, npmRoot, packageFile, proofDirectory, timingDirectory, projected, pkg, members, args: ports.args,
+        preorder, postorder, headers, completions, populate, observe, facts, finish, rewrite, receiptFile };
+    };
+    const assertDiagnosticOnly = (value: TimingReceipt) => {
+      assert.equal(value.qualificationGranted, false); assert.equal(value.nativePassGranted, false);
+      assert.equal(value.gatePassGranted, false); assert.equal(value.releaseEvidence, false);
+      assert.equal(value.clockOrigins.nominalRemainingIsExactNativeRemaining, false);
+    };
+    await control("Gate57 timing source graph covers every literal verify and qa invocation without a fixed count", async () => {
+      const fixture = timingFixture(); fixture.populate(); fixture.observe(); const { reference, value } = fixture.finish();
+      assert.equal(reference.status, "COMPLETE_DIAGNOSTIC_ONLY"); assert.equal(value.status, reference.status); assert.deepEqual(value.issues, []);
+      assert.deepEqual(value.source.invocationPreorder.map(row => row.script), fixture.preorder);
+      assert.deepEqual(value.source.invocationPostorder.map(id => fixture.preorder[id]), fixture.postorder);
+      assert.deepEqual(value.observations.starts.map(row => row.script), fixture.preorder);
+      assert.deepEqual(value.observations.ends.map(row => row.script), fixture.postorder);
+      assert.ok(value.observations.ends.every(row => row.timingFileMatched)); assert.equal(value.files.length, fixture.preorder.length);
+      assert.ok(fixture.preorder.includes("qa:cinematic-admin") && fixture.preorder.includes("qa:taxonomy-form-revision"));
+      assert.equal(value.source.packageSha256, sha256(readFileSync(fixture.packageFile))); assertDiagnosticOnly(value);
+      runtimeProofs.push({ control: "controlled_source_graph_timing", invocationCount: fixture.preorder.length,
+        packageSha256: value.source.packageSha256, sourceDerivedCount: true, liveAdmissionGranted: false, actualNpmExecuted: false });
+    });
+    await control("Gate57 timing keeps independent cross-pipe delivery and bounded unrelated lines", async () => {
+      const fixture = timingFixture(); fixture.populate(); assert.ok(fixture.projected); fixture.projected.beginDeadline();
+      fixture.projected.observe("stdout", "x".repeat(5_000) + "\n");
+      for (const value of fixture.completions) fixture.projected.observe("stderr", value);
+      for (const value of fixture.headers) fixture.projected.observe("stdout", "\u001b[32m" + value.replace("\n", "\u001b[0m\r\n"));
+      const { value } = fixture.finish(); assert.equal(value.status, "COMPLETE_DIAGNOSTIC_ONLY"); assertDiagnosticOnly(value);
+      assert.ok(value.observations.starts.every(row => typeof row.nominalRemainingMs === "number"));
+    });
+    const partialCases: Array<[string, (fixture: ReturnType<typeof timingFixture>) => void, string]> = [
+      ["missing start", fixture => fixture.observe(fixture.headers.slice(1)), "START_PREORDER_MISMATCH"],
+      ["missing end", fixture => fixture.observe(fixture.headers, fixture.completions.slice(0, -1)), "INCOMPLETE_OR_INTERRUPTED_NPM_OBSERVATIONS"],
+      ["wrong start order", fixture => { const rows = [...fixture.headers]; [rows[0], rows[1]] = [rows[1]!, rows[0]!]; fixture.observe(rows); }, "START_PREORDER_MISMATCH"],
+      ["unexpected banner", fixture => fixture.observe(["> " + fixture.pkg.name + "@" + fixture.pkg.version + " unbound\n", ...fixture.headers]), "UNEXPECTED_SCRIPT_BANNER"],
+      ["wrong completion order", fixture => { const rows = [...fixture.completions]; [rows[0], rows[1]] = [rows[1]!, rows[0]!]; fixture.observe(fixture.headers, rows); }, "END_FILE_SEQUENCE_OR_DURATION_AMBIGUOUS"],
+      ["duplicate end", fixture => fixture.observe(fixture.headers, [...fixture.completions, fixture.completions[0]!]), "INVALID_OR_EXCESS_END_EVENT"],
+      ["missing timing file", fixture => { unlinkSync(fixture.members.get(fixture.postorder[0]!)!); fixture.observe(); }, "END_FILE_SEQUENCE_OR_DURATION_AMBIGUOUS"],
+      ["unexpected timing file name", fixture => { unlinkSync(fixture.members.get(fixture.postorder[0]!)!); writeFileSync(path.join(fixture.timingDirectory, "unbound.txt"), "opaque"); fixture.observe(); }, "UNEXPECTED_TIMING_FILE_NAME"],
+      ["corrupt timing JSON", fixture => { writeFileSync(fixture.members.get(fixture.postorder[0]!)!, "{negative fixture"); fixture.observe(); }, "MALFORMED_TIMING_JSON"],
+      ["wrong npm metadata version", fixture => { fixture.rewrite(fixture.postorder[0]!, value => { value.metadata.version = "0.0.0"; }); fixture.observe(); }, "UNQUALIFIED_TIMING_METADATA_OR_WALL_CLOCK"],
+      ["unknown timing command", fixture => { fixture.rewrite(fixture.postorder[0]!, value => { value.metadata.command = ["run", "unbound"]; }); fixture.observe(); }, "UNQUALIFIED_TIMING_METADATA_OR_WALL_CLOCK"],
+      ["duplicate timing command", fixture => { fixture.rewrite(fixture.postorder[1]!, value => { value.metadata.command[1] = fixture.postorder[0]!; }); fixture.observe(); }, "DUPLICATE_TIMING_COMMAND"],
+      ["wrong timing duration", fixture => { fixture.rewrite(fixture.postorder[0]!, value => { value.timers["command:run"] = 0; }); fixture.observe(); }, "END_FILE_SEQUENCE_OR_DURATION_AMBIGUOUS"],
+      ["negative npm wall duration", fixture => fixture.observe(fixture.headers, ["npm timing command:run Completed in -1ms\n", ...fixture.completions.slice(1)]), "NEGATIVE_NPM_WALL_DURATION"],
+      ["unfinished wall timer", fixture => { fixture.rewrite(fixture.postorder[0]!, value => { value.unfinishedTimers = { active: [1, 2] }; }); fixture.observe(); }, "UNQUALIFIED_TIMING_METADATA_OR_WALL_CLOCK"],
+      ["unterminated stream", fixture => { fixture.observe(); fixture.projected!.observe("stderr", "npm timing command:run"); }, "UNTERMINATED_STREAM_LINE"],
+    ];
+    for (const [label, alter, issue] of partialCases) await control("Gate57 timing " + label + " stays diagnostic PARTIAL", async () => {
+      const fixture = timingFixture(); fixture.populate(); alter(fixture); const { value } = fixture.finish();
+      assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); assert.ok(value.issues.includes(issue)); assert.ok(value.observations.ends.every(row => row.script === null && !row.timingFileMatched)); assertDiagnosticOnly(value);
+    });
+    await control("Gate57 timing unsupported npm protocol adds no npm environment or false completeness", async () => {
+      const fixture = timingFixture({ npmVersion: "99.0.0" }); assert.equal(fixture.projected, undefined);
+      assert.equal(existsSync(fixture.timingDirectory), false); assert.equal(existsSync(fixture.receiptFile), false);
+    });
+    await control("Gate57 timing backwards delivery UTC is diagnostic PARTIAL without a clock tolerance", async () => {
+      let utc = Date.now(); const ControlledDate = class extends Date { constructor(value?: number) { super(value ?? (utc -= 1_000)); } };
+      const fixture = timingFixture({ ports: { Date: ControlledDate } }); fixture.populate(); fixture.observe(); const { value } = fixture.finish();
+      assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); assert.ok(value.issues.includes("DELIVERY_UTC_MOVED_BACKWARDS_WITH_MONOTONIC_PROGRESS")); assertDiagnosticOnly(value);
+    });
+    await control("Gate57 timing fractional clock deltas are retained without an invented drift threshold", async () => {
+      let tick = 0; const fixture = timingFixture({ ports: { performance: { now: () => (tick += 0.125) }, started: 0 } });
+      fixture.populate(); fixture.observe(); const { value } = fixture.finish(); assert.equal(value.status, "COMPLETE_DIAGNOSTIC_ONLY"); assertDiagnosticOnly(value);
+    });
+    for (const shape of ["unsupported", "lifecycle", "repeated"] as const) await control("Gate57 timing " + shape + " source graph remains ambiguous diagnostic data", async () => {
+      const pkg: { name: string; version: string; scripts: Record<string, string> } = { name: "controlled", version: "0.0.0", scripts: { "verify:admin-runtime": shape === "unsupported" ? "echo unmodeled"
+        : shape === "repeated" ? "npm run verify:leaf && npm run verify:leaf" : "npm run verify:leaf", "verify:leaf": "node leaf.mjs",
+        ...(shape === "lifecycle" ? { "preverify:leaf": "node hidden.mjs" } : {}) } };
+      const fixture = timingFixture({ package: pkg }); fixture.populate(); fixture.observe(); const { value } = fixture.finish();
+      assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); assert.ok(value.issues.includes(shape === "unsupported" ? "UNSUPPORTED_BOUND_COMMAND_OR_PACKAGE"
+        : shape === "lifecycle" ? "UNMODELED_NPM_LIFECYCLE_SCRIPT" : "REPEATED_SCRIPT_INVOCATION_AMBIGUOUS")); assertDiagnosticOnly(value);
+    });
+    await control("Gate57 timing unrelated argv touches no new runtime or filesystem port", async () => {
+      const forbidden = () => { throw Error("Unrelated timing path touched a forbidden port."); };
+      const fixture = timingFixture({ args: ["--experimental-strip-types", "unchanged.mts"], ports: { process: { get execPath() { return forbidden(); } }, existsSync: forbidden } });
+      assert.equal(fixture.projected, undefined); assert.equal(existsSync(fixture.timingDirectory), false);
+    });
+    for (const reason of ["nonzero_exit", "timeout", "cancelled"] as const) await control("Gate57 timing preserves original " + reason + " facts without granting a gate result", async () => {
+      const fixture = timingFixture(); fixture.populate(); fixture.observe(); const code = reason === "nonzero_exit" ? 7 : null;
+      const { value } = fixture.finish({ code, reason }); assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY");
+      assert.equal(value.child.code, code); assert.equal(value.child.reason, reason); assertDiagnosticOnly(value);
+    });
+    const integrityCases: Array<[string, (fixture: ReturnType<typeof timingFixture>) => void]> = [
+      ["source drift", fixture => writeFileSync(fixture.packageFile, readFileSync(fixture.packageFile, "utf8") + " ")],
+      ["argv drift", fixture => { fixture.args[2] = "changed-command"; }],
+      ["runtime drift", fixture => writeFileSync(fixture.executable, "changed controlled runtime bytes")],
+      ["npm source drift", fixture => writeFileSync(path.join(fixture.npmRoot, "lib", "npm.js"), "changed format source")],
+    ];
+    for (const [label, alter] of integrityCases) await control("Gate57 timing " + label + " preserves secondary integrity failure", async () => {
+      const fixture = timingFixture(); fixture.populate(); fixture.observe(); alter(fixture);
+      assert.throws(() => fixture.finish(), error => error instanceof assert.AssertionError);
+      const value = JSON.parse(readFileSync(fixture.receiptFile, "utf8")) as TimingReceipt;
+      assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); assert.ok(value.issues.includes("TIMING_EVIDENCE_INTEGRITY_OR_IO_FAILURE")); assertDiagnosticOnly(value);
+    });
+    for (const kind of ["link", "hardlink", "escape", "membership"] as const) await control("Gate57 timing " + kind + " cannot qualify physical raw files", async () => {
+      let directoryReads = 0;
+      const fixture = timingFixture({ ports: {
+        lstatSync: (at: Parameters<typeof lstatSync>[0]) => { const stat = lstatSync(at); return typeof at === "string" && at.endsWith("-timing.json")
+          ? { ...stat, isFile: () => true, isSymbolicLink: () => kind === "link", nlink: kind === "hardlink" ? 2 : stat.nlink } : stat; },
+        realpathSync: (at: Parameters<typeof realpathSync>[0]) => typeof at === "string" && at.endsWith("-timing.json") && kind === "escape"
+          ? path.join(directory, "outside-timing-file") : realpathSync(at),
+        readdirSync: (at: Parameters<typeof readdirSync>[0]) => { const names = readdirSync(at); if (typeof at === "string" && at.endsWith("-npm-timing")
+          && kind === "membership" && ++directoryReads === 2) return [...names, "unbound-timing.json"]; return names; },
+      } });
+      fixture.populate(); fixture.observe(); assert.throws(() => fixture.finish(), error => error instanceof assert.AssertionError);
+      const value = JSON.parse(readFileSync(fixture.receiptFile, "utf8")) as TimingReceipt;
+      assert.ok(value.issues.includes("TIMING_EVIDENCE_INTEGRITY_OR_IO_FAILURE")); assertDiagnosticOnly(value);
+    });
+    await control("Gate57 timing raw read failure retains exact secondary error and interrupted child facts", async () => {
+      const failure = Error("Controlled timing read failure");
+      const fixture = timingFixture({ ports: { readFileSync: (at: Parameters<typeof readFileSync>[0], options?: unknown) => {
+        if (typeof at === "string" && at.endsWith("-timing.json")) throw failure; return readFileSync(at, options as BufferEncoding); } } });
+      fixture.populate(); fixture.observe(); assert.throws(() => fixture.finish({ code: null, reason: "timeout" }), error => error === failure);
+      const value = JSON.parse(readFileSync(fixture.receiptFile, "utf8")) as TimingReceipt;
+      assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); assertDiagnosticOnly(value);
+    });
+    await control("Gate57 timing raw byte drift after capture cannot qualify its initial hash", async () => {
+      const reads = new Map<string, number>();
+      const fixture = timingFixture({ ports: { readFileSync: (at: Parameters<typeof readFileSync>[0], options?: unknown) => {
+        const bytes = readFileSync(at, options as BufferEncoding);
+        if (typeof at === "string" && at.endsWith("-timing.json")) { const count = (reads.get(at) ?? 0) + 1; reads.set(at, count);
+          if (count > 1) return Buffer.from(bytes.toString() + " "); } return bytes; } } });
+      fixture.populate(); fixture.observe(); assert.throws(() => fixture.finish(), error => error instanceof assert.AssertionError);
+      const value = JSON.parse(readFileSync(fixture.receiptFile, "utf8")) as TimingReceipt;
+      assert.ok(value.issues.includes("TIMING_EVIDENCE_INTEGRITY_OR_IO_FAILURE")); assertDiagnosticOnly(value);
+    });
+    await control("Gate57 timing generated credential projection refuses receipt publication", async () => {
+      const fixture = timingFixture({ package: { name: "controlled", version: "0.0.0", scripts: { "verify:admin-runtime": "node private-sentinel.mjs" } } });
+      fixture.populate(); fixture.observe(); assert.throws(() => fixture.finish(), error => error instanceof assert.AssertionError && /generated credential/u.test(error.message));
+      assert.equal(existsSync(fixture.receiptFile), false);
+    });
+    // Actual short npm processes use the existing Native child owner. Only their package workspace is disposable.
+    const npmCli = [path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js"),
+      path.resolve(path.dirname(process.execPath), "../lib/node_modules/npm/bin/npm-cli.js"),
+      path.resolve(path.dirname(process.execPath), "../share/nodejs/npm/bin/npm-cli.js")].find(at => existsSync(at) && lstatSync(at).isFile());
+    assert.ok(npmCli, "The controlled npm timing probe requires the current installed npm CLI.");
+    const actualNpmVersion = (JSON.parse(readFileSync(path.join(path.resolve(path.dirname(npmCli), ".."), "package.json"), "utf8")) as { version: string }).version;
+    const actualNpmTimingSupported = actualNpmVersion === "11.9.0";
+    const npmFixtureDirectory = realpathSync(mkdtempSync(path.join(directory, "timing-package-")));
+    const npmPackage = { name: "venisia-owned-timing-control", version: "0.0.0", private: true, scripts: {
+      "verify:admin-runtime": "npm run verify:timing-branch && npm run qa:timing-leaf",
+      "verify:timing-baseline": "npm run verify:timing-branch && npm run qa:timing-leaf",
+      "verify:timing-branch": "npm run verify:timing-leaf", "verify:timing-leaf": "node leaf.mjs", "qa:timing-leaf": "node leaf.mjs",
+    } };
+    writeFileSync(path.join(npmFixtureDirectory, "package.json"), JSON.stringify(npmPackage), { flag: "wx" });
+    writeFileSync(path.join(npmFixtureDirectory, "leaf.mjs"), "process.stdout.write('timing-leaf:' + process.env.npm_lifecycle_event + '\\n');process.stdout.write('timing-enabled:'+(process.env.npm_config_timing==='true')+'\\n');\n"
+      + "if(process.env.VENESIA_TIMING_CONTROL_HOLD==='1'){process.stdout.write('timing-controlled-ready\\n');setInterval(()=>{},1000);}\n", { flag: "wx" });
+    const npmEnvironment = { ...environment, CI: "1", npm_config_update_notifier: "false", npm_config_audit: "false", npm_config_fund: "false",
+      npm_config_userconfig: path.join(npmFixtureDirectory, "user.npmrc"), npm_config_globalconfig: path.join(npmFixtureDirectory, "global.npmrc"),
+      npm_config_cache: path.join(npmFixtureDirectory, "cache") };
+    writeFileSync(npmEnvironment.npm_config_userconfig, "", { flag: "wx" }); writeFileSync(npmEnvironment.npm_config_globalconfig, "", { flag: "wx" });
+    const npmSourceProof = path.join(directory, "npm-timing-fixture-source"); mkdirSync(npmSourceProof);
+    const npmSourceFiles = ["package.json", "leaf.mjs", "user.npmrc", "global.npmrc"].map(member => {
+      const original = path.join(npmFixtureDirectory, member), preserved = path.join(npmSourceProof, member), bytes = readFileSync(original);
+      writeFileSync(preserved, bytes, { flag: "wx", mode: 0o600 }); return { original, preserved, bytes: bytes.length, sha256: sha256(bytes) };
+    });
+    const actualNpm = (name: string, script: string, hold: boolean, signal = new AbortController().signal, limitMs = 30_000) =>
+      api.run({ sourceDirectory: npmFixtureDirectory, context, children, signal }, [npmCli, "run", script],
+        { ...npmEnvironment, ...(hold ? { VENESIA_TIMING_CONTROL_HOLD: "1" } : {}) }, name, limitMs);
+    const readTiming = (reference: TimingReference) => { const at = path.join(directory, reference.file), bytes = readFileSync(at);
+      assert.equal(sha256(bytes), reference.sha256); const value = JSON.parse(bytes.toString()) as TimingReceipt;
+      for (const row of value.files) { assert.ok(row.file.startsWith(realpathSync(directory) + path.sep));
+        const bytes = readFileSync(row.file); assert.equal(bytes.length, row.bytes); assert.equal(sha256(bytes), row.sha256); }
+      assertDiagnosticOnly(value); return value; };
+    try {
+      await control("actual short npm paired aliases retain diagnostic overhead without a release speedup claim", async () => {
+        const baseline = await actualNpm("npm-timing-baseline", "verify:timing-baseline", false);
+        assert.equal(baseline.code, 0); assert.equal(baseline.timingEvidence, undefined); assert.match(baseline.stdout, /timing-enabled:false/u);
+        const measured = await actualNpm("npm-timing-measured", "verify:admin-runtime", false);
+        assert.equal(measured.code, 0);
+        if (actualNpmTimingSupported) {
+          assert.ok(measured.timingEvidence); assert.match(measured.stdout, /timing-enabled:true/u);
+          const value = readTiming(measured.timingEvidence); assert.equal(value.enabled, true);
+          assert.equal(value.status, "COMPLETE_DIAGNOSTIC_ONLY"); assert.deepEqual(value.issues, []);
+          assert.equal(value.source.packageSha256, sha256(readFileSync(path.join(npmFixtureDirectory, "package.json"))));
+          assert.deepEqual(value.source.invocationPreorder.map(row => row.script), ["verify:admin-runtime", "verify:timing-branch", "verify:timing-leaf", "qa:timing-leaf"]);
+        } else { assert.equal(measured.timingEvidence, undefined); assert.match(measured.stdout, /timing-enabled:false/u); }
+        for (const result of [baseline, measured]) { assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0); }
+        const proof = { control: "actual_short_npm_timing_probe", actualNpmVersion, actualNpmTimingSupported, baseline, measured, signedDurationDifferenceMs: measured.durationMs - baseline.durationMs,
+          comparisonBoundary: "One sequential pair with different root npm argv/lifecycle names; no causal overhead threshold or production speedup inference",
+          canonicalGate57Executed: false, releaseEvidence: false, automaticRetries: 0 };
+        writeFileSync(path.join(directory, "npm-timing-paired-proof.json"), JSON.stringify(proof, null, 2) + "\n", { flag: "wx", mode: 0o600 }); runtimeProofs.push(proof);
+      });
+      for (const reason of ["timeout", "cancelled"] as const) await control("actual short npm " + reason + " keeps partial timing and Native cleanup", async () => {
+        const controller = new AbortController();
+        const pending = actualNpm("npm-timing-" + reason, "verify:admin-runtime", true, controller.signal, reason === "timeout" ? 1_500 : 20_000);
+        const outcome = pending.then(value => value, (error: unknown) => error);
+        try { if (reason === "cancelled") {
+          const child = [...children][0]; assert.ok(child?.stdout);
+          await new Promise<void>((done, reject) => {
+            let observed = ""; const timer = setTimeout(() => { controller.abort(); reject(Error("Controlled npm did not reach its fixed readiness marker.")); }, 10_000);
+            const receive = (chunk: unknown) => { observed = (observed + String(chunk)).slice(-1_024);
+              if (observed.includes("timing-controlled-ready\n")) { clearTimeout(timer); child.stdout!.off("data", receive); done(); } };
+            child.stdout!.on("data", receive); child.once("error", () => { clearTimeout(timer); reject(Error("Controlled npm failed before readiness.")); });
+          });
+          controller.abort(Error("Controlled npm timing cancellation"));
+        } } catch (error) { controller.abort(); await outcome; throw error; }
+        const error = await outcome; assert.ok(error instanceof Error); assert.match(error.message, /aborted or exceeded its bound/u);
+        const retained = (error as Error & { childResult: Awaited<ReturnType<typeof api.run>> & { reason: string } }).childResult;
+        assert.equal(retained.reason, reason); assert.equal(retained.cleanup.status, "PASS"); assert.equal(retained.cleanup.liveProcesses, 0); assert.equal(children.size, 0);
+        if (actualNpmTimingSupported) { assert.ok(retained.timingEvidence); const value = readTiming(retained.timingEvidence); assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); }
+        else assert.equal(retained.timingEvidence, undefined);
+        if (process.platform === "win32") { assert.equal(retained.nativeJobReceipt?.reason, reason); assert.equal(retained.nativeJobReceipt?.cleanup.activeProcessesAfterCleanup, 0); }
+        const proof = { control: "actual_short_npm_" + reason, actualNpmVersion, actualNpmTimingSupported, originalFailureClass: error.name, originalChildResult: retained,
+          canonicalGate57Executed: false, canonicalDeadlineChanged: false, releaseEvidence: false, automaticRetries: 0 };
+        writeFileSync(path.join(directory, "npm-timing-" + reason + "-proof.json"), JSON.stringify(proof, null, 2) + "\n", { flag: "wx", mode: 0o600 }); runtimeProofs.push(proof);
+      });
+    } finally {
+      assert.equal(children.size, 0, "Close actual controlled npm jobs before deleting only their package workspace.");
+      assert.equal(realpathSync(npmFixtureDirectory), npmFixtureDirectory);
+      assert.ok(path.basename(npmFixtureDirectory).startsWith("timing-package-") && path.dirname(npmFixtureDirectory) === directory);
+      for (const row of npmSourceFiles) { assert.equal(sha256(readFileSync(row.original)), row.sha256); assert.equal(sha256(readFileSync(row.preserved)), row.sha256); }
+      writeFileSync(path.join(directory, "npm-timing-fixture-source-binding.json"), JSON.stringify({ schema: 1, sourceDirectory: npmFixtureDirectory,
+        files: npmSourceFiles, actualControlledPackage: true, canonicalGate57Executed: false, releaseEvidence: false }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+      rmSync(npmFixtureDirectory, { recursive: true, force: true }); assert.equal(existsSync(npmFixtureDirectory), false);
+    }
     const applicationOwner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
       && node.name?.text === "runOwnedPublicVerification");
     assert.ok(applicationOwner?.body);
@@ -6253,7 +6552,7 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
     }
   } finally {
     const stopped = await Promise.allSettled([...children].map(child => api.stop(child, environment)));
-    if (process.platform === "win32" || options?.admissionOnly) {
+    if (process.platform === "win32" || options?.admissionOnly || existsSync(path.join(directory, "npm-timing-fixture-source"))) {
       const evidenceRoot = path.join(root, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true }); assert.equal(realpathSync(evidenceRoot), evidenceRoot);
       const nativeEvidenceDirectory = realpathSync(mkdtempSync(path.join(evidenceRoot, "owned-process-controls-")));
       const evidence: Array<{ file: string; sha256: string; bytes: number }> = [];
@@ -8463,7 +8762,7 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const i = "scripts/lib/verification-source-inventory.mts", f = "scripts/verify-verification-infrastructure.mts", q = "scripts/verify-isolated-application-cli-pulse.mjs";
     const workerNames = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
     // This controlled source fixture exercises the historical async correction,
-    // whose finite authority predates Native application ownership and cleanup.
+    // whose finite authority predates Native application ownership, cleanup and archive preservation.
     const currentRunSource = text("runOwnedPublicVerification");
     const run = declaration("runOwnedPublicVerification"); assert.ok(ts.isFunctionDeclaration(run) && run.body);
     const runTries = run.body.statements.filter(ts.isTryStatement); assert.equal(runTries.length, 1);
@@ -8479,7 +8778,15 @@ function verifyRetainedPublicControlEligibility(source: string) {
     assert.equal(applicationCleanup[0].getText(ownerFile), 'for (const settled of applicationCleanup) if (settled.status === "rejected") throw settled.reason;');
     const cleanupRule = transformations.filter(row => row.from === "    const childCleanup = await Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment())));");
     assert.equal(cleanupRule.length, 1);
-    const historicalFinally = "{\n    " + cleanupStatements.filter(node => node !== applicationCleanup[0]).map(node => node === nativeCleanup[0]
+    const archivePreservationStatements = [
+      'let preservationFailed = false, preservationFailure: unknown;',
+      'try { await preserveClosedNativeArchives(); } catch (error) { preservationFailed = true; preservationFailure = error; }',
+      'if (preservationFailed) throw preservationFailure;',
+    ].map(source => {
+      const matches = cleanupStatements.filter(node => node.getText(ownerFile).replace(/\r\n/gu, "\n") === source);
+      assert.equal(matches.length, 1); return matches[0];
+    });
+    const historicalFinally = "{\n    " + cleanupStatements.filter(node => node !== applicationCleanup[0] && !archivePreservationStatements.includes(node)).map(node => node === nativeCleanup[0]
       ? cleanupRule[0].to.trimStart() : node.getText(ownerFile).replace(/\r\n/gu, "\n")).join("\n    ") + "\n  }";
     const nativeFinallySource = nativeFinally.getText(ownerFile).replace(/\r\n/gu, "\n");
     assert.equal(currentRunSource.split(nativeFinallySource).length, 2);

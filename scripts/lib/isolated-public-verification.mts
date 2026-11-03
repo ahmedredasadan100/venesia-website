@@ -4960,7 +4960,9 @@ export function runOwnedVerificationChild(ports: {
   nativeJobIdentity?: WindowsJobIdentity | null; nativeJobReceipt?: WindowsJobReceipt | null;
   nativeCapability?: { executable: string; executableSha256: string; sourceSha256: string; compilerSha256: string; provenance: string };
   helperExit?: { code: number | null; signal: NodeJS.Signals | null };
-  helperIdentity?: { pid: number | null; ppid: number } }> {
+  helperIdentity?: { pid: number | null; ppid: number };
+  timingEvidence?: { file: string; sha256: string; status: "COMPLETE_DIAGNOSTIC_ONLY" | "PARTIAL_DIAGNOSTIC_ONLY";
+    overhead: { setupMs: number; observerMs: number; readParseMs: number; serializationMs: number; writeMs: number } } }> {
   const { sourceDirectory, context, children, signal } = ports;
   const started = performance.now();
   return new Promise((done, reject) => {
@@ -4968,6 +4970,212 @@ export function runOwnedVerificationChild(ports: {
     assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Owned child deadline must be a finite timer-safe positive integer.");
     const stdoutPath = ownedPath(context, `public-${name}.stdout.log`), stderrPath = ownedPath(context, `public-${name}.stderr.log`);
     assert.equal(existsSync(stdoutPath) || existsSync(stderrPath), false, "Owned child evidence already exists; refuse duplicate execution.");
+    const gate57Timing = (() => {
+      // Unrelated owners/argv perform no additional filesystem or runtime work.
+      if (args.length !== 3 || args[1] !== "run" || args[2] !== "verify:admin-runtime") return undefined;
+      const invocationArgv = [...args], setupStarted = performance.now(), nodeDirectory = dirname(process.execPath);
+      const npmCli = [join(nodeDirectory, "node_modules/npm/bin/npm-cli.js"), resolve(nodeDirectory, "../lib/node_modules/npm/bin/npm-cli.js"),
+        resolve(nodeDirectory, "../share/nodejs/npm/bin/npm-cli.js")].find(file => existsSync(file) && lstatSync(file).isFile());
+      if (!npmCli || args[0] !== npmCli) return undefined;
+      const npmRoot = resolve(dirname(npmCli), ".."), npmPackageFile = join(npmRoot, "package.json");
+      let npmPackage: { version?: string };
+      try { npmPackage = JSON.parse(readFileSync(npmPackageFile, "utf8")) as { version?: string }; } catch { return undefined; }
+      // An unsupported package manager retains its original command/environment;
+      // absence of this version-specific observer is never timing qualification.
+      if (npmPackage.version !== "11.9.0") return undefined;
+      const enabled = true, issues = new Set<string>();
+      const packageFile = join(sourceDirectory, "package.json"), packageBytes = readFileSync(packageFile);
+      const pkg = JSON.parse(packageBytes.toString()) as { name?: string; version?: string; scripts?: Record<string, string> };
+      const scripts = pkg.scripts ?? {}, preorder: Array<{ id: number; script: string; parentId: number | null }> = [], postorder: number[] = [];
+      const nodeLeaves = enabled ? localVerificationCommandSteps(scripts, "verify:admin-runtime") : undefined;
+      if (enabled && (!nodeLeaves || typeof pkg.name !== "string" || typeof pkg.version !== "string")) issues.add("UNSUPPORTED_BOUND_COMMAND_OR_PACKAGE");
+      if (nodeLeaves) {
+        const visit = (script: string, parentId: number | null) => {
+          const id = preorder.length; preorder.push({ id, script, parentId });
+          if (scripts["pre" + script] || scripts["post" + script]) issues.add("UNMODELED_NPM_LIFECYCLE_SCRIPT");
+          for (const step of scripts[script]!.split("&&")) { const wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step.trim()); if (wrapper) visit(wrapper[1]!, id); }
+          postorder.push(id);
+        };
+        visit("verify:admin-runtime", null);
+        if (new Set(preorder.map(row => row.script)).size !== preorder.length) issues.add("REPEATED_SCRIPT_INVOCATION_AMBIGUOUS");
+      }
+      const checkedFile = (file: string) => {
+        const stat = lstatSync(file); assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && realpathSync(file) === file,
+          "Owned npm timing evidence requires a physical ordinary file."); return stat;
+      };
+      const boundFiles = [npmPackageFile, npmCli, ...(enabled ? ["lib/npm.js", "lib/utils/timers.js", "lib/utils/display.js", "lib/utils/log-file.js",
+        "lib/commands/run.js", "node_modules/@npmcli/run-script/lib/run-script-pkg.js", "node_modules/proc-log/lib/index.js"].map(file => join(npmRoot, file)) : [])]
+        .map(file => { checkedFile(file); return { file, sha256: digest(readFileSync(file)) }; });
+      const runtime = { node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+        executable: process.execPath, executableSha256: digest(readFileSync(process.execPath)), parentExecArgv: [...process.execArgv], npmVersion: npmPackage.version ?? null,
+        npmPackageManagerOutsideProjectLock: true, npmSourceBinding: "Finite installed format-producing source files; not a complete npm dependency closure", files: boundFiles };
+      const directory = ownedPath(context, `public-${name}-npm-timing`);
+      if (enabled) {
+        assert.equal(existsSync(directory), false, "Preserve earlier npm timing evidence rather than reusing its directory.");
+        mkdirSync(directory, { mode: 0o700 }); assert.equal(realpathSync(directory), directory);
+        assert.ok(directory.startsWith(realpathSync(context.runDirectory) + sep));
+      }
+      const clockOriginMonotonicMs = performance.now(), startedWall = Date.now(), setupMs = clockOriginMonotonicMs - setupStarted;
+      let ownerTimeoutReferenceMonotonicMs: number | null = null;
+      const starts: Array<{ script: string; planId: number | null; deliveryMonotonicMs: number; deliveryUtc: string; nominalRemainingMs: number | null; wallMinusMonotonicMs: number }> = [];
+      const ends: Array<{ npmCommandInclusiveWallMs: number; deliveryMonotonicMs: number; deliveryUtc: string; nominalRemainingMs: number | null; wallMinusMonotonicMs: number }> = [];
+      const carries = { stdout: "", stderr: "" }, dropping = { stdout: false, stderr: false };
+      const lastDelivery: Partial<Record<"stdout" | "stderr", { utcMs: number; monotonicMs: number }>> = {};
+      const packageIdentity = `${pkg.name}@${pkg.version}`, bannerPrefix = `> ${packageIdentity} `;
+      const knownScripts = new Set(preorder.map(row => row.script)), ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
+      let observerMs = 0, observerCalls = 0, observedCharacters = 0, droppedLines = 0;
+      const stamp = (stream: "stdout" | "stderr") => { const now = performance.now(), deliveryUtc = new Date().toISOString(), utcMs = Date.parse(deliveryUtc), previous = lastDelivery[stream];
+        if (previous && now >= previous.monotonicMs && utcMs < previous.utcMs) issues.add("DELIVERY_UTC_MOVED_BACKWARDS_WITH_MONOTONIC_PROGRESS");
+        lastDelivery[stream] = { utcMs, monotonicMs: now };
+        return { deliveryMonotonicMs: now - started, deliveryUtc,
+        nominalRemainingMs: ownerTimeoutReferenceMonotonicMs === null ? null : limitMs - (now - ownerTimeoutReferenceMonotonicMs),
+        wallMinusMonotonicMs: Date.now() - startedWall - (now - clockOriginMonotonicMs) }; };
+      const line = (stream: "stdout" | "stderr", raw: string) => {
+        const value = raw.replace(ansi, "").replace(/\r$/u, "");
+        if (stream === "stdout" && value.startsWith(bannerPrefix)) {
+          const script = value.slice(bannerPrefix.length);
+          if (!knownScripts.has(script)) { issues.add("UNEXPECTED_SCRIPT_BANNER"); return; }
+          if (starts.length >= preorder.length) { issues.add("EXCESS_START_EVENTS"); return; }
+          const expected = preorder[starts.length]!, matches = expected.script === script;
+          if (!matches) issues.add("START_PREORDER_MISMATCH");
+          starts.push({ script, planId: matches ? expected.id : null, ...stamp(stream) });
+        } else if (stream === "stderr") {
+          const match = /^npm timing command:run Completed in (-?[0-9]+)ms$/u.exec(value);
+          if (!match) return;
+          const duration = Number(match[1]);
+          if (!Number.isSafeInteger(duration) || ends.length >= preorder.length) { issues.add("INVALID_OR_EXCESS_END_EVENT"); return; }
+          if (duration < 0) issues.add("NEGATIVE_NPM_WALL_DURATION");
+          ends.push({ npmCommandInclusiveWallMs: duration, ...stamp(stream) });
+        }
+      };
+      const observe = (stream: "stdout" | "stderr", chunk: string) => {
+        if (!enabled) return;
+        const before = performance.now(); observerCalls++; observedCharacters += chunk.length;
+        try {
+          let offset = 0;
+          while (offset < chunk.length) {
+            const newline = chunk.indexOf("\n", offset), end = newline < 0 ? chunk.length : newline;
+            if (!dropping[stream]) {
+              const segment = chunk.slice(offset, end);
+              if (carries[stream].length + segment.length <= 4096) carries[stream] += segment;
+              else {
+                const prefix = (carries[stream] + segment.slice(0, 4096)).replace(ansi, "");
+                if (prefix.startsWith(bannerPrefix) || prefix.startsWith("npm timing command:run")) issues.add("TIMING_LINE_CARRY_BOUND");
+                carries[stream] = ""; dropping[stream] = true; droppedLines++;
+              }
+            }
+            if (newline >= 0) { if (!dropping[stream]) line(stream, carries[stream]); carries[stream] = ""; dropping[stream] = false; offset = newline + 1; }
+            else break;
+          }
+        } catch { issues.add("OBSERVER_PARSE_FAILURE"); }
+        finally { observerMs += performance.now() - before; }
+      };
+      const finish = (facts: { code: number | null; reason: string | null; stdout: string | null; stderr: string | null;
+        cleanup?: Cleanup; nativeJobIdentity: WindowsJobIdentity | null; nativeJobReceipt: WindowsJobReceipt | null }) => {
+        const readStarted = performance.now();
+        for (const stream of ["stdout", "stderr"] as const) if (carries[stream]) { issues.add("UNTERMINATED_STREAM_LINE"); carries[stream] = ""; }
+        const files: Array<{ file: string; bytes: number; sha256: string }> = [], closedFiles: Array<{ file: string; bytes: number; sha256: string }> = [];
+        const timings: Array<{ script: string; commandInclusiveWallMs: number; npmInclusiveWallMs: number; id: string }> = [];
+        let rawMemberCount: number | null = null, rawNamesSha256: string | null = null;
+        let captureFailure: unknown;
+        try {
+          assert.deepEqual(args, invocationArgv, "Owned npm argv changed during execution.");
+          assert.equal(digest(readFileSync(packageFile)), digest(packageBytes), "Bound npm package scripts changed during execution.");
+          for (const row of boundFiles) { checkedFile(row.file); assert.equal(digest(readFileSync(row.file)), row.sha256, "Installed npm format source changed during execution."); }
+          assert.equal(digest(readFileSync(process.execPath)), runtime.executableSha256);
+          if (facts.stdout === null || facts.stderr === null || facts.cleanup?.status !== "PASS" || facts.cleanup.liveProcesses !== 0 || facts.cleanup.processTreeVerified !== true) issues.add("CLOSED_CHILD_EVIDENCE_UNAVAILABLE");
+          if (ownerTimeoutReferenceMonotonicMs === null) issues.add("OWNER_TIMEOUT_REFERENCE_UNAVAILABLE");
+          for (const [file, text] of [[stdoutPath, facts.stdout], [stderrPath, facts.stderr]] as const) if (text !== null) {
+            checkedFile(file); const bytes = readFileSync(file); assert.equal(digest(bytes), digest(text), "Closed child stream differs from its timing binding.");
+            closedFiles.push({ file, bytes: bytes.length, sha256: digest(bytes) });
+          }
+          if (process.platform === "win32") {
+            if (!facts.nativeJobIdentity || !facts.nativeJobReceipt) issues.add("NATIVE_CLOSURE_EVIDENCE_UNAVAILABLE");
+            else {
+              if (facts.nativeJobReceipt.status !== "PASS" || facts.nativeJobReceipt.cleanup.activeProcessesAfterCleanup !== 0
+                || facts.nativeJobReceipt.jobToken !== facts.nativeJobIdentity.jobToken || facts.nativeJobReceipt.rootPid !== facts.nativeJobIdentity.rootPid)
+                issues.add("NATIVE_CLOSURE_EVIDENCE_UNQUALIFIED");
+              for (const [suffix, value] of [["native-identity", facts.nativeJobIdentity], ["native-result", facts.nativeJobReceipt]] as const) {
+              const file = ownedPath(context, `public-${name}.${suffix}.json`); checkedFile(file);
+              const bytes = readFileSync(file); assert.deepEqual(JSON.parse(bytes.toString()), value, "Closed Native receipt differs from its timing binding.");
+              closedFiles.push({ file, bytes: bytes.length, sha256: digest(bytes) });
+              }
+            }
+          }
+          if (enabled) {
+            const stat = lstatSync(directory); assert.ok(stat.isDirectory() && !stat.isSymbolicLink() && realpathSync(directory) === directory);
+            const names = readdirSync(directory).sort(); rawMemberCount = names.length; rawNamesSha256 = digest(JSON.stringify(names));
+            if (names.length > preorder.length) issues.add("EXCESS_TIMING_FILE_MEMBERSHIP");
+            else for (const member of names) {
+              const file = join(directory, member), stat = checkedFile(file);
+              if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{3}Z-timing\.json$/u.test(member)) { issues.add("UNEXPECTED_TIMING_FILE_NAME"); continue; }
+              if (stat.size > 8_000_000) { issues.add("TIMING_FILE_PARSE_BOUND"); continue; }
+              const bytes = readFileSync(file), row = { file, bytes: bytes.length, sha256: digest(bytes) }; files.push(row);
+              let value: unknown; try { value = JSON.parse(bytes.toString()); } catch { issues.add("MALFORMED_TIMING_JSON"); continue; }
+              if (!value || typeof value !== "object" || Array.isArray(value)) { issues.add("INVALID_TIMING_JSON"); continue; }
+              const data = value as { metadata?: { id?: unknown; command?: unknown; version?: unknown; logfiles?: unknown }; timers?: Record<string, unknown>; unfinishedTimers?: unknown };
+              const command = data.metadata?.command, id = data.metadata?.id, commandMs = data.timers?.["command:run"], npmMs = data.timers?.npm;
+              const dateParts = typeof id === "string" ? /^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2})_([0-9]{2})_([0-9]{2})_([0-9]{3})Z$/u.exec(id) : null;
+              const utc = dateParts ? `${dateParts[1]}T${dateParts[2]}:${dateParts[3]}:${dateParts[4]}.${dateParts[5]}Z` : null;
+              const validId = utc !== null && Number.isFinite(Date.parse(utc)) && new Date(Date.parse(utc)).toISOString() === utc;
+              if (!Array.isArray(command) || command.length !== 2 || command[0] !== "run" || typeof command[1] !== "string" || !knownScripts.has(command[1])
+                || typeof id !== "string" || !validId || member !== id + "-timing.json" || data.metadata?.version !== "11.9.0"
+                || !Array.isArray(data.metadata.logfiles) || data.metadata.logfiles.length !== 0
+                || !Number.isSafeInteger(commandMs) || !Number.isSafeInteger(npmMs) || (commandMs as number) < 0 || (npmMs as number) < (commandMs as number)
+                || !data.unfinishedTimers || typeof data.unfinishedTimers !== "object" || Array.isArray(data.unfinishedTimers) || Object.keys(data.unfinishedTimers).length !== 0) {
+                issues.add("UNQUALIFIED_TIMING_METADATA_OR_WALL_CLOCK"); continue;
+              }
+              timings.push({ script: command[1], commandInclusiveWallMs: commandMs as number, npmInclusiveWallMs: npmMs as number, id });
+            }
+            assert.deepEqual(readdirSync(directory).sort(), names, "Npm timing membership changed after Native closure.");
+            for (const row of files) { checkedFile(row.file); assert.equal(digest(readFileSync(row.file)), row.sha256, "Npm timing bytes changed after capture."); }
+          }
+        } catch (error) { captureFailure = error; issues.add("TIMING_EVIDENCE_INTEGRITY_OR_IO_FAILURE"); }
+        const startedIds = new Set(starts.flatMap(row => row.planId === null ? [] : [row.planId]));
+        const observedPostorder = postorder.filter(id => startedIds.has(id));
+        if (ends.length > observedPostorder.length) issues.add("END_POSTORDER_AMBIGUOUS");
+        const byScript = new Map<string, typeof timings[number]>();
+        for (const row of timings) { if (byScript.has(row.script)) issues.add("DUPLICATE_TIMING_COMMAND"); else byScript.set(row.script, row); }
+        const completedPrefix = observedPostorder.slice(0, ends.length).map(id => preorder[id]!);
+        const mappingUnambiguous = enabled && issues.size === 0 && starts.every(row => row.planId !== null) && ends.length === timings.length
+          && byScript.size === timings.length && completedPrefix.length === ends.length
+          && completedPrefix.every((row, index) => byScript.get(row.script)?.commandInclusiveWallMs === ends[index]!.npmCommandInclusiveWallMs)
+          && timings.every(row => completedPrefix.some(invocation => invocation.script === row.script));
+        if (!mappingUnambiguous) issues.add("END_FILE_SEQUENCE_OR_DURATION_AMBIGUOUS");
+        const reconciled = ends.map((end, index) => ({ ...end, planId: mappingUnambiguous ? completedPrefix[index]!.id : null,
+          script: mappingUnambiguous ? completedPrefix[index]!.script : null, timingFileMatched: mappingUnambiguous }));
+        const complete = enabled && facts.code === 0 && facts.reason === null && starts.length === preorder.length && ends.length === preorder.length && timings.length === preorder.length;
+        if (!complete) issues.add("INCOMPLETE_OR_INTERRUPTED_NPM_OBSERVATIONS");
+        const status = complete && issues.size === 0 ? "COMPLETE_DIAGNOSTIC_ONLY" as const : "PARTIAL_DIAGNOSTIC_ONLY" as const;
+        const readParseMs = performance.now() - readStarted, receiptFile = `public-${name}.npm-timing.json`;
+        const value = { schema: 1, status, enabled, gate: "verify:admin-runtime", childArgv: invocationArgv, childArgvSha256: digest(JSON.stringify(invocationArgv)),
+          source: { packageFile, packageSha256: digest(packageBytes), sourceDirectory, invocationPreorder: preorder, invocationPostorder: postorder, nodeLeaves: nodeLeaves ?? null }, runtime,
+          child: { code: facts.code, reason: facts.reason, nativeJobIdentity: facts.nativeJobIdentity, nativeJobReceipt: facts.nativeJobReceipt,
+            cleanup: facts.cleanup ?? null, rawFiles: closedFiles, stdout: { file: stdoutPath, sha256: facts.stdout === null ? null : digest(facts.stdout) }, stderr: { file: stderrPath, sha256: facts.stderr === null ? null : digest(facts.stderr) } },
+          observations: { starts, ends: reconciled, mappingUnambiguous, unobservedOrUnfinished: preorder.filter(row => !reconciled.some(end => end.planId === row.id && end.timingFileMatched)).map(row => ({ id: row.id, script: row.script, startObserved: startedIds.has(row.id), endAttribution: "UNKNOWN" })),
+            futureUnstartedBranchesPrunedOnlyForNonzero: facts.reason === "nonzero_exit" && mappingUnambiguous,
+            clockPolicy: "Delivery timestamps only; wall-minus-monotonic is recorded without a tolerance or clock-accuracy claim. Cross-pipe order never defines a stack." },
+          rawTimingDirectory: enabled ? directory : null, files, timings, issues: [...issues], nominalLimitMs: limitMs,
+          rawMembership: { memberCount: rawMemberCount, sortedNamesSha256: rawNamesSha256, hashedOrdinaryFiles: files.length,
+            allMemberBytesHashed: rawMemberCount !== null && rawMemberCount === files.length,
+            incompleteRawMetadataNeverQualifies: true, rawFilesRetainedInOwnedDirectory: true },
+          clockOrigins: { ownerInvocationMonotonicMs: started, ownerTimeoutReferenceMonotonicMs, wallComparisonOriginMonotonicMs: clockOriginMonotonicMs,
+            wallComparisonOriginUtcMs: startedWall, nominalRemainingIsExactNativeRemaining: false,
+            boundary: "Owner timeout reference is captured immediately before its existing setTimeout. Invocation setup, Native root creation/duration and cleanup have separate origins." },
+          overhead: { setupMs, observerMs, readParseMs, observerCalls, observedCharacters, carryLimitCharacters: 4096, droppedNonCandidateLines: droppedLines, maximumEventsPerStream: preorder.length,
+            serializationAndWriteMs: "Measured after receipt completion in the returned timingEvidence reference", npmChildTimingEffect: "UNKNOWN_UNTIL_BOUNDED_PROBE" },
+          attribution: { npmTimers: "Date.now inclusive wall durations; nested durations must not be summed as CPU or total elapsed time", cpu: "UNKNOWN", io: "UNKNOWN", wait: "UNKNOWN", historicalTimeoutCause: "UNKNOWN" },
+          qualificationGranted: false, nativePassGranted: false, gatePassGranted: false, releaseEvidence: false };
+        const serializationStart = performance.now(), text = JSON.stringify(value, null, 2) + "\n", serializationMs = performance.now() - serializationStart;
+        assert.equal(context.sanitize(text), text, "Npm diagnostic receipt contains a generated credential.");
+        const writeStart = performance.now(); writeFileSync(ownedPath(context, receiptFile), text, { flag: "wx", mode: 0o600 }); const writeMs = performance.now() - writeStart;
+        if (captureFailure !== undefined) throw captureFailure;
+        return { file: receiptFile, sha256: digest(text), status, overhead: { setupMs, observerMs, readParseMs, serializationMs, writeMs } };
+      };
+      return { environment: enabled ? { npm_config_timing: "true", npm_config_logs_dir: directory, npm_config_logs_max: "0" } : {}, observe, finish,
+        beginDeadline: () => { ownerTimeoutReferenceMonotonicMs = performance.now(); } };
+    })();
+    const invocationEnvironment = gate57Timing ? { ...env, ...gate57Timing.environment } : env;
     if (process.platform === "linux") {
       assert.equal(typeof process.getuid, "function", "Owned Linux cleanup needs current-user process identity.");
       assert.ok(readFileSync("/proc/self/stat", "utf8").length > 0 && lstatSync("/proc").isDirectory(), "Owned Linux cleanup needs inspectable procfs.");
@@ -4976,9 +5184,9 @@ export function runOwnedVerificationChild(ports: {
     // Linux discovery never retains environment contents and excludes every process older than this owned root.
     const markerKey = "VENESIA_QA_OWNED_CHILD", marker = globalThis.crypto.randomUUID();
     const spawnedAtUtc = new Date().toISOString();
-    const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args, cwd: sourceDirectory, env: { ...env, [markerKey]: marker },
+    const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args, cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
       identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs }) : undefined;
-    const child = windows?.child ?? spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...env, [markerKey]: marker },
+    const child = windows?.child ?? spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
       detached: process.platform === "linux", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     children.add(child); let stdout = "", stderr = "", failed = false;
     let processFailure: Error | undefined;
@@ -5096,9 +5304,10 @@ export function runOwnedVerificationChild(ports: {
     };
     const abortSignal = () => abort("cancelled");
     signal.addEventListener("abort", abortSignal, { once: true });
+    gate57Timing?.beginDeadline();
     const timeout = setTimeout(() => abort("timeout"), limitMs);
-    child.stdout.on("data", value => { stdout += String(value); if (stdout.length > 8_000_000) abort("output_limit"); });
-    child.stderr.on("data", value => { stderr += String(value); if (stderr.length > 8_000_000) abort("output_limit"); });
+    child.stdout.on("data", value => { const chunk = String(value); stdout += chunk; gate57Timing?.observe("stdout", chunk); if (stdout.length > 8_000_000) abort("output_limit"); });
+    child.stderr.on("data", value => { const chunk = String(value); stderr += chunk; gate57Timing?.observe("stderr", chunk); if (stderr.length > 8_000_000) abort("output_limit"); });
     child.once("error", (error: NodeJS.ErrnoException) => {
       clearTimeout(timeout); signal.removeEventListener("abort", abortSignal);
       const code = typeof error.code === "string" && /^[A-Z0-9_]+$/u.test(error.code) ? error.code : null;
@@ -5133,6 +5342,16 @@ export function runOwnedVerificationChild(ports: {
         writeFileSync(stdoutPath, cleanOutput, { mode: 0o600, flag: "wx" });
         writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
       } catch (error) { evidenceFailure = error; }
+      let timingEvidence: ReturnType<NonNullable<typeof gate57Timing>["finish"]> | undefined;
+      try { timingEvidence = gate57Timing?.finish({ code: rootCode, reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput,
+        stderr: cleanErrors, cleanup, nativeJobIdentity, nativeJobReceipt }); }
+      catch (error) {
+        if (evidenceFailure === undefined) evidenceFailure = error;
+        else if (evidenceFailure instanceof Error && Object.isExtensible(evidenceFailure) && !Object.hasOwn(evidenceFailure, "timingEvidenceFailure"))
+          Object.defineProperty(evidenceFailure, "timingEvidenceFailure", { value: error });
+        if (cleanupFailure instanceof Error && Object.isExtensible(cleanupFailure) && !Object.hasOwn(cleanupFailure, "timingEvidenceFailure"))
+          Object.defineProperty(cleanupFailure, "timingEvidenceFailure", { value: error });
+      }
       // Keep bounded cleanup facts even when the original native/FS Error has no cause.
       // The exact Error remains private on the rejection; never project its message/stack.
       const cleanupError = cleanupFailure instanceof Error ? cleanupFailure : undefined;
@@ -5142,7 +5361,7 @@ export function runOwnedVerificationChild(ports: {
       const cleanupCode = cleanupData(cleanupError, "code") ?? cleanupData(cleanupCause, "code");
       const cleanupExit = cleanupData(cleanupCause, "exitCode");
       const childResult = { code: rootCode ?? null, signal: rootSignal,
-        identity, ...nativeProof, durationMs: performance.now() - started,
+        identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), durationMs: performance.now() - started,
         reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
         cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
           forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
@@ -5159,7 +5378,7 @@ export function runOwnedVerificationChild(ports: {
         : processFailure ?? (cleanupFailure ? new Error(`Public ${name} cleanup failed.`, { cause: cleanupFailure }) : evidenceFailure);
       if (error) { if (error instanceof Error) Object.defineProperty(error, "childResult", { value: childResult, enumerable: true }); reject(error); }
       else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: rootCode ?? -1, rawExit: { code: rootCode, signal: rootSignal },
-        identity: childResult.identity, ...nativeProof, stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
+        identity: childResult.identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
     };
     child.once("close", code => { void settle(code).catch(reject); });
   });

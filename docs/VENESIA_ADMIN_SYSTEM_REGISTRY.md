@@ -3168,3 +3168,178 @@ are recorded only in [the scoped recovery handoff](../.tmp-qa/gate57-performance
 This entry itself confers no unexecuted result. Historical archive qualification
 cannot be invented retrospectively. Performance cause and release readiness
 remain unresolved; six human reviews remain Pending and`globalClosed=false`.
+
+### 27.46 Gate57 command-boundary timing resolution — 3 November 2026
+
+**Previous → current / measured limits:** The qualified Native preservation
+correction at `3a895cfd` retains494 targeted cases,48 protected correspondences
+and4/22/52 assertion coverage within its recorded scope. Historical Full E stays
+56 PASS / Gate57 TIMEOUT /18 NOT RUN. The1800000ms composite deadline and every
+canonical command/assertion remain unchanged. Existing logs add npm-instance
+initialization checkpoints for the final11 visible commands, not exact process
+lifetimes. The earlier29-heading ledger omitted the two actual `qa:` headers;
+the bound package graph and both raw streams contain31 npm invocations. This is
+an accounting correction, not execution drift or a changed gate count.
+
+**Existing execution owner / bounded measurement:** `runOwnedVerificationChild`
+owns the canonical Gate57 child and its existing stdout/stderr handlers, Native
+lifecycle and cleanup. Gate57-only timing uses child-local npm settings and an
+owned evidence directory. It preserves raw npm timing records and independently
+observes source-bound start banners and completion messages. UTC/monotonic
+receipt observations are delivery boundaries; npm durations use its own wall
+clock. Neither is an exact nested OS process lifetime or CPU/IO measurement.
+Nesting is derived from the existing literal command graph; inclusive parent
+and child durations are not summed. Missing, ambiguous, interrupted or clock-
+inconsistent observations remain explicit PARTIAL/UNKNOWN. Timing records do
+not grant Gate, Native, Admission or release PASS and do not replace the actual
+exit or cleanup. No wrapper, Node hook, new runner, watchdog, cache or global
+configuration is introduced.
+
+**Consumers / proof boundary:** Public Gate57 and a separately authorized
+single targeted diagnostic consume the same child owner. Existing isolated
+verifier controls maintain source/runtime/command/evidence binding, positive,
+negative and boundary cases, timeout/cancellation, raw-error preservation and
+cleanup. Controlled npm fixtures do not qualify the canonical product source
+or prove a performance cause. Own observation/collection costs and remaining
+precision limits belong to the evidence, without an invented clock tolerance.
+
+Actual ordered verification, raw timing tables, source/commit binding, any
+single diagnostic result and the engineering decision are recorded only in
+[the timing-resolution handoff](../.tmp-qa/gate57-timing-resolution-20261103-01/final-handoff-report.md).
+This entry grants no unexecuted outcome. Native Archive still requires live
+release qualification; performance cause and deadline sufficiency remain
+unresolved until the recorded evidence proves them. No Full E, Push or CI is
+performed in this task; human reviews remain Pending and`globalClosed=false`.
+
+### 27.47 PR #229 release freeze and QA stabilization decision — 3 November 2026
+
+**Previous → current:** Section27.46 describes an uncommitted timing delta,
+not a qualified baseline. Its existing control failed with `Missing expected
+exception`: the fixture placed its sentinel in `package.version`, which is not
+published raw in the receipt. This is a fixture expectation failure, not proved
+Product privacy failure. No timing commit or long diagnostic exists. The three
+entering changed files are preserved byte-for-byte, together with a verified
+Git bundle of all29 local commits, in the release checkpoint below. The working
+delta remains frozen; it was neither adopted as qualified nor reverted to evade
+its failure. No Product, execution code, assertion, timeout or CI change was
+made by this review.
+
+**Gate57 decision / existing owner:** Existing evidence does not establish a
+specific larger completion bound. Standalone1461734ms and copied-source Full E
+timeout1800176ms have different execution contexts; the latter is incomplete.
+Default1121 and the final Feed start prove progress, not remaining duration or
+the cause of slowdown. Corrected accounting contains31 npm invocations, including
+the two `qa:` headings; earlier29-heading reports remain historical. The current
+`localVerificationQualityPrefixDeadlineMs` owner returns1800000ms and supplies
+the source floor and every quality-prefix row. Exact-budget and finite-bound
+assertions protect that contract. A scalar increase would affect all those
+consumers. No numeric increase is proposed as evidence-derived, and no new Full E
+or retry was run. Any future mandatory budget revision requires the Owner's
+documented decision and affected existing controls, without weakening assertions.
+
+**Qualified evidence / open gaps:** `d846d9ac` retains focused372, standalone
+default1121 and canonical Gate57 PASS within its recorded source binding.
+`3a895cfd` retains Native preservation controls494, correspondence48/48 and
+assertion coverage4/22/52; live Public archive preservation remains unverified.
+The latest completed release attempt on `d846d9ac` retains live Admission and
+Automatic Preflight PASS, Targeted Admin5/5, then56 PASS / Gate57 TIMEOUT /
+18 NOT_RUN. None is a new release PASS for the dirty working tree. All six
+Article/News/Press/Site Update/Video/Gallery Owner reviews remain Pending.
+
+**Remote reality / closure:** Live GitHub readback retains PR229 Draft at
+`b771c98c`, with8/8 CI jobs PASS and the Git-bound Vercel Preview READY on that
+remote SHA only. Local HEAD stays `3a895cfd`,29 commits ahead; local main,
+origin/main and remote main agree at `a29a9a89`. Five strict branch-protection
+contexts and administrator enforcement are unchanged. No Push, Ready, Merge,
+Production deployment or smoke was performed. Treasury was inspected read-only;
+no application resource was created, stopped or mutated by this review.
+
+**Stabilization / approval:** The bounded review separates the proved Alt
+Product correction, QA infrastructure corrections and QA fixture/projection
+failures. It proposes applying existing risk/evidence-reuse rules, at most two
+corrections per proved cause, and no recursive QA expansion. Optional timing and
+performance tooling is frozen. This is an operating proposal for Owner review,
+not an amendment to the Constitution or QA contract. Current batch remains E;
+future proven bounded A/B batches retain their existing smaller release profile.
+No protection is removed. The smallest next evidence path and its limits, the
+six-type review package, costs and all release blockers are recorded in the
+[two-part release and stabilization report](../.tmp-qa/pr229-release-closure-20261103-01/final-report.md).
+
+**STOP — Owner Release & QA Stabilization Review. `globalClosed=false`.**
+
+### 27.48 PR #229 bounded Gate57 recovery — 3 November 2026
+
+**Previous → current / authorized delta:** The Owner approved bounded recovery
+from `3a895cfd`, preserving all29 commits, the uncommitted timing work and prior
+evidence. The failed credential-publication fixture placed its sentinel in
+`package.version`, which is retained only through package/stream hashes. The
+one-line correction uses a valid literal Node command containing the sentinel;
+the existing command parser projects it into `receipt.source.nodeLeaves`.
+The same Runtime observer, Consumer projection, sanitizer, rejection assertion
+and no-publication assertion remain unchanged. This is correction1 for the
+proved fixture-input cause, not a Product privacy or performance correction.
+
+**Owner / consumers / protection:** The owner remains
+`runOwnedVerificationChild`; its existing isolated-verifier controls cover the
+affected Producer → Runtime → Consumer → Receipt path and positive/negative
+boundaries, including actual short npm execution, cancellation and timeout.
+The existing source-floor/Admission and local-risk qualification commands own
+the checks. No new runner, engine, registry, metric or capability is introduced.
+The shared1800000ms deadline and its controls are unchanged. No Product, Auth,
+Schema, Production or Treasury mutation belongs to this scope.
+
+**Policy / execution boundary:** The approved operational rules are maintained
+in QA_RELEASE_CLOSURE Section3.2.2, their existing owner. Current batch remains E;
+optional measurement/performance expansion is frozen. One existing Gate57
+diagnostic may run only after current-source and environment qualification,
+with the unchanged30-minute child limit. Its result cannot grant release or
+live Public archive qualification. An UNKNOWN cause stops this bounded path;
+any new mandatory budget decision or more than two corrections per proved
+cause requires Owner authority. Six human reviews remain Pending.
+
+Actual attempts, timings, source binding and disposition are retained under
+`.tmp-qa/pr229-gate57-recovery-20261103-01/`; this entry grants no unexecuted PASS.
+The single authorized diagnostic completed with a verifier assertion failure,
+not a timeout. Its first failure proves a separate historical-source fixture
+drift: the async-correction seed retained three later Native archive-preservation
+statements. Correction1 for this cause asserts each exact current statement
+and excludes it only from that historical seed. The live archive owner, all19
+transformation rules, unique-match assertions and after-only negative control
+are preserved. The existing retained-final-quality selector owns validation;
+the diagnostic is not repeated. This cause does not explain the earlier Full E
+timeout, whose cause remains UNKNOWN.
+
+**Observed verification / evidence validity:** The first ordered qualification
+passed in516286ms overall, including536 local-risk/timing controls in85571ms,
+actual npm positive/timeout/cancellation paths and cleanup with zero live
+children. The corrected historical fixture passed372 retained-final-quality
+controls in51665ms, including real workers and source-rejection cases; its
+fresh ordered qualification passed in484591ms overall. Both qualifications
+passed source Syntax, ESLint, TypeScript, Governance/Infrastructure guards,
+current Admission inputs and48/48 automatic correspondence. The second tested
+source manifest is `0d1ecc9fbf020813449ec4102dc0c206f4c12b9659909a1a396705ea94f7e6e9`
+at base HEAD `3a895cfd`. Only the retained-worker fixture declaration changed
+between the two qualified executable sources; the timing owner, controls,
+fixtures, package graph and other executable inputs remain equal. The timing
+controls were therefore not rerun. These are scoped development results; final
+Registry evidence text is a later documentation delta and no current release
+Admission or old-SHA behavioral PASS is inferred from it.
+
+**Single diagnostic / release decision:** The one diagnostic child exited1
+after558446ms (887897ms including preparation/preservation); the unchanged
+1800000ms limit was not reached. It stopped after841 verifier controls at the
+proved historical fixture mismatch. Timing remains PARTIAL_DIAGNOSTIC_ONLY:
+11 matched npm starts/ends and20 unstarted branches. All1777 raw evidence files
+and694 directories were preserved and independently checked against their
+manifests; Native cleanup observed365 processes and zero live/residual children.
+No second Gate57 attempt or Full E was run. Gate57 and the release path remain
+BLOCKED: the earlier latency cause is still UNKNOWN, the authorized diagnostic
+attempt is consumed, and the corrected source has no complete Gate57/Full E
+result. A further bounded diagnostic needs renewed Owner authorization; no
+larger deadline is evidence-derived. Live Public archive qualification,
+Targeted Admin, Full E75/75, exact-final-SHA CI/Preview and all six Owner reviews
+remain release prerequisites. No Push, Ready, Merge or Production action is
+authorized by these scoped passes. This QA/docs delta has no Product/UI change;
+its local development evidence does not grant the pending Product reviews.
+The original fixture failure and all earlier release/Native evidence remain
+historical with their original status. `globalClosed=false`.

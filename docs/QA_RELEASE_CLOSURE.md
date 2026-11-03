@@ -242,6 +242,48 @@ each small change or require remote CI before Local Product Review. Workflow
 maintenance uses applicable local checks; required GitHub CI remains a release
 gate on the current PR head under Section 3.3.
 
+### Bounded blocker recovery and QA stability
+
+Apply Product First: restore the blocked Product/release proof through its
+existing owner, with the required protection intact. Separate necessary repair
+of a proven Product, verification, fixture or environment defect from optional
+performance, measurement and QA improvements; defer the latter. A failure in a
+verification tool requires affected maintenance under this section, not another
+runner, engine, registry, measurement tool or recursive QA layer.
+
+Before correction, retain the original failure and establish the cause,
+expected/observed contract, current owner and affected consumers. Use the
+existing QA evidence to record the correction count, authorized diagnostic
+budget, actual commands/durations/results and remaining blockers. Allow at most
+two corrections per proven cause; a changed SHA, command name or later attempt
+does not reset that count. Further correction, a new timeout decision, contract
+or scope expansion, or a data/permission risk requires renewed Owner authority.
+If the bounded diagnostic leaves the cause UNKNOWN, retain its evidence and
+stop the affected recovery with a clear blocked decision; do not retry at random
+or convert missing proof into a Product diagnosis.
+
+Requalify changed proof at its existing Producer → Runtime → Consumer → Receipt
+boundaries, including affected positive, negative and boundary cases. Run only
+the affected development checks and preserve qualified, unaffected evidence
+when its inputs, contracts and environment are proven equivalent under Section
+3.4. Do not repeat the same qualified leaf within that proven boundary, substitute
+an older SHA's PASS for current-source qualification, or use evidence reuse to
+waive a mandatory release gate. Risk selection remains Section 3.3.1: shared
+owners include their affected consumers; verification-execution changes and
+unbounded impact retain Full Local Gate. No assertion, gate, failure condition,
+security protection or cleanup obligation is weakened or removed.
+
+For the approved PR #229 Gate57 recovery, the combined batch remains E. After
+qualifying the existing timing fixture/instrumentation source and environment,
+the authorized diagnostic is one attempt with the existing 30-minute limit.
+Do not change the shared timeout function or extend its limit automatically.
+An established cause may be corrected at its current owner within the two-
+correction budget, followed by affected verification. An UNKNOWN outcome ends
+this bounded diagnostic authority. Start no new Full E until Gate57 is resolved
+and the final source/environment satisfy the existing Admission, Preflight and
+Targeted Admin prerequisites; targeted recovery alone cannot satisfy Full E or
+authorize Ready, Merge or Production before their required gates and reviews.
+
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
 rule grants no additional Product, Architecture, Auth, Permission, Database,
