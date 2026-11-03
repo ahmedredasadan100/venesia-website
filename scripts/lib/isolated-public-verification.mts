@@ -6088,7 +6088,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
       if (localPlan?.mode === "bounded") { await drainControlPulse(); verifySource(); assert.equal(localInputs!.finalHead, headSha); activeLocalVerifications.add(originalContext); }
     }
-    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: localVerificationQualityPrefixDeadlineMs() }));
+    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: script === "verify:admin-runtime" ? 2_220_000 : localVerificationQualityPrefixDeadlineMs() }));
     const liveAdmission = request.admissionQualification ? assertLocalVerificationAdmissionQualification(request.admissionQualification,
       { baselineHead: request.admissionQualification.baselineHead, finalHead: headSha, sourceSha256: digest(JSON.stringify(manifest)) }) : undefined;
     if (qualityPrefix.length) assert.deepEqual(qualityScripts.slice(0, 2), ["lint", "typecheck"], "Canonical quality must start with ESLint then TypeScript.");

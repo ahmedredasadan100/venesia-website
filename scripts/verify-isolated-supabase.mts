@@ -7489,25 +7489,54 @@ async function verifyAdoptionDeadlineControls() {
     requireActualBudget(budgetApi);
     const returned = budgetNode.body!.statements.find(ts.isReturnStatement); assert.ok(returned?.expression);
     const original = budgetNode.getText(file), offset = returned.expression.getStart(file) - budgetNode.getStart(file);
-    for (const replacement of ["180_000", "Number.POSITIVE_INFINITY", "0.5"]) {
+    for (const replacement of ["180_000", "2_220_000", "Number.POSITIVE_INFINITY", "0.5"]) {
       const mutant = original.slice(0, offset) + replacement + original.slice(offset + returned.expression.getWidth(file));
       assert.notEqual(mutant, original);
       assert.throws(() => requireActualBudget({ localVerificationQualityPrefixDeadlineMs: loadBudget(mutant) }), assert.AssertionError);
     }
   });
-  check("actual canonical quality-prefix projection invokes its owner budget for every existing check", () => {
-    const run = declaration("runOwnedPublicVerification"), body = run.body!.statements.find(ts.isTryStatement); assert.ok(body);
-    const prefix = body.tryBlock.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
-      .find(node => node.name.getText(file) === "qualityPrefix"); assert.ok(prefix?.initializer);
-    let calls = 0;
-    const project = new Function("qualityScripts", "localVerificationQualityPrefixDeadlineMs", compile("return (" + prefix.initializer.getText(file) + ");")) as
-      (checks: string[], budget: () => number) => Array<{ qualityScript: string; limitMs: number }>;
-    const checks = ["verify:consumer-capability-adoption", "verify:executable-governance"];
-    const rows = project(checks, () => { calls++; return requireActualBudget(budgetApi); });
-    assert.deepEqual(rows.map(row => row.qualityScript), checks); assert.equal(calls, checks.length);
-    assert.ok(rows.every(row => row.limitMs === budgetApi.localVerificationQualityPrefixDeadlineMs()));
-    const custom = project(checks, () => 731); assert.ok(custom.every(row => row.limitMs === 731), "The actual projection consumes its supplied owner port, not a duplicated literal.");
+  const run = declaration("runOwnedPublicVerification"), body = run.body!.statements.find(ts.isTryStatement); assert.ok(body);
+  const prefix = body.tryBlock.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
+    .find(node => node.name.getText(file) === "qualityPrefix"); assert.ok(prefix?.initializer);
+  const prefixText = prefix.initializer.getText(file);
+  const projectPrefix = (text = prefixText) => new Function("qualityScripts", "localVerificationQualityPrefixDeadlineMs", compile("return (" + text + ");")) as
+    (checks: string[], budget: () => number) => Array<{ qualityScript: string; limitMs: number }>;
+  const project = projectPrefix();
+  const gates = file.statements.find(node => ts.isVariableStatement(node)
+    && node.declarationList.declarations.some(row => row.name.getText(file) === "GATES")); assert.ok(gates);
+  const plan = new Function("assert", compile(gates.getText(file) + "\n" + declaration("finalQualityScriptNames").getText(file).replace(/^export /u, ""))
+    + ";return finalQualityScriptNames;")(assert) as (scripts: Record<string, string>) => string[];
+  const actualChecks = plan(JSON.parse(readSource("package.json")).scripts as Record<string, string>);
+  assert.equal(actualChecks.filter(script => script === "verify:admin-runtime").length, 1);
+  const requireProjection = (candidate: ReturnType<typeof projectPrefix>) => {
+    const lookalikes = ["verify:admin-runtime-extra", "prefixverify:admin-runtime", "VERIFY:ADMIN-RUNTIME", "verify:admin-runtime ", "verify:admin-runtime:other"];
+    for (const checks of [actualChecks, [...actualChecks].reverse(), ["verify:admin-runtime", ...actualChecks.filter(script => script !== "verify:admin-runtime")],
+      [...lookalikes, "verify:admin-runtime"], ["verify:consumer-capability-adoption", "verify:executable-governance"], []]) {
+      for (const defaultBudget of [requireActualBudget(budgetApi), 731]) {
+        let calls = 0;
+        const rows = candidate(checks, () => { calls++; return defaultBudget; });
+        assert.deepEqual(rows.map(row => row.qualityScript), checks);
+        assert.equal(calls, checks.filter(script => script !== "verify:admin-runtime").length);
+        assert.deepEqual(rows.map(row => row.limitMs), checks.map(script => script === "verify:admin-runtime" ? 2_220_000 : defaultBudget),
+          "Only the exact Admin Runtime script gets 37m; every other script consumes its unchanged owner budget port.");
+      }
+    }
+  };
+  check("actual canonical quality-prefix projection limits 37m to the exact Admin Runtime script across every current check and reordered or lookalike inputs", () => {
+    requireProjection(project);
+    for (const mutant of [
+      prefixText.replace('script === "verify:admin-runtime"', "index === " + actualChecks.indexOf("verify:admin-runtime")),
+      prefixText.replace('script === "verify:admin-runtime"', 'script.startsWith("verify:admin-runtime")'),
+      prefixText.replace('script === "verify:admin-runtime"', 'script.includes("verify:admin-runtime")'),
+      prefixText.replace('script === "verify:admin-runtime"', 'script.trim().toLowerCase() === "verify:admin-runtime"'),
+      prefixText.replace("2_220_000", "1_800_000"),
+      prefixText.replace("localVerificationQualityPrefixDeadlineMs()", "1_800_000"),
+    ]) {
+      assert.notEqual(mutant, prefixText);
+      assert.throws(() => requireProjection(projectPrefix(mutant)), assert.AssertionError);
+    }
   });
+  const adminRuntimeDeadlineMs = project(["verify:admin-runtime"], () => requireActualBudget(budgetApi))[0]!.limitMs;
   type ControlledChild = EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; pid: number; exitCode: number | null; signalCode: NodeJS.Signals | null };
   const code = compile(["ownedPath", "runOwnedVerificationChild"].map(name => declaration(name).getText(file).replace(/^export /u, "")).join("\n"));
   const proofs: Array<Record<string, unknown>> = [];
@@ -7548,15 +7577,18 @@ async function verifyAdoptionDeadlineControls() {
   const control = async (name: string, execute: () => Promise<void>) => {
     try { await execute(); } catch (error) { console.error("FAIL " + name); throw error; } cases.push(name);
   };
-  await control("actual child receives the Adoption budget in both native and JS timer ports without profiling", async () => {
-    const value = fixture(), pending = value.invoke();
-    assert.equal(value.launches.length, 1); assert.equal(value.launches[0]!.limitMs, requireActualBudget(budgetApi));
-    assert.equal(value.scheduled.length, 1); assert.equal(value.scheduled[0]!.delay, requireActualBudget(budgetApi));
+  for (const budget of [
+    { name: "Adoption", limitMs: requireActualBudget(budgetApi), control: "adoption_owner_budget_ports" },
+    { name: "exact Admin Runtime projection", limitMs: adminRuntimeDeadlineMs, control: "admin_runtime_projected_budget_ports" },
+  ]) await control("actual child receives the " + budget.name + " budget in both native and JS timer ports without profiling", async () => {
+    const value = fixture(), pending = value.invoke(undefined, budget.limitMs);
+    assert.equal(value.launches.length, 1); assert.equal(value.launches[0]!.limitMs, budget.limitMs);
+    assert.equal(value.scheduled.length, 1); assert.equal(value.scheduled[0]!.delay, budget.limitMs);
     assert.deepEqual(value.launches[0]!.args, ["--experimental-strip-types", "scripts/verify-admin-row-actions-capability.mts", "--consumer-capability-audit"]);
     value.child.stdout.emit("data", "controlled source audit PASS"); value.close(0);
     const result = await bounded(pending); assert.equal(result.code, 0); assert.deepEqual(result.rawExit, { code: 0, signal: null });
     assert.equal(value.children.size, 0); assert.deepEqual(value.cleared, [value.scheduled[0]]); assert.equal(value.writes.size, 2);
-    proofs.push({ control: "adoption_owner_budget_ports", deadlineMs: value.scheduled[0]!.delay, nativeDeadlineMs: value.launches[0]!.limitMs,
+    proofs.push({ control: budget.control, deadlineMs: value.scheduled[0]!.delay, nativeDeadlineMs: value.launches[0]!.limitMs,
       rawExit: result.rawExit, helperExit: result.helperExit, cleanup: result.cleanup, actualNativeProcessExecuted: false });
   });
   await control("actual child preserves a nonzero test exit independently of deadline and cancellation", async () => {
@@ -7565,8 +7597,13 @@ async function verifyAdoptionDeadlineControls() {
     assert.equal(result.stderr, "AssertionError: controlled test failure"); assert.deepEqual(value.stopped, [null]); assert.equal(value.children.size, 0);
     proofs.push({ control: "nonzero_is_not_timeout", rawExit: result.rawExit, helperExit: result.helperExit, cleanup: result.cleanup });
   });
-  for (const reason of ["timeout", "cancelled"] as const) await control("actual child retains " + reason + " plus original root exit and complete controlled cleanup", async () => {
-    const value = fixture(), controller = new AbortController(), pending = value.invoke(controller.signal);
+  for (const budget of [
+    { limitMs: requireActualBudget(budgetApi), suffix: "", controlSuffix: "" },
+    { limitMs: adminRuntimeDeadlineMs, suffix: " at the projected Admin Runtime budget", controlSuffix: "_admin_runtime_budget" },
+  ]) for (const reason of ["timeout", "cancelled"] as const) await control("actual child retains " + reason + " plus original root exit and complete controlled cleanup" + budget.suffix, async () => {
+    const value = fixture(), controller = new AbortController(), pending = value.invoke(controller.signal, budget.limitMs);
+    assert.equal(value.launches.length, 1); assert.equal(value.launches[0]!.limitMs, budget.limitMs);
+    assert.equal(value.scheduled.length, 1); assert.equal(value.scheduled[0]!.delay, budget.limitMs);
     const rejected = bounded(pending).then(() => assert.fail("Termination must remain a rejected failure."), error => error as Error & {
       childResult: { code: number | null; signal: NodeJS.Signals | null; reason: string; cleanup: { status: string; liveProcesses: number }; helperExit: { code: number | null; signal: NodeJS.Signals | null } } });
     if (reason === "timeout") value.scheduled[0]!.callback(); else controller.abort(Error("Controlled deadline cancellation"));
@@ -7575,7 +7612,7 @@ async function verifyAdoptionDeadlineControls() {
     assert.equal(error.childResult.reason, reason); assert.equal(error.childResult.code, 37); assert.equal(error.childResult.signal, null);
     assert.deepEqual(error.childResult.helperExit, { code: 0, signal: null }); assert.equal(error.childResult.cleanup.status, "PASS"); assert.equal(error.childResult.cleanup.liveProcesses, 0);
     assert.deepEqual(value.stopped, [reason]); assert.equal(value.children.size, 0); assert.deepEqual(value.cleared, [value.scheduled[0]]);
-    proofs.push({ control: "owned_" + reason, originalRootExit: { code: error.childResult.code, signal: error.childResult.signal },
+    proofs.push({ control: "owned_" + reason + budget.controlSuffix, originalRootExit: { code: error.childResult.code, signal: error.childResult.signal },
       helperExit: error.childResult.helperExit, cleanup: error.childResult.cleanup, actualNativeProcessExecuted: false });
   });
   type CleanupDiagnostic = { stage: string; name: string; code: string | null; exitCode: number | null; nativeReceipt: string };

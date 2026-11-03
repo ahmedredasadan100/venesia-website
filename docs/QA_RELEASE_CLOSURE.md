@@ -273,16 +273,23 @@ owners include their affected consumers; verification-execution changes and
 unbounded impact retain Full Local Gate. No assertion, gate, failure condition,
 security protection or cleanup obligation is weakened or removed.
 
-For the approved PR #229 Gate57 recovery, the combined batch remains E. After
-qualifying the existing timing fixture/instrumentation source and environment,
-the authorized diagnostic is one attempt with the existing 30-minute limit.
-Do not change the shared timeout function or extend its limit automatically.
+For the approved PR #229 Gate57 recovery, the combined batch remains E. The
+original 30-minute attempts and their evidence retain their historical status.
+Following the isolated Feed measurement and explicit budget decision on
+3 November 2026, the Owner authorized one further Gate57 attempt at 37 minutes
+(2220000ms), after current-source and environment qualification. Apply this
+exception only to the exact `verify:admin-runtime` quality script in the existing
+`runOwnedPublicVerification` owner. Keep the shared
+`localVerificationQualityPrefixDeadlineMs` function, its 30-minute default and
+all other consumers unchanged; do not extend any limit or retry automatically.
 An established cause may be corrected at its current owner within the two-
 correction budget, followed by affected verification. An UNKNOWN outcome ends
-this bounded diagnostic authority. Start no new Full E until Gate57 is resolved
-and the final source/environment satisfy the existing Admission, Preflight and
-Targeted Admin prerequisites; targeted recovery alone cannot satisfy Full E or
-authorize Ready, Merge or Production before their required gates and reviews.
+this bounded diagnostic authority; another attempt or budget change requires
+renewed Owner authority. A Gate57 PASS permits Full E75/75 only after the final
+source/environment satisfy the existing Admission, Preflight and Targeted Admin
+prerequisites. The reconstructed timing estimate and isolated Feed PASS cannot
+substitute for Gate57 or Full E. This stage authorizes no Push, Ready, Merge or
+Production action; required release gates and all six Owner reviews remain.
 
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This

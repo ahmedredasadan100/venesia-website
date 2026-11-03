@@ -3402,3 +3402,67 @@ does not authorize Gate57 retry, Full E, Push, Ready, Merge or Production.
 Batch risk remains E. Live Public archive qualification, complete Gate57,
 performance closure, Full E75/75 and subsequent release reviews remain open.
 `globalClosed=false`.
+
+### 27.50 PR #229 Gate57 scoped deadline decision — 3 November 2026
+
+**Previous → current / measured boundary:** The qualified diagnostic on
+`350a607d` retained the 1800000ms limit and ended in Native TIMEOUT after
+1800098ms (1801569.190ms including its child owner). Its 31 planned npm
+invocations contain 23 direct root branches; 22 completed before the final
+Feed branch. The Feed banner arrived with about 6330ms nominal JS budget left.
+Raw evidence preservation and cleanup passed with zero live/residual children.
+This establishes the observed deadline termination, not a CPU, I/O or historical
+slowdown diagnosis. The original partial timing, BLOCKED status and all earlier
+failures remain preserved in the
+[30-minute diagnostic evidence](../.tmp-qa/pr229-fast-final-release-20261103-01/diagnostic/).
+
+The separately authorized single `npm run verify:feed-module-contract-integrity`
+measurement on the same source/runtime passed: Native 16703ms and child
+owner 17393.562ms, with eight observed processes, no forced termination and zero
+live/residual children. Its source/dependency staging matched the preceding
+diagnostic. It had no preceding Gate57 warm-up or inherited Gate57 npm timing
+flags, so comparable isolated inputs do not establish identical timing
+conditions. Its [measurement evidence](../.tmp-qa/pr229-feed-measurement-20261103-01/diagnostic/)
+is an isolated Feed PASS, not Gate57 or release PASS.
+
+**Approved decision / existing owner:** Native prefix plus isolated Feed gives
+1809950.127ms; the more conservative banner-prefix plus child-owner accounting
+gives 1811063.157ms (30:11.063). These reconstructed estimates do not sum nested
+inclusive command durations and are not measured full Gate57 completion bounds.
+The explicitly chosen operational reserve is 20% (362212.631ms), producing
+36:13.276 before rounding up to 37 minutes (2220000ms). The reserve is not a
+measured percentile or worst-case guarantee; scheduling, caches, inherited
+timing settings and outer-command finalization remain sources of variation.
+The Owner approved this 37-minute Gate57-only budget and one attempt, followed
+by Full E75/75 if Gate57 passes and the existing release prerequisites qualify.
+
+The approved change belongs only to the exact `verify:admin-runtime` script
+selection inside `runOwnedPublicVerification`. The shared
+`localVerificationQualityPrefixDeadlineMs` remains 1800000ms for source-floor
+ESLint/TypeScript, Adoption and every other quality-prefix consumer. The actual
+quality execution still passes its selected budget to the existing child owner,
+Native deadline, JS deadline and timing receipt. Cancellation, finite timer-safe
+validation, original error priority, Native archive preservation and cleanup
+remain mandatory. No runner, engine, registry, measurement layer, Product,
+Auth/RLS, Schema, Production or Treasury change is authorized.
+
+**Affected protection / pending proof:** Existing `verifyFinalQualityGatePlan`,
+`verifyAdoptionDeadlineControls`, `verifyLocalRiskExecutionControls` and
+`verifySharedChildControls` own the affected projection, exact-script budget,
+default-budget, timeout/cancellation, error and archive contracts. Maintain
+their assertions and negative cases at those owners; direct quality execution,
+source-floor consumers, command registration and CI workflows remain intact.
+The current recovery evidence is to be retained under
+`.tmp-qa/pr229-gate57-final-recovery-20261103-01/`. At this decision checkpoint,
+the new source, affected controls, single 37-minute Gate57 attempt and Full E
+result are Pending; this entry grants none of them a PASS. Older results retain
+their original source/input bindings and cannot qualify a changed source.
+
+**Delivery boundary:** Current batch remains E. A new Full E75/75 requires the
+actual Gate57 PASS and existing final-source/environment Admission, Preflight
+and Targeted Admin prerequisites. There is no automatic second attempt or
+further deadline increase. Push, Ready, Merge and Production are not authorized
+in this stage; exact-final-SHA CI/Preview and the six Article/News/Press/Site
+Update/Video/Gallery Owner reviews remain separate release conditions.
+The operational policy remains QA_RELEASE_CLOSURE Section3.2.2, with no parallel
+policy or reduced protection. `globalClosed=false`.
