@@ -105,6 +105,8 @@ export type LocalVerificationAdmissionQualification = {
   inputs: ReturnType<typeof validateLocalVerificationInputObservations> | null;
   artifacts: readonly { path: string; sha256: string }[]; failures: readonly string[];
   runDirectory: string; durationMs: number; behavioralPass: false; releaseEvidence: false;
+  /** Explicit temporary PR #229 operating budget, sealed with this live invocation. */
+  operationalBudget?: LocalVerificationOperationalBudget;
 };
 // Only this owner's completed, live invocation can grant admission. JSON, even with
 // a correct hash or nonce copied from a former run, cannot recreate this authority.
@@ -127,9 +129,21 @@ export type LocalVerificationInputObservations = {
 /** One existing prefix budget, also used by its measured Adoption caller. */
 export function localVerificationQualityPrefixDeadlineMs(): number { return 1_800_000; }
 
+export type LocalVerificationOperationalBudget = "pr229-20261103-double-operational";
+/** Batch-only outer command allowance. Never apply at the generic process/timer owner
+ * or to readiness, heartbeat, cancellation, preparation or cleanup contracts. */
+export function localVerificationOperationalDeadlineMs(limitMs: number, budget?: LocalVerificationOperationalBudget): number {
+  assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown temporary operational budget.");
+  assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Operational deadline must be a finite timer-safe positive integer.");
+  const result = limitMs * (budget === undefined ? 1 : 2);
+  assert.ok(Number.isSafeInteger(result) && result <= 2_147_483_647, "Expanded operational deadline must be timer-safe.");
+  return result;
+}
+
 /** One source floor inside the existing execution owner, before any dependent behavioral leaf.
  * A prior floor is private live invocation state, never a serialized receipt or a path-based waiver. */
 async function runLocalVerificationSourceFloor(options: {
+  operationalBudget?: LocalVerificationOperationalBudget;
   sourceDirectory: string;
   context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
   signal: AbortSignal; sources: ReadonlyMap<string, string | Buffer>; changedFiles: readonly string[];
@@ -180,6 +194,7 @@ async function runLocalVerificationSourceFloor(options: {
   const children = new Set<ChildProcess>(), seen = new Set<string>();
   let firstFailure: unknown;
   const run = async (stage: string, step: string, args: string[], limitMs: number) => {
+    limitMs = localVerificationOperationalDeadlineMs(limitMs, options.operationalBudget);
     if (options.drainControlPulse) await checkpoint();
     options.signal.throwIfAborted(); options.verifySource();
     if (seen.has(step)) {
@@ -2240,8 +2255,11 @@ function assertLocalVerificationAdmissionQualification(value: LocalVerificationA
 /** Execute only the existing finite consumer/input profiles under the existing child owner.
  * No Docker, DB, Browser, release result or caller-supplied receipt is accepted here. */
 export async function qualifyLocalVerificationAdmission(options: { baselineHead?: string; additionalSourceFiles?: readonly string[];
+  operationalBudget?: LocalVerificationOperationalBudget;
   ci?: { eventName: string; event: unknown; githubSha: string } }, signal: AbortSignal): Promise<LocalVerificationAdmissionQualification> {
   signal.throwIfAborted();
+  const operationalBudget = options.operationalBudget;
+  const admissionDeadlineMs = localVerificationOperationalDeadlineMs(300_000, operationalBudget);
   const started = performance.now(), nonce = globalThis.crypto.randomUUID();
   const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
@@ -2249,6 +2267,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     if (process.env[key] !== undefined) environment[key] = process.env[key];
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: environment, windowsHide: true,
     timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
+  if (operationalBudget !== undefined) git("merge-base", "--is-ancestor", "9edaf02f4cd476315d71b306d5f786f3d8d1efd0", "HEAD");
   // Reuse immutable CI baseline selection. Its source-only DRIFT is diagnostic,
   // never permission to omit the fresh behavioral qualification below.
   const additional = [...(options.additionalSourceFiles ?? [])];
@@ -2350,6 +2369,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
       blocking: targets?.blocking ?? [],
       sourceGuardEffects: "sourceGuardEffects" in initial ? initial.sourceGuardEffects.map(({ entry, fingerprint, unresolved }) => ({ entry, fingerprint, unresolved })) : [] });
     sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory: ROOT, context, signal, sources: currentSources,
+      operationalBudget,
       changedFiles: initial.actualDelta.map(change => change.file), verifySource: assertSnapshot,
       governance: targets?.targets.filter(target => target.kind === "source_guard") ?? [],
       governanceQualified });
@@ -2358,7 +2378,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
       const args = ["--experimental-strip-types", profile.entry, ...profile.args];
       const env = { ...environment, VENESIA_QA_ASSERTION_RELOCATION_RECEIPT: "1", VENESIA_QA_ASSERTION_RELOCATION_NONCE: nonce,
         VENESIA_QA_ADMISSION_NONCE: nonce };
-      const result = await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, args, env, "admission-" + (index + 1), 300_000);
+      const result = await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, args, env, "admission-" + (index + 1), admissionDeadlineMs);
       executions.push({ entry: profile.entry, args, result }); validateChild(result); assertSnapshot();
       let raw: unknown;
       if (profile.receipt === "assertion-relocation-observations") {
@@ -2402,6 +2422,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
   };
   try { collect(runDirectory); } catch (error) { failures.push(error instanceof Error ? error.message : "Admission evidence preservation failed."); }
   const value: LocalVerificationAdmissionQualification = { schema: 1, kind: "owned-admission-qualification", nonce,
+    ...(operationalBudget === undefined ? {} : { operationalBudget }),
     status: failures.length ? "BLOCKED" : "PASS", baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
     runtime, executions, assertions, inputs, artifacts: [...artifacts].sort(([left], [right]) => left.localeCompare(right)).map(([path, sha256]) => ({ path, sha256 })),
     failures, runDirectory, durationMs: performance.now() - started, behavioralPass: false, releaseEvidence: false };
@@ -5508,6 +5529,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   assert.ok(preallocationAdmission, "Public execution requires this owner's live source qualification; serialized or old receipts cannot authorize it.");
   assert.equal(request.admissionQualification.status, "PASS");
   assert.equal(digest(JSON.stringify(request.admissionQualification)), preallocationAdmission.sha256, "Admission receipt was altered after qualification.");
+  const operationalBudget = request.admissionQualification.operationalBudget;
+  localVerificationOperationalDeadlineMs(1, operationalBudget);
+  if (operationalBudget !== undefined) {
+    assert.equal(request.selection, "admin-adoption", "Temporary PR #229 budget requires the complete Public/Admin release path.");
+    assert.equal(request.adoptionScope, undefined); assert.equal(request.adoptionCohort, undefined);
+    assert.equal(request.adoptionJourneySelection, undefined); assert.equal(request.adminMeasurement, undefined);
+  }
   assert.equal(digest(JSON.stringify(preallocationAdmission.sourceFloor)), preallocationAdmission.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
   if (request.localVerification && request.finalQualityGate === true)
     assert.ok(request.admissionQualification,
@@ -6088,11 +6116,12 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
       if (localPlan?.mode === "bounded") { await drainControlPulse(); verifySource(); assert.equal(localInputs!.finalHead, headSha); activeLocalVerifications.add(originalContext); }
     }
-    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: script === "verify:admin-runtime" ? 2_220_000 : localVerificationQualityPrefixDeadlineMs() }));
+    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: localVerificationOperationalDeadlineMs(script === "verify:admin-runtime" ? 2_220_000 : localVerificationQualityPrefixDeadlineMs(), operationalBudget) }));
     const liveAdmission = request.admissionQualification ? assertLocalVerificationAdmissionQualification(request.admissionQualification,
       { baselineHead: request.admissionQualification.baselineHead, finalHead: headSha, sourceSha256: digest(JSON.stringify(manifest)) }) : undefined;
     if (qualityPrefix.length) assert.deepEqual(qualityScripts.slice(0, 2), ["lint", "typecheck"], "Canonical quality must start with ESLint then TypeScript.");
     const sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory, context, signal,
+      operationalBudget,
       sources: new Map(manifest.map(row => [row.file, readFileSync(join(sourceDirectory, row.file))] as const)),
       changedFiles: liveAdmission?.sourceDiscovery.changes.map(change => change.file) ?? localInputs?.changes.map(change => change.file) ?? [],
       verifySource, drainControlPulse, governance: [],
@@ -6117,7 +6146,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     const executionGates = heroCompatibility && request.finalQualityGate
       ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...pendingQualityPrefix, ...GATES]
       : [...pendingQualityPrefix, ...gates];
-    for (const gate of executionGates) {
+    for (const originalGate of executionGates) {
+      const gate = "qualityScript" in originalGate ? originalGate : { ...originalGate,
+        limitMs: localVerificationOperationalDeadlineMs(originalGate.limitMs, operationalBudget) };
       await drainControlPulse(); verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
       let gateApp: ChildProcess | undefined;

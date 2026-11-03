@@ -899,7 +899,7 @@ async function verifyOwnedAdminFixtureDelivery() {
 
 /** Project the actual private floor and its unchanged budget; never duplicate its execution logic. */
 function orderedSourceFloorControlSource(tree: ts.SourceFile) {
-  return ["localVerificationQualityPrefixDeadlineMs", "runLocalVerificationSourceFloor"].map(name => {
+  return ["localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "runLocalVerificationSourceFloor"].map(name => {
     const found = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === name);
     assert.equal(found.length, 1, "Missing unique ordered verification owner: " + name);
     return found[0].getText(tree).replace(/^export /u, "");
@@ -913,8 +913,9 @@ async function verifyOrderedLocalVerificationControls() {
   const code = ts.transpileModule(orderedSourceFloorControlSource(tree), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   type Child = { code: number; stdout: string; stderr: string; rawExit: { code: number | null; signal: string | null };
     cleanup: { status: string; liveProcesses: number; processTreeVerified: boolean } };
-  type Floor = { contextSha256: string; sourceSha256: string; syntaxFiles: string[]; checks: Array<{ stage: string; step: string; result: Child }> };
+  type Floor = { contextSha256: string; sourceSha256: string; syntaxFiles: string[]; checks: Array<{ stage: string; step: string; limitMs: number; result: Child }> };
   type Options = { sourceDirectory: string; context: { runDirectory: string; sanitize(value: string): string; cleanEnvironment(): NodeJS.ProcessEnv };
+    operationalBudget?: import("./lib/isolated-public-verification.mts").LocalVerificationOperationalBudget;
     signal: AbortSignal; sources: Map<string, string | Buffer>; changedFiles: readonly string[]; verifySource(): void;
     drainControlPulse?: () => Promise<void>;
     governance: readonly { step: string; limitMs: number; successMarker?: string }[]; governanceQualified: boolean; prior?: Floor };
@@ -960,6 +961,17 @@ async function verifyOrderedLocalVerificationControls() {
     assert.deepEqual(result.syntaxFiles, ["control.mts", "view.jsx", "view.tsx"]);
     assert.ok(value.launches.every(launch => launch.environment.PRIVATE_SECRET === undefined && launch.environment.CI === "1"));
     assert.deepEqual(value.launches.map(launch => launch.limitMs), [1_800_000, 1_800_000, 17_000]);
+  });
+  await control("explicit operational scope doubles each external source-floor leaf once and cannot borrow default-budget receipts", async () => {
+    const value = fixture(), original = await value.run(); value.options.prior = original;
+    value.options.operationalBudget = "pr229-20261103-double-operational"; value.launches.length = 0;
+    const expanded = await value.run();
+    assert.deepEqual(value.launches.map(launch => launch.limitMs), [3_600_000, 3_600_000, 34_000]);
+    assert.deepEqual(expanded.checks.map(check => check.limitMs), [3_600_000, 3_600_000, 34_000]);
+    value.options.prior = expanded; value.launches.length = 0;
+    assert.deepEqual((await value.run()).checks, expanded.checks); assert.equal(value.launches.length, 0);
+    delete value.options.operationalBudget;
+    await value.run(); assert.deepEqual(value.launches.map(launch => launch.limitMs), [1_800_000, 1_800_000, 17_000]);
   });
   await control("malformed Syntax refuses every executable leaf with a bounded diagnostic", async () => {
     const value = fixture(); value.options.sources.set("control.mts", "export const = ;");
@@ -2335,7 +2347,7 @@ async function verifyRetainedFinalQualityAdmissionControls(admissionControls: Aw
   // it does not qualify the current runtime, source checkout or any owned resources.
   const { qualification, privateInvocations } = admissionControls.requestGuardAdmission;
   assert.equal(qualification.status, "PASS");
-  const guard = new Function("assert", "digest", "localVerificationAdmissionInvocations", "gitHead", "prepared", "adminCredentials", "CORE_PREVIEW_PUBLIC_IMPACT_SELECTION", "validateCorePreviewPublicImpactSelection", "validateCoreJourneySelection", "ownedProcessCleanupQualification", compile(statement("adminAdoptionGate").getText(file).replace(/^export /u, "") + "\nreturn async function(request) { const context={assertOwned:async()=>{}}; " + requestCode + ";return {adoption,retainedQuality}; }"))(assert, sha256, privateInvocations, async () => qualification.finalHead, { get: () => ({}) }, { get: () => ({}) }, "preview-public-impact", () => undefined, () => undefined,
+  const guard = new Function("assert", "digest", "localVerificationAdmissionInvocations", "gitHead", "prepared", "adminCredentials", "CORE_PREVIEW_PUBLIC_IMPACT_SELECTION", "validateCorePreviewPublicImpactSelection", "validateCoreJourneySelection", "ownedProcessCleanupQualification", compile(["localVerificationOperationalDeadlineMs", "adminAdoptionGate"].map(name => statement(name).getText(file).replace(/^export /u, "")).join("\n") + "\nreturn async function(request) { const context={assertOwned:async()=>{}}; " + requestCode + ";return {adoption,retainedQuality}; }"))(assert, sha256, privateInvocations, async () => qualification.finalHead, { get: () => ({}) }, { get: () => ({}) }, "preview-public-impact", () => undefined, () => undefined,
     () => ({ fullEProcessCleanupQualified: true })) as (request: Record<string, unknown>) => Promise<{ adoption: boolean; retainedQuality: boolean }>;
   const requests = { retained: { additionalSourceFiles: [], finalQualityGate: true, retainedAdminBehaviorAdmissionSha256: "f".repeat(64), admissionQualification: qualification }, legacy: { additionalSourceFiles: [], finalQualityGate: true, selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms", admissionQualification: qualification } };
   assert.deepEqual(await guard(requests.retained), { adoption: false, retainedQuality: true }); assert.deepEqual(await guard(requests.legacy), { adoption: true, retainedQuality: false });
@@ -2403,13 +2415,14 @@ function verifyFinalQualityGatePlan() {
     assert.equal(result.length, 1); return result[0].getText(file);
   };
   const pending = declaration("pendingQualityPrefix", body.tryBlock.statements);
-  const declarations = [deadline.getText(file).replace(/^export /u, ""), gates.getText(file), declaration("heroGate", run.body.statements),
+  const operationalDeadline = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "localVerificationOperationalDeadlineMs"); assert.ok(operationalDeadline);
+  const declarations = [deadline.getText(file).replace(/^export /u, ""), operationalDeadline.getText(file).replace(/^export /u, ""), "const operationalBudget = undefined;", gates.getText(file), declaration("heroGate", run.body.statements),
     declaration("qualityPrefix", body.tryBlock.statements), pending, declaration("executionGates", body.tryBlock.statements)];
   type Gate = { name: string; qualityScript?: string };
   type Execution = { qualityPrefix: Gate[]; pendingQualityPrefix: Gate[]; executionGates: Gate[] };
-  const compileExecution = (parts: readonly string[]) => new Function("qualityScripts", "heroCompatibility", "request", "gates",
+  const compileExecution = (parts: readonly string[]) => new Function("assert", "qualityScripts", "heroCompatibility", "request", "gates",
     ts.transpileModule(parts.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-      + ";return {qualityPrefix,pendingQualityPrefix,executionGates};") as (scripts: string[], hero: boolean, request: object, gates: Gate[]) => Execution;
+      + ";return {qualityPrefix,pendingQualityPrefix,executionGates};").bind(null, assert) as (scripts: string[], hero: boolean, request: object, gates: Gate[]) => Execution;
   const execution = compileExecution(declarations);
   const canonical = new Function(code + ";return GATES;")() as Gate[];
   // The two source-floor leaves already ran in this exact context. Their named
@@ -3858,6 +3871,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
       stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext, drainControlPulse,
       lstatSync, readdirSync, writeFileSync, mkdirSync, dirname, isAbsolute, ownedPath, registeredVerificationNodeEntries } = ports;
     const request = ports.request ?? {admissionQualification:{baselineHead:"controlled-baseline"}}, heroCompatibility = false, measurement = undefined, ROOT = ports.ROOT ?? "controlled-root";
+    const operationalBudget = request.admissionQualification?.operationalBudget;
     const headSha = ports.headSha ?? "controlled-head", localInputs = undefined, signal = ports.signal ?? new AbortController().signal;
     const manifest = ports.manifest ?? [{file:"package.json"},{file:"controlled.mts"}], qualityEnvironment = {};
     const verifySource = ports.verifySource ?? (() => {}), process = ports.process ?? {platform:"win32",execPath:"controlled-node",version:"controlled-version",versions:{v8:"controlled-v8"},execArgv:[]};
@@ -3883,7 +3897,8 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     try {
       if (stageInstalledDependencies) { const process = { platform: "win32" }; ${stageBranch} }
       ${orderedPreparation}
-      for (const gate of executionGates) {
+      for (${loop.initializer.getText(file)} of executionGates) {
+        ${declaration("gate", gateStatements)}
         const gateApp = undefined;
         ${gateStatements.slice(begin, end).map(node => node.getText(file)).join("\n")}
       }
@@ -3891,8 +3906,8 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     return { reports, qualityReports, buildIdSha256 };
   };`)) as (ports: Record<string, unknown>) => () => Promise<{ reports: Array<{ name: string; code: number }>; qualityReports: Array<{ script: string; code: number }> }>;
   const fixture = (options: { failedChild?: string; driverFailure?: Error; skippedE2E?: boolean; failedCleanup?: boolean; failedWorker?: boolean;
-    stageInstalledDependencies?: () => Promise<void> } = {}) => {
-    const events: string[] = [], launched: string[] = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
+    stageInstalledDependencies?: () => Promise<void>; operationalBudget?: import("./lib/isolated-public-verification.mts").LocalVerificationOperationalBudget } = {}) => {
+    const events: string[] = [], launched: string[] = [], budgets: Array<{ name: string; limitMs: number }> = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
     let removed = false, stopped = false, workerStopped = false;
     const sourceDirectory = path.join("owned", "source");
     const retainedAdmission = { get workerStopped() { return workerStopped; }, async close() {
@@ -3902,9 +3917,10 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     const context = { runDirectory: "owned", sanitize: (value: string) => value, cleanEnvironment: () => ({}), record: (event: string, data: { gate: string }) => events.push(event + ":" + data.gate) };
     const activeLocalVerifications = new WeakSet([context]);
     const ports = { assert, ts, join: path.join, sep: path.sep, digest: sha256, prefix, stageInstalledDependencies: options.stageInstalledDependencies,
+      request: { admissionQualification: { baselineHead: "controlled-baseline", operationalBudget: options.operationalBudget } },
       context, originalContext: context, activeLocalVerifications, async drainControlPulse() {},
-      async runChild(_args: string[], _env: object, name: string) {
-        launched.push(name);
+      async runChild(_args: string[], _env: object, name: string, limitMs: number) {
+        launched.push(name); budgets.push({ name, limitMs });
         if (options.failedChild === name && options.driverFailure) throw options.driverFailure;
         const code = options.failedChild === name ? 1 : 0;
         return { code, rawExit: { code, signal: null }, cleanup: { status: "PASS", liveProcesses: 0, processTreeVerified: true },
@@ -3922,7 +3938,7 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
         assert.equal(value, path.join(sourceDirectory, ".next/BUILD_ID")); return Buffer.from("controlled-build-id");
       },
     };
-    return { execute: factory(ports), events, launched, receipts, stopped: () => stopped, workerStopped: () => workerStopped, removed: () => removed,
+    return { execute: factory(ports), events, launched, budgets, receipts, stopped: () => stopped, workerStopped: () => workerStopped, removed: () => removed,
       active: () => activeLocalVerifications.has(context) };
   };
   const control = async (name: string, operation: () => Promise<void>) => { await operation(); cases.push(name); };
@@ -3934,6 +3950,13 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     const cleanup = value.receipts.find(row => row.name === "public-process-cleanup.json"); assert.ok(cleanup);
     assert.deepEqual(cleanup.value, { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: true,
       otherResourcesTouched: false, retainedEvidenceWorkerStopped: true });
+  });
+  await control("actual execution mapping doubles scoped external prefix and Public tails once without changing default descriptors", async () => {
+    const normal = fixture(), expanded = fixture({ operationalBudget: "pr229-20261103-double-operational" });
+    await normal.execute(); await expanded.execute();
+    assert.deepEqual(expanded.budgets, normal.budgets.map(row => ({ name: row.name, limitMs: row.limitMs * 2 })));
+    assert.deepEqual(normal.budgets.slice(-4).map(row => row.limitMs), [900_000, 180_000, 180_000, 600_000]);
+    assert.ok(normal.stopped() && expanded.stopped() && normal.removed() && expanded.removed());
   });
   await control("a failed affected check aborts later checks and Public gates while awaiting original cleanup", async () => {
     const value = fixture({ failedChild: "quality-2-typecheck" });
@@ -6312,7 +6335,8 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
       const directQualification = { status: "PASS" } as import("./lib/isolated-public-verification.mts").LocalVerificationAdmissionQualification;
       const directFloor = { checks: [] }, directInvocations = new WeakMap([[directQualification,
         { sha256: sha256(JSON.stringify(directQualification)), sourceFloor: directFloor, sourceFloorSha256: sha256(JSON.stringify(directFloor)) }]]);
-      const buildDirect = new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", compile(direct.getText(file).replace(/^export /u, ""))
+      const operationalDeadline = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "localVerificationOperationalDeadlineMs"); assert.ok(operationalDeadline);
+      const buildDirect = new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", compile(operationalDeadline.getText(file).replace(/^export /u, "") + "\n" + direct.getText(file).replace(/^export /u, ""))
         + ";return runOwnedPublicVerification;")(assert, sha256, directInvocations, windows) as typeof import("./lib/isolated-public-verification.mts").runOwnedPublicVerification;
       const directContext: Parameters<typeof buildDirect>[0] = { ...context, apiPort: 0, anonKey: "controlled-noncredential",
         serviceKey: "controlled-noncredential", assertOwned: async () => { ownershipReads++; throw stop; }, record: () => { throw stop; } };
@@ -7046,7 +7070,7 @@ function verificationInputSourceObservations() {
     "verifySharedChildControls", "verifyRegisteredNodeEntryControls", "verifyInputObservationValidationControls", "verifyAdoptionDeadlineControls", "admissionQualificationOnly"]);
   declaration("scripts/lib/isolated-supabase.mts", ["sourcePath", "requireThat", "readReleaseLock", "runIsolatedSupabase"]);
   declaration("scripts/lib/windows-owned-process.mts", ["nativeBuild", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess"]);
-  declaration("scripts/lib/isolated-public-verification.mts", ["localVerificationCommandSteps", "registeredVerificationNodeEntries", "localVerificationQualityPrefixDeadlineMs", "runOwnedVerificationChild", "stopChild"]);
+  declaration("scripts/lib/isolated-public-verification.mts", ["localVerificationCommandSteps", "registeredVerificationNodeEntries", "localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "runOwnedVerificationChild", "stopChild"]);
   declaration("scripts/qa-isolated-supabase.mts", ["options", "$dispatch"]);
   declaration("scripts/qa-isolated-supabase-transport.mjs", ["$module"]);
   const graph = collectExecutableSourceGraph({ root, entrySourceFiles: [...observed.keys()], symbolAware: false, nativeEagerImports: true });
@@ -7230,11 +7254,11 @@ async function verifyAdmissionQualificationControls() {
   type InputImpact = import("./lib/isolated-public-verification.mts").LocalVerificationImpact;
   type PrivateDiscovery = Binding & { additionalSourceFiles: readonly string[]; changes: Inputs["changes"]; changeImpact: NonNullable<Inputs["changeImpact"]> };
   type ControlledInvocation = { sourceDiscovery?: PrivateDiscovery; sourceDiscoverySha256: string;
-    sourceFloor: { checks: Array<{ result: { code: number } }> }; sourceFloorSha256: string };
+    sourceFloor: { checks: Array<{ limitMs: number; result: { code: number } }> }; sourceFloorSha256: string };
   const executorCode = compile(orderedSourceFloorControlSource(tree) + "\n" + ["localVerificationAdmissionInvocations", "localVerificationCommandSteps", "registeredVerificationNodeEntries",
     "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission", "readLocalVerificationInputs"].map(declaration).join("\n"));
   const executorFixture = (options: { raw?: "wrong-nonce" | "missing-schema" | "corrupt"; nonzero?: boolean; nativeFailure?: boolean; validatorFailure?: boolean;
-    childFailure?: boolean; cleanupFailure?: boolean; floorTypeScriptFailure?: boolean;
+    childFailure?: boolean; cleanupFailure?: boolean; floorTypeScriptFailure?: boolean; budgetAncestorFailure?: boolean;
     governance?: "qualified" | "unqualified" | "missing" | "failed" | "missing-marker"; mutateAdditional?: () => void } = {}) => {
     const files = new Map<string, Buffer>(), links = new Set<string>(), fs = memory(files, links), baselineHead = "a".repeat(40);
     const entries = ["scripts/verify-admin-form-system.mts", "scripts/verify-page-block-editor-presentation.mts", "scripts/verify-isolated-supabase.mts"];
@@ -7250,7 +7274,7 @@ async function verifyAdmissionQualificationControls() {
     const binding = (): Binding => ({ baselineHead, finalHead: head, sourceSha256: sourceSha() });
     const discovered: NonNullable<Inputs["changeImpact"]> = { proofBoundary: "source_discovery_only", sourceSha256: sourceSha(), deltaSha256: sha256("[]"),
       changes: [], obligations: [], protections: [], qaQuality: [] };
-    const launches: Array<{ args: string[]; limitMs: number }> = [], floorLaunches: string[] = [], stops: string[] = [], observedPackages: string[][] = [];
+    const launches: Array<{ args: string[]; limitMs: number }> = [], floorLaunches: string[] = [], stops: string[] = [], observedPackages: string[][] = [], gitCalls: string[][] = [];
     const nativePath = path.join(memoryRoot, ".tmp-qa", "admission-qualification-controlled", "input.native-result.json");
     const api = new Function("assert", "ROOT", "digest", "process", "execFileSync", "inspectLocalVerificationChangeImpact", "selectSourceInventory", "sourceIncluded", "safeSourcePath",
       "existsSync", "lstatSync", "realpathSync", "readFileSync", "collectExecutableSourceGraph", "ts", "nodeModule", "localVerificationAdmissionRuntimeIdentity", "resolve", "join", "sep",
@@ -7258,9 +7282,13 @@ async function verifyAdmissionQualificationControls() {
       "localVerificationNativeGate", "localVerificationCoverage", "deriveLocalVerificationSourceImpact",
       executorCode + ";return {qualifyLocalVerificationAdmission,assertQualified:assertLocalVerificationAdmissionQualification,readInputs:readLocalVerificationInputs,privateInvocation:value=>localVerificationAdmissionInvocations.get(value),privateInvocations:localVerificationAdmissionInvocations};")(
       assert, memoryRoot, sha256, { platform: "win32", env: {}, execPath: "controlled-node", version: "controlled-node-version", versions: { v8: "controlled-v8" }, execArgv: [] }, (_command: string, args: string[]) => {
+        gitCalls.push(args);
         if (args[0] === "ls-files") return Buffer.from(selected.join("\0") + "\0");
         if (args[0] === "rev-parse") return Buffer.from(args.includes("--verify") ? baselineHead : head);
-        if (args[0] === "merge-base") return Buffer.alloc(0);
+        if (args[0] === "merge-base") {
+          if (options.budgetAncestorFailure && args[2] === "9edaf02f4cd476315d71b306d5f786f3d8d1efd0") throw Error("Controlled operational scope ancestor mismatch");
+          return Buffer.alloc(0);
+        }
         if (args[0] === "ls-tree") return Buffer.from(selected.join("\0") + "\0");
         if (args[0] === "diff") return Buffer.from(changedFiles.length ? changedFiles.join("\0") + "\0" : "");
         if (args[0] === "show") { const bytes = sources.get(args[1]!.slice(41)); assert.ok(bytes); return bytes; }
@@ -7319,7 +7347,7 @@ async function verifyAdmissionQualificationControls() {
     const readQualified = (value: Qualification, additional: string[] = [], request: Partial<InputRequest> = {}, previous?: Inputs) =>
       api.readInputs({ cleanEnvironment: () => ({ NODE_ENV: "test" }) }, { ...binding(), changes: [] }, manifest(), additional,
         { additionalSourceFiles: additional, admissionQualification: value, ...request }, previous);
-    return { api, binding, files, links, nativePath, runtime, launches, floorLaunches, stops, observedPackages, discovered, changedFiles, selected, manifest, readQualified,
+    return { api, binding, files, links, nativePath, runtime, launches, floorLaunches, stops, observedPackages, gitCalls, discovered, changedFiles, selected, manifest, readQualified,
       coverageRequests, coldDiscoveries: () => coldDiscoveries, head: (value: string) => { head = value; }, inspections: () => inspections };
   };
   const qualify = (api: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationAdmission">, signal = new AbortController().signal) =>
@@ -7332,7 +7360,33 @@ async function verifyAdmissionQualificationControls() {
     assert.ok(fixture.launches.every(row => Number.isSafeInteger(row.limitMs) && row.limitMs > 0 && row.limitMs <= 2_147_483_647));
     assert.ok(fixture.observedPackages.every(names => ["typescript", "react", "react-dom", "jiti"].every(name => names.includes(name))));
     assert.equal(value.behavioralPass, false); assert.equal(value.releaseEvidence, false); assert.equal(value.failures.length, 0);
+    assert.equal(Object.hasOwn(value, "operationalBudget"), false); assert.ok(fixture.launches.every(row => row.limitMs === 300_000));
     assert.throws(() => fixture.api.assertQualified(JSON.parse(JSON.stringify(value)) as Qualification, fixture.binding()), /live qualified execution/u);
+  });
+  await control("actual Admission binds the exact temporary operational scope to fresh floor profiles ancestry and immutable live receipt", async () => {
+    const fixture = executorFixture({ governance: "qualified" }), operationalBudget = "pr229-20261103-double-operational" as const;
+    const value = await fixture.api.qualifyLocalVerificationAdmission({ baselineHead: "a".repeat(40), operationalBudget }, new AbortController().signal);
+    assert.equal(value.status, "PASS"); assert.equal(value.operationalBudget, operationalBudget); fixture.api.assertQualified(value, fixture.binding());
+    assert.ok(fixture.gitCalls.some(args => JSON.stringify(args) === JSON.stringify(["merge-base", "--is-ancestor", "9edaf02f4cd476315d71b306d5f786f3d8d1efd0", "HEAD"])));
+    assert.deepEqual(fixture.api.privateInvocation(value).sourceFloor.checks.map(row => row.limitMs), [3_600_000, 3_600_000, 360_000]);
+    assert.deepEqual(fixture.launches.map(row => row.limitMs), [600_000, 600_000, 600_000]);
+    delete value.operationalBudget; assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /altered after qualification/u);
+    value.operationalBudget = "unapproved" as typeof operationalBudget; assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /altered after qualification/u);
+    // Re-insertion changes the exact serialized receipt order; restoring the value
+    // alone must not revive an invocation whose sealed bytes were altered.
+    value.operationalBudget = operationalBudget;
+    assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /altered after qualification/u);
+    assert.throws(() => fixture.api.assertQualified(JSON.parse(JSON.stringify(value)) as Qualification, fixture.binding()), /live qualified execution/u);
+    const ordinary = executorFixture(), normal = await qualify(ordinary.api); normal.operationalBudget = operationalBudget;
+    assert.throws(() => ordinary.api.assertQualified(normal, ordinary.binding()), /altered after qualification/u);
+  });
+  await control("actual Admission rejects a foreign operational scope or ancestry before source discovery and child allocation", async () => {
+    const foreign = executorFixture();
+    await assert.rejects(foreign.api.qualifyLocalVerificationAdmission({ operationalBudget: "unapproved" as Qualification["operationalBudget"] }, new AbortController().signal), /Unknown temporary operational budget/u);
+    assert.equal(foreign.inspections(), 0); assert.deepEqual(foreign.launches, []); assert.deepEqual(foreign.floorLaunches, []);
+    const ancestry = executorFixture({ budgetAncestorFailure: true });
+    await assert.rejects(ancestry.api.qualifyLocalVerificationAdmission({ operationalBudget: "pr229-20261103-double-operational" }, new AbortController().signal), /Controlled operational scope ancestor mismatch/u);
+    assert.equal(ancestry.inspections(), 0); assert.deepEqual(ancestry.launches, []); assert.deepEqual(ancestry.floorLaunches, []);
   });
   await control("actual Admission TypeScript failure prevents every heavy profile and preserves the source-floor exit", async () => {
     const fixture = executorFixture({ floorTypeScriptFailure: true }), value = await qualify(fixture.api);
@@ -7429,7 +7483,7 @@ async function verifyAdmissionQualificationControls() {
     let ownershipReads = 0;
     const stop = Error("Controlled ownership boundary; no resource allocation");
     const qualificationFixture = executorFixture(), qualified = await qualify(qualificationFixture.api);
-    const run = new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", "assertLocalVerificationAdmissionQualification", compile(declaration("runOwnedPublicVerification")) + ";return runOwnedPublicVerification;")(
+    const run = new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", "assertLocalVerificationAdmissionQualification", compile(declaration("localVerificationOperationalDeadlineMs") + "\n" + declaration("runOwnedPublicVerification")) + ";return runOwnedPublicVerification;")(
       assert, sha256, qualificationFixture.api.privateInvocations, () => ({ fullEProcessCleanupQualified: true }), qualificationFixture.api.assertQualified) as typeof import("./lib/isolated-public-verification.mts").runOwnedPublicVerification;
     const context: Parameters<typeof run>[0] = { runDirectory: root, apiPort: 57100,
       anonKey: "controlled-anon", serviceKey: "controlled-service",
@@ -7479,6 +7533,13 @@ async function verifyAdoptionDeadlineControls() {
   const loadBudget = (text = budgetNode.getText(file)) => new Function(compile(text.replace(/^export /u, ""))
     + ";return localVerificationQualityPrefixDeadlineMs;")() as () => number;
   const budgetApi = { localVerificationQualityPrefixDeadlineMs: loadBudget() };
+  const operationalBudgetNode = declaration("localVerificationOperationalDeadlineMs");
+  const operationalApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "localVerificationOperationalDeadlineMs"> = {
+    localVerificationOperationalDeadlineMs: new Function("assert", compile(operationalBudgetNode.getText(file).replace(/^export /u, ""))
+      + ";return localVerificationOperationalDeadlineMs;")(assert) as typeof import("./lib/isolated-public-verification.mts").localVerificationOperationalDeadlineMs,
+  };
+  const operationalDeadline = operationalApi.localVerificationOperationalDeadlineMs;
+  const approvedOperationalBudget = "pr229-20261103-double-operational" as const;
   const requireActualBudget = (api: Pick<typeof import("./lib/isolated-public-verification.mts"), "localVerificationQualityPrefixDeadlineMs">) => {
     const value = api.localVerificationQualityPrefixDeadlineMs();
     assert.equal(value, 1_800_000, "Adoption consumes the unchanged canonical quality-prefix budget.");
@@ -7495,12 +7556,29 @@ async function verifyAdoptionDeadlineControls() {
       assert.throws(() => requireActualBudget({ localVerificationQualityPrefixDeadlineMs: loadBudget(mutant) }), assert.AssertionError);
     }
   });
+  check("actual temporary operational budget doubles only its exact explicit scope and rejects invalid inputs or timer overflow", () => {
+    assert.equal(operationalApi.localVerificationOperationalDeadlineMs(1_800_000), 1_800_000);
+    assert.equal(operationalApi.localVerificationOperationalDeadlineMs(1_800_000, approvedOperationalBudget), 3_600_000);
+    for (const limit of [1, 17, 300_000, 900_000, requireActualBudget(budgetApi), 2_220_000, 1_073_741_823]) {
+      assert.equal(operationalApi.localVerificationOperationalDeadlineMs(limit), limit);
+      assert.equal(operationalApi.localVerificationOperationalDeadlineMs(limit, approvedOperationalBudget), limit * 2);
+    }
+    assert.equal(operationalApi.localVerificationOperationalDeadlineMs(2_147_483_647), 2_147_483_647);
+    for (const scope of ["", "pr229-20261103-double-operational-extra", "PR229-20261103-DOUBLE-OPERATIONAL", "pr229-20261103-double-operational ", null, 2, true, {}])
+      assert.throws(() => operationalApi.localVerificationOperationalDeadlineMs(17, scope as typeof approvedOperationalBudget), assert.AssertionError);
+    for (const scope of [undefined, approvedOperationalBudget]) {
+      for (const limit of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5, 2_147_483_648])
+        assert.throws(() => operationalApi.localVerificationOperationalDeadlineMs(limit, scope), assert.AssertionError);
+    }
+    for (const limit of [1_073_741_824, 2_147_483_647])
+      assert.throws(() => operationalApi.localVerificationOperationalDeadlineMs(limit, approvedOperationalBudget), assert.AssertionError);
+  });
   const run = declaration("runOwnedPublicVerification"), body = run.body!.statements.find(ts.isTryStatement); assert.ok(body);
   const prefix = body.tryBlock.statements.flatMap(node => ts.isVariableStatement(node) ? [...node.declarationList.declarations] : [])
     .find(node => node.name.getText(file) === "qualityPrefix"); assert.ok(prefix?.initializer);
   const prefixText = prefix.initializer.getText(file);
-  const projectPrefix = (text = prefixText) => new Function("qualityScripts", "localVerificationQualityPrefixDeadlineMs", compile("return (" + text + ");")) as
-    (checks: string[], budget: () => number) => Array<{ qualityScript: string; limitMs: number }>;
+  const projectPrefix = (text = prefixText) => new Function("qualityScripts", "localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "operationalBudget", compile("return (" + text + ");")) as
+    (checks: string[], budget: () => number, deadline: typeof operationalDeadline, scope?: typeof approvedOperationalBudget) => Array<{ qualityScript: string; limitMs: number }>;
   const project = projectPrefix();
   const gates = file.statements.find(node => ts.isVariableStatement(node)
     && node.declarationList.declarations.some(row => row.name.getText(file) === "GATES")); assert.ok(gates);
@@ -7512,17 +7590,17 @@ async function verifyAdoptionDeadlineControls() {
     const lookalikes = ["verify:admin-runtime-extra", "prefixverify:admin-runtime", "VERIFY:ADMIN-RUNTIME", "verify:admin-runtime ", "verify:admin-runtime:other"];
     for (const checks of [actualChecks, [...actualChecks].reverse(), ["verify:admin-runtime", ...actualChecks.filter(script => script !== "verify:admin-runtime")],
       [...lookalikes, "verify:admin-runtime"], ["verify:consumer-capability-adoption", "verify:executable-governance"], []]) {
-      for (const defaultBudget of [requireActualBudget(budgetApi), 731]) {
+      for (const scope of [undefined, approvedOperationalBudget]) for (const defaultBudget of [requireActualBudget(budgetApi), 731]) {
         let calls = 0;
-        const rows = candidate(checks, () => { calls++; return defaultBudget; });
+        const rows = candidate(checks, () => { calls++; return defaultBudget; }, operationalDeadline, scope);
         assert.deepEqual(rows.map(row => row.qualityScript), checks);
         assert.equal(calls, checks.filter(script => script !== "verify:admin-runtime").length);
-        assert.deepEqual(rows.map(row => row.limitMs), checks.map(script => script === "verify:admin-runtime" ? 2_220_000 : defaultBudget),
-          "Only the exact Admin Runtime script gets 37m; every other script consumes its unchanged owner budget port.");
+        assert.deepEqual(rows.map(row => row.limitMs), checks.map(script => (script === "verify:admin-runtime" ? 2_220_000 : defaultBudget) * (scope === undefined ? 1 : 2)),
+          "Exact Admin Runtime and default owner budgets stay unchanged unless the explicit operational scope doubles their external allowance once.");
       }
     }
   };
-  check("actual canonical quality-prefix projection limits 37m to the exact Admin Runtime script across every current check and reordered or lookalike inputs", () => {
+  check("actual canonical quality-prefix projection preserves default deadlines and applies the exact operational scope once across every current check and reordered or lookalike inputs", () => {
     requireProjection(project);
     for (const mutant of [
       prefixText.replace('script === "verify:admin-runtime"', "index === " + actualChecks.indexOf("verify:admin-runtime")),
@@ -7531,12 +7609,18 @@ async function verifyAdoptionDeadlineControls() {
       prefixText.replace('script === "verify:admin-runtime"', 'script.trim().toLowerCase() === "verify:admin-runtime"'),
       prefixText.replace("2_220_000", "1_800_000"),
       prefixText.replace("localVerificationQualityPrefixDeadlineMs()", "1_800_000"),
+      prefixText.replace(", operationalBudget)", ", undefined)"),
+      prefixText.replace(", operationalBudget)", ', "pr229-20261103-double-operational")'),
+      prefixText.replace(", operationalBudget)", ", operationalBudget) * 2"),
     ]) {
       assert.notEqual(mutant, prefixText);
       assert.throws(() => requireProjection(projectPrefix(mutant)), assert.AssertionError);
     }
+    assert.throws(() => project(actualChecks, () => requireActualBudget(budgetApi), operationalDeadline, "unapproved" as typeof approvedOperationalBudget), assert.AssertionError);
   });
-  const adminRuntimeDeadlineMs = project(["verify:admin-runtime"], () => requireActualBudget(budgetApi))[0]!.limitMs;
+  const adminRuntimeDeadlineMs = project(["verify:admin-runtime"], () => requireActualBudget(budgetApi), operationalDeadline)[0]!.limitMs;
+  const scopedDeadlines = project(["verify:consumer-capability-adoption", "verify:admin-runtime"], () => requireActualBudget(budgetApi), operationalDeadline, approvedOperationalBudget);
+  const scopedAdoptionDeadlineMs = scopedDeadlines[0]!.limitMs, scopedAdminRuntimeDeadlineMs = scopedDeadlines[1]!.limitMs;
   type ControlledChild = EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; pid: number; exitCode: number | null; signalCode: NodeJS.Signals | null };
   const code = compile(["ownedPath", "runOwnedVerificationChild"].map(name => declaration(name).getText(file).replace(/^export /u, "")).join("\n"));
   const proofs: Array<Record<string, unknown>> = [];
@@ -7580,6 +7664,9 @@ async function verifyAdoptionDeadlineControls() {
   for (const budget of [
     { name: "Adoption", limitMs: requireActualBudget(budgetApi), control: "adoption_owner_budget_ports" },
     { name: "exact Admin Runtime projection", limitMs: adminRuntimeDeadlineMs, control: "admin_runtime_projected_budget_ports" },
+    { name: "scoped Adoption projection", limitMs: scopedAdoptionDeadlineMs, control: "scoped_adoption_projected_budget_ports" },
+    { name: "scoped Admin Runtime projection", limitMs: scopedAdminRuntimeDeadlineMs, control: "scoped_admin_runtime_projected_budget_ports" },
+    { name: "unscaled direct tiny child", limitMs: 17, control: "direct_tiny_child_budget_not_rescaled" },
   ]) await control("actual child receives the " + budget.name + " budget in both native and JS timer ports without profiling", async () => {
     const value = fixture(), pending = value.invoke(undefined, budget.limitMs);
     assert.equal(value.launches.length, 1); assert.equal(value.launches[0]!.limitMs, budget.limitMs);
@@ -7600,6 +7687,9 @@ async function verifyAdoptionDeadlineControls() {
   for (const budget of [
     { limitMs: requireActualBudget(budgetApi), suffix: "", controlSuffix: "" },
     { limitMs: adminRuntimeDeadlineMs, suffix: " at the projected Admin Runtime budget", controlSuffix: "_admin_runtime_budget" },
+    { limitMs: scopedAdoptionDeadlineMs, suffix: " at the scoped Adoption budget", controlSuffix: "_scoped_adoption_budget" },
+    { limitMs: scopedAdminRuntimeDeadlineMs, suffix: " at the scoped Admin Runtime budget", controlSuffix: "_scoped_admin_runtime_budget" },
+    { limitMs: 17, suffix: " at an unscaled direct tiny child budget", controlSuffix: "_direct_tiny_child_budget" },
   ]) for (const reason of ["timeout", "cancelled"] as const) await control("actual child retains " + reason + " plus original root exit and complete controlled cleanup" + budget.suffix, async () => {
     const value = fixture(), controller = new AbortController(), pending = value.invoke(controller.signal, budget.limitMs);
     assert.equal(value.launches.length, 1); assert.equal(value.launches[0]!.limitMs, budget.limitMs);
@@ -8284,7 +8374,7 @@ async function changeImpactOnly() {
       ci = { eventName, event, githubSha };
     }
     const parsed = ts.createSourceFile("isolated-public-verification.mts", readSource("scripts/lib/isolated-public-verification.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-    const names = ["GATES", "localVerificationQualityPrefixDeadlineMs", "runLocalVerificationSourceFloor", "localVerificationAdmissionInvocations", "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission",
+    const names = ["GATES", "localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "runLocalVerificationSourceFloor", "localVerificationAdmissionInvocations", "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission",
       "localVerificationAssertionRelocationRequired", "validateLocalVerificationAssertionRelocations", "validateLocalVerificationInputObservations", "localVerificationInstalledRuntimePackages", "localVerificationAdmissionRuntimeIdentity",
       "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "localVerificationSourceGuardEffects", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",

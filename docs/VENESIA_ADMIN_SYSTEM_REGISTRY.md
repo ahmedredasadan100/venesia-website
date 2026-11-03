@@ -3466,3 +3466,23 @@ in this stage; exact-final-SHA CI/Preview and the six Article/News/Press/Site
 Update/Video/Gallery Owner reviews remain separate release conditions.
 The operational policy remains QA_RELEASE_CLOSURE Section3.2.2, with no parallel
 policy or reduced protection. `globalClosed=false`.
+
+**Subsequent scoped operational authorization — 3 November 2026:** The Owner
+authorized the nondefault `pr229-20261103-double-operational` option for this
+PR #229 batch only. Fresh live qualification carries the explicit selection;
+serialized evidence cannot grant execution authority. The existing source-floor,
+Admission-profile and Public prefix/tail owners double their external execution
+budgets, giving the current batch 60-minute default prefixes and 74-minute Gate57.
+Their default 30/37-minute contracts remain unchanged. The task-local host
+snapshot query alone changes from 20 to 40 seconds. Internal readiness,
+heartbeat, cancellation, cleanup, preparation and dependency checkpoints remain
+unchanged, with no global environment switch or new QA owner.
+
+This later authorization supersedes the preceding attempt budget only and
+preserves its evidence/history. Affected protection at the existing owners must
+cover the explicit selection, unchanged defaults and rejected invalid scope;
+fresh Final Source/environment qualification and runtime results are Pending.
+The current E batch permits one Gate57 attempt followed by Full E75/75 through
+the existing Admission, Preflight and Targeted Admin prerequisites. No automatic
+retry, Push, Ready, Merge or Production is authorized; all six Owner reviews
+remain required and `globalClosed=false`.

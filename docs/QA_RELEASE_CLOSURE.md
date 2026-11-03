@@ -276,7 +276,7 @@ security protection or cleanup obligation is weakened or removed.
 For the approved PR #229 Gate57 recovery, the combined batch remains E. The
 original 30-minute attempts and their evidence retain their historical status.
 Following the isolated Feed measurement and explicit budget decision on
-3 November 2026, the Owner authorized one further Gate57 attempt at 37 minutes
+3 November 2026, the Owner initially authorized one further Gate57 attempt at 37 minutes
 (2220000ms), after current-source and environment qualification. Apply this
 exception only to the exact `verify:admin-runtime` quality script in the existing
 `runOwnedPublicVerification` owner. Keep the shared
@@ -290,6 +290,20 @@ source/environment satisfy the existing Admission, Preflight and Targeted Admin
 prerequisites. The reconstructed timing estimate and isolated Feed PASS cannot
 substitute for Gate57 or Full E. This stage authorizes no Push, Ready, Merge or
 Production action; required release gates and all six Owner reviews remain.
+
+The subsequent Owner authorization on 3 November 2026 supersedes only that
+attempt's operational budget for the current PR #229 batch. The explicit,
+nondefault `pr229-20261103-double-operational` option on fresh live qualification
+doubles external source-floor, Admission-profile and Public prefix/tail execution
+budgets: the default 30-minute prefix becomes 60 minutes and Gate57 becomes
+74 minutes. Default source contracts remain 30/37 minutes. The task-local host
+snapshot query alone receives 40 seconds. Internal readiness, heartbeat,
+cancellation, cleanup, preparation and dependency checkpoints remain unchanged;
+no global environment switch or additional QA owner is introduced. This
+exception requires a newly frozen Final Source and qualified environment, permits
+one Gate57 attempt and then Full E75/75 only through the existing prerequisites,
+and grants no retry or release authority. Runtime results remain Pending until
+their actual receipts qualify; the history above is not a new PASS.
 
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
