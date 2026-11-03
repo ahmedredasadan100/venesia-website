@@ -330,6 +330,15 @@ Pending. The authorized continuation remains
 one Gate57 attempt, then Full E75/75 through the existing prerequisites, with
 all six Owner reviews required and no Push, Ready, Merge or Production action.
 
+The first corrected-source Admission stopped at TypeScript because the new
+controlled native-deadline input omitted the required `NODE_ENV` field. Its
+Native completion/cleanup receipts passed and Gate57 had not started. The
+bounded fixture correction supplies literal `NODE_ENV: "test"`; the ten affected
+deadline vectors and TypeScript (24528ms) pass without changing any runtime
+owner or assertion. Preserve the failed Admission and its source binding;
+fresh live qualification is required for the corrected source. The continuation
+evidence is under `.tmp-qa/pr229-timeout-ownership-release-20261103-02/`.
+
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
 rule grants no additional Product, Architecture, Auth, Permission, Database,

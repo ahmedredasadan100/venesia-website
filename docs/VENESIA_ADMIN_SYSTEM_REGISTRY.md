@@ -3521,3 +3521,13 @@ Current risk remains E: one Gate57
 attempt precedes Full E75/75 through the existing release prerequisites; all six
 Owner reviews remain required. Push, Ready, Merge and Production remain
 unauthorized, and `globalClosed=false`.
+
+The subsequent Admission on `5d9f18ad` stopped before Gate57 at TypeScript:
+the new controlled deadline test used an environment without required
+`NODE_ENV`. The single fixture correction adds literal `NODE_ENV: "test"`.
+All ten affected deadline vectors and TypeScript (24528ms) pass; the Native
+owner, previously qualified 172 process controls, lifecycle assertions and
+cleanup limits are unchanged. That failed Admission retains its original
+receipts and successful cleanup. Current continuation evidence is retained in
+`.tmp-qa/pr229-timeout-ownership-release-20261103-02/`; fresh live Admission,
+Gate57 and Full E remain Pending until their actual terminal receipts qualify.

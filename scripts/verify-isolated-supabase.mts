@@ -5158,7 +5158,7 @@ function verifyWindowsOwnedProcessContracts() {
   for (const limitMs of [1, 86_400_000, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5, 86_400_001, 139_440_000, 2_147_483_647]) {
     check("actual native launch validates deadline before build evidence or process allocation: " + String(limitMs), () => {
       let builds = 0, evidenceReads = 0, launches = 0;
-      const boundary = Error("Controlled native spawn boundary; no process allocation"), input = { args: ["-e", "0"], cwd: root, env: {},
+      const boundary = Error("Controlled native spawn boundary; no process allocation"), input = { args: ["-e", "0"], cwd: root, env: { NODE_ENV: "test" as const },
         identityPath: path.join(root, "controlled.identity.json"), receiptPath: path.join(root, "controlled.receipt.json"), limitMs };
       const api: Pick<typeof import("./lib/windows-owned-process.mts"), "spawnWindowsOwnedProcess"> = {
         spawnWindowsOwnedProcess: new Function("assert", "nativeBuild", "existsSync", "realpathSync", "dirname", "spawn", "process", nativeSpawnCode + ";return spawnWindowsOwnedProcess;")(
