@@ -3120,3 +3120,51 @@ source/commit binding and cleanup belong to
 The prior sealed failure is immutable and is not reclassified. This entry grants
 no Full E, Push, CI, deployment or merge result; human reviews remain Pending
 and`globalClosed=false`.
+
+### 27.45 Gate57 timing boundary and pre-cleanup Native preservation — 3 November 2026
+
+**Previous → current / bounded findings:** Full E on `d846d9ac` retained56 PASS,
+Gate57 `verify:admin-runtime` TIMEOUT and18 NOT RUN. The unchanged1800000ms
+bound applies to the entire canonical npm composite. Its default verifier
+completed1121 checks and Topics Listing completed53; Feed started only about
+three seconds before termination. The prior repository-root canonical run
+completed in1461734ms; the copied-source Full E child reached1800176ms.
+The first comparable Native checkpoint was already196726.820ms later relative
+to its own Gate57 start. Individual preceding command timestamps and the cause
+of that lag are unavailable. No removable literal leaf duplication, blocking
+cause, Feed defect or performance correction is established. The timeout and
+all original gates/assertions remain unchanged; no historical PASS is reused
+to qualify the failed copied-source run.
+
+**Existing owner / correction:** The two preservation gaps describe one declared
+`owned-process-controls-Np12m0` archive. Its128-file raw snapshot is retained
+but remains unqualified: the late task consumer required a successful Public
+window while `runOwnedPublicVerification` removed the copied source on failure.
+The same Public owner now captures actual settled child results or the original
+error's own `childResult` in private invocation state. Capture is limited to
+declared archive candidates and successful known Windows producer commands;
+unrelated Build/Public/Admin outputs are not retained by this state.
+
+After awaited process/worker closure and before workspace deletion, that owner
+preserves declared archives in its existing run directory and writes
+`public-native-evidence-preservation.json`. Private binding, live Admission,
+source/runtime/lock identity, original child streams and Native receipts precede
+qualification of the copy. Exact physical containment, ordinary unlinked files,
+raw hashes, producer index, file membership and empty directories are checked.
+Inner negative JSON remains opaque. Index rejection can retain raw bytes without
+granting qualification. Preservation failure cannot replace the original child
+error or skip owned cleanup. The receipt grants no Native, gate or live Admission
+PASS, and does not require a successful Public window or a missing gate-summary
+receipt to be reconstructed.
+
+**Consumers / evidence boundary:** The existing isolated verifier's
+`verifyLocalRiskExecutionControls` maintains the actual wrapper/finally projection
+and positive, negative and boundary filesystem controls. Verification
+Infrastructure, Executable Governance, Public execution and future release
+evidence consumers retain their existing ownership. No export, runner, registry,
+cache, timer, retry or Product capability is added. Actual ordered checks,
+Correspondence/Coverage, raw evidence, final source/commit binding and cleanup
+are recorded only in [the scoped recovery handoff](../.tmp-qa/gate57-performance-native-recovery-20261103-01/final-handoff-report.md).
+This entry itself confers no unexecuted result. Historical archive qualification
+cannot be invented retrospectively. Performance cause and release readiness
+remain unresolved; six human reviews remain Pending and`globalClosed=false`.

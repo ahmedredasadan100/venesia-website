@@ -5480,8 +5480,184 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (/^next\.config\./u.test(name)) assert.ok(["next.config.ts", imageConfig.file].includes(name), "Unexpected Next config precedence.");
     }
   };
-  const runChild = (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) =>
-    runOwnedVerificationChild({ sourceDirectory, context, children, signal }, args, env, name, limitMs);
+  let nativeArchiveBinding: Readonly<{ headSha: string; sourceSha256: string; sourceManifestSha256: string;
+    runtimeSha256: string; projectLockSha256: string; installedLockSha256: string }> | undefined;
+  const closedVerificationChildren: Array<{ name: string; args: string[]; commandSha256: string;
+    binding: typeof nativeArchiveBinding; result: unknown }> = [];
+  const closedNativeArchiveCandidate = (args: readonly string[], result: unknown) => {
+    if (result === null || typeof result !== "object") return false;
+    const value = result as { stderr?: unknown; code?: unknown };
+    return typeof value.stderr === "string" && value.stderr.includes('"ownedNativeEvidenceDirectory"')
+      || process.platform === "win32" && value.code === 0 && (args.length === 3 && args[1] === "run" && args[2] === "verify:admin-runtime"
+        || args.length === 2 && args[0] === "--experimental-strip-types" && args[1] === join(sourceDirectory, "scripts/verify-isolated-supabase.mts"));
+  };
+  const runChild = async (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) => {
+    const command = [...args], binding = nativeArchiveBinding;
+    try {
+      const result = await runOwnedVerificationChild({ sourceDirectory, context, children, signal }, args, env, name, limitMs);
+      if (closedNativeArchiveCandidate(command, result))
+        closedVerificationChildren.push({ name, args: command, commandSha256: digest(JSON.stringify(command)), binding, result });
+      return result;
+    } catch (error) {
+      const result: unknown = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "childResult")?.value : undefined;
+      if (closedNativeArchiveCandidate(command, result))
+        closedVerificationChildren.push({ name, args: command, commandSha256: digest(JSON.stringify(command)), binding, result });
+      throw error;
+    }
+  };
+  const preserveClosedNativeArchives = async () => {
+    const archives: Array<Record<string, unknown>> = [], failures: Array<{ stage: string; code: string | null }> = [];
+    let firstFailure: unknown, stage = "closed_child_declaration", bindingChecked = false;
+    const record = (value: unknown): Record<string, unknown> => {
+      assert.ok(value !== null && typeof value === "object" && !Array.isArray(value)); return value as Record<string, unknown>;
+    };
+    const failure = (error: unknown) => {
+      if (!failures.length) firstFailure = error;
+      const code: unknown = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "code")?.value : undefined;
+      failures.push({ stage, code: typeof code === "string" && /^[A-Z0-9_]+$/u.test(code) ? code : null });
+    };
+    const checkedPath = (file: string, root: string, directory: boolean) => {
+      assert.ok(file === root || file.startsWith(root + sep), "Native evidence escaped its owned physical root.");
+      const stat = lstatSync(file);
+      assert.equal(stat.isSymbolicLink(), false, "Native evidence cannot traverse a link.");
+      assert.equal(directory ? stat.isDirectory() : stat.isFile(), true, "Native evidence requires ordinary files and directories.");
+      assert.equal(realpathSync(file), file, "Native evidence cannot traverse an indirect physical path.");
+      if (!directory) assert.equal(stat.nlink, 1, "Native evidence cannot contain a hard-linked file.");
+      return stat;
+    };
+    const tree = (root: string) => {
+      const directories: string[] = [], files: Array<{ file: string; sha256: string; bytes: number }> = [];
+      const visit = (at: string) => {
+        checkedPath(at, root, true);
+        for (const name of readdirSync(at).sort()) {
+          assert.ok(name && !/[\\/:]/u.test(name) && name !== "." && name !== "..", "Invalid Native evidence member.");
+          const file = join(at, name), stat = lstatSync(file), relative = file.slice(root.length + 1).replaceAll("\\", "/");
+          if (stat.isDirectory()) { directories.push(relative); visit(file); }
+          else { checkedPath(file, root, false); const bytes = readFileSync(file); files.push({ file: relative, sha256: digest(bytes), bytes: bytes.length }); }
+        }
+      };
+      visit(root); return { directories: directories.sort(), files: files.sort((a, b) => a.file.localeCompare(b.file)) };
+    };
+    const declared = new Set<string>();
+    let adminRuntimeProducesArchive: boolean | undefined;
+    for (const child of closedVerificationChildren) {
+      try {
+        stage = "closed_child_declaration";
+        const result = record(child.result), stderr = result.stderr;
+        const lines = typeof stderr === "string" ? stderr.split(/\r?\n/u) : [];
+        const declarations = lines.map((line, index) => ({ line, index: index + 1 }))
+          .filter(row => row.line.includes('"ownedNativeEvidenceDirectory"'));
+        // A failed wrapper may have stopped before the producer. Only an actual successful,
+        // registered Gate57 command establishes that its Windows producer must have run.
+        if (!declarations.length && result.code === 0 && process.platform === "win32") {
+          let producerExecuted = child.args.length === 2 && child.args[0] === "--experimental-strip-types"
+            && child.args[1] === join(sourceDirectory, "scripts/verify-isolated-supabase.mts");
+          if (child.args.length === 3 && child.args[1] === "run" && child.args[2] === "verify:admin-runtime") {
+            if (adminRuntimeProducesArchive === undefined) {
+              const scripts = record(JSON.parse(readFileSync(join(sourceDirectory, "package.json"), "utf8"))).scripts;
+              adminRuntimeProducesArchive = registeredVerificationNodeEntries(record(scripts) as Record<string, string>, "verify:admin-runtime")
+                .includes("scripts/verify-isolated-supabase.mts");
+            }
+            producerExecuted = adminRuntimeProducesArchive;
+          }
+          assert.equal(producerExecuted, false, "A completed Native archive producer omitted its declaration.");
+        }
+        if (!declarations.length) continue;
+        stage = "closed_child_binding";
+        assert.ok(nativeArchiveBinding && child.binding === nativeArchiveBinding, "Native archives require this invocation's private child binding.");
+        assert.equal(child.commandSha256, digest(JSON.stringify(child.args)));
+        assert.equal(typeof result.stdout, "string"); assert.equal(typeof stderr, "string");
+        const stdoutFile = ownedPath(context, `public-${child.name}.stdout.log`), stderrFile = ownedPath(context, `public-${child.name}.stderr.log`);
+        for (const file of [stdoutFile, stderrFile]) checkedPath(file, realpathSync(context.runDirectory), false);
+        assert.equal(digest(readFileSync(stdoutFile)), digest(result.stdout as string));
+        assert.equal(digest(readFileSync(stderrFile)), digest(stderr as string));
+        const cleanup = record(result.cleanup);
+        assert.equal(cleanup.status, "PASS"); assert.equal(cleanup.processTreeVerified, true); assert.equal(cleanup.liveProcesses, 0);
+        const native = result.nativeJobReceipt, identity = result.nativeJobIdentity;
+        if (process.platform === "win32") {
+          const terminal = record(native), initial = record(identity), nativeCleanup = record(terminal.cleanup);
+          assert.equal(terminal.status, "PASS"); assert.equal(terminal.jobToken, initial.jobToken); assert.equal(terminal.rootPid, initial.rootPid);
+          assert.equal(terminal.rootExitCode, result.code); assert.equal(terminal.rootCreationTimeFileTime, initial.rootCreationTimeFileTime);
+          assert.equal(record(result.identity).pid, initial.rootPid); assert.equal(initial.ownerJobAssignedBeforeResume, true);
+          assert.equal(nativeCleanup.status, "PASS"); assert.equal(nativeCleanup.processTreeVerified, true); assert.equal(nativeCleanup.activeProcessesAfterCleanup, 0);
+          for (const [suffix, value] of [["native-identity", identity], ["native-result", native]] as const) {
+            const file = ownedPath(context, `public-${child.name}.${suffix}.json`); checkedPath(file, realpathSync(context.runDirectory), false);
+            assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), value, "Native closed-child receipt changed after settlement.");
+          }
+        }
+        stage = "source_runtime_binding";
+        if (!bindingChecked) {
+          assert.equal(digest(readFileSync(ownedPath(context, "public-source-manifest.json"))), nativeArchiveBinding.sourceManifestSha256);
+          assert.equal(nativeArchiveBinding.sourceSha256, digest(JSON.stringify(manifest)));
+          assert.equal(nativeArchiveBinding.headSha, request.admissionQualification!.finalHead);
+          assert.equal(nativeArchiveBinding.sourceSha256, request.admissionQualification!.sourceSha256);
+          assert.equal(nativeArchiveBinding.runtimeSha256, digest(JSON.stringify(request.admissionQualification!.runtime)));
+          assert.equal(digest(readFileSync(join(ROOT, "package-lock.json"))), nativeArchiveBinding.projectLockSha256);
+          assert.equal(digest(readFileSync(join(ROOT, "node_modules/.package-lock.json"))), nativeArchiveBinding.installedLockSha256);
+          assertLocalVerificationAdmissionQualification(request.admissionQualification!, { baselineHead: request.admissionQualification!.baselineHead,
+            finalHead: request.admissionQualification!.finalHead, sourceSha256: request.admissionQualification!.sourceSha256 });
+          verifySource(); bindingChecked = true;
+        }
+        for (const declaration of declarations) {
+          const archive: Record<string, unknown> = { status: "BLOCKED", qualificationGranted: false, nativePassClaimed: false, gatePassClaimed: false,
+            child: { name: child.name, commandSha256: child.commandSha256, code: result.code, reason: result.reason ?? "completed",
+              identity: result.identity, nativeJobIdentity: identity ?? null, nativeJobReceipt: native ?? null },
+            declarationStream: { file: stderrFile, sha256: digest(stderr as string), line: declaration.index }, sourceBinding: nativeArchiveBinding };
+          archives.push(archive);
+          try {
+            stage = "declared_archive_path";
+            const value = record(JSON.parse(declaration.line));
+            assert.deepEqual(Object.keys(value).sort(), ["ownedNativeEvidenceDirectory", "retainedFiles"]);
+            assert.equal(typeof value.ownedNativeEvidenceDirectory, "string");
+            const originalRoot = value.ownedNativeEvidenceDirectory as string, temporary = join(sourceDirectory, ".tmp-qa");
+            assert.equal(dirname(originalRoot), temporary); checkedPath(temporary, sourceDirectory, true);
+            const name = originalRoot.slice(temporary.length + 1);
+            assert.match(name, /^owned-process-controls-[a-zA-Z0-9_-]+$/u);
+            assert.equal(declared.has(originalRoot), false, "Duplicate Native archive declaration."); declared.add(originalRoot);
+            assert.ok(Number.isSafeInteger(value.retainedFiles) && (value.retainedFiles as number) >= 0);
+            archive.originalRoot = originalRoot; checkedPath(originalRoot, temporary, true);
+            stage = "raw_archive_copy";
+            const before = tree(originalRoot), destination = ownedPath(context, "native-archives-preserved");
+            if (!existsSync(destination)) mkdirSync(destination);
+            checkedPath(destination, realpathSync(context.runDirectory), true);
+            const preservedRoot = join(destination, name); assert.equal(existsSync(preservedRoot), false, "Preserve any earlier Native archive copy.");
+            mkdirSync(preservedRoot); archive.preservedRoot = preservedRoot; archive.before = before;
+            for (const directory of before.directories) mkdirSync(join(preservedRoot, directory), { recursive: true });
+            for (const row of before.files) {
+              const original = join(originalRoot, row.file); checkedPath(original, originalRoot, false);
+              const bytes = readFileSync(original); assert.equal(digest(bytes), row.sha256); assert.equal(bytes.length, row.bytes);
+              writeFileSync(join(preservedRoot, row.file), bytes, { flag: "wx", mode: 0o600 });
+            }
+            const after = tree(originalRoot), copied = tree(preservedRoot); archive.after = after; archive.copied = copied;
+            assert.deepEqual(after, before, "Native archive changed while preserving its bytes.");
+            assert.deepEqual(copied, before, "Native archive copy lost raw bytes or directory membership.");
+            archive.rawBytesUnmodified = true; archive.completeTreeAndEmptyDirectories = true;
+            archive.fileMappings = before.files.map(row => ({ originalPath: join(originalRoot, row.file), preservedPath: join(preservedRoot, row.file), bytes: row.bytes, sha256: row.sha256 }));
+            archive.snapshotSha256 = digest(JSON.stringify(before));
+            stage = "archive_index_membership";
+            const indexFile = join(preservedRoot, "evidence-index.json"), index = record(JSON.parse(readFileSync(indexFile, "utf8")));
+            assert.equal(index.schema, 1); assert.equal(index.originalNativeEvidenceRetained, true); assert.ok(Array.isArray(index.files));
+            assert.ok(Array.isArray(index.finalCleanup) && index.finalCleanup.every(value => value === "fulfilled"));
+            const indexed = (index.files as unknown[]).map(value => {
+              const row = record(value); assert.deepEqual(Object.keys(row).sort(), ["bytes", "file", "sha256"]);
+              assert.equal(typeof row.file, "string"); assert.ok(!isAbsolute(row.file as string) && !/[\\:]/u.test(row.file as string));
+              assert.ok(!(row.file as string).split("/").some(part => !part || part === "." || part === ".."));
+              assert.match(String(row.sha256), /^[a-f0-9]{64}$/u); assert.ok(Number.isSafeInteger(row.bytes) && (row.bytes as number) >= 0);
+              return { file: row.file as string, sha256: row.sha256 as string, bytes: row.bytes as number };
+            }).sort((a, b) => a.file.localeCompare(b.file));
+            assert.equal(new Set(indexed.map(row => row.file)).size, indexed.length); assert.equal(indexed.length, value.retainedFiles);
+            assert.deepEqual(before.files.filter(row => row.file !== "evidence-index.json"), indexed, "Native archive index differs from exact raw file membership.");
+            archive.index = { originalPath: join(originalRoot, "evidence-index.json"), preservedPath: indexFile, sha256: digest(readFileSync(indexFile)) };
+            archive.status = "PASS_PRESERVATION_ONLY";
+          } catch (error) { archive.failureStage = stage; failure(error); }
+        }
+      } catch (error) { failure(error); }
+    }
+    if (!archives.length && !failures.length) return;
+    receipt(context, "public-native-evidence-preservation.json", { schema: 1, status: failures.length ? "BLOCKED" : "PASS_PRESERVATION_ONLY",
+      sourceBinding: nativeArchiveBinding ?? null, archives, failures, qualificationGranted: false, nativePassClaimed: false, gatePassClaimed: false, liveAdmissionGranted: false });
+    if (failures.length) throw firstFailure;
+  };
   const stageInstalledDependencies = async () => {
     const started = performance.now(), deadlineMs = 600_000;
     const sourceRoot = join(ROOT, "node_modules"), targetRoot = join(sourceDirectory, "node_modules");
@@ -5651,6 +5827,11 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       byteSource: frozenManifest ? "reviewed-frozen-directory" : "working-tree", additionalSourceFiles: request.additionalSourceFiles,
       fixtureContentSha256: readiness.fixtureContentSha256, collectorSha256,
       manifest, sourceSha256: digest(JSON.stringify(manifest)), privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), generatedLocalCredentialsOnly: true });
+    const archiveRuntime = request.admissionQualification!.runtime as ReturnType<typeof localVerificationAdmissionRuntimeIdentity>;
+    nativeArchiveBinding = Object.freeze({ headSha, sourceSha256: digest(JSON.stringify(manifest)),
+      sourceManifestSha256: digest(readFileSync(ownedPath(context, "public-source-manifest.json"))),
+      runtimeSha256: digest(JSON.stringify(archiveRuntime)), projectLockSha256: archiveRuntime.projectLockSha256,
+      installedLockSha256: archiveRuntime.installedLockSha256 });
     let qualityScripts: string[] = [];
     let qualityEnvironment = context.cleanEnvironment();
     let npmCli: string | undefined;
@@ -5885,11 +6066,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     }
     assert.equal(realpathSync(sourceDirectory), sourceDirectory);
     assert.ok(sourceDirectory.startsWith(realpathSync(context.runDirectory) + sep));
+    let preservationFailed = false, preservationFailure: unknown;
+    try { await preserveClosedNativeArchives(); } catch (error) { preservationFailed = true; preservationFailure = error; }
     rmSync(sourceDirectory, { recursive: true, force: false });
     receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false,
       ...(retainedAdmission ? { retainedEvidenceWorkerStopped: retainedAdmission.workerStopped } : {}) });
     if (retainedAdmission) assert.equal(retainedAdmission.workerStopped, true, "Retained evidence worker must stop before cleanup completes.");
     for (const settled of workerCleanup) if (settled.status === "rejected") throw settled.reason;
+    if (preservationFailed) throw preservationFailure;
     } catch (cleanupFailure) {
       if (!publicFailed) throw cleanupFailure;
       if (publicFailure instanceof Error && Object.isExtensible(publicFailure) && !Object.hasOwn(publicFailure, "publicCleanupFailure"))

@@ -3736,14 +3736,22 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
   assert.ok(qualityPosition > stagePosition && qualityPosition < body.tryBlock.statements.indexOf(loop));
   const orderedPreparation = body.tryBlock.statements.slice(qualityPosition, body.tryBlock.statements.indexOf(loop)).map(node => node.getText(file)).join("\n");
   const factory = new Function("ports", compile(`return async () => {
-    const { assert, ts, join, sep, digest, context, runChild, receipt, children, retainedAdmission,
-      stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext, drainControlPulse } = ports;
-    const request = {admissionQualification:{baselineHead:"controlled-baseline"}}, heroCompatibility = false, measurement = undefined, ROOT = "controlled-root";
-    const headSha = "controlled-head", localInputs = undefined, signal = new AbortController().signal;
-    const manifest = [{file:"package.json"},{file:"controlled.mts"}], qualityEnvironment = {};
-    const verifySource = () => {}, process = {execPath:"controlled-node",version:"controlled-version",versions:{v8:"controlled-v8"},execArgv:[]};
-    const assertLocalVerificationAdmissionQualification = () => ({sourceDiscovery:{changes:[]},sourceFloor:{checks:[]}});
-    const runOwnedVerificationChild = (_ports,args,env,name) => runChild(args,env,name);
+    const { assert, ts, join, sep, digest, context, runChild: driverChild, receipt, children, retainedAdmission,
+      stopChild, sourceDirectory, realpathSync, rmSync, existsSync, readFileSync, activeLocalVerifications, originalContext, drainControlPulse,
+      lstatSync, readdirSync, writeFileSync, mkdirSync, dirname, isAbsolute, ownedPath, registeredVerificationNodeEntries } = ports;
+    const request = ports.request ?? {admissionQualification:{baselineHead:"controlled-baseline"}}, heroCompatibility = false, measurement = undefined, ROOT = ports.ROOT ?? "controlled-root";
+    const headSha = ports.headSha ?? "controlled-head", localInputs = undefined, signal = new AbortController().signal;
+    const manifest = ports.manifest ?? [{file:"package.json"},{file:"controlled.mts"}], qualityEnvironment = {};
+    const verifySource = ports.verifySource ?? (() => {}), process = ports.process ?? {platform:"win32",execPath:"controlled-node",version:"controlled-version",versions:{v8:"controlled-v8"},execArgv:[]};
+    const assertLocalVerificationAdmissionQualification = ports.assertLocalVerificationAdmissionQualification
+      ?? (() => ({sourceDiscovery:{changes:[]},sourceFloor:{checks:[]}}));
+    const runOwnedVerificationChild = (_ports,args,env,name,limitMs) => driverChild(args,env,name,limitMs);
+    ${declaration("nativeArchiveBinding", run.body.statements)}
+    nativeArchiveBinding = ports.nativeArchiveBinding;
+    ${declaration("closedVerificationChildren", run.body.statements)}
+    ${declaration("closedNativeArchiveCandidate", run.body.statements)}
+    ${declaration("runChild", run.body.statements)}
+    ${declaration("preserveClosedNativeArchives", run.body.statements)}
     const stageInstalledDependencies = ports.stageInstalledDependencies;
     const qualityScripts = ports.prefix, npmCli = "controlled-npm-cli", env = {};
     const reports = [], qualityReports = []; let buildIdSha256 = null, appPort = null, appFailed = false;
@@ -3846,7 +3854,251 @@ async function verifyLocalRiskExecutionControls(prefix: readonly string[], execu
     assert.equal(secondary.enumerable, false);
     assert.equal(value.receipts.some(row => row.name === "public-process-cleanup.json"), false);
   });
+  await control("actual closed-child capture retains exact success nonzero timeout and cancellation outcomes without granting a gate", async () => {
+    const capture = new Function("ports", compile(`const {digest,runOwnedVerificationChild,sourceDirectory,context,children,signal,process,join}=ports;
+      ${declaration("nativeArchiveBinding", run.body!.statements)}
+      nativeArchiveBinding=ports.binding;
+      ${declaration("closedVerificationChildren", run.body!.statements)}
+      ${declaration("closedNativeArchiveCandidate", run.body!.statements)}
+      ${declaration("runChild", run.body!.statements)}
+      return {runChild,closedVerificationChildren};`)) as (ports: Record<string, unknown>) => {
+        runChild: (args: string[], env: object, name: string, limitMs: number) => Promise<unknown>;
+        closedVerificationChildren: Array<{ name: string; args: string[]; commandSha256: string; binding: unknown; result: unknown }>;
+      };
+    const binding = Object.freeze({ controlledPrivateBinding: true });
+    for (const reason of ["completed", "nonzero_exit", "timeout", "cancelled"] as const) {
+      const result = { code: reason === "completed" ? 0 : 1, reason, stderr: reason === "completed" ? "controlled closed stream"
+        : '{"ownedNativeEvidenceDirectory":"controlled-unread-archive","retainedFiles":0}' };
+      const original = Error("Controlled original " + reason);
+      if (reason === "timeout" || reason === "cancelled") Object.defineProperty(original, "childResult", { value: result });
+      const value = capture({ digest: sha256, binding, sourceDirectory: "controlled-source", context: {}, children: new Set(), signal: new AbortController().signal, process: { platform: "win32" }, join: path.join,
+        async runOwnedVerificationChild() { if (reason === "timeout" || reason === "cancelled") throw original; return result; } });
+      const args = ["controlled-npm-cli", "run", "verify:admin-runtime"], expected = [...args];
+      if (reason === "timeout" || reason === "cancelled") await assert.rejects(value.runChild(args, {}, "quality-57-verify-admin-runtime", 1_800_000), error => error === original);
+      else assert.equal(await value.runChild(args, {}, "quality-57-verify-admin-runtime", 1_800_000), result);
+      args.push("changed-after-settlement");
+      assert.equal(value.closedVerificationChildren.length, 1);
+      const row = value.closedVerificationChildren[0]!; assert.equal(row.result, result); assert.equal(row.binding, binding);
+      assert.deepEqual(row.args, expected); assert.equal(row.commandSha256, sha256(JSON.stringify(expected)));
+      assert.equal(Object.hasOwn(row, "gatePassClaimed"), false);
+    }
+    const largeResult = { code: 0, stdout: "unrelated large Public output\n".repeat(100_000), stderr: "unrelated warnings\n".repeat(100_000) };
+    const unrelated = capture({ digest: sha256, binding, sourceDirectory: "controlled-source", context: {}, children: new Set(), signal: new AbortController().signal,
+      process: { platform: "win32" }, join: path.join, async runOwnedVerificationChild() { return largeResult; } });
+    assert.equal(await unrelated.runChild(["controlled-next-cli", "build"], {}, "normal-build", 900_000), largeResult);
+    assert.equal(unrelated.closedVerificationChildren.length, 0, "Unrelated large streams cannot accumulate in the private archive capture.");
+    const original = Object.freeze(Error("Controlled failure before any closed result"));
+    const value = capture({ digest: sha256, binding, sourceDirectory: "controlled-source", context: {}, children: new Set(), signal: new AbortController().signal, process: { platform: "win32" }, join: path.join,
+      async runOwnedVerificationChild() { throw original; } });
+    await assert.rejects(value.runChild([], {}, "controlled-unsettled", 1_800_000), error => error === original);
+    assert.equal(value.closedVerificationChildren.length, 0);
+  });
+  await control("actual Public finally closes children before preservation and preserves before workspace deletion", async () => {
+    const cleanup = body.finallyBlock!.getText(file), close = cleanup.indexOf("await Promise.all("), preserve = cleanup.indexOf("await preserveClosedNativeArchives()"), remove = cleanup.indexOf("rmSync(sourceDirectory");
+    assert.ok(close >= 0 && preserve > close && remove > preserve);
+    assert.equal(cleanup.match(/await preserveClosedNativeArchives\(\)/gu)?.length, 1);
+    const value = fixture(); await value.execute();
+    assert.ok(value.events.indexOf("child-stopped") < value.events.indexOf("workspace-removed"));
+    assert.ok(value.events.indexOf("worker-stopped") < value.events.indexOf("workspace-removed"));
+    assert.equal(value.receipts.some(row => row.name === "public-native-evidence-preservation.json"), false,
+      "No captured producer or declaration is not fabricated as preservation success.");
+  });
   if (executionOnly) return;
+  // Actual owner declarations with controlled file/child ports only; these fixtures never grant live Admission or OS Native authority.
+  const commandEntries = new Function("assert", "sourceIncluded", compile(["localVerificationCommandSteps", "registeredVerificationNodeEntries"].map(name => {
+    const node = file.statements.find(row => ts.isFunctionDeclaration(row) && row.name?.text === name); assert.ok(node);
+    return node.getText(file).replace(/^export /u, "");
+  }).join("\n")) + ";return registeredVerificationNodeEntries;")(assert, sourceIncluded) as
+    (scripts: Record<string, string>, check: string) => string[];
+  const buildPreservation = new Function("ports", compile(`const {assert,digest,receipt,lstatSync,realpathSync,readFileSync,readdirSync,writeFileSync,mkdirSync,existsSync,
+    join,dirname,isAbsolute,sep,ROOT,process,sourceDirectory,ownedPath,context,request,manifest,verifySource,registeredVerificationNodeEntries,assertLocalVerificationAdmissionQualification}=ports;
+    ${declaration("nativeArchiveBinding", run.body.statements)}
+    nativeArchiveBinding=ports.nativeArchiveBinding;
+    ${declaration("closedVerificationChildren", run.body.statements)}
+    closedVerificationChildren.push(...ports.closed);
+    ${declaration("preserveClosedNativeArchives", run.body.statements)}
+    return preserveClosedNativeArchives;`)) as (ports: Record<string, unknown>) => () => Promise<void>;
+  type ArchiveFault = "missing-binding" | "cloned-child-binding" | "command-mismatch" | "stderr-mismatch" | "native-receipt-mismatch"
+    | "native-exit-mismatch" | "source-manifest-mismatch" | "source-sha-mismatch" | "runtime-mismatch" | "project-lock-mismatch" | "installed-lock-mismatch"
+    | "missing-declaration" | "malformed-declaration" | "duplicate-declaration" | "missing-archive" | "path-escape" | "link" | "hard-link"
+    | "malformed-index" | "index-hash" | "index-membership" | "index-path" | "index-cleanup" | "archive-mutation" | "destination-mutation" | "existing-copy" | "private-io-failure";
+  const archiveFixture = async (options: { outcome?: "completed" | "nonzero_exit" | "timeout" | "cancelled"; fault?: ArchiveFault; omitDeclaration?: boolean } = {}) => {
+    const directory = realpathSync(mkdtempSync(path.join(root, ".tmp-qa", "native-archive-preservation-controls-")));
+    const installation = path.join(directory, "installation"), runDirectory = path.join(directory, "run"), workspace = path.join(runDirectory, "public-build-source");
+    const temporary = path.join(workspace, ".tmp-qa"), originalRoot = path.join(temporary, "owned-process-controls-controlled"), preservedRoot = path.join(runDirectory, "native-archives-preserved", path.basename(originalRoot));
+    for (const at of [installation, path.join(installation, "node_modules"), runDirectory, workspace, temporary, originalRoot, path.join(originalRoot, "empty"), path.join(originalRoot, "nested"), path.join(workspace, ".next")]) mkdirSync(at);
+    const packageBytes = JSON.stringify({ scripts: { lint: "eslint --max-warnings=0", typecheck: "tsc --noEmit", "verify:admin-runtime": "node --experimental-strip-types scripts/verify-isolated-supabase.mts" } });
+    const lock = "controlled project and installed lock\n", controlled = "export const controlled = true;\n";
+    writeFileSync(path.join(workspace, "package.json"), packageBytes); writeFileSync(path.join(workspace, "controlled.mts"), controlled);
+    writeFileSync(path.join(workspace, "package-lock.json"), lock); writeFileSync(path.join(workspace, ".next/BUILD_ID"), "controlled-build-id");
+    writeFileSync(path.join(installation, "package-lock.json"), lock); writeFileSync(path.join(installation, "node_modules/.package-lock.json"), lock);
+    const manifest = [{ file: "package.json", sha256: sha256(packageBytes) }, { file: "controlled.mts", sha256: sha256(controlled) }, { file: "package-lock.json", sha256: sha256(lock) }];
+    const headSha = "a".repeat(40), runtime = { projectLockSha256: sha256(lock), installedLockSha256: sha256(lock), controlledRuntime: true };
+    const qualification = { baselineHead: "b".repeat(40), finalHead: headSha, sourceSha256: sha256(JSON.stringify(manifest)), runtime };
+    const sourceManifestFile = path.join(runDirectory, "public-source-manifest.json");
+    writeFileSync(sourceManifestFile, JSON.stringify({ invocationHeadSha: headSha, sourceSha256: qualification.sourceSha256, manifest, privateEnvironmentFilesCopied: false }));
+    const binding = Object.freeze({ headSha, sourceSha256: options.fault === "source-sha-mismatch" ? "f".repeat(64) : qualification.sourceSha256,
+      sourceManifestSha256: sha256(readFileSync(sourceManifestFile)), runtimeSha256: sha256(JSON.stringify(runtime)), projectLockSha256: runtime.projectLockSha256, installedLockSha256: runtime.installedLockSha256 });
+    const negativeBytes = Buffer.from('{"intentionally-invalid-negative":'), binaryBytes = Buffer.from([0, 255, 9, 13, 10]);
+    const negativeFile = path.join(originalRoot, "negative-fixture.json"), binaryFile = path.join(originalRoot, "nested/bytes.bin");
+    writeFileSync(negativeFile, negativeBytes); writeFileSync(binaryFile, binaryBytes);
+    const indexed = [{ file: "negative-fixture.json", sha256: sha256(negativeBytes), bytes: negativeBytes.length }, { file: "nested/bytes.bin", sha256: sha256(binaryBytes), bytes: binaryBytes.length }];
+    if (options.fault === "index-hash") indexed[0]!.sha256 = "f".repeat(64);
+    if (options.fault === "index-membership") indexed.pop();
+    if (options.fault === "index-path") indexed[0]!.file = "../private-file";
+    const index = { schema: 1, originalNativeEvidenceRetained: true, finalCleanup: [options.fault === "index-cleanup" ? "rejected" : "fulfilled"], files: indexed };
+    writeFileSync(path.join(originalRoot, "evidence-index.json"), options.fault === "malformed-index" ? "{not-json" : JSON.stringify(index));
+    const link = path.join(originalRoot, "linked"), foreign = path.join(directory, "foreign");
+    if (options.fault === "link") { mkdirSync(foreign); symlinkSync(foreign, link, "junction"); }
+    if (options.fault === "hard-link") await asyncFs.link(negativeFile, path.join(directory, "hard-link-peer.json"));
+    if (options.fault === "missing-archive") rmSync(originalRoot, { recursive: true, force: false });
+    const declaredRoot = options.fault === "path-escape" ? path.join(directory, "outside-owned-source") : originalRoot;
+    const declarationLine = options.fault === "malformed-declaration" ? '{"ownedNativeEvidenceDirectory":'
+      : JSON.stringify({ ownedNativeEvidenceDirectory: declaredRoot, retainedFiles: 2 });
+    const stderr = options.omitDeclaration || options.fault === "missing-declaration" ? "" : declarationLine + "\n" + (options.fault === "duplicate-declaration" ? declarationLine + "\n" : "");
+    const outcome = options.outcome ?? "completed", code = outcome === "completed" ? 0 : outcome === "nonzero_exit" ? 1 : 3758096385;
+    const name = "quality-3-verify-admin-runtime", identity = { jobToken: "controlled-private-job", rootPid: 4242, rootCreationTimeFileTime: "133000000000000000", ownerJobAssignedBeforeResume: true };
+    const native = { ...identity, status: "PASS", reason: outcome === "nonzero_exit" ? "completed" : outcome, rootExitCode: options.fault === "native-exit-mismatch" ? code + 1 : code,
+      cleanup: { status: "PASS", processTreeVerified: true, activeProcessesAfterCleanup: 0 } };
+    const result = { code, reason: outcome, rawExit: { code, signal: null }, signal: null, stdout: "controlled producer output\n", stderr,
+      identity: { pid: identity.rootPid }, nativeJobIdentity: identity, nativeJobReceipt: native,
+      cleanup: { status: "PASS", processTreeVerified: true, liveProcesses: 0 } };
+    for (const [suffix, value] of [["native-identity", identity], ["native-result", native]] as const) writeFileSync(path.join(runDirectory, `public-${name}.${suffix}.json`), JSON.stringify(value));
+    const stdoutFile = path.join(runDirectory, `public-${name}.stdout.log`), stderrFile = path.join(runDirectory, `public-${name}.stderr.log`);
+    writeFileSync(stdoutFile, result.stdout); writeFileSync(stderrFile, options.fault === "stderr-mismatch" ? "changed closed stderr" : stderr);
+    if (options.fault === "native-receipt-mismatch") writeFileSync(path.join(runDirectory, `public-${name}.native-result.json`), JSON.stringify({ ...native, rootPid: 9999 }));
+    if (options.fault === "source-manifest-mismatch") writeFileSync(sourceManifestFile, "changed source receipt");
+    if (options.fault === "runtime-mismatch") (runtime as Record<string, unknown>).changed = true;
+    if (options.fault === "project-lock-mismatch") writeFileSync(path.join(installation, "package-lock.json"), "changed project lock");
+    if (options.fault === "installed-lock-mismatch") writeFileSync(path.join(installation, "node_modules/.package-lock.json"), "changed installed lock");
+    if (options.fault === "existing-copy") { mkdirSync(path.dirname(preservedRoot)); mkdirSync(preservedRoot); writeFileSync(path.join(preservedRoot, "sentinel"), "earlier raw evidence"); }
+    const original = Error("Controlled original producer " + outcome), privateMessage = "PRIVATE_CONTROLLED_ERROR_MUST_NOT_BE_PROJECTED";
+    const privateFailure = Object.assign(Error(privateMessage), { code: "PRIVATE ERROR CODE WITH SPACES" });
+    if (outcome === "timeout" || outcome === "cancelled") Object.defineProperty(original, "childResult", { value: result });
+    const args = ["controlled-npm-cli", "run", "verify:admin-runtime"];
+    const closed = [{ name, args, commandSha256: options.fault === "command-mismatch" ? "f".repeat(64) : sha256(JSON.stringify(args)),
+      binding: options.fault === "cloned-child-binding" ? { ...binding } : binding, result }];
+    const events: string[] = [], receipts: Array<{ name: string; value: Record<string, unknown> }> = [];
+    let removed = false, workerStopped = false, childStopped = false, sourceReads = 0, qualificationChecks = 0, sourceChecks = 0;
+    const context = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({}), record: (event: string, data: { gate?: string }) => events.push(event + ":" + (data.gate ?? "")) };
+    const retainedAdmission = { get workerStopped() { return workerStopped; }, async close() { await Promise.resolve(); workerStopped = true; events.push("worker-stopped"); } };
+    const ports = { assert, ts, join: path.join, dirname: path.dirname, isAbsolute: path.isAbsolute, sep: path.sep, digest: sha256, ROOT: installation,
+      process: { platform: "win32", execPath: "controlled-node", version: "controlled-version", versions: { v8: "controlled-v8" }, execArgv: [] },
+      sourceDirectory: workspace, context, originalContext: context, activeLocalVerifications: new WeakSet([context]), children: new Set([{}]), retainedAdmission,
+      request: { admissionQualification: qualification }, headSha, manifest, nativeArchiveBinding: options.fault === "missing-binding" ? undefined : binding, closed,
+      prefix: ["lint", "typecheck", "verify:admin-runtime"], registeredVerificationNodeEntries: commandEntries, ownedPath: (_context: unknown, file: string) => path.join(runDirectory, file),
+      async drainControlPulse() {}, verifySource() { sourceChecks++; },
+      assertLocalVerificationAdmissionQualification(value: unknown) { assert.equal(value, qualification); qualificationChecks++; return { sourceDiscovery: { changes: [] }, sourceFloor: { checks: [] } }; },
+      async runChild(_args: string[], _env: object, gate: string) {
+        if (gate === name) { if (outcome === "timeout" || outcome === "cancelled") throw original; return result; }
+        return { code: 0, rawExit: { code: 0, signal: null }, cleanup: { status: "PASS", liveProcesses: 0, processTreeVerified: true }, stdout: "", stderr: "" };
+      },
+      async stopChild() { await Promise.resolve(); childStopped = true; events.push("child-stopped"); },
+      receipt(_context: unknown, file: string, value: Record<string, unknown>) { receipts.push({ name: file, value });
+        if (file === "public-native-evidence-preservation.json") { events.push("native-preservation-receipt"); writeFileSync(path.join(runDirectory, file), JSON.stringify(value)); } },
+      lstatSync, realpathSync, readdirSync, mkdirSync, existsSync,
+      readFileSync(at: string, encoding?: BufferEncoding) {
+        if (at.startsWith(originalRoot + path.sep) || at.startsWith(path.join(runDirectory, `public-${name}`))) events.push("native-file-read");
+        if (options.fault === "private-io-failure" && at === stdoutFile) throw privateFailure;
+        const bytes = encoding ? readFileSync(at, encoding) : readFileSync(at);
+        if (options.fault === "archive-mutation" && at === negativeFile && ++sourceReads === 2) writeFileSync(negativeFile, "changed after source read");
+        return bytes;
+      },
+      writeFileSync(at: string, bytes: Uint8Array, settings: { flag: string; mode: number }) {
+        writeFileSync(at, bytes, settings);
+        if (options.fault === "destination-mutation" && at === path.join(preservedRoot, "negative-fixture.json")) writeFileSync(at, "changed destination bytes");
+      },
+      rmSync(at: string, settings: unknown) { assert.equal(at, workspace); assert.deepEqual(settings, { recursive: true, force: false }); rmSync(workspace, { recursive: true, force: false }); removed = true; events.push("workspace-removed"); },
+    };
+    return { execute: factory(ports), preserve: buildPreservation(ports), events, receipts, original, privateFailure, privateMessage, originalRoot, preservedRoot,
+      negativeBytes, binaryBytes, directory, workspace, qualificationChecks: () => qualificationChecks, sourceChecks: () => sourceChecks,
+      stopped: () => childStopped && workerStopped, removed: () => removed,
+      cleanup() { if (existsSync(link) && lstatSync(link).isSymbolicLink()) unlinkSync(link);
+        assert.equal(path.dirname(directory), realpathSync(path.join(root, ".tmp-qa"))); assert.equal(lstatSync(directory).isSymbolicLink(), false);
+        rmSync(directory, { recursive: true, force: false }); assert.equal(existsSync(directory), false); } };
+  };
+  for (const outcome of ["completed", "nonzero_exit", "timeout", "cancelled"] as const) await control("actual pre-delete Native archive preservation retains " + outcome + " without relabeling its gate", async () => {
+    const value = await archiveFixture({ outcome });
+    try {
+      if (outcome === "completed") {
+        const result = await value.execute(); assert.deepEqual(result.qualityReports.map(row => row.script), ["lint", "typecheck", "verify:admin-runtime"]);
+      } else if (outcome === "nonzero_exit") await assert.rejects(value.execute(), error => error instanceof assert.AssertionError);
+      else await assert.rejects(value.execute(), error => error === value.original);
+      assert.ok(value.stopped() && value.removed());
+      const receipts = value.receipts.filter(row => row.name === "public-native-evidence-preservation.json"); assert.equal(receipts.length, 1);
+      const receipt = receipts[0]!.value; assert.equal(receipt.status, "PASS_PRESERVATION_ONLY");
+      assert.equal(receipt.qualificationGranted, false); assert.equal(receipt.nativePassClaimed, false);
+      assert.equal(receipt.gatePassClaimed, false); assert.equal(receipt.liveAdmissionGranted, false);
+      assert.deepEqual(receipt.failures, []); assert.ok(Array.isArray(receipt.archives)); assert.equal(receipt.archives.length, 1);
+      const archive = (receipt.archives as Array<Record<string, unknown>>)[0]!;
+      assert.equal(archive.status, "PASS_PRESERVATION_ONLY"); assert.equal(archive.qualificationGranted, false); assert.equal(archive.gatePassClaimed, false);
+      assert.equal(archive.rawBytesUnmodified, true); assert.equal(archive.completeTreeAndEmptyDirectories, true);
+      assert.deepEqual(archive.before, archive.after); assert.deepEqual(archive.before, archive.copied);
+      assert.equal(archive.snapshotSha256, sha256(JSON.stringify(archive.before)));
+      assert.deepEqual(readFileSync(path.join(value.preservedRoot, "negative-fixture.json")), value.negativeBytes,
+        "Intentionally invalid negative JSON is retained as opaque bytes.");
+      assert.deepEqual(readFileSync(path.join(value.preservedRoot, "nested/bytes.bin")), value.binaryBytes);
+      assert.equal(lstatSync(path.join(value.preservedRoot, "empty")).isDirectory(), true);
+      const firstRead = value.events.indexOf("native-file-read"), receiptAt = value.events.indexOf("native-preservation-receipt"), removedAt = value.events.indexOf("workspace-removed");
+      assert.ok(firstRead > value.events.indexOf("child-stopped") && firstRead > value.events.indexOf("worker-stopped"));
+      assert.ok(receiptAt > firstRead && removedAt > receiptAt);
+      assert.ok(value.qualificationChecks() >= 1 && value.sourceChecks() >= 1);
+      if (outcome !== "completed") assert.equal(value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
+    } finally { value.cleanup(); }
+  });
+  for (const fault of ["missing-binding", "cloned-child-binding", "command-mismatch", "stderr-mismatch", "native-receipt-mismatch", "native-exit-mismatch",
+    "source-manifest-mismatch", "source-sha-mismatch", "runtime-mismatch", "project-lock-mismatch", "installed-lock-mismatch", "missing-declaration",
+    "malformed-declaration", "duplicate-declaration", "missing-archive", "path-escape", "link", "hard-link", "malformed-index", "index-hash", "index-membership",
+    "index-path", "index-cleanup", "archive-mutation", "destination-mutation", "existing-copy", "private-io-failure"] as const) {
+    await control("actual Native archive preservation rejects " + fault + " without granting execution authority", async () => {
+      const value = await archiveFixture({ fault });
+      try {
+        await assert.rejects(value.preserve(), error => fault === "private-io-failure" ? error === value.privateFailure
+          : fault === "missing-archive" ? error instanceof Error && Object.getOwnPropertyDescriptor(error, "code")?.value === "ENOENT"
+          : fault === "malformed-declaration" || fault === "malformed-index" ? error instanceof SyntaxError : error instanceof assert.AssertionError);
+        const receipt = value.receipts.find(row => row.name === "public-native-evidence-preservation.json"); assert.ok(receipt);
+        assert.equal(receipt.value.status, "BLOCKED"); assert.equal(receipt.value.qualificationGranted, false); assert.equal(receipt.value.nativePassClaimed, false);
+        assert.equal(receipt.value.gatePassClaimed, false); assert.equal(receipt.value.liveAdmissionGranted, false);
+        assert.ok(Array.isArray(receipt.value.failures)); assert.equal(receipt.value.failures.length, 1);
+        const expectedStage = ["source-manifest-mismatch", "source-sha-mismatch", "runtime-mismatch", "project-lock-mismatch", "installed-lock-mismatch"].includes(fault) ? "source_runtime_binding"
+          : fault === "missing-declaration" ? "closed_child_declaration"
+          : ["malformed-declaration", "duplicate-declaration", "missing-archive", "path-escape"].includes(fault) ? "declared_archive_path"
+          : ["malformed-index", "index-hash", "index-membership", "index-path", "index-cleanup"].includes(fault) ? "archive_index_membership"
+          : ["link", "hard-link", "archive-mutation", "destination-mutation", "existing-copy"].includes(fault) ? "raw_archive_copy" : "closed_child_binding";
+        assert.equal((receipt.value.failures as Array<{ stage: string }>)[0]!.stage, expectedStage);
+        assert.equal(value.receipts.some(row => row.name === "final-quality-gate.json"), false);
+        assert.equal(value.events.some(row => row.startsWith("public-gate-pass:")), false);
+        if (fault === "existing-copy") assert.equal(readFileSync(path.join(value.preservedRoot, "sentinel"), "utf8"), "earlier raw evidence");
+        if (fault === "private-io-failure") {
+          const projected = JSON.stringify(receipt.value); assert.equal(projected.includes(value.privateMessage), false);
+          assert.equal(projected.includes("PRIVATE ERROR CODE WITH SPACES"), false);
+          assert.ok((receipt.value.failures as Array<{ code: unknown }>).every(row => row.code === null));
+        }
+      } finally { value.cleanup(); }
+    });
+  }
+  await control("Native preservation failure retains the original timed-out child error and completes owned cleanup", async () => {
+    const value = await archiveFixture({ outcome: "timeout", fault: "private-io-failure" });
+    try {
+      await assert.rejects(value.execute(), error => error === value.original);
+      assert.ok(value.stopped() && value.removed());
+      const secondary = Object.getOwnPropertyDescriptor(value.original, "publicCleanupFailure");
+      assert.ok(secondary); assert.equal(secondary.value, value.privateFailure); assert.equal(secondary.enumerable, false);
+      const receipt = value.receipts.find(row => row.name === "public-native-evidence-preservation.json"); assert.ok(receipt);
+      assert.equal(receipt.value.status, "BLOCKED"); assert.equal(JSON.stringify(receipt.value).includes(value.privateMessage), false);
+      assert.equal(value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
+      assert.ok(value.events.indexOf("native-preservation-receipt") < value.events.indexOf("workspace-removed"));
+    } finally { value.cleanup(); }
+  });
+  await control("a producer interrupted before any declaration preserves its original failure without inventing archive evidence", async () => {
+    const value = await archiveFixture({ outcome: "timeout", omitDeclaration: true, fault: "missing-binding" });
+    try {
+      await assert.rejects(value.execute(), error => error === value.original);
+      assert.ok(value.stopped() && value.removed());
+      assert.equal(value.receipts.some(row => row.name === "public-native-evidence-preservation.json"), false);
+      assert.equal(value.events.includes("public-gate-pass:quality-3-verify-admin-runtime"), false);
+    } finally { value.cleanup(); }
+  });
   const buildStage = new Function("ports", compile(`const {assert,asyncFs,fsConstants,performance,join,sep,ROOT,sourceDirectory,context,signal,process,
     drainControlPulse,manifest,digest,receipt,localVerificationAdmissionRuntimeIdentity}=ports;
     ${stageDeclaration}
