@@ -5151,6 +5151,34 @@ function verifyWindowsOwnedProcessContracts() {
     void invalidReason;
   }
   const file = "scripts/lib/windows-owned-process.mts", source = ts.createSourceFile(file, readSource(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const nativeSpawn = source.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "spawnWindowsOwnedProcess");
+  assert.ok(nativeSpawn?.body, "Use the actual native launch owner for its preallocation deadline contract.");
+  const nativeSpawnCode = ts.transpileModule(nativeSpawn.getText(source).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const nativeDeadlineValidation: { acceptedLimits: number[]; rejectedLimits: string[]; nativeProcessesAllocated: number } = { acceptedLimits: [], rejectedLimits: [], nativeProcessesAllocated: 0 };
+  for (const limitMs of [1, 86_400_000, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 0.5, 86_400_001, 139_440_000, 2_147_483_647]) {
+    check("actual native launch validates deadline before build evidence or process allocation: " + String(limitMs), () => {
+      let builds = 0, evidenceReads = 0, launches = 0;
+      const boundary = Error("Controlled native spawn boundary; no process allocation"), input = { args: ["-e", "0"], cwd: root, env: {},
+        identityPath: path.join(root, "controlled.identity.json"), receiptPath: path.join(root, "controlled.receipt.json"), limitMs };
+      const api: Pick<typeof import("./lib/windows-owned-process.mts"), "spawnWindowsOwnedProcess"> = {
+        spawnWindowsOwnedProcess: new Function("assert", "nativeBuild", "existsSync", "realpathSync", "dirname", "spawn", "process", nativeSpawnCode + ";return spawnWindowsOwnedProcess;")(
+          assert, () => { builds++; return { executable: "controlled-native-executable" }; }, () => { evidenceReads++; return false; },
+          (value: string) => { evidenceReads++; return value; }, path.dirname,
+          (executable: string, args: string[]) => {
+            launches++; assert.equal(executable, "controlled-native-executable");
+            assert.deepEqual(args, ["--identity", input.identityPath, "--receipt", input.receiptPath, "--limit-ms", String(limitMs),
+              "--cleanup-ms", "10000", "--", process.execPath, ...input.args]); throw boundary;
+          }, { execPath: process.execPath }) as typeof import("./lib/windows-owned-process.mts").spawnWindowsOwnedProcess,
+      };
+      if (limitMs === 1 || limitMs === 86_400_000) {
+        assert.throws(() => api.spawnWindowsOwnedProcess(input), error => error === boundary);
+        assert.equal(builds, 1); assert.equal(launches, 1); assert.equal(evidenceReads, 4); nativeDeadlineValidation.acceptedLimits.push(limitMs);
+      } else {
+        assert.throws(() => api.spawnWindowsOwnedProcess(input), /Native owned process deadline must be a positive integer no greater than 86400000 ms/u);
+        assert.equal(builds, 0); assert.equal(launches, 0); assert.equal(evidenceReads, 0); nativeDeadlineValidation.rejectedLimits.push(String(limitMs));
+      }
+    });
+  }
   const declaration = (name: string) => { const node = source.statements.find((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === name); assert.ok(node); return node; };
   const receiptType = declaration("WindowsJobReceipt"); assert.ok(ts.isIntersectionTypeNode(receiptType.type));
   const receiptBody = receiptType.type.types.find(ts.isTypeLiteralNode); assert.ok(receiptBody);
@@ -5199,7 +5227,7 @@ function verifyWindowsOwnedProcessContracts() {
   }
   return { status: "PASS", scope: "imported_type_value_vectors_and_source_contracts_only", nativeRootProcessesAllocated: 0,
     identityMemberVectors: 3, receiptNumberAndNullVectors: 2, compilerNegativeVectorsDeclared: 3, compilerNegativeProof: "requires actual TypeScript check",
-    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity, nativeBuildPublication };
+    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity, nativeBuildPublication, nativeDeadlineValidation };
 }
 
 /** Independent retained PROCESS handles prove abrupt closure without retaining a JOB handle. */

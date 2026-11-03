@@ -3486,3 +3486,38 @@ The current E batch permits one Gate57 attempt followed by Full E75/75 through
 the existing Admission, Preflight and Targeted Admin prerequisites. No automatic
 retry, Push, Ready, Merge or Production is authorized; all six Owner reviews
 remain required and `globalClosed=false`.
+
+**Timeout ownership correction after `f26844ed` — 3 November 2026:** Fresh
+Admission and Automatic Preflight passed on that source. Gate57 did not execute:
+the task caller supplied the 139440000ms coordinator aggregate ceiling as the
+diagnostic child limit, beyond the existing Native maximum of 86400000ms.
+Historical cleanup remains FAIL; its original failure and receipts under
+`.tmp-qa/pr229-temporary-budget-release-20261103-01/` are not rewritten by this
+correction or a later result.
+
+The approved existing caller in
+`.tmp-qa/pr229-timeout-ownership-release-20261103-01/` separates
+`diagnosticWrapperDeadlineMs=7200000` (120 minutes) from the unchanged
+139440000ms coordinator-only aggregate ceiling. The wrapper allowance comprises
+74 minutes for Gate57, the existing 10-minute dependency preparation limit and
+36 minutes of explicit operational margin; it is not measured WCET. The
+existing Native process owner strengthens child-limit prevalidation while
+preserving its maximum, generic limits and internal readiness, heartbeat,
+cancellation, cleanup, preparation and dependency checkpoints. No new runner
+or QA owner is introduced.
+
+**Affected verification:** Existing `--owned-child-controls-only` passed 172
+controls in 57727.037ms, including 12 Windows Native acceptance cases and
+timeout/cancellation/cleanup receipts. Outer Native accounting observed 231
+processes, zero live processes and zero residual processes. The actual caller
+validation projection accepted 7200000ms and rejected eight invalid values,
+including 139440000ms; its two direct child ports use 600000ms and
+`diagnosticWrapperDeadlineMs`, while the aggregate remains watchdog-only.
+Evidence: [affected-check result](../.tmp-qa/pr229-timeout-ownership-release-20261103-01/affected-child-checks/result.json)
+and [caller binding proof](../.tmp-qa/pr229-timeout-ownership-release-20261103-01/caller-budget-binding-proof.json).
+Fresh live Admission, Gate57 and Full E on the corrected Final Source remain
+Pending. Earlier Admission/Preflight PASS cannot qualify that changed source.
+Current risk remains E: one Gate57
+attempt precedes Full E75/75 through the existing release prerequisites; all six
+Owner reviews remain required. Push, Ready, Merge and Production remain
+unauthorized, and `globalClosed=false`.

@@ -305,6 +305,31 @@ one Gate57 attempt and then Full E75/75 only through the existing prerequisites,
 and grants no retry or release authority. Runtime results remain Pending until
 their actual receipts qualify; the history above is not a new PASS.
 
+The next approved correction separates timeout ownership. On `f26844ed`, fresh
+Admission and Automatic Preflight passed, but Gate57 never executed: the caller
+passed its 139440000ms aggregate ceiling to the diagnostic child, exceeding the
+existing Native 86400000ms maximum. Keep the aggregate ceiling exclusively at
+the coordinator. The existing task caller uses a separate
+`diagnosticWrapperDeadlineMs` of 7200000ms (120 minutes): the approved 74-minute
+Gate57 budget, existing 10-minute dependency preparation limit and 36 minutes of
+explicit operational margin, not a measured worst-case completion bound. The
+existing Native owner strengthens prevalidation of its unchanged child-limit
+contract; generic limits and internal readiness, heartbeat, cancellation,
+cleanup and preparation checkpoints remain unchanged. Preserve the historical
+cleanup FAIL and original receipts. The existing `--owned-child-controls-only`
+check passed 172 controls in 57727.037ms, including 12 Windows Native acceptance
+cases and timeout/cancellation/cleanup receipts; outer Native accounting observed
+231 processes with zero live/residual processes. The actual caller validation
+projection accepted 7200000ms and rejected eight invalid values, including
+139440000ms. Its two direct child ports use 600000ms and the diagnostic wrapper
+budget; the aggregate ceiling remains coordinator-watchdog-only. Retain the
+[affected-check result](../.tmp-qa/pr229-timeout-ownership-release-20261103-01/affected-child-checks/result.json)
+and [caller binding proof](../.tmp-qa/pr229-timeout-ownership-release-20261103-01/caller-budget-binding-proof.json).
+Fresh live Admission, Gate57 and Full E on the corrected Final Source remain
+Pending. The authorized continuation remains
+one Gate57 attempt, then Full E75/75 through the existing prerequisites, with
+all six Owner reviews required and no Push, Ready, Merge or Production action.
+
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
 rule grants no additional Product, Architecture, Auth, Permission, Database,

@@ -232,6 +232,8 @@ export function startWindowsClosureObservation(options: { identity: WindowsJobId
 
 export function spawnWindowsOwnedProcess(options: { args: string[]; cwd: string; env: NodeJS.ProcessEnv;
   identityPath: string; receiptPath: string; limitMs: number }) {
+  assert.ok(Number.isSafeInteger(options.limitMs) && options.limitMs > 0 && options.limitMs <= 86_400_000,
+    "Native owned process deadline must be a positive integer no greater than 86400000 ms.");
   const native = nativeBuild(), { identityPath, receiptPath } = options;
   assert.ok(!existsSync(identityPath) && !existsSync(receiptPath), "Native evidence cannot be replaced.");
   for (const file of [identityPath, receiptPath]) assert.equal(realpathSync(dirname(file)), dirname(file), "Native evidence cannot traverse links.");
