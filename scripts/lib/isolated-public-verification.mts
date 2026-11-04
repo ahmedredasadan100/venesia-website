@@ -130,8 +130,10 @@ export type LocalVerificationInputObservations = {
 export function localVerificationQualityPrefixDeadlineMs(): number { return 1_800_000; }
 
 export type LocalVerificationOperationalBudget = "pr229-20261103-double-operational";
-/** Batch-only outer command allowance. Never apply at the generic process/timer owner
- * or to readiness, heartbeat, cancellation, preparation or cleanup contracts. */
+/** Explicit outer execution allowance, calculated once from the approved original.
+ * The legacy selector remains sealed into this PR's invocation. Never apply at the
+ * generic process/timer owner or to behavioral readiness, heartbeat, cancellation,
+ * preparation or cleanup contracts; whole qualification execution is an outer budget. */
 export function localVerificationOperationalDeadlineMs(limitMs: number, budget?: LocalVerificationOperationalBudget): number {
   assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown temporary operational budget.");
   assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Operational deadline must be a finite timer-safe positive integer.");

@@ -1412,6 +1412,40 @@ async function verifyOwnedPreparationLifecycle(owner: typeof import("./lib/isola
   assert.ok(source.includes('preparation?.pause();') && source.includes('query_timeout: 30000'));
   assert.ok(source.includes('preparationJobs') && source.includes('PREPARATION_DRAIN_TIMEOUT'));
   cases.push("fresh lifecycle qualifies process permissions before Docker work and retains bounded preparation drain and client query timeout");
+  {
+    const cli = ts.createSourceFile("qa-isolated-supabase.mts", readSource("scripts/qa-isolated-supabase.mts"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const proof = cli.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "connectionLifecycleProof");
+    assert.ok(proof && ts.isFunctionDeclaration(proof) && proof.body);
+    const variables = proof.body.statements.flatMap(statement => ts.isVariableStatement(statement) ? [...statement.declarationList.declarations] : []);
+    const binding = (name: string) => { const matches = variables.filter(node => node.name.getText(cli) === name); assert.equal(matches.length, 1); return matches[0]!; };
+    const names = ["originalExecutionDeadlineMs", "operationalBudget", "executionDeadlineMs"];
+    const declarations = names.map(name => `const ${binding(name).getText(cli)};`).join("\n");
+    assert.equal(binding("originalExecutionDeadlineMs").initializer?.getText(cli), "420_000");
+    assert.equal(binding("executionDeadlineMs").initializer?.getText(cli), "localVerificationOperationalDeadlineMs(originalExecutionDeadlineMs, operationalBudget)");
+    const timer = binding("timer"); assert.ok(timer.initializer && ts.isCallExpression(timer.initializer));
+    assert.equal(timer.initializer.expression.getText(cli), "setTimeout");
+    assert.equal(timer.initializer.arguments[1].getText(cli), "executionDeadlineMs");
+    let delay: number | undefined, timeout: (() => void) | undefined;
+    const controller = new AbortController(), deadlineOwner = await import("./lib/isolated-public-verification.mts");
+    const bound = new Function("localVerificationOperationalDeadlineMs", "controller", "IsolatedSupabaseError", "setTimeout",
+      ts.transpileModule(`${declarations}\nconst ${timer.getText(cli)};\nreturn {${names.join(",")},timer};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
+      deadlineOwner.localVerificationOperationalDeadlineMs, controller, owner.IsolatedSupabaseError,
+      (callback: () => void, limit: number) => { timeout = callback; delay = limit; return "controlled-timer"; }) as Record<string, unknown>;
+    assert.deepEqual(bound, { originalExecutionDeadlineMs: 420_000, operationalBudget: "pr229-20261103-double-operational", executionDeadlineMs: 840_000, timer: "controlled-timer" });
+    assert.equal(delay, 840_000); assert.equal(controller.signal.aborted, false); assert.ok(timeout); timeout();
+    assert.equal(controller.signal.aborted, true); assert.equal(controller.signal.reason.code, "CONNECTION_READINESS_TIMEOUT");
+    assert.equal(controller.signal.reason.stage, "connection-readiness");
+    const receipts: ts.ObjectLiteralExpression[] = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && node.expression.getText(cli) === "save" && node.arguments[0]?.getText(cli) === '"connection-readiness-result.json"') {
+        assert.ok(ts.isObjectLiteralExpression(node.arguments[1])); receipts.push(node.arguments[1]);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(proof); assert.equal(receipts.length, 1);
+    for (const name of names) assert.equal(receipts[0].properties.filter(node => ts.isShorthandPropertyAssignment(node) && node.name.text === name).length, 1);
+    cases.push("actual connection CLI derives its840-second operational bound once from original420, retains exact timeout cancellation and binds both budgets in the existing receipt");
+  }
 }
 
 async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/isolated-supabase.mts")) {
@@ -1664,6 +1698,68 @@ async function verifyPublicSourceHeartbeatBoundary(owner: typeof import("./lib/i
     assert.equal(t.abort.signal.aborted, true); t.control.tick(); assert.equal(t.state().connections, 1);
   }
   cases.push("a heartbeat failing during the archive wait preserves the Public rejection at its boundary while the unchanged outer lifecycle returns the exact heartbeat error without a success claim");
+  // Dispatch the actual timer callback through the real event loop while its
+  // existing lease is pending. These short fixture delays do not change the
+  // production cadence, socket deadlines, or passive source/archive contract.
+  const dispatchHeartbeat = (control: { tick(): void }) => new Promise<void>(resolve => {
+    setTimeout(() => { control.tick(); resolve(); }, 1);
+  });
+  {
+    const t = setup(), dispatched = dispatchHeartbeat(t.control);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    assert.equal(t.started(), false, "A due callback cannot run inside synchronous source work.");
+    await dispatched;
+    for (let n = 0; n < 8 && !t.started(); n++) await Promise.resolve();
+    assert.equal(t.started(), true);
+    let finished = false;
+    const boundary = (async () => { await t.control.drain(); t.sourceGuard(); finished = true; })();
+    await dispatchHeartbeat(t.control);
+    assert.equal(finished, false); assert.equal(t.state().sourceReads, 0);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 0, sourceReads: 0, oldClosed: false });
+    t.release(); await boundary;
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 1, sourceReads: 3, oldClosed: true });
+    assert.ok(t.events.indexOf("heartbeat") < t.events.indexOf("source-read"));
+    assert.equal(t.abort.signal.aborted, false);
+    await t.control.settle(Promise.resolve()); await dispatchHeartbeat(t.control);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 1, sourceReads: 3, oldClosed: true });
+  }
+  cases.push("real delayed timer dispatch during an async wait renews once, serializes another pending tick, drains before source reads and stops after lifecycle settlement");
+  {
+    const failure = new owner.IsolatedSupabaseError("DB_CONNECTION_TIMEOUT", "database-connect"), t = setup(failure, false, true);
+    await dispatchHeartbeat(t.control);
+    for (let n = 0; n < 8 && !t.started(); n++) await Promise.resolve();
+    assert.equal(t.started(), true);
+    const boundary = (async () => { await t.control.drain(); t.sourceGuard(); })();
+    void boundary.catch(() => undefined);
+    await dispatchHeartbeat(t.control);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 0, sourceReads: 0, oldClosed: false });
+    t.release(); await assert.rejects(boundary, error => error === failure);
+    assert.equal(t.abort.signal.aborted, true);
+    await assert.rejects(t.control.settle(boundary), error => error === failure);
+    await dispatchHeartbeat(t.control);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 0, sourceReads: 0, oldClosed: false });
+  }
+  cases.push("real dispatched heartbeat failure aborts the waiting job, preserves exact failure through settlement and denies source reads or retry");
+  {
+    const original = Error("Controlled timer-wait cancellation"), t = setup();
+    await dispatchHeartbeat(t.control);
+    for (let n = 0; n < 8 && !t.started(); n++) await Promise.resolve();
+    assert.equal(t.started(), true);
+    const preservation = archiveSourceBoundary(t.control.drain, t.sourceGuard)();
+    let settled = false;
+    const result = t.control.settle(preservation.then(() => { throw original; }))
+      .finally(() => { settled = true; });
+    void result.catch(() => undefined);
+    t.abort.abort(original); await dispatchHeartbeat(t.control);
+    assert.equal(settled, false);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 0, sourceReads: 0, oldClosed: false });
+    t.release(); await assert.rejects(result, error => error === original);
+    assert.equal(t.abort.signal.reason, original);
+    assert.ok(t.events.indexOf("heartbeat") < t.events.indexOf("source-read"));
+    await dispatchHeartbeat(t.control);
+    assert.deepEqual(t.state(), { connections: 1, heartbeats: 1, sourceReads: 3, oldClosed: true });
+  }
+  cases.push("real timer dispatch during cancellation preserves the original error, waits pending renewal before archive source checks and leaves no post-settlement pulse");
 }
 
 async function adminControlLeaseOnly() {

@@ -7,7 +7,7 @@ import { dirname, resolve, sep } from "node:path";
 import { runApplicationHandoff } from "./lib/isolated-public-application.mts";
 import { assertDatabaseSecurityCatalog, captureDatabaseSecurityCatalog, loadDatabaseSecurityContract } from "./lib/database-rls-security-contract.mts";
 import { IsolatedSupabaseError, runIsolatedSupabase, type IsolatedSupabaseOptions, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
-import { ownedProcessCleanupQualification } from "./lib/isolated-public-verification.mts";
+import { localVerificationOperationalDeadlineMs, ownedProcessCleanupQualification } from "./lib/isolated-public-verification.mts";
 
 const root = resolve(import.meta.dirname, "..");
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -379,7 +379,10 @@ async function connectionLifecycleProof(argv: string[]) {
   mkdirSync(output, { recursive: true, mode: 0o700 });
   const save = (name: string, value: unknown) => writeFileSync(resolve(output, name), JSON.stringify(value, null, 2) + "\n", { flag: "wx", mode: 0o600 });
   const started = performance.now(), controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new IsolatedSupabaseError("CONNECTION_READINESS_TIMEOUT", "connection-readiness")), 420_000);
+  const originalExecutionDeadlineMs = 420_000;
+  const operationalBudget = "pr229-20261103-double-operational";
+  const executionDeadlineMs = localVerificationOperationalDeadlineMs(originalExecutionDeadlineMs, operationalBudget);
+  const timer = setTimeout(() => controller.abort(new IsolatedSupabaseError("CONNECTION_READINESS_TIMEOUT", "connection-readiness")), executionDeadlineMs);
   const observations: Array<Record<string, string | number | boolean>> = [];
   const sourceInputs = () => ["scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-supabase-cli.mts",
     "scripts/lib/isolated-supabase-transport.mjs", "scripts/lib/isolated-public-verification.mts", "scripts/fixtures/isolated-supabase/stack.lock.json"]
@@ -459,7 +462,7 @@ async function connectionLifecycleProof(argv: string[]) {
     const accepted = !failure && expectedCancellation && cancellationQueryRejected && nativeExpectedFailure?.code === "PREPARATION_CANCELLED"
       && cleanupComplete && sourceUnchanged;
     save("connection-readiness-result.json", { status: accepted ? "PASS" : "BLOCKED", failure: failure ?? null, observations,
-      durationMsIncludingCleanup: performance.now() - started, executionDeadlineMs: 420_000,
+      durationMsIncludingCleanup: performance.now() - started, originalExecutionDeadlineMs, operationalBudget, executionDeadlineMs,
       sourceHead: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", timeout: 30_000 }).trim(),
       sourceInputs: sources, sourceInputsAfter: sourceInputs(), sourceUnchanged, sourceSha256: hash(sources),
       cancellationCode: controller.signal.reason instanceof IsolatedSupabaseError ? controller.signal.reason.code : null,

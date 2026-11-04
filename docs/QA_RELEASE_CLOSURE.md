@@ -256,8 +256,9 @@ expected/observed contract, current owner and affected consumers. Use the
 existing QA evidence to record the correction count, authorized diagnostic
 budget, actual commands/durations/results and remaining blockers. Allow at most
 two corrections per proven cause; a changed SHA, command name or later attempt
-does not reset that count. Further correction, a new timeout decision, contract
-or scope expansion, or a data/permission risk requires renewed Owner authority.
+does not reset that count. Further correction, a timeout decision outside the
+standing external runtime budget rule below, contract or scope expansion, or a
+data/permission risk requires renewed Owner authority.
 If the bounded diagnostic leaves the cause UNKNOWN, retain its evidence and
 stop the affected recovery with a clear blocked decision; do not retry at random
 or convert missing proof into a Product diagnosis.
@@ -272,6 +273,48 @@ waive a mandatory release gate. Risk selection remains Section 3.3.1: shared
 owners include their affected consumers; verification-execution changes and
 unbounded impact retain Full Local Gate. No assertion, gate, failure condition,
 security protection or cleanup obligation is weakened or removed.
+
+### Standing external runtime budget rule — Owner decision, 4 November 2026
+
+For QA external execution budgets, **Effective Runtime Budget = Original Runtime
+Budget × 2**. This permanent Owner authority covers commands, subprocesses,
+qualification, preparation, tests, gates and aggregate execution wrappers; no new
+approval is needed for the authorized100% increase. Bind each value to its
+approved original in the existing owner/caller and retain that original in the
+evidence. A later attempt does not double an already effective value. An existing
+explicit selector may retain its identifier for compatibility; it does not
+restrict this standing authorization to one historical attempt.
+
+Before execution, prove each wrapper accommodates its required internal stages
+and explicit operating margin. Record original/effective values, the actual
+binding and hard deadline, sequential/parallel stage arithmetic, and the
+operator's technical maximum. Respect all maxima; an aggregate coordinator
+budget must never become a subprocess timeout. If the doubled original cannot
+accommodate the required stages or exceeds a technical maximum, stop before
+allocation with the concrete unresolved constraint. A budget is a ceiling, not
+a target duration: finish immediately on success or confirmed failure.
+
+This rule applies to an outer preparation/qualification execution allowance,
+not its behavioral readiness checkpoints. Heartbeat, lease, cancellation,
+cleanup and other behavioral timeout contracts, assertions, rejection cases,
+isolation and mandatory gates remain unchanged. No generic process owner or
+environment switch should blindly double every timer. Maintain affected callers
+and their existing tests/fixtures; prove budget wiring quickly and use the
+existing source, Admission, Preflight, evidence and cleanup contracts. No
+automatic retry follows a real functional/security failure, and this authority
+does not authorize Product changes, Push, Ready, Merge or Production.
+
+For the current PR #229 continuation, the whole live-connection qualification
+uses420000→840000ms and its Native wrapper480000→960000ms, retaining120000ms
+outside the inner limit. Windows host/ports snapshots retain20000→40000ms;
+they do not double to80000ms. Previously doubled release children retain their
+existing60-minute prefix/74-minute Gate57 limits. The coordinator's approved
+original139440000ms becomes278880000ms at the coordinator only, while Native
+children remain within86400000ms. Record all required stage totals and remaining
+margin before the single authorized complete Full E75/75; no partial resume or
+merging of attempts is permitted. Earlier failures retain their original
+results. The following dated decisions remain history and do not override this
+later standing budget authorization.
 
 For the approved PR #229 Gate57 recovery, the combined batch remains E. The
 original 30-minute attempts and their evidence retain their historical status.

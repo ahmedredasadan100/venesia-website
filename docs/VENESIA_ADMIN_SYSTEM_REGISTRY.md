@@ -3531,3 +3531,185 @@ cleanup limits are unchanged. That failed Admission retains its original
 receipts and successful cleanup. Current continuation evidence is retained in
 `.tmp-qa/pr229-timeout-ownership-release-20261103-02/`; fresh live Admission,
 Gate57 and Full E remain Pending until their actual terminal receipts qualify.
+
+
+### 27.51 PR #229 bounded control stability qualification — 4 November 2026
+
+**Baseline and retained evidence:** The Owner accepted source
+`a3c778b024162d9ddc55de9a0773cc545ac2eee1`. The prior run under
+`.tmp-qa/pr229-timeout-ownership-release-20261103-02/` retains Gate57 diagnostic
+PASS (36m22.211s), Targeted Admin5/5 PASS, Full E2/75 followed by
+`APPLICATION_CLIENT_DISCONNECTED`, and completed cleanup. Public preservation
+for that interrupted Full E remains BLOCKED/MISSING_RAW. The observed78.322s
+heartbeat gap and one aggregate bridge `idle_timeout` do not establish the
+historical socket cause or a causal connection between those observations.
+
+**Current owners and scope:** The existing
+`isolated-supabase.mts` client observer/control lease/Public heartbeat lifecycle,
+`isolated-public-verification.mts` source/archive/child consumer, and
+`isolated-supabase-transport.mjs` Bridge remain byte-identical to the retained
+source. The existing `verifyPublicSourceHeartbeatBoundary` fixture adds three
+controlled integration cases for delayed real-event-loop dispatch, pending lease
+serialization, failure identity/cancellation and passive archive preservation.
+All2986 previous assertion call expressions remain in order;22 assertions are
+additive. No runtime correction, retry, timeout, lease, cadence, Product, Auth,
+Schema, migration or workflow change is made. No new QA runner/engine/registry
+is introduced. The passive drain and synchronous source/archive contract remain
+intact; the timer scheduling observation is a limitation, not an incident RCA.
+
+**Affected consumers:** The existing `--admin-control-lease-only` selection and
+`verify:platform-performance`, plus the general verifier reached by
+`verify:verification-infrastructure`/`verify:executable-governance` and the
+canonical release chain. Existing CI invokes the same verifier and requires
+future Exact-HEAD proof; this task does not alter or start CI. Manifest/adoption
+contracts and Product presentation are unchanged; Owner visual review is not
+established or replaced by this fixture proof.
+
+**Live qualification boundary:** A byte-identical copy of the existing task
+connection caller was prepared in
+`.tmp-qa/pr229-control-stability-20261104-01/`. Its sandbox port query first
+failed with CIM access denied, before any test or database allocation. Native
+access then reached the same existing `portSnapshot` command, which exceeded
+its unchanged20000ms deadline (`spawnSync powershell.exe ETIMEDOUT`). The
+live connection test was NOT RUN; this independent preallocation failure is
+retained, not retried or repaired speculatively. No PostgreSQL/Supabase resource
+or Product fixture was allocated. The existing temporary awake helper acquired
+and restored its prior execution state on the same native thread, exit0, with
+no power-plan change. Treasury was not modified.
+
+**Current targeted result:** Eight ordered checks PASS: Syntax, strict ESLint,
+TypeScript, executable governance, control lease103 cases, Bridge31 cases,
+disconnect diagnostics41 cases and cleanup contracts. The three added cases
+passed. All eight Native Jobs completed and cleaned up:11 observed processes,
+zero live/residual processes and zero remaining children. This proves the
+controlled integration only; it does not establish a live PostgreSQL pass.
+
+**Evidence and release decision:** See
+[bounded qualification report](../.tmp-qa/pr229-control-stability-20261104-01/report.json),
+[source/assertion preservation](../.tmp-qa/pr229-control-stability-20261104-01/source-preservation.json),
+[targeted verification](../.tmp-qa/pr229-control-stability-20261104-01/targeted-checks/result.json),
+[preallocation timeout](../.tmp-qa/pr229-control-stability-20261104-01/preallocation-timeout.json)
+and [awake restoration](../.tmp-qa/pr229-control-stability-20261104-01/control-integration-awake-01.finally.json).
+Previous Gate57/Targeted results remain their original evidence; changed verifier
+proof requires its affected checks, and a future release still requires fresh
+live Admission/Preflight plus source/input/environment qualification. No Full E
+resume or gate deletion is permitted. The consumed one-attempt authority is not
+a retry allowance: one renewed Owner decision is needed for bounded operating
+qualification followed, only if eligible, by one new complete Full E75/75.
+Runtime connection stability and release eligibility remain BLOCKED/UNPROVEN;
+no new implementation root cause is established. Combined batch remains E,
+`globalClosed=false`, with no Push, Ready, Merge or Production action.
+
+
+### 27.52 PR #229 Windows snapshot recovery and live connection deadline — 4 November 2026
+
+The Owner authorized one fresh bounded Windows/connection qualification and,
+only after prerequisites, one complete Full E75/75. Preserve the existing
+`a3c778b0` history, prior62-line additive verifier proof and all failed receipts;
+no Product, Auth/RLS, Schema, Treasury, Production, Push, Ready or Merge scope.
+
+**Existing owner correction:** A fresh copy of the existing task connection
+caller changes only the external Windows `portSnapshot` process allowance from
+20000 to40000ms (the approved100% operating margin). The complete query and
+empty-port assertions remain byte-identical. The actual current Windows
+preparation passed; the existing420000ms connection-test limit and480000ms
+Native wrapper limit, lease, heartbeat, cancellation and cleanup are unchanged.
+No new test engine/runner/registry or runtime correction was introduced.
+
+**Actual PostgreSQL result:** The existing owned platform passed readiness and
+network isolation. Three of five real cases PASS: reject renewal during an
+active read-only transaction; reject renewal during an active query; and renew
+a verified idle backend while closing its predecessor. Platform preparation
+consumed192708.250ms. The unchanged total420000ms test deadline then cancelled
+the async observation before its required240000ms due-renewal interval finished.
+Native failure is `PREPARATION_CANCELLED`, with original cancellation reason
+`CONNECTION_READINESS_TIMEOUT`. No new application-client disconnect was
+recorded. This is partial connection proof, not a passing live qualification,
+Public heartbeat endurance, or an RCA for the historical Full E disconnect.
+The fourth due-renewal and fifth active-query cancellation cases are NOT COMPLETE.
+
+**Time, preservation and cleanup:** Inner execution including cleanup took
+446881.964ms; outer invocation including prechecks/cleanup took465721.849ms
+(7m45.722s), within its480000ms bound. Owned cleanup completed with zero remaining
+resources, original resources unchanged and private environment removed. Native
+cleanup PASS observed735 processes and zero live/residual processes; no owned
+children remained. The existing awake helper restored its prior execution state
+on the same native thread. All selected runtime/source bytes remained identical.
+Earlier eight targeted checks remain valid retained proof; they were not rerun.
+
+**Release state:** Admission, Automatic Preflight and Full E were NOT RUN;
+current Full E is0/75 and its newly approved attempt was not consumed. Prior
+Gate57 diagnostic PASS36:22, Targeted Admin5/5 and failed Full E2/75 remain separate
+original receipts. The existing Full E caller was prepared for prerequisite
+reuse but never executed. No gate was skipped or resumed and no automatic retry
+occurred. An independent live-qualification deadline is the current blocker;
+any further attempt/budget decision remains with the Owner. PR release/push
+eligibility is not established; all six Owner reviews retain their prior status,
+and `globalClosed=false`.
+
+Evidence: [final report](../.tmp-qa/pr229-windows-full-e-20261104-01/final-report.json),
+[Windows budget proof](../.tmp-qa/pr229-windows-full-e-20261104-01/windows-budget-validation.json),
+[actual connection receipt](../.tmp-qa/pr229-windows-full-e-20261104-01/current-connection-readiness-02/connection-readiness-result.json),
+[owned lifecycle cleanup](../.tmp-qa/pr229-windows-full-e-20261104-01/current-connection-readiness-02/run/cleanup.json),
+[Native wrapper result](../.tmp-qa/pr229-windows-full-e-20261104-01/current-connection-owner-02/result.json),
+[awake restoration](../.tmp-qa/pr229-windows-full-e-20261104-01/windows-full-e-awake-01.finally.json).
+
+### 27.53 Standing runtime budget rule and PR #229 final continuation — 4 November 2026
+
+The Owner permanently authorizes external QA execution budgets at exactly twice
+their approved original value, without another budget approval. The governing
+rule is maintained in `docs/QA_RELEASE_CLOSURE.md`, Section3.2.2. This later
+authority supersedes the budget-decision blockers in27.51/27.52; their original
+failures, cleanup receipts and incomplete results remain unchanged.
+
+**Owner and scope:** Existing `localVerificationOperationalDeadlineMs` retains
+its implementation and explicit selector. The existing connection CLI binds its
+whole qualification limit420000→840000ms once and records original/effective
+values; its existing Native caller binds480000→960000ms. Windows snapshots stay
+at20000→40000ms. The release coordinator budget is corrected independently of
+already doubled children; no aggregate value enters the Native child port.
+An additive existing-fixture case proves the CLI timer and receipt consume the
+same bound value. Public-owner documentation clarifies this outer allowance;
+its executable behavior is unchanged. Existing assertions, lease, heartbeat,
+cancellation, cleanup and preparation checkpoints are preserved.
+
+**Evidence and pending boundaries:** The previous eight affected checks, live
+three-of-five connection result and cleanup remain separately retained evidence.
+Current affected binding/static checks and fresh actual five-case PostgreSQL
+qualification are required before source freeze, live Admission and Automatic
+Preflight. Gate57 diagnostic36:22 and Targeted Admin5/5 may be reused only with
+explicit Section3.4 equivalence; mandatory Full E still executes all75 gates in
+one fresh attempt. No historical partial receipt becomes a current PASS.
+Current evidence is retained under
+`.tmp-qa/pr229-global-budget-release-20261104-01/`. Combined scope remains E;
+all six Owner reviews retain their existing status and `globalClosed=false`.
+No Push, Ready, Merge or Production action is authorized.
+
+**Affected verification:** Seven current checks PASS: syntax for the three
+affected source files, strict ESLint, TypeScript, executable governance and
+the existing control-lease mode104/104. Its added budget case retains the
+original cancellation code and proves the timer/receipt use840000ms derived
+from420000ms exactly once. Independent preservation review confirms all2986
+original verifier assertions remain in order (now3025), all105 CLI assertions
+and all1386 Public-owner assertions remain, and six runtime-owner executable
+token streams are unchanged. The real connection test body is unchanged.
+Evidence: [targeted checks](../.tmp-qa/pr229-global-budget-release-20261104-01/targeted-checks/result.json),
+[preservation](../.tmp-qa/pr229-global-budget-release-20261104-01/source-preservation.json),
+[connection budget binding](../.tmp-qa/pr229-global-budget-release-20261104-01/connection-budget-binding-proof.json)
+and [Full E budget binding](../.tmp-qa/pr229-global-budget-release-20261104-01/full-e-budget-binding-proof.json).
+
+**Actual live qualification:** Windows port preflight PASS, then all five existing
+PostgreSQL cases PASS. The due-renewal observation ran243336.681ms with12 samples
+and replaced the healthy idle backend; actual active-query cancellation rejected
+the query and preserved native `PREPARATION_CANCELLED` as the expected fault.
+Inner execution including cleanup325140.443ms; outer330782.354ms (5m30.782s),
+finishing immediately within840000/960000ms. Cleanup removed10 owned resources,
+left zero remaining, preserved originals, removed private environment, released
+56165–56168, and left zero owned children; selected source bytes stayed stable.
+This proves the bounded live connection contract, not indefinite endurance or
+the cause of the historical Full E disconnect (still UNKNOWN). Fresh live
+Admission/Automatic Preflight and the single complete Full E remain the next
+release requirements on frozen source.
+Evidence: [live five-case receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-readiness-02/connection-readiness-result.json),
+[Native wrapper receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-owner-02/result.json)
+and [owned cleanup](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-readiness-02/run/cleanup.json).
