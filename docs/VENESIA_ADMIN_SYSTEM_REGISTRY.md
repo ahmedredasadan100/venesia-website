@@ -3932,3 +3932,57 @@ Evidence: [three-field RCA](../.tmp-qa/pr229-admission-recovery-20261104-01/admi
 [exact-LF preparation](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-lf-preparation-result.json),
 [Full E evidence assessment](../.tmp-qa/pr229-admission-recovery-20261104-01/full-e-evidence-eligibility.json)
 and [six-review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json).
+
+### 27.56 PR #229 scoped Owner review deferral — 4 November 2026
+
+**Current disposition:** the Project Owner explicitly accepts the residual risk
+of the six unperformed human reviews and authorizes their formal deferral for
+this PR's release to the separate **QA Stabilization & Optimization** review and
+improvement phase. [Decision OWNER-PR229-REVIEW-DEFERRAL-20261104](https://github.com/ahmedredasadan100/venesia-website/pull/229#issuecomment-6624132969)
+records the authority, scope, accepted risk, review requirements and follow-up
+responsibility. Ahmed owns that follow-up and operational review after release.
+
+Constitution Section 2.2 permits this explicit current Owner decision and
+requires recording its material conflict with QA Section 10's default Owner
+Local Visual Approval requirement. The exception defers only these human
+reviews' release-blocking consequence for PR #229; it neither claims that the
+reviews occurred nor changes the standing release policy. It is not a Runtime
+scope exception under Constitution Section 20.4 or a transferred PR #228 waiver.
+
+| Review | Actual review status | Release disposition | Follow-up owner |
+| --- | --- | --- | --- |
+| Article | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| News | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Press | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Site Update | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Video | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Gallery | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+
+Actual approvals remain **0**; scoped formal deferrals are **6**. Closing each
+review still requires actual reviewer/time, source/environment, Create/Edit
+routes, Desktop/Mobile/RTL and the functional/failure/readback observations in
+the existing six-review package. Video retains provider/playback review;
+Gallery retains item Alt, caption and item-operation review. Human visual,
+functional and live-persistence review remains unproved; automated or fixture
+PASS does not replace it. The reviews must be revisited in the independent
+phase, and a new material or security finding retains the ordinary stop rules.
+
+The decision covers tested source `732df14ade1c8a529a3e78a6b83199d84bca53fd`
+and its verified documentation-only decision-record successor, whose final SHA
+and release results belong in the linked PR evidence. It expires with this PR's
+release decision or Owner withdrawal and grants no future exception. Required
+exact-HEAD CI, Branch Protection, architecture proof, cleanup, expected-head
+Standard Merge, automatic Production and safe Smoke remain mandatory. No
+technical/security gate, assertion, GitHub approval or data protection is waived.
+
+The completed Admission recovery has **CI 8/8 PASS** in
+[run 41777363881](https://github.com/ahmedredasadan100/venesia-website/actions/runs/41777363881)
+and [Preview READY](https://vercel.com/venesia-developments-projects/venesia-website/8ncMhErTPx8hEzZSuunw1M3Qggsv)
+on `732df14a`; this supersedes Section 27.55's pre-execution status only.
+Full E **75/75** remains retained evidence from `015b518b`, qualified through the
+existing affected proof and QA Section 3.4. This addendum changes no runtime,
+dependency, test or workflow input; fresh source-bound Pre-Push and exact-HEAD
+CI/Preview are required for its successor. Ready, Merge and Production remain
+unexecuted at this recording point. Previous receipts and historical Pending
+classifications remain intact; the new scoped disposition supersedes their
+zero-deferral release status. `globalClosed=false`.
