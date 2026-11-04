@@ -3713,3 +3713,53 @@ release requirements on frozen source.
 Evidence: [live five-case receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-readiness-02/connection-readiness-result.json),
 [Native wrapper receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-owner-02/result.json)
 and [owned cleanup](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-readiness-02/run/cleanup.json).
+
+**Final observed release result:** On frozen source
+`015b518b39c6dda8b39ee9296d379bb276d4f0ab`, fresh live Admission (one invocation)
+and Automatic Preflight PASS, followed by **Full E75/75 PASS in one complete
+attempt**, in the canonical order (70 prefix, four Public tails and Admin
+adoption). No retry, skip, resume or cross-attempt result merge occurred.
+The standalone Gate57 and Targeted Admin prerequisites were retained only after
+explicit input/environment qualification; mandatory Gate57 inside Full E ran and
+passed in39m47.552s, within its approved74-minute external limit.
+The full release caller ran00:22:52.106–02:34:43.373 UTC, lasting2h11m51.267s;
+Full E preallocation through cleanup took2h03m30.692s. The caller exited0 and
+same-live-Admission post-cleanup source protection passed.
+
+**Observed control stability and preservation:** The completed Full E recorded
+349 heartbeats,28 healthy renewals, a maximum recorded heartbeat gap35.673s,
+zero Application Client disconnects, and zero Bridge failures or `idle_timeout`
+events; all144 accepted Bridge connections closed. This establishes stability
+within this actual run, not an indefinite guarantee or the historical disconnect
+cause, which remains UNKNOWN. No speculative runtime connection fix was made.
+Independent audit matched all1674 frozen source hashes and the prepared caller,
+all75 Native jobs passed with zero residual processes, and1780 preserved Native
+archive files plus two Public evidence files matched their raw hashes.
+Public preservation is PASS/COMPLETE; earlier failed receipts remain unchanged.
+
+**Cleanup and host restoration:** Full E removed all10 owned resources, removed
+the private environment and build workspace, stopped owned Public processes and
+released its four ports. Final host inspection found the original four containers,
+five networks and five volumes unchanged in the captured metadata; all selected
+QA ports were free. Treasury metadata/listener were unchanged, with zero Treasury
+queries or lifecycle actions. Temporary sleep prevention exited0 after the root
+stop signal and restored the prior execution state on the same native thread;
+power-plan, standby and hibernation policies remained unchanged.
+
+**Documentation closeout and release boundary:** This result is recorded after
+the frozen-source audit as a Registry-only documentation delta. Section3.4 retains
+the runtime PASS on its original tested source; Section15 checks this documentation
+delta separately. The final evidence-equivalence receipt records the documentation
+HEAD and unchanged runtime/dependency/configuration/test inputs without relabeling
+the original receipts as fresh execution on that HEAD. Local verification is
+complete and eligible for the next authorized Push step. Push, Exact-HEAD remote
+CI, Ready, Merge and Production are not performed; all six Owner reviews retain
+their existing status and `globalClosed=false`.
+
+Evidence: [final report](../.tmp-qa/pr229-global-budget-release-20261104-01/final-report.json),
+[terminal release receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/execution/final-release-local-result.json),
+[independent final audit](../.tmp-qa/pr229-global-budget-release-20261104-01/final-verification.json),
+[Full E cleanup](../.tmp-qa/pr229-global-budget-release-20261104-01/full-e/runtime/cleanup.json),
+[final environment](../.tmp-qa/pr229-global-budget-release-20261104-01/environment-final.json),
+[sleep restoration](../.tmp-qa/pr229-global-budget-release-20261104-01/global-budget-awake-01.finally.json),
+and [documentation evidence equivalence](../.tmp-qa/pr229-global-budget-release-20261104-01/documentation-evidence-equivalence.json).
