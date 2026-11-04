@@ -3847,3 +3847,88 @@ Evidence: [bounded RCA](../.tmp-qa/pr229-ci-source-recovery-20261104-01/root-cau
 [evidence eligibility](../.tmp-qa/pr229-ci-source-recovery-20261104-01/impact-evidence-eligibility.json),
 [review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json),
 and [original CI failure](../.tmp-qa/pr229-final-release-20261104-01/ci-terminal.json).
+
+### 27.55 PR #229 Admission runtime qualification recovery — 4 November 2026
+
+**Previous → current / proved cause:** after the bounded link correction on
+`644f6975`, CI run `41772023320` stopped at
+`BLOCKED_ADMISSION_QUALIFICATION`; the source-guard owner correctly rejected
+an unreviewed runtime context. Comparing the complete original and rejected
+effect preimages proves exactly three differing runtime fields: Node
+`22.23.3` → `22.23.4`, executable SHA `e966ce74…` → `94efd062…`, and raw
+installed-lock SHA `b56c0007…` → `20505c38…`. Substituting those three fields
+reproduces both rejected fingerprints. The 12/34-file source closures,
+canonical package/config inputs and four Infrastructure generated-input groups
+were unchanged at rejection; the previous npm-link correction did not cause
+this mismatch. Historical Linux qualification used Alpine with mounted
+Windows dependencies; hosted CI used GNU Node and a fresh `npm ci`.
+
+**First missed detection stage and owner:** release environment eligibility
+before Push. The prior handoff explicitly retained hosted Ubuntu qualification
+as a prerequisite; Windows Pre-Push and the physical link fixture did not prove
+that context. `localVerificationSourceGuardEffects` still owns complete effect
+identity, and `qualifyLocalVerificationTargets` still owns strict paired-context
+selection. No hash is accepted merely because it was observed or CI rejected it.
+
+**Bounded correction:** only the primary quality-gate job pins Node `22.23.4`;
+the specialized jobs retain their configuration. The existing Infrastructure
+workflow guard now requires one active `actions/setup-node@v5` with exactly
+that version and npm cache before canonical installation. Seventeen added
+negative cases reject floating/dynamic/alternate runtime inputs, duplicate or
+conditional setup, ignored failure and wrong ordering; all80 prior assertions
+and their multiplicity are preserved. Its reviewed producer SHA and the paired
+Windows/GNU effect values are backed by both actual canonical guards passing
+in each measured context. The retired Alpine values remain historical
+evidence and no longer authorize the current pair. Closure sizes remain12/34;
+the Infrastructure producer delta is explicitly reviewed. Raw installed-lock
+and executable-byte hashing, mixed/unknown rejection, execution sequencing,
+private Admission authority, lifecycle, cancellation and cleanup remain intact.
+
+**Actual affected proof:** both source guards pass2/2 with canonical
+`--experimental-strip-types` on Windows (10.400s) and2/2 on GNU Node `22.23.4`
+with fresh npm installation (9.066s); before/after effects are stable and each
+qualification leaves zero owned children. The GNU executable
+and installed-lock hashes match the rejected CI context exactly. The existing
+current-infrastructure mode passes234 controls on Windows and226 on GNU,
+including seven added runtime-identity and rejected-selector Admission controls;
+both canonical runs preserve their source and leave zero owned children
+(12.140s and10.479s respectively). These are
+platform-specific observed counts, not hosted CI or Product/Browser proof.
+Initial GNU preparation failures remain separate receipts; successful exact-LF
+preparation does not overwrite them or claim that they passed. Independent
+review found that the first task caller omitted the canonical Node option in
+its child arguments; those results remain noncanonical evidence and do not
+grant qualification. Only the affected two guards and targeted profile were
+rerun in each environment with corrected task callers. A separate Windows
+canonical attempt stopped on sandbox Git dubious ownership and cleaned up;
+the established execution owner was restored without changing Git configuration.
+All original receipts remain preserved. Host dependencies were not changed.
+Final task-resource cleanup remains a release prerequisite.
+
+**Evidence validity and release boundary:** QA Section3.4 permits retaining
+unaffected Full E75/75 on its original tested SHA `015b518b` together with the
+fresh affected proof. Combined scope remains E. This bounded runtime-input and
+qualification-value renewal does not change verification execution architecture;
+any later unbounded or execution-authority change requires reclassification.
+Final source freeze/equivalence, fresh Admission and ordered source floor,
+Automatic Pre-Push, and required exact-HEAD CI/Preview remain pending. CI has
+not yet been retried for this correction. All six Owner reviews remain
+**Pending**, with zero approvals and zero formal deferrals; technical test
+acceptance does not approve them. Ready/Merge remain blocked by their required
+formal disposition. Product, Auth/RLS, Schema, Treasury and Production are
+unchanged by this correction, and `globalClosed=false`.
+
+Evidence: [three-field RCA](../.tmp-qa/pr229-admission-recovery-20261104-01/admission-fingerprint-rca.json),
+[workflow source review](../.tmp-qa/pr229-admission-recovery-20261104-01/workflow-detection-source-review.json),
+[canonical Windows guards](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-guards-canonical-owner/qualification-result.json),
+[canonical GNU guards](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-guards-canonical/qualification-result.json),
+[canonical Windows targeted proof](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-targeted-canonical-owner/result.json),
+[canonical GNU targeted proof](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-targeted-canonical/result.json),
+[noncanonical Windows receipt](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-guards/qualification-result.json),
+[noncanonical GNU receipt](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-guards/qualification-result.json),
+[Windows ownership failure](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-guards-canonical/qualification-result.json),
+[first preparation failure](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-preparation-result.json),
+[second preparation failure](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-preparation-gzip-result.json),
+[exact-LF preparation](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-lf-preparation-result.json),
+[Full E evidence assessment](../.tmp-qa/pr229-admission-recovery-20261104-01/full-e-evidence-eligibility.json)
+and [six-review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json).

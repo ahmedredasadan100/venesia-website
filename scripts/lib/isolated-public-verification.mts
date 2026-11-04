@@ -1816,7 +1816,7 @@ export function localVerificationSourceGuardEffects(entry: string, sources: Read
       // callee, temporary input, extraction predicate and controlled port wiring.
       // A renamed/added call or path is not renewed by merely recomputing a hash.
       const producers = new Map([
-        ["scripts/verify-verification-infrastructure.mts", "55299aa79b97f9bebae2a8c5b538ac893cb76c0c3bbb7dea9287ade56fdcd3a8"],
+        ["scripts/verify-verification-infrastructure.mts", "46f62c6228eb2306df1af056704a4c3c41dcd98b4a92ef54bf82531bbfb2a9a3"],
         ["scripts/lib/verification-module-loader.mjs", "23b537191a2f7eafc6b15ac9631faa1f701bfa0b7858c8870eff19254532d9e4"],
         ["scripts/fixtures/verification-text-contract.mjs", "392c0e259233b4c8e67b03375c4e5f5eb66c9754a9843cfcaa64deb8778366e7"],
         ["scripts/fixtures/admin-core-query-presentation-plan.mjs", "0edabba8604f429fe2ce8ddf8738fc545c395ee559f851c086305e7153552001"],
@@ -2002,10 +2002,11 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   const qualityReasons = analysis.changes.filter(change => /^(?:scripts|tests)\//u.test(change.file) && change.semanticChange);
   // These are reviewed effect contracts for two existing direct source leaves, not their npm composites.
   // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
-  // Exact Windows24/Linux22 contexts share this order; an unknown or mixed context is never inherited.
+  // Exact Windows24 and GNU Linux22.23.4/fresh-install contexts share this order.
+  // The historical Alpine/Windows-mounted dependency context is not inherited.
   const sourceGuards = [
-    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", "f5f8d2bdd3b5bc3fc9970c8635e481ce2d3577783adec7d474fd46e73e899dee"], marker: "Executable governance PASS" },
-    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: ["c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b", "96c02fd6676dfc6140a75f618fb240613091cf63bf27d8ff0c6c1a52ceaaba33"], marker: "PASS verification infrastructure:" },
+    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", "790abdafab8c3f07a7be31e533e5fba2237f121a65e54a367f33fe16758ed759"], marker: "Executable governance PASS" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: ["cf94c6af79418b32c7953a4e5f4e88a6463844d26b3f185ec270e627a3d15c46", "1dc7b9131ac32554129437c7709e60dbc1cb793b49e6eaf73782c71fd808eeec"], marker: "PASS verification infrastructure:" },
   ];
   const knownContexts = sourceGuards.map(guard => guard.sha256.indexOf(sourceGuardSha256[guard.entry])).filter(index => index >= 0);
   const mixedContexts = new Set(knownContexts).size > 1;

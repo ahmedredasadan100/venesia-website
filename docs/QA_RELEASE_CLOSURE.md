@@ -588,6 +588,16 @@ fragments, packages or runtime changes reject qualification; a success marker or
 caller-supplied hash cannot replace it. This is a bounded current-owner effect
 contract, not a resolver for arbitrary generated code. Executable Governance
 retains its separately reviewed closure.
+Qualification must match the release environment before Push. The primary
+quality-gate job pins Node `22.23.4` before `npm ci`; the existing Infrastructure
+guard rejects a floating, changed, conditional or bypassed runtime setup. A
+qualification from another Linux distribution or a Windows-mounted dependency
+tree does not qualify the fresh GNU/Linux installation. Runtime or installed-lock
+drift requires actual execution of the affected canonical leaves and retained
+source, input and cleanup receipts before renewing their paired context binding.
+Keep the installed lock bound to its raw bytes; do not normalize it or approve an
+observed fingerprint merely because CI rejected it. Unknown, retired or mixed
+contexts remain blocked before dependent verification work.
 This does not qualify their named composite commands, Database effects or
 Browser behavior. QA/fixture changes automatically nominate these
 existing quality owners even without an import-graph edge; unresolved fixture

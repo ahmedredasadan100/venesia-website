@@ -7460,7 +7460,8 @@ async function verifyAdmissionQualificationControls() {
     "assertLocalVerificationAdmissionQualification", "qualifyLocalVerificationAdmission", "readLocalVerificationInputs"].map(declaration).join("\n"));
   const executorFixture = (options: { raw?: "wrong-nonce" | "missing-schema" | "corrupt"; nonzero?: boolean; nativeFailure?: boolean; validatorFailure?: boolean;
     childFailure?: boolean; cleanupFailure?: boolean; floorTypeScriptFailure?: boolean; budgetAncestorFailure?: boolean;
-    governance?: "qualified" | "unqualified" | "missing" | "failed" | "missing-marker"; mutateAdditional?: () => void } = {}) => {
+    governance?: "qualified" | "unqualified" | "missing" | "failed" | "missing-marker";
+    qualifiedTargets?: ReturnType<typeof import("./lib/isolated-public-verification.mts").qualifyLocalVerificationTargets>; mutateAdditional?: () => void } = {}) => {
     const files = new Map<string, Buffer>(), links = new Set<string>(), fs = memory(files, links), baselineHead = "a".repeat(40);
     const entries = ["scripts/verify-admin-form-system.mts", "scripts/verify-page-block-editor-presentation.mts", "scripts/verify-isolated-supabase.mts"];
     const sources = new Map<string, Buffer>(entries.map(entry => [entry, Buffer.from('import value from "jiti"; export const controlled = value;')]));
@@ -7495,7 +7496,7 @@ async function verifyAdmissionQualificationControls() {
         if (args[0] === "show") { const bytes = sources.get(args[1]!.slice(41)); assert.ok(bytes); return bytes; }
         throw Error("Unexpected controlled Git operation.");
       }, () => { inspections++; return { ...binding(), changeImpact: discovered, fast: { correspondence: [{ protected: true }] }, actualDelta: [],
-        ...(options.governance ? { qualifiedTargets: {
+        ...(options.qualifiedTargets ? { qualifiedTargets: structuredClone(options.qualifiedTargets) } : options.governance ? { qualifiedTargets: {
           selections: [{ family: "controlled-source-guard", selected: true, qualified: !["unqualified", "missing"].includes(options.governance), reason: options.governance }],
           blocking: ["unqualified", "missing"].includes(options.governance) ? ["controlled_unqualified_effect"] : [],
           targets: ["unqualified", "missing"].includes(options.governance) ? [] : [{ kind: "source_guard", step: "node --experimental-strip-types scripts/controlled-governance.mts", limitMs: 180_000, successMarker: "GOVERNANCE_CONTROL_PASS" }],
@@ -7614,6 +7615,36 @@ async function verifyAdmissionQualificationControls() {
       assert.ok(value.failures.length > 0); assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /live qualified execution/u);
       const evidence = JSON.parse(fixture.files.get(path.join(value.runDirectory, "governance-qualification.json"))!.toString()) as { status: string };
       assert.equal(evidence.status, governance === "unqualified" || governance === "missing" ? "BLOCKED" : "PASS");
+    });
+  }
+  const selectorApi = new Function("assert", compile(declaration("localVerificationCommandSteps") + "\n" + declaration("qualifyLocalVerificationTargets"))
+    + ";return {qualifyLocalVerificationTargets};")(assert) as Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationTargets">;
+  const repositoryScripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const selectionAnalysis: NonNullable<Inputs["changeImpact"]> = { proofBoundary: "source_discovery_only", sourceSha256: "a".repeat(64), deltaSha256: "b".repeat(64),
+    ownerBindings: [], obligations: [], protections: [], changes: [{ file: "scripts/fixtures/controlled-runtime-context.mts", owners: [], capabilities: [], consumers: [], contracts: [],
+      candidateChecks: ["verify:executable-governance", "verify:verification-infrastructure"], unresolved: [], semanticChange: true, presentationOnly: false }] };
+  const retiredAlpineEffects = {
+    "scripts/verify-executable-governance.mts": "f5f8d2bdd3b5bc3fc9970c8635e481ce2d3577783adec7d474fd46e73e899dee",
+    "scripts/verify-verification-infrastructure.mts": "96c02fd6676dfc6140a75f618fb240613091cf63bf27d8ff0c6c1a52ceaaba33",
+  };
+  for (const [name, effects] of [["unknown", Object.fromEntries(Object.keys(retiredAlpineEffects).map(entry => [entry, "f".repeat(64)]))],
+    ["retired Alpine", retiredAlpineEffects]] as const) {
+    await control("actual rejected " + name + " selector stops Admission before Governance or profiles and preserves the failure", async () => {
+      const targets = selectorApi.qualifyLocalVerificationTargets(repositoryScripts, selectionAnalysis,
+        sha256(readSource("scripts/qa-admin-form-guarded-navigation.mts").replaceAll("\r\n", "\n")), effects);
+      assert.deepEqual(targets.targets, []); assert.equal(targets.selections.filter(row => row.selected && !row.qualified).length, 2);
+      const fixture = executorFixture({ qualifiedTargets: targets }), value = await qualify(fixture.api);
+      assert.equal(value.status, "BLOCKED"); assert.deepEqual(value.executions, []); assert.deepEqual(fixture.launches, []);
+      assert.deepEqual(fixture.floorLaunches, ["ordered-1-eslint", "ordered-2-typescript"]);
+      assert.ok(value.failures.length > 0); assert.equal(fixture.api.privateInvocation(value), undefined);
+      assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /live qualified execution/u);
+      const evidence = JSON.parse(fixture.files.get(path.join(value.runDirectory, "governance-qualification.json"))!.toString()) as { status: string; blocking: string[] };
+      assert.equal(evidence.status, "BLOCKED"); assert.deepEqual(evidence.blocking, targets.blocking);
+      const failure = JSON.parse(fixture.files.get(path.join(value.runDirectory, "ordered-source-floor-failure.json"))!.toString()) as {
+        status: string; completed: Array<{ stage: string; code: number }>; childResult: unknown; dependentVerificationStarted: boolean };
+      assert.equal(failure.status, "BLOCKED"); assert.equal(failure.dependentVerificationStarted, false); assert.equal(failure.childResult, null);
+      assert.deepEqual(failure.completed.map(row => [row.stage, row.code]), [["eslint", 0], ["typescript", 0]]);
+      assert.ok(value.artifacts.some(row => row.path.endsWith("/ordered-source-floor-failure.json")));
     });
   }
   await control("actual Admission authority rejects mutated receipts stale bindings runtime dependencies and altered native artifacts", async () => {
@@ -8105,7 +8136,7 @@ async function verifyQualifiedSelectionControls() {
   };
   const verifyActualSourceGuardQualification = (ownerApi: Pick<typeof import("./lib/isolated-public-verification.mts"), "qualifyLocalVerificationTargets">) => {
   const nativePortEffects = { ...sourceGuardHashes,
-    "scripts/verify-verification-infrastructure.mts": "c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b" };
+    "scripts/verify-verification-infrastructure.mts": "cf94c6af79418b32c7953a4e5f4e88a6463844d26b3f185ec270e627a3d15c46" };
   const nativePortAnalysis = (file: string, semanticChange = true): Analysis => {
     const value = qualityAnalysis(); value.changes = [{ ...value.changes[0]!, file, semanticChange }]; return value;
   };
@@ -8171,7 +8202,7 @@ async function verifyQualifiedSelectionControls() {
     assert.ok(redirected.blocking.includes("missing_exact_registered_source_guard:scripts/verify-executable-governance.mts"));
   });
   check("both reviewed direct quality leaves qualify once while invented hashes and markers leave Infrastructure blocked", () => {
-    const actual = { ...sourceGuardHashes, "scripts/verify-verification-infrastructure.mts": "c42cbcb64cb07d6d9dd72fa440b344aceb0333fc5e0ce8a62c9591f38326224b" };
+    const actual = { ...sourceGuardHashes, "scripts/verify-verification-infrastructure.mts": "cf94c6af79418b32c7953a4e5f4e88a6463844d26b3f185ec270e627a3d15c46" };
     const selected = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, actual);
     assert.equal(selected.targets.length, 2); assert.deepEqual(selected.blocking, []);
     assert.equal(new Set(selected.targets.map(target => target.step)).size, 2);
@@ -8191,9 +8222,29 @@ async function verifyQualifiedSelectionControls() {
     }
   });
   const linuxSourceGuardHashes = {
+    "scripts/verify-executable-governance.mts": "790abdafab8c3f07a7be31e533e5fba2237f121a65e54a367f33fe16758ed759",
+    "scripts/verify-verification-infrastructure.mts": "1dc7b9131ac32554129437c7709e60dbc1cb793b49e6eaf73782c71fd808eeec",
+  };
+  const retiredAlpineSourceGuardHashes = {
     "scripts/verify-executable-governance.mts": "f5f8d2bdd3b5bc3fc9970c8635e481ce2d3577783adec7d474fd46e73e899dee",
     "scripts/verify-verification-infrastructure.mts": "96c02fd6676dfc6140a75f618fb240613091cf63bf27d8ff0c6c1a52ceaaba33",
   };
+  check("the retired Alpine context cannot authorize either current primary source guard", () => {
+    const result = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, retiredAlpineSourceGuardHashes);
+    assert.deepEqual(result.targets, []); assert.equal(result.selections.filter(row => row.selected).length, 2);
+    for (const entry of Object.keys(retiredAlpineSourceGuardHashes)) {
+      assert.equal(result.selections.find(row => row.family === entry)?.qualified, false);
+      assert.ok(result.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:" + entry));
+    }
+    assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+  });
+  check("two unknown current source guard contexts retain both mandatory blocked selections", () => {
+    const supplied = Object.fromEntries(Object.keys(linuxSourceGuardHashes).map(entry => [entry, "f".repeat(64)]));
+    const result = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, supplied);
+    assert.deepEqual(result.targets, []); assert.equal(result.selections.filter(row => row.selected && !row.qualified).length, 2);
+    for (const entry of Object.keys(supplied)) assert.ok(result.blocking.includes("qualified_source_guard_bytes_changed_review_effect_contract:" + entry));
+    assert.equal(result.unqualifiedRemainUnderExistingGates, true);
+  });
   check("the reviewed Linux context selects both actual source leaves with their matching supplied fingerprints", () => {
     const result = ownerApi.qualifyLocalVerificationTargets(scripts, qualityAnalysis(), fixtureHash, linuxSourceGuardHashes);
     assert.deepEqual(result.blocking, []); assert.equal(result.targets.length, 2);
@@ -8245,6 +8296,23 @@ async function verifyQualifiedSelectionControls() {
     const runtime = { node: "fixture-node", v8: "fixture-v8", modules: "fixture-modules", platform: "fixture-platform", arch: "fixture-arch",
       executableSha256: "a".repeat(64), installedLockSha256: sha256(lock), execArgv: ["--experimental-strip-types"] };
     const original = effects(entry, sources, runtime, lock); assert.deepEqual(original.unresolved, []); assert.ok(original.fingerprint);
+    for (const [name, changedRuntime] of [["Node version", { ...runtime, node: "fixture-node-changed" }],
+      ["executable bytes", { ...runtime, executableSha256: "b".repeat(64) }]] as const) {
+      check("source guard effect identity cannot reuse qualification after changed " + name, () => {
+        const changed = effects(entry, sources, changedRuntime, lock);
+        assert.deepEqual(changed.unresolved, []); assert.notEqual(changed.fingerprint, original.fingerprint);
+        assert.deepEqual(changed.closure, original.closure); assert.deepEqual(changed.inputs, original.inputs);
+      });
+    }
+    check("source guard effect identity binds raw installed lock bytes even when parsed JSON is identical", () => {
+      const changedLock = JSON.stringify(JSON.parse(lock), null, 2) + "\n";
+      assert.deepEqual(JSON.parse(changedLock), JSON.parse(lock)); assert.notEqual(sha256(changedLock), runtime.installedLockSha256);
+      const changed = effects(entry, sources, { ...runtime, installedLockSha256: sha256(changedLock) }, changedLock);
+      assert.deepEqual(changed.unresolved, []); assert.notEqual(changed.fingerprint, original.fingerprint);
+      assert.deepEqual(changed.closure, original.closure); assert.deepEqual(changed.inputs, original.inputs);
+      const stale = effects(entry, sources, runtime, changedLock);
+      assert.equal(stale.fingerprint, null); assert.ok(stale.unresolved.includes("installed_dependencies_do_not_match_current_lock"));
+    });
     assert.deepEqual(original.closure.map(row => row.file).sort(), [entry, hidden, side, nested, forwarded].sort());
     const ordinary = collectExecutableSourceGraph({ root, entrySourceFiles: [entry], sourceOverrides: sources, symbolAware: false });
     assert.equal(ordinary.has(hidden), false); assert.equal(ordinary.has(nested), false);

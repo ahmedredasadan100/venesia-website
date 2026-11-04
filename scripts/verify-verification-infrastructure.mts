@@ -224,7 +224,13 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
   assert.ok(active(checkout) && record(checkout.with));
   assert.equal(checkout.with["fetch-depth"], 0, "Event baselines require full history");
   assert.equal(checkout.with["persist-credentials"], false, "Source consistency uses local Git history without retaining checkout credentials");
+  const setup = exactly(step => typeof step.uses === "string" && step.uses.startsWith("actions/setup-node@"), "Use one explicit primary-job Node setup");
+  assert.equal(setup.uses, "actions/setup-node@v5", "Keep the existing Node setup action");
+  assert.ok(active(setup) && record(setup.with), "Primary Node setup must run unconditionally and propagate failure");
+  assert.deepEqual(setup.with, { "node-version": "22.23.4", cache: "npm" }, "Primary Admission requires its exact reviewed Node release without alternate version, architecture or download inputs");
+  assert.equal(Object.hasOwn(setup, "env"), false, "Primary Node setup cannot override its runtime or PATH environment");
   const install = exactly(step => step.run === "npm ci", "Keep canonical dependency installation once");
+  assert.ok(steps.indexOf(setup) < steps.indexOf(install), "Set the pinned primary runtime before installing or inspecting dependencies");
   const impact = exactly(step => step.id === "qa-change-impact", "The existing primary job must run source consistency once");
   assert.ok(active(install) && active(impact));
   assert.equal(impact.run, 'npm run --silent verify:isolated-supabase -- --ci-change-impact > "$RUNNER_TEMP/qa-change-impact.json"', "Run only the existing source consistency adapter; event values never become shell commands");
@@ -257,10 +263,28 @@ function assertQualityChangeImpactWorkflow(source: string, scripts: Readonly<Rec
   assertQualityChangeImpactWorkflow(source, scripts);
   assertQualityChangeImpactWorkflow(yaml.dump(current, { lineWidth: -1 }), scripts);
   const primary = (value: Workflow) => value.jobs["quality-gate"]!;
+  const setup = (value: Workflow) => primary(value).steps.find(step => step.uses === "actions/setup-node@v5")!;
   const impact = (value: Workflow) => primary(value).steps.find(step => step.id === "qa-change-impact")!;
   const artifact = (value: Workflow) => primary(value).steps.find(step => step.uses === "actions/upload-artifact@v4")!;
   const gate = (value: Workflow) => primary(value).steps.find(step => step.run === "npm run ci:check")!;
   const negatives: Array<[string, (value: Workflow) => void]> = [
+    ["floating primary Node major", value => { (setup(value).with as Record<string, unknown>)["node-version"] = "22"; }],
+    ["floating primary Node range", value => { (setup(value).with as Record<string, unknown>)["node-version"] = "22.x"; }],
+    ["unreviewed primary Node patch", value => { (setup(value).with as Record<string, unknown>)["node-version"] = "22.23.3"; }],
+    ["dynamic primary Node version", value => { (setup(value).with as Record<string, unknown>)["node-version"] = "${{ vars.NODE_VERSION }}"; }],
+    ["missing primary Node version", value => { delete (setup(value).with as Record<string, unknown>)["node-version"]; }],
+    ["alternate primary Node version file", value => { (setup(value).with as Record<string, unknown>)["node-version-file"] = ".nvmrc"; }],
+    ["latest primary Node override", value => { (setup(value).with as Record<string, unknown>)["check-latest"] = true; }],
+    ["alternate primary Node architecture", value => { (setup(value).with as Record<string, unknown>).architecture = "arm64"; }],
+    ["alternate primary Node download", value => { (setup(value).with as Record<string, unknown>).mirror = "https://runtime.invalid"; }],
+    ["primary Node PATH override", value => { setup(value).env = { PATH: "/unreviewed/runtime" }; }],
+    ["missing primary Node setup", value => { primary(value).steps = primary(value).steps.filter(step => step.uses !== "actions/setup-node@v5"); }],
+    ["duplicate primary Node setup", value => { primary(value).steps.push(structuredClone(setup(value))); }],
+    ["another Node setup action version", value => { primary(value).steps.push({ ...structuredClone(setup(value)), uses: "actions/setup-node@v4" }); }],
+    ["changed primary Node setup action", value => { setup(value).uses = "actions/setup-node@v4"; }],
+    ["conditional primary Node setup", value => { setup(value).if = false; }],
+    ["ignored primary Node setup failure", value => { setup(value)["continue-on-error"] = true; }],
+    ["late primary Node setup", value => { const selected = setup(value); primary(value).steps = primary(value).steps.filter(step => step !== selected); primary(value).steps.push(selected); }],
     ["missing fast integration", value => { primary(value).steps = primary(value).steps.filter(step => step.id !== "qa-change-impact"); }],
     ["ignored fast failure", value => { impact(value)["continue-on-error"] = true; }],
     ["conditional fast step", value => { impact(value).if = false; }],
