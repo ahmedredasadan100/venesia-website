@@ -1950,3 +1950,2039 @@ Syntax and ESLint pass; the existing `verify:admin-form-system` passes 244 asser
 The Owner accepted Section 27.8's targeted correction and proof and authorized commit/push of only the verified QA helper and three previously approved canonical documentation files to PR #228's existing branch. This supersedes the preceding local-review-pending status and no-publication boundary; earlier failed/successful receipts remain immutable. Current source review revalidated QA SHA `239e783f18a57b1e1db1b84b62f60bd756db1a879865efe960b408570cfbc22d`, every byte outside `runSharedPresentation`, the unchanged Fixture and all 1,010 Product source files. No additional Product, consumer, manifest, capability, visual default, image-alt assertion or quality-contract change is included. Targeted proof is reused without repeating successful checks.
 
 The scoped publication snapshots, staged-path audit, commit/push proof and actual GitHub results on the new SHA are retained in `.tmp-qa/consolidated-release-20261027/commit-verified-corrections-ci/`. Raw evidence, Debug and private files remain outside the commit. This authorization covers automatic Required CI and specialized checks on the new SHA; it does not reopen image_alt diagnosis, permit hiding its failure or authorize a Full E rerun. Full E remains incomplete, Public Evidence Preservation and other Owner Functional/Visual/live persistence reviews remain Pending, and QA-IMAGE-ALT-228-01 retains its deferred/accepted-risk boundary. PR remains Draft; no Ready, merge, deployment or protection change is authorized. Stop at Final CI Review; `globalClosed=false`.
+
+### 27.10. Phase 02 safe verification-owner recovery — 27 October 2026 — bounded local proof
+
+**Baseline / authority:** this recovery starts after merged PR #228 at local `main` / cached `origin/main` / HEAD `a29a9a89779c70fcf8f256faebd6103d566f5b1c`. The Owner authorizes safe targeted Runtime recovery only; Complete E77, deferred image-alt investigation, Product behavior, Auth/Permissions, migrations, Production mutation and release actions remain outside this execution. The existing command/graph/helper ledgers remain discovery evidence, not behavioral PASS or a new Registry. [Scope and reuse review](../.tmp-qa/qa-runtime-recovery-20261027/attempt-1ead205d/scope-and-reuse-review.json) references the existing 203 entries / 118 imported modules, actual modes, effects, indirect readers and unresolved inputs.
+
+**Previous -> Current / proved causes:** the optional `scripts/verify-isolated-supabase.mts#currentInfrastructureOnly` previously rejected the legitimate cleanup ownership reads at `Object.keys(config!.volumes)`. Its old failure and current source hashes match the retained Section 27.3 classification; no reproduction rerun was needed. The focused guard now admits only reviewed AST call shapes and requires resource, network-member and evidence-hash validation before cleanup authorization, retaining the original recursive call policy and unknown-call rejection. The first fresh isolated attempt then reached a second stale guard: a Migration CLI password-in-URL predicate scanned the whole helper module, including separate owned SEO/type-generation URL consumers. The correction scopes that predicate to the unique actual migration-push function and checks its password-free argv, actual private environment constructor/return and runner binding. Neither lifecycle nor CLI implementation changed. These are two Test/Guard defects, not Product, database or cleanup-owner defects.
+
+**Ownership / consumers / preservation:** only the two checks inside the existing focused function changed. No owner, runner, capability, manifest, workflow, default, CLI mode or assertion was removed; 33 effective actual-source rejection controls and two positive representation controls were added. The direct consumer remains `npm run verify:isolated-supabase -- --current-infrastructure-only`. Existing infrastructure/governance/Admin Runtime/CI aggregates consume the same entry through its unchanged default dispatch; they do not execute this optional mode. [Independent final review](../.tmp-qa/qa-runtime-recovery-20261027/attempt-1ead205d/independent-review-final.json) proves identical imports, dispatch, default main and all other declarations. A further non-import review found that retained-quality reconciliation reads the whole changed guard among 44 owner inputs. Unchanged executable declarations alone therefore cannot qualify this affected input: the existing `--retained-final-quality-only` mode was freshly selected and passed 350 checks, including actual worker success, rejection, timeout, abort and cleanup paths. [Indirect-input proof](../.tmp-qa/qa-runtime-recovery-20261027/attempt-1ead205d/results/retained-01.json) closes that scoped impact; historical default PASS726 remains original historical evidence, not a fresh whole-file or reconstructed aggregate PASS. Adoption and Product presentation are unchanged, with no new Visual or Owner approval claim.
+
+**Fresh proof / limits:** fresh physical Scratch copies preserve full Git history and source bytes, with separate dependency files and no private environment file; the initial copy binds all 1,672 baseline tracked files and the second binds the reviewed candidate bytes. Canonical focused execution on Windows / Node 24.14.0 passes 78 checks, including the new positive/negative/boundary/failure controls; the affected retained-quality mode separately passes 350 checks. Neither mode executes Docker, Browser, network, DB or migrations. Syntax, targeted ESLint and configured strict semantic TypeScript pass on the final guard; TypeScript covers 192 transitive local sources with the existing `checkJs=false` limit. Three Runtime attempts are retained: the first focused FAIL, the source-corrected focused PASS and the affected retained-quality PASS; six static-check attempts passed across the two candidates. [Final focused result](../.tmp-qa/qa-runtime-recovery-20261027/attempt-1ead205d/results/focused-02.json) and [affected TypeScript](../.tmp-qa/qa-runtime-recovery-20261027/attempt-1ead205d/results/typescript-02.json) bind guard SHA `b374afed2b283b324214255e26bdaeb2bc6ef115a3797c6d4d2378e05613cb2c`. This is actual offline owner/guard execution and mutation rejection, not PG17/PGlite/Browser, hosted persistence, Full E or complete 203-entry behavioral proof. The safety predicates are bounded call/binding guards, not a general semantic sandbox.
+
+**Delivery boundary:** [Final recovery receipt](../.tmp-qa/qa-runtime-recovery-20261027/attempt-1ead205d/final-recovery-receipt.json) records cleanup, original-resource/source/evidence preservation and final Git status separately. No commit, push, PR, Ready, merge, deployment, protection, Product or database change is part of this recovery. Complete E77 was not run. Release risk remains E for the changed verification owner; the applicable later Full Local Gate, exact-final-HEAD Required CI, existing unresolved issues, evidence-retention gaps and Owner reviews remain independent release conditions. `globalClosed=false`.
+
+### 27.11. Phase 03 QA simplification and change impact — 27 October 2026 — scoped implementation
+
+**Executive result:** the existing verification owner now derives source-bound change impact and rejects missing/stale reviewed contract protection; the existing Form and Page Block guards share one pure Section contract fixture. No Product, capability owner, runner, registry, package command, CI workflow, permission or database behavior changed. Default guards and all release authorizations remain in force. This is bounded local QA proof; `globalClosed=false`, and risk E release verification remains unverified.
+
+**Baseline / preservation / history:** initial HEAD was `a29a9a89779c70fcf8f256faebd6103d566f5b1c` on main, with only the two Phase 02 tracked edits plus protected `.tmp/` and `debug.log`. Exact source/evidence hashes qualified the existing Phase 02 results; no rerun merely for commit. Those two files alone were committed as `8e472c68de78f180fab7c7c10a357e378fc3fe29` on `codex/qa-architecture-simplification-20261027`, without Push. Phase 03 remains a separately reviewable working-tree delta on that HEAD. [Baseline and hash inventory](../.tmp-qa/qa-architecture-phase03-20261027/baseline-preservation.json) covers 1,672 tracked files, 359 protected untracked leaves and two root environment-file hashes (tracked public template and private local file; no values). Fresh scratch retains full Git history, raw source bytes and physically separate dependencies; no private environment was copied. Final cleanup/source/resource results are in the [delivery receipt](../.tmp-qa/qa-architecture-phase03-20261027/delivery-receipt.json).
+
+**Architecture before -> after:**
+
+| Boundary | Previous | Current / preserved authority |
+| --- | --- | --- |
+| Impact | Reviewed owner/contracts/consumers/check names plus positive verification-entry coverage | Same reader and planner, with exact baseline/current source discovery, capability/consumer candidates, semantic obligations, missing-protection diagnostics and explicit unknowns. Import/literal reference remains discovery, never Behavioral PASS. |
+| Contract drift | Required arrays could name contracts without a source-bound protection-maintenance check | Changed exported types/signatures, explicit contract constants and existing Collection/Form authorities require exact-byte reviewed assertion/vector protection; ordinary cosmetic CSS has no invented numeric contract. Enforced evidence and approved presentation requirements remain normative. |
+| Scheduling | Existing bounded A/B prefix or canonical Full prefix plus four Public gates | Same policy. Fast is a development report with `releaseEvidence=false`; candidate Browser/DB commands are not autoexecuted. Additional Full checks are pruned only if the same named npm child and exact ordered argv/multiplicity are already included; canonical prefix unchanged. |
+| Section protection | Two partly overlapping implementations and one duplicate header-negative definition | One pure vector fixture, invoked through both independent canonical compile/binding ports. Twelve obligation rows preserved; five Section mutations, six Field/import mutations, unchanged Field grid and Tabs/consumer tail. No suite/owner retired. |
+| Results/evidence | Existing owners, logs and source fingerprints | Existing receipts remain authoritative. Five fingerprint arrays now include the extracted fixture. Browser runtime logic is byte-equivalent after removing only those new provenance strings; old Browser receipts are historical, not freshly resealed PASS. |
+
+**File-by-file disposition / retained responsibilities:**
+
+| File | Disposition / owner and reason | Preservation and proof |
+| --- | --- | --- |
+| `scripts/lib/isolated-public-verification.mts` | REFACTOR existing selection owner; extend source-bound impact, drift admission, shared literal command parser and per-entry metadata cache | A–E floors, Full admission, exact hashes/actual delta, four Public gates, native tail and lifecycle remain. Cache is local to one immutable snapshot; unknowns fail closed. |
+| `scripts/verify-isolated-supabase.mts` | KEEP default owner; EXTEND existing local-risk controls and opt-in read-only impact adapter | Phase 02 function and default main remain raw-byte-identical. New positive/negative/boundary/reader/cache/argv controls execute actual canonical declarations. No lifecycle or default dispatch replaced. |
+| `scripts/fixtures/admin-form-section-contract.mts` | CONSOLIDATE proven Form-owner vectors only | Pure React/SSR/assert, injected canonical loader, type-only original Section signature; no filesystem, process, DB, Browser or transport. Includes native/callback identity, panel parity, neutral semantics and approved standalone geometry. |
+| `scripts/verify-admin-form-system.mts` | CONSOLIDATE Section vectors; KEEP engine/Field/import checks local | Exact inverse outside one function/import; unchanged 16-state Field grid and six local rejection tuples. Header rejection moves to the shared Section set. |
+| `scripts/verify-page-block-editor-presentation.mts` | CONSOLIDATE Section vectors; KEEP local integration/adoption/Tab/domain checks | Exact inverse outside one function/import; compile prefix, Tabs and consumer applicability tail unchanged. Both existing CLI modes still run. |
+| `scripts/qa-admin-form-layout.mjs` | KEEP Browser owner; maintain one provenance array | Only new shared fixture source hash input; no Browser, fixture lifecycle, assertions or dispatch change. |
+| `scripts/qa-home-story-presentation.mjs` | KEEP Browser owner; maintain four provenance arrays | Same constrained provenance-only edit; existing behavior remains untouched. |
+| `docs/QA_RELEASE_CLOSURE.md` | EXTEND current authority Sections 2.1 / 3.3.1 | Engine/Capability/Contract/Adoption/Functional/Integration responsibilities, source-only inspection and existing Fast/Release/Full boundaries; no parallel policy/registry. |
+| This Registry | APPEND scoped previous-to-current history, adoption/evidence/gaps | Existing manifest authority, historical failures and deferred investigations preserved. |
+
+No ARCHIVE or RETIRE candidate was executed. Other historical/duplicate-name guards remain KEEP/UNCLASSIFIED under the prior audit until equivalence is proved. This phase does not erase old CSS expectations speculatively or assert complete system-wide adoption.
+
+**Remaining verification owners:** Engine/Field/native behavior remains with Form; shared Section capability/contract vectors remain Form-owned and are executed independently by Form and Page Block. Page Block retains Tabs, actual applicability and Form/Card/Header integration. Consumer capability adoption remains in the existing manifest-derived audit. Save/edit/delete/duplicate/failure/read-back and permission/data protection stay in existing domain, controller, navigation and integration owners. QA Section 2.1 maps these responsibilities to current commands; Phase 01 ledgers remain historical discovery input, not a fresh 203-entry behavioral census. PG17, PGlite and Browser fixtures remain separate.
+
+**Execution / coverage preservation:** all six targeted owner profiles passed: Form `--field-row-composition` (4 reported groups), Page Block `--panel-composition` (4), existing local-risk mode (153, previously134), current infrastructure mode (78), retained-quality mode (350, real Worker success/failure/timeout/abort/close and cleanup), and direct verification infrastructure owner. Counts are per-owner outer groups, not a sum of unique assertions. [Section preservation](../.tmp-qa/qa-architecture-phase03-20261027/section-preservation.json) proves all twelve mapped obligations and raw inverses; [independent review](../.tmp-qa/qa-architecture-phase03-20261027/final-independent-review.json) binds the final source and preserved Phase 02/default behavior. Actual Git discovery reports changed files/owners/contracts and deliberate DRIFT pending a reviewed record. Real CLI rejection cases cover missing/duplicate baseline, private record and forbidden execution options; reviewed-record/stale-record outcomes are retained in the delivery receipt. No inspector starts its selected checks. Strict affected TypeScript and final ESLint passed. One initial strict TypeScript attempt failed on four new QA type-compatibility diagnostics, corrected at the same owners without changing runtime guards; failed evidence is retained. No runtime assertion was removed, weakened or skipped to obtain PASS.
+
+**Measured performance:** same Windows Node24.14.0, same physical scratch/dependencies, same canonical leaf argv; setup excluded. One warmup plus three measured repetitions per existing mode, medians below. Planner work expands from134 to153 groups, so its small overhead is additional proof, not a speedup claim. Final type correction has a separate passing exact-byte receipt; equivalence is reviewed independently.
+
+| Comparable scope | Before | After | Interpretation |
+| --- | --- | --- | --- |
+| Form field-row composition | 1.536s | 1.534s | Essentially unchanged in this small sample. |
+| Page Block panel composition | 2.241s | 2.085s | Local observed reduction; not a CI/global guarantee. |
+| Local-risk verification | 2.648s | 2.960s | More contract/selection proof; do not claim faster. |
+| Real Git impact inspection, same8-file/10-obligation task scope, n=1 | 78.760s | 18.272s | Proven repeated per-alias AST work removed; discovery/obligations and maintenance rules preserved. Not a pre-Phase03 feature comparison. |
+
+[Performance data](../.tmp-qa/qa-architecture-phase03-20261027/performance-summary.json) retains samples and scope. Required CI duration/rerun rate, production targeted-test time, average QA files per arbitrary change, system-wide owner/capability/adoption coverage, failure-classifier accuracy and global protection-preservation percentage were not measured here. No new numbers are invented. The bounded Section obligation matrix is12/12 preserved; that is not a system-wide metric.
+
+**Change-impact acceptance / remaining gaps / next authorized sequence:** the actual read-only command is documented in QA Section3.3.1. It requires an explicit immutable baseline and reviewed existing batch record; source consistency is not Behavioral PASS. It is opt-in: no automatic pre-push/default-CI enforcement hook was installed. Arbitrary implementation semantics, opaque/generated applicability, unsupported shell/native commands and imported-fixture-only assertion equivalence remain unresolved and cannot authorize bounded release. Source binding plus reviewer relevance and actual targeted tests are still required; expected contracts are never rewritten from changed implementation. Metadata caching preserves scope rather than suppressing obligations.
+
+Local acceptance requires final source/contract tests, exact-byte static proof, covered rejection paths, preservation and cleanup; the receipt records each boundary PASS/FAIL/BLOCKED/UNVERIFIED. This architecture/verification-execution batch is E: a later authorized Full Local Gate, all applicable specialized/Browser proof, exact-final-HEAD Required CI and Owner reviews remain release conditions. The Owner prohibited Full E in this task, so it was not run. `QA-IMAGE-ALT-228-01` stays recorded/deferred with its original result, without investigation. No Push, PR, Ready, Merge, Deployment, migration, Auth/Permissions or Production mutation occurred. Stop here for Owner Architecture Review; no subsequent phase is started.
+
+### 27.12. Phase 04 smart QA activation and existing CI integration — 28 October 2026 — scoped local verification
+
+**Previous → current / preservation:** Phase 03's exact eight tracked deltas and new Section fixture were qualified against their existing source, runtime and preservation receipts, then committed separately as `65a3a0e952b6a651b43195b7f3b5a0aec2f8fbf0` (`refactor(qa): consolidate contracts and derive source-bound change impact`). The preceding Phase 02 recovery commit remains `8e472c68de78f180fab7c7c10a357e378fc3fe29`. There was no Push, PR, Merge or deployment. Phase 04 extends the same planner, verifier, infrastructure guard and single workflow; no Product, dependency, command registration, adoption authority, database, Auth or permission change is included. [Baseline preservation](../.tmp-qa/qa-activation-phase04-20261028/baseline-preservation.json) binds all prior source bytes, 359 protected leaves, two environment-file hashes and the preceding evidence. Historical entries above retain their original evidence/status; this entry records the later activation.
+
+| Current owner / file | Phase 04 responsibility and preserved boundary |
+| --- | --- |
+| `scripts/lib/isolated-public-verification.mts` | Existing source graph and manifests derive snapshot/delta-bound owner/capability/consumer/contract obligations, automatic assertion/vector correspondence and explainable candidate commands. Literal JSX padding/radius-only classification keeps all other AST/state tokens and declared obligations binding. Functional changes require behavior/native integration or readback; unknown effects/mappings retain Full. Manual reviewed release admission and all canonical Full gates remain separate and unchanged. |
+| `scripts/verify-isolated-supabase.mts` | Existing `--ci-change-impact` adapter reads trusted event Git objects and emits sanitized JSON without fixture/Browser/DB execution or automatic approval records. Existing local-risk controls cover A presentation, B shared contract plus indirect consumers, C save/delete/duplicate bodies, incomplete/stale selectors and invalid event/history boundaries. |
+| `.github/workflows/quality-gate.yml` | Existing primary job invokes source consistency after dependency installation, with three database values empty and checkout credentials not persisted. Attempt-specific report upload preserves failures; existing eight job identities, native services and full `ci:check` remain required. No extra workflow/job or mandatory local hook. |
+| `scripts/verify-verification-infrastructure.mts` | Existing installed YAML parser verifies source step order/failure propagation, immutable-event boundary, secret isolation, narrow artifact path and all eight required jobs/full command, with positive and effective rejection controls. |
+| `docs/QA_RELEASE_CLOSURE.md` Section3.3.1 | Existing authority distinguishes automatic Fast source consistency, unexecuted Targeted candidate requirements, human approval, behavior and mandatory Full/remote CI. |
+
+**Coverage / proof interpretation:** Engine, Capability, Contract and Adoption protection remains with the existing owners, graph and two authoritative manifests. All Phase 03 local-risk groups and their assertions are retained. New grouped controls add presentation-state boundaries, contract protection/consumer diagnostics, save/delete/duplicate functional fallback, stale/partial snapshots and CI event rejection; workflow controls preserve existing required checks. A source-green report is expressly `ownerReviewSatisfied=false`, `behavioralPass=false`, `releaseEvidence=false`. It proves changed assertion syntax linked to normative source, not approved contract intent or equivalent runtime semantics. Targeted commands include exact current command steps and reasons, remain unexecuted with unknown effects, and cannot waive rejection, permissions, data-loss or save/readback coverage. Expected contracts are not rewritten automatically.
+
+**Runtime / comparable measurement / failure correction:** Fresh isolated scratch retains full history and raw source bytes, with physically separate dependencies and no private environment. The [delivery receipt](../.tmp-qa/qa-activation-phase04-20261028/delivery-receipt.json) records final source hashes, targeted receipts, actual CI-adapter event simulations, rejection outcomes, independent review, cleanup and resource preservation. [Same-input selection comparison](../.tmp-qa/qa-activation-phase04-20261028/performance-selection.json) binds three identical in-memory source scenarios and preserved obligation/assertion projections before/after. [Performance summary](../.tmp-qa/qa-activation-phase04-20261028/performance-summary.json) separates that sample from expanded guard workloads and actual controlled functional verification; local samples do not establish GitHub CI acceleration. The initial strict-TypeScript attempt found one new test-overload error (`undefined` passed as an assertion predicate); the correction uses `Error`, retaining all rejection vectors. Initial failure evidence is preserved separately from final verification.
+
+**Open gaps / approval / release:** CI integration is implemented locally; remote execution and timing remain unverified until separately authorized publication and exact-head required CI. This verification-infrastructure delta retains class E release obligations under Constitution25.4; Full Local Gate, broad Browser/DB suites and release actions were outside this targeted task. No presentation adoption, visual approval or native persistence PASS is inferred from selection or controlled runtime tests. `QA-IMAGE-ALT-228-01` remains deferred with its prior result unchanged and was not investigated. `globalClosed=false`; local evidence cannot declare Release Readiness.
+
+### 27.13. PR 229 final CI and build recovery — 28 October 2026 — bounded QA-owner correction
+
+**Baseline / actual failure / preservation:** PR [#229](https://github.com/ahmedredasadan100/venesia-website/pull/229) is Draft on baseline `cacc1d82e8b90762179ee6283345927235bf8a27`, branch `codex/qa-phase04-closure-20261028`. Its first [CI run](https://github.com/ahmedredasadan100/venesia-website/actions/runs/40605265179) retained seven successful jobs and one failed primary job; automatic Preview build also failed. The existing source/cleanup evidence remains valid only within its measured scope. All prior records above remain historical evidence; the [recovery receipt](../.tmp-qa/pr229-final-ci-build-recovery-20261028/delivery-receipt.json) binds current source, verification, publication, final CI/build results and cleanup. Existing protected files, private environment hashes and previous evidence are preserved; no unrelated delta is absorbed.
+
+**A — source-only Git event admission owner:** `scripts/lib/isolated-public-verification.mts` previously required `merge_commit_sha` for every merge checkout. The saved Actions report proves rejection at that predicate before source checks. The matching published `opened` event projection (`18399723149`, same base/head/time) omits that property; its queried value is null. The historical Actions event JSON itself was not retained, so its exact missing-versus-null value and timing cause remain unproved. GitHub's actual immutable merge `ab8f4394d23b9fd446d9bdec7ecfe3e902521a61` has exactly ordered parents `[a29a9a89779c70fcf8f256faebd6103d566f5b1c, cacc1d82e8b90762179ee6283345927235bf8a27]`, independently matching event base/head. The existing resolver now admits absent/null optional metadata only with that exact two-parent proof from local Git. Supplied non-null SHA remains validated; merge-checkout equality, actual HEAD/GITHUB_SHA identity, local object/history existence and both ancestry checks remain mandatory. No guessed ref/baseline, fetch, broadened event type or malformed/mismatched SHA admission is added.
+
+**B — narrow Git environment / actual Next typing:** the same inspector typed its deliberately restricted Git environment as `NodeJS.ProcessEnv` without the `NODE_ENV` required by Next's actual ambient augmentation. This declaration originated in Phase 03; the earlier targeted TypeScript context did not load that augmentation. A fixed `NODE_ENV: "test"` now completes the existing Git-child environment type without inheriting caller mode or secrets. Only read-only Git starts in this path; Product/app/fixture environments, lifecycle ports, permissions and behavior are unchanged. No any, ignore directive, type-check suppression or weakened assertion is introduced.
+
+**Affected verification and boundaries:** the existing `scripts/verify-isolated-supabase.mts` local-risk controls retain all prior 158 groups/assertions and add one actual-AST environment initialization/whitelist control. PR merge/head, absent/null metadata, malformed/missing/mismatched SHA, missing/foreign/reversed/octopus parents, unavailable history and both ancestry rejection paths are covered at the same owner. Fresh scratch retains full Git history/raw source and physical dependencies, excludes private environment/credentials and uses canonical `npm run build` with actual Next-generated types; source, ESLint, TypeScript/build, positive/negative/boundary and CI-adapter receipts are recorded in the recovery evidence. Existing workflow, required contexts, command registrations, Full gates and unrelated valid proof remain unchanged. Full E and extra broad local Browser/database suites are outside this correction; no manual CI retry is authorized while the automatic run is active.
+
+**Approval / remaining limits:** only these two proved QA defects and their original guards/documentation are corrected. New outcomes, final Commit/PR SHA and exact-head GitHub/Vercel status belong to the recovery receipt and PR, without rewriting older failures. `QA-IMAGE-ALT-228-01` remains deferred/Known Unresolved with its prior result unchanged; it is not investigated or waived. No Ready, Merge, manual Deployment, migration, Auth/Permissions, Product or Production change is authorized. `globalClosed=false`; stop at Owner Final CI Review.
+
+### 27.14. QA final stabilization — bounded diagnostic checkpoint — 28 October 2026
+
+Baseline is PR229 head `8434661b70389a1e7fbb63bbbe2c6a9f9507e3de`. Run40610014948 retained seven successful jobs and one blocked CI admission; Vercel Preview is READY. The original event payload was not retained. A prior read-only search found no binding in102 log entries or the two artifacts; current PR metadata is not the original event. The old `history.exists` catch maps several Git errors/output mismatches to false, so its missing-history message alone does not establish a physical absent object or a stale merge value.
+
+The existing inspector/verifier now preserves sanitized original-event SHA bindings plus the original failed lookup exit/identity and bounded local object-type/parent/ancestry probes in the existing failure artifact. Admission, SHA/history/ancestry assertions, exitCode1, all eight CI jobs and Required Checks remain unchanged at this diagnostic checkpoint. Existing local-risk controls cover valid output, query failure, absent/null fields and malicious values without recording arbitrary event/environment data. No Product, database, permission, new runner/registry/workflow or acceptance relaxation is included. One authorized automatic diagnostic CI attempt precedes any evidence-based acceptance correction. Source, runtime, final SHA and remote outcomes are recorded in the [stabilization receipt](../.tmp-qa/qa-final-stabilization-20261028/delivery-receipt.json); no PASS for the original failed event is inferred. `QA-IMAGE-ALT-228-01` stays deferred and unchanged; `globalClosed=false`.
+
+### 27.15. QA final stabilization — proved admission correction and bounded functional execution — 28 October 2026
+
+**Previous → current / evidence limit:** Section 27.14 retained a diagnostic-only correction without changing admission. The subsequent [original-run diagnostic artifact](../.tmp-qa/qa-final-stabilization-20261028/diagnostic-ci-artifact/qa-change-impact.json) now proves the relevant distinction: actual checkout/GITHUB_SHA `4fafac2754f2f11f54f1bda84c62464050791944` is a local commit with exactly ordered parents `[a29a9a89779c70fcf8f256faebd6103d566f5b1c, 545ee380ecedd8ba0e4d5c7d9e949bcb5309c34e]`; both event base and head are ancestors. Its separate `merge_commit_sha` value is `1ff04a04d24bcaaa8a38d13028469a0e8025622b`, whose original identity/type/parent lookups exited 128. The diagnostic retained the actual rejection and did not manufacture PASS. The cause is the QA owner's treatment of advisory metadata as an authoritative required local commit; no Product, permission, database or merge-topology defect is inferred.
+
+**Current owners / bounded responsibilities:**
+
+| Existing owner | Current change and proof boundary |
+| --- | --- |
+| `scripts/lib/isolated-public-verification.mts` | The resolver validates non-null advisory metadata's strict nonzero 40-hex shape, while actual HEAD/GITHUB_SHA, local base/head/checkout objects, exactly two ordered merge parents and both ancestry checks authorize admission. A head checkout retains exact identity/ancestry checks. The same source-impact owner qualifies only the current literal Form save/cache leaf from actual changed inputs, current manifest bindings, registered command expansion and reviewed harness bytes. Existing child lifecycle and receipt writers are reused within this module. |
+| `scripts/verify-isolated-supabase.mts` | The existing verifier adds explicit `--execute-qualified-impact --impact-baseline=<40sha>` selection without approval-record or untracked-entry execution. Existing read-only CI mode remains unchanged. Positive/negative source, event/history, selector and mocked cleanup/network controls protect this boundary; their execution outcomes require the final source-bound receipts. |
+| `scripts/qa-admin-form-guarded-navigation.mts` | Its exact existing `--save-cache-only` mode retains the thirteen scenario vectors and their assertions. It adds owned-origin network fencing, owned Blob-origin checks, blocked Service Workers, finite page deadlines, exact-flag rejection before resource creation, all-resource cleanup and preservation of the original error. A final structured receipt distinguishes actual controlled Browser execution from native persistence and business-consumer adoption. |
+| Existing Form/Collection capability and adoption manifests | `form_runtime`, Form lifecycle contracts, Entity List/query cache and applicable consumer declarations remain authoritative and unchanged. Discovery of applicable consumers is not evidence that every actual consumer was mounted or saved. `form-save-parity-across-consumers` remains open under its existing state. |
+| `docs/QA_RELEASE_CLOSURE.md` Section 3.3.1 | Documents authoritative Git topology versus advisory metadata, the single qualified execution family, failure/evidence boundaries and the unchanged Full/remote CI requirements. No parallel registry, runner, workflow or mandatory local hook is added. |
+
+**Functional coverage / preserved protections:** the qualified leaf mounts the actual `AdminFormRuntime`, shared QueryClient/provider, Entity List controller and query/cache owners against controlled action results and an in-memory source. Existing scenarios cover confirmed success/warning, Create-to-Edit handoff, cache-settlement failure without source rollback, error/throw/unconfirmed result, opt-out, plain and controlled failed second saves, and fresh list reads without resaving. Its receipt may prove `shared_owner_controlled_browser_behavior` only. The synthetic flow is not a native Server Action/Database transaction or an authenticated business consumer. Required save/delete/duplicate/permissions/data-loss/native-readback checks keep their original owners and gates; no broad adoption, Owner visual approval or persistence PASS follows from this pilot.
+
+**Execution / reporting / remaining gaps:** the explicit mode requires current successful source coherence, exact source/HEAD binding and an effects-qualified literal leaf. Missing qualification blocks applicable execution; if no qualified family is affected, the result is `NOT RUN`; unsupported/unmapped checks retain existing obligations and conservative Full fallback. Child logs and the existing targeted receipt retain SHA, owner/capability/contract/consumer reasons, command, duration, result, exit, attempt/retry, evidence hashes and cleanup. The first failure classification is `UNKNOWN` with a technical cause and original evidence; no automatic retry or label-based Product/Fixture diagnosis is introduced. Browser/server/TEMP cleanup attempts are independent; the outer owner must prove child termination before removing only its owned temporary tree. A source audit of signal handlers is not actual abort/resource proof.
+
+**Platform and effect qualification:** the explicit execution API accepts only the immutable baseline and derives current impact inside the owner; a caller cannot supply selector authority. Effect qualification uses the reviewed canonical-LF fixture fingerprint while global source evidence retains raw bytes. The pilot is restricted to `win32` until equivalent process-tree timeout cleanup is proved elsewhere; unsupported platforms are `BLOCKED` before a command starts. Linux read-only selection and the ordinary required CI commands remain unchanged. Missing terminal evidence leaves Browser completion and unobserved network counts unknown/null, never fabricated zero/PASS.
+
+**Verification / approval status:** final runtime, real-Git event replay, TypeScript/Next build, timing comparison, preservation and cleanup outcomes are pending source freeze and targeted execution at this entry's creation. They belong to the [same stabilization receipt](../.tmp-qa/qa-final-stabilization-20261028/delivery-receipt.json); no unrun test is recorded PASS here and no system-wide speedup is claimed. The earlier diagnostic failures remain retained. The existing workflow still performs read-only source selection, all eight CI jobs and the complete `ci:check`; this pilot cannot satisfy or remove release class E, Full Local Gate, exact-final-SHA CI or Owner review requirements. `QA-IMAGE-ALT-228-01` remains deferred/Known Unresolved with its prior result unchanged, without investigation. No Ready, Merge, manual Deployment, Product, migration, Auth/Permissions or Production mutation is included. `globalClosed=false`; stop at the Owner's final review boundary.
+
+**Exact-SHA CI follow-up (687d7272):** GitHub accepted the immutable event and source coherence; Vercel Preview reached READY. The unchanged required zero-warning lint gate then correctly rejected two unused formal parameters in the new controlled sanitizer-failure tests. The earlier affected-file lint commands omitted `--max-warnings=0`; their exit-zero receipts are retained but cannot qualify the required lint contract. The bounded correction removes only those two ignored parameter declarations, preserving every assertion, callback body, scenario and lifecycle effect. Fresh canonical zero-warning lint, syntax and actual Next ambient typing qualify this change; behavioral evidence is reused through exact transformation proof. The failed CI attempt remains recorded. Final required CI/Vercel results and the evidence validity chain belong to the linked stabilization receipt; no failed result is overwritten or promoted to PASS.
+
+### 27.16. QA Phase 05 — existing-owner hardening and bounded optimization — 28 October 2026
+
+**Previous → current:** baseline PR229 head `0dcda107e2f00804498392de20b6882035fd4113` retains the proved Git-event admission correction, READY Preview and deferred image-Alt CI failure. Phase 05 maintains the same source-impact/verification owner, existing Form Browser fixture, manifest owners and registered commands. No Product, contract owner, adoption manifest, workflow, Required Check, database runtime or release-risk policy is replaced. Full Local E remains required for release and is UNVERIFIED within this targeted task; `globalClosed=false`.
+
+| Existing owner | Current bounded responsibility / preserved proof |
+| --- | --- |
+| `scripts/lib/isolated-public-verification.mts` | Source correspondence now binds the changed exported contract to applicable changed assertions/vectors through lexical runtime/type dependencies. Unrelated assertions in the same file cannot satisfy it. Invocation-local pure memos reduce duplicate semantic/AST/Git-blob work while retaining the executable graphs and conservative A–E floors. The same qualified execution owner supports only the reviewed Form leaf on Windows/Linux, deduplicates overlapping leaf selection, keeps unknown effects blocked and preserves all native/full obligations. |
+| Existing owned child lifecycle in that module | Windows taskkill is retained. Linux adds bounded same-UID PID/starttime and inherited-marker discovery, detached/orphan draining, TERM/freeze/KILL and verified zero-live-process cleanup. Marker/environment contents are never retained, and only the reviewed inheriting fixture is qualified. Child stdout/stderr use exclusive writes. Failed child results preserve output, reason and cleanup without automatic retries. |
+| `scripts/verify-isolated-supabase.mts` | Existing local-risk/default guards retain prior assertions and add per-contract relevance, unknown-category, terminal-receipt, exclusive evidence, Linux timeout/cancellation/orphan/fast-exit and unrelated-process-preservation controls. The explicit existing qualified command selects and runs one current Form family; ordinary CI remains read-only source selection followed by unchanged mandatory full commands. |
+| `scripts/qa-admin-form-guarded-navigation.mts` | Only additive preparation/execution/cleanup timing in its existing final family receipt. The thirteen vectors, save/failure/readback behavior, all assertions, network fencing and all-resource cleanup are preserved. Review of these timing-only bytes explicitly renews the effect fingerprint; changed unknown fixture bytes still block execution. |
+| Existing Form Runtime, QueryClient/cache and Entity List owners / adoption manifests | Runtime, capability, contract, adapter and consumer ownership remain unchanged. Actual controlled Browser proof is distinct from native Server Action/database persistence, Auth/permissions and business-consumer adoption. Existing `form-save-parity-across-consumers` and applicable native save/delete/duplicate/readback protection remain under their current owners/gates. |
+
+**Results / evidence / limits:** the [Phase 05 delivery receipt](../.tmp-qa/qa-phase05-hardening-20261028/delivery-receipt.json) records final source hashes, before/after equality and timings, exact Windows/Linux command outcomes, positive/negative/boundary/failure controls, TypeScript/Next context, final Commit/CI/Preview and preservation/cleanup. Until its actual receipts exist, runtime qualification is pending and no PASS is inferred here. Run identity, first attempt/retry/flaky disposition, causal classification, sanitized log hashes and cleanup are retained in the existing targeted receipt rather than a parallel reporting runtime. Source checks do not become behavioral PASS; UNKNOWN failures are not relabeled from assertion text. Historical evidence is preserved. `QA-IMAGE-ALT-228-01` stays deferred/Known Unresolved, without investigation, PASS conversion or waiver. Owner Architecture/Release review, exact-final-SHA Required CI and all release gates remain independent; no Ready, Merge or manual deployment is authorized.
+
+### 27.17 Current — bounded Alt overwrite evidence / Owner Product decision — 28 أكتوبر 2026
+
+**Previous → current:** Phase 05 remains complete within its approved scope; no architecture, performance, consolidation, runner, workflow or registry implementation is reopened. The Owner separately resumed `QA-IMAGE-ALT-228-01` diagnosis on PR #229 HEAD `cf54f7fe1f7a790137e772f98f3cd161dd9e2994`. Latest CI Gallery Edit RTL390 retained the saved Arabic Alt instead of the intended explicit Alt. Its original event delivery/reset path remains unobserved; it is not assumed identical to earlier failures.
+
+**Actual bounded proof:** fresh isolated Windows/Chrome diagnostics completed the existing Content Panel/Gallery 16 Create/Edit cases, 32 source save attempts, 4 reference consumers, 9 default/port boundaries, 4 public projections and 4 notice cases. Both one-shot focus controls retained the original assertion and passed, including release of the original modal callback at the installed Playwright fill protocol boundary. These are instrumented observations, not a correction or Full E PASS. A single offline Linux/Chromium 149 replay then passed nine original cases and failed News Edit RTL390; six later cases were not run. Trusted input delivered the intended text to the same connected textarea; six milliseconds later React's controlled host commit overwrote it with the old empty value before document bubbling. The observer recorded no node replacement or native form reset. Native value, host props and both inspected local-state fiber observations were empty at the failure checkpoint. Raw failure, observer preparation failure, successful controls and source identities are preserved separately in the [bounded RCA receipt](../.tmp-qa/image-alt-recovery-20261028/rca.json).
+
+**Owners / limits:** `AdminMediaImageField` owns controlled Alt state and its native metadata field; `TopicImageField`/`ContentBasicDataPanel` and Article/Media consumers remain unchanged. The reset is localized to this actual Product field path in the isolated fixture. The initiating React render callback is still unproved: existing form-level consumers and pending owner updates require causal localization before choosing a patch. `AdminEntitySeoPanel` already documents the relevant post-root native-observer ordering precedent; this is not evidence to change unrelated listeners. The original Gallery/Article failures and Hosted/Production occurrence remain unproved. No behavioral loss is inferred for consumers not observed. Typed Alt preservation, Caption/raw multiline/default resynchronization and all save/failure/readback contracts remain required.
+
+**Stop / approval / release:** no Product, executable QA, fixture, assertion or expected-value correction has been made. The current task expressly requires Owner approval before a Product correction, so diagnosis stops at that boundary. No commit, push, new CI run, Ready, Merge or deployment follows this finding. Existing Required CI remains failed on this HEAD; Vercel Preview READY is a separate result. Full Local E, Public Evidence Preservation and actual Owner Functional/Visual/live persistence reviews remain incomplete/Pending. Historical evidence and the PR #228-only exception retain their original boundaries. `globalClosed=false`.
+
+### 27.18 Current — authorized Alt continuation / unproved initiating update — 29 October 2026
+
+**Previous → current / authorization:** the Owner's direct `++` resumed the bounded original-owner investigation and authorized a proved Product correction after Section 27.17's approval stop. That approval is retained; the terminal limitation is causal proof, not missing permission. PR #229 HEAD remains `cf54f7fe1f7a790137e772f98f3cd161dd9e2994`. Phase 05 architecture and optimization remain closed within their approved scope.
+
+**Actual additional evidence:** fresh offline container workspaces retain Git history and source bytes, use the pinned CI Chromium 149 image and finite disposable PGlite/Auth/cache/media ports, and have no host mounts, private credentials, provider network or hosted writes. The original Content Panel trace passed seven cases, then failed Gallery Edit Desktop on gallery-tuple parity: an intended added-image Alt was empty before persistence and normalized to null. Its initiating loss was not recorded; neither a persistence defect nor a common cause with the primary-Alt failures is inferred. A separate one-case Gallery Edit Desktop trace passed. Two accounted pressure controls each invoked the actual old Review/Warning callback exactly once and retained native/FormData/React-prop Alt; pressure alone is insufficient to justify moving those observers. Earlier controls lacking activation accounting and unused post-root variants remain separately marked, not promoted to causal proof.
+
+**Final bounded trace / preserved coverage:** the original `qa:topic-form-draft-recovery` selectors, 24-case order, actions, expected values and assertions were retained in an instrumented scratch copy. All 24 six-type Create/Edit Desktop/RTL390 cases, 25 boundaries, six notice cases, 49 source-adapter save attempts and 64 screenshots completed successfully. The 24 primary-fill checkpoints contain 5,525 recorded native/React events with zero observer errors or dropped events; source identity is stable. The diagnostic did not reproduce the overwrite. It is not a corrected-source PASS, Hosted persistence proof, Owner approval or Full E closure. Exact queue/hook and metadata host-commit tracing was added only to the in-memory diagnostic bundle; installed packages and canonical Product/QA files remain unchanged. Existing manifests, 12 Article/Media form variants, shared engines/capabilities, Alt/Caption/raw-value/default contracts and rejection/save/readback protections retain their owners and assertions. Applicability preflights for `topic-article-create-edit` and `topic-media-create-edit` passed; no adoption status is inferred beyond that proof.
+
+**Terminal classification / release boundary:** React's same-node controlled overwrite remains observed in Section 27.17, but its initiating callback and the current CI Gallery failure's cause remain **UNKNOWN**. No speculative Product patch, observer relocation, timing workaround, expectation adjustment or new diagnostic loop follows. Only the affected existing ledger/registry documentation is maintained; raw evidence and owned-resource preservation/cleanup are retained in the [continuation receipt](../.tmp-qa/image-alt-correction-20261029/closure.json). No commit or push is made without a proved correction. Exact-HEAD required CI remains FAIL; Vercel Preview READY is separate. Full Local E and Public Evidence Preservation remain UNVERIFIED/Pending, actual Owner Functional/Visual/live persistence reviews remain Pending, and no Ready, Merge or deployment is authorized. `globalClosed=false`.
+
+### 27.19 Current — one actual CI causal capture authorized — 29 October 2026
+
+**Previous → current / authority:** the Owner separately authorized exactly one actual GitHub CI diagnostic commit/run on PR #229 from `cf54f7fe1f7a790137e772f98f3cd161dd9e2994`, followed only by a minimum proved correction and its affected verification. Existing documentation edits and all prior evidence remain preserved. No reproduction or incomplete causal trace ends the attempt as UNKNOWN, with the earlier CI failure retained and no second diagnostic run. The historical first failing Linux observer added an `input:microtask`; its observed React overwrite therefore does not independently prove an uninstrumented Product defect. Section 27.18's successful no-added-microtask observations retain their diagnostic-only boundary.
+
+**Existing owners / bounded change:** temporary tracing is opt-in within the current `qa-home-story-presentation.mjs` consumer fixture and its in-memory React compilation. It observes fixture metadata only: trusted input/change, identified native nodes, controlled Alt/Caption, selected current/alternate state and props, queue/hook identity, callbacks/effects, host commits and existing save/readback checkpoints. It introduces no retry, sleep, extra microtask, synthetic input, refill or reordered case. Activation is limited to the explicit marker, actual PR #229 attempt one and the diagnostic commit's unique trailer/direct baseline parent; normal future heads do not activate it. Installed Product/package bytes, manifests, capabilities and all original assertions/expected values remain unchanged. The existing Workflow keeps the same eight required jobs, runners and canonical commands; its existing failure-safe source-report artifact step moves after the canonical gate and additionally preserves only `.tmp-qa/admin-development-batch-01/image-alt-ci-attempt-01/`. Its existing verification-infrastructure owner protects that exact whitelist, activation scope and original failure propagation, with additive rejection controls. No new workflow, runner, registry or Product state owner is introduced.
+
+**Proof / release boundary:** local syntax, affected static checks, source assertion/order preservation and exact-commit activation controls precede the authorized diagnostic push; runtime outcomes are not inferred from them. The [actual CI capture receipt](../.tmp-qa/image-alt-ci-capture-20261029/closure.json) records immutable baseline/final SHA, run/attempt, sanitized artifacts/logs, coverage, causal decision and resource preservation. A diagnostic PASS does not prove a Product correction or erase a prior FAIL. Any permanent diagnostic design is outside this task. Full E, Public Evidence Preservation and actual Owner reviews remain required and Pending until independently completed. No Ready, Merge, Production deployment, Branch Protection change or waiver is authorized. `globalClosed=false`.
+
+
+### 27.20 Current — proved Alt observer-ordering correction — 29 October 2026
+
+**Previous → current / actual CI:** the one authorized diagnostic ran once on immutable commit `ddc58ad905798b02c9b980691c70e7a95c21916b` after baseline `cf54f7fe1f7a790137e772f98f3cd161dd9e2994`. [Run 40778581262 / primary job 123134144721](https://github.com/ahmedredasadan100/venesia-website/actions/runs/40778581262/job/123134144721) passed twenty original Draft cases, then retained FAIL at Video Create RTL390. The original expected Arabic Alt reached the intended native field, but the immediate assertion read empty. Actual PR event HEAD is the diagnostic commit; checkout and `GITHUB_SHA` are merge commit `09452b1056ed613163e540c8cdcefdd1b0bd31c7`. Artifact `12857181359` is preserved with verified ZIP SHA-256 `4040850ae3ae64454836a4311ec4441781aac5624582121e5a80d7ae54faa4c5`. Earlier entries 27.17–27.19 remain verbatim historical records, including the first observer's added-microtask limitation; their previous UNKNOWN decision is superseded only within the newly proved scope below.
+
+**Proved mechanism / actual owners:** the [retained actual-CI analysis](../.tmp-qa/image-alt-ci-capture-20261029/source-causal-analysis.json) binds 482 events with zero observer errors/dropped events and no added scheduling. `AdminMediaImageField`'s actual image `onLoad` queued dimensions on queue 18/hook 7 at lane 32. Trusted input then established the intended Alt on the same connected textarea node 3. The form-level `AdminMediaAltWarning` observer queued its state at lane 2 while dimensions remained pending; the existing React root microtask committed the exact dimensions object, leaving controlled Alt at its old value. React `updateTextarea` wrote empty before the root bubble listener could handle the edit. The dimensions queue/object and finished-state diff establish the owner chain, rather than nearest-callback timing. No form reset, node replacement or changed `defaultAlt` was observed. Content Review ran after that specific CI overwrite, so its correction is justified separately by the local counterproof, not inferred from that CI callback's proximity.
+
+**Counterproof / minimum correction:** [Four local controls](../.tmp-qa/image-alt-ci-capture-20261029/causal-counterproof.json) retain actual raw exits `1, 1, 1, 0`: old Warning/Review fail; corrected Warning with old Review fails; the same control with passive callback/setter tracing fails; changing only virtual Review observation to post-root own-form bubbling passes. All four invoke the real committed image's original `onLoad` once under temporary actual default priority and restore that priority; the original picker, trusted fill and Expected Alt assertion remain unchanged. The passive trace has zero errors/drops and records Review before the actual React host restore. Exact reverse-byte equality binds the sole Review intervention in the positive counterfactual. These are three expected-negative diagnostic controls and one positive controlled case, not a final Product or Full E PASS. Local controls used Node 24.17.0; actual CI used Node 22.23.4, so final canonical/remote proof remains separate.
+
+The implemented Product changes are confined to [AdminMediaAltWarning](../src/components/admin/media-intelligence/AdminMediaAltWarning.tsx) and [ContentReviewPanel](../src/components/admin/content-workflow/ContentReviewPanel.tsx). Each existing effect retains its original initial read, state setters, dependencies and cleanup, observes `input`/`change` at `form.ownerDocument` bubbling, and filters the same form with `Node`/`form.contains`. Their current source SHA-256 values are respectively `2e4f6e5360157c5f5a1cbce7788aae138c12262ea7ff868bd43a57fc6b16bbd1` and `9e0479e90a7f6f3c21d6540717ec4739714c141ef371e2e966ca658084efb69f`. The image dimensions capability itself, image/Alt/Caption fields, default/raw multiline semantics, Warning copy, review checks, permissions, validation, draft and save/readback owners are unchanged. No timing workaround, retry, refill, expected-value change, assertion suppression or parallel owner was introduced.
+
+**Consumers / contracts / source maintenance:** the existing `topic-article-create-edit` and `topic-media-create-edit` manifests remain authoritative for Article Create/Edit and News/Press/Site Update/Video/Gallery Create/Edit. Primary media still follows `ContentBasicDataPanel → TopicImageField → AdminMediaImageField`; Gallery still owns ordered tuples at `AdminMediaGalleryField`. Shared engines, capability axes and legitimate exceptions are preserved; this correction does not promote unproved adoption cells. The existing [content adoption guard](../scripts/verify-unified-content-editors-adoption.mts) currently adds 137 net source lines against the entering baseline and 32 effective negative variants (16 per owner), protecting actual effect connectivity, post-root/non-capture binding, own-form filtering, initial synchronization, both event types and exact cleanup. The guard leaf, 135 Topic basic-data checks, 32 publishing checks, strict ESLint for the three affected executable files, actual Next TypeScript over 489 source files and both affected consumer Source Proof checks PASS. Source/SSR proof remains distinct from behavioral, visual, persisted-live and Owner approval evidence.
+
+**Final local verification / retained environment failures:** the [final frozen-source runtime audit](../.tmp-qa/image-alt-ci-capture-20261029/final-runtime-audit.json) records `TARGETED_LOCAL_PASS_RELEASE_UNVERIFIED`, with source identity, workspace binding and all seven affected source checks PASS. The unchanged canonical owners complete: [Draft](../.tmp-qa/image-alt-ci-capture-20261029/final-draft-complete-result.json) PASS with 24 main cases, 25 boundaries, six notices, 49 source-adapter saves and 64 screenshots in 589419.6272 ms; [Content Panel/Gallery](../.tmp-qa/image-alt-ci-capture-20261029/final-panel-complete-result.json) PASS with 16 main cases, four references, nine defaults, four public cases, four notices, 32 source-adapter saves and 58 screenshots in 461040.1773 ms; [Unified Image](../.tmp-qa/image-alt-ci-capture-20261029/final-image-result.json) PASS with eight main cases, 26 defaults, two notices, 16 source-adapter saves and 53 screenshots in 280391.2754 ms. These isolated actual React consumers/source save adapters and disposable PGlite fixtures establish their canonical behavioral claims, not hosted persistence or Owner approval.
+
+The first isolated `npm run build` retains actual exit 1 because Turbopack rejected the owned workspace's out-of-root `node_modules` symlink. [Original failure/result](../.tmp-qa/image-alt-ci-capture-20261029/final-build-result.json) and [raw error log](../.tmp-qa/image-alt-ci-capture-20261029/final-build.log) remain FAIL, classified Environment/provisioning. A fresh owned workspace using physical dependencies from the same lockfile and unchanged source completes the [actual Next TypeScript/Build](../.tmp-qa/image-alt-ci-capture-20261029/final-build-physical-result.json) PASS in 191005.1351 ms (attempt 2). Original [Draft](../.tmp-qa/image-alt-ci-capture-20261029/final-draft-result.json) and [Panel](../.tmp-qa/image-alt-ci-capture-20261029/final-panel-result.json) runs retain raw watchdog exits 124 after 480251.366 and 420430.6118 ms, classified BLOCKED Environment/execution budget, not Product assertion failures: Draft had passed 20 main cases before screenshot timeout; Panel had passed all 16 main cases and three notices before its fourth reload was interrupted. Canonical aggregate counts require all 24/16 main cases and expose no resume, so partial runs could not become family PASS. One deadline-corrected fresh execution per family used the identical frozen source, a 1500-second budget and attempt 2/retry 1 with `automaticRetry=false`; the successful full receipts do not overwrite either earlier outcome. Unified Image completed on attempt 1 without retry. No additional control suite was repeated for this budget correction.
+
+**Source identity qualification:** the original canonical Browser source-map enumeration omits `AdminMediaAltWarning`; its retained map status remains incomplete and is not rewritten as full owner enumeration. Provisioned frozen files and independent [during-runtime capture](../.tmp-qa/image-alt-ci-capture-20261029/runtime-workspace-source-identity.json) plus [end capture](../.tmp-qa/image-alt-ci-capture-20261029/runtime-workspace-source-identity-end.json) link all six executable files, including Warning, to [the final executable freeze](../.tmp-qa/image-alt-ci-capture-20261029/final-executable-identity.json). The final audit records this qualified workspace binding separately from the unchanged canonical maps. These captures are during/end measurements, not a claimed measured pre-execution snapshot.
+
+**First normal CI / separately proved QA correction:** the [retained terminal receipt](../.tmp-qa/image-alt-ci-capture-20261029/github-final-terminal.json) binds normal [run 40786986144](https://github.com/ahmedredasadan100/venesia-website/actions/runs/40786986144) to head `65a50eaff52fd121128340ef1622a006b74dc68a` and checkout merge `5316b3cda8f978b24a27b1cd8eb00ae1b337b539`: seven specialized jobs PASS, primary job FAIL/exit 1. Its unchanged canonical Draft completes 24 main cases/25 boundaries/49 source-adapter saves, including previously failing Video Create RTL390 and requested Gallery Edit RTL390; Unified Image completes eight main/26 defaults/16 saves. Those actual CI Alt passes do not convert the primary job to PASS or authorize credit for later gates. The new failure is proved QA: the existing `verify-executable-governance.mts:301` assertion rejects two raw `source.slice` calls at the newly added guard mutation helper's line 2306. Original log/receipt and this FAIL remain immutable.
+
+Only that mutation representation changes: the existing `verify-unified-content-editors-adoption.mts` helper now uses TypeScript `transform`/`visitEachChild`, factory nodes and Printer output instead of raw source splicing. The correction is 18 added/nine removed lines against `65a50eaf`, leaving 137 net added guard lines against the entering `cf54f7fe` baseline, with all 32 effective negative variants retained. There is no Product, contract, workflow, configuration, canonical QA command, fixture, expectation or policy change. Its frozen raw SHA-256 is `cbc2a823d0b391743fc9525b50f387f02a1080f9c18986e156bc398fdde9717b`. Four targeted checks PASS at attempt 1/retry 0: [existing owner guard](../.tmp-qa/image-alt-ci-capture-20261029/governance-recovery-owner-result.json), [original executable-governance leaf](../.tmp-qa/image-alt-ci-capture-20261029/governance-recovery-policy-result.json), [strict ESLint](../.tmp-qa/image-alt-ci-capture-20261029/governance-recovery-eslint-result.json), and [actual TypeScript/Next configuration](../.tmp-qa/image-alt-ci-capture-20261029/governance-recovery-next-types.json) with 466 source files and zero diagnostics. The seven earlier source-check receipts and six-file runtime binding above describe their preceding frozen source; they are not rewritten to claim the new guard bytes were measured then. Product owners, canonical Browser source and build inputs are unchanged, so their preceding canonical runtime/Build proof and the first normal CI's actual Alt passes remain eligible within that unchanged scope. No unaffected family or performance suite is repeated. New-head normal Required CI/Preview remain Pending; this is a normal verification attempt after the proved QA fix, not a second diagnostic capture.
+**Actual Owner/live review targets — Pending:** the existing six-type manifest surfaces and [canonical route owner](../src/lib/admin/content-routes.ts) derive the six Create URLs below. Edit IDs are the retained reference records in this Registry's earlier Article/Media table, not fabricated placeholders or newly observed hosted routes. Their current availability/type, live Desktop/Mobile/RTL review, functional save/failure/readback and Owner approval remain unverified; this entry performs no hosted write and does not promote previous screenshots to current approval.
+
+| Consumer | Create review target | Retained Edit review target | Current live/Owner proof |
+| --- | --- | --- | --- |
+| Article | `/admin/content/topics/new?type=article` | `/admin/content/topics/1521` | Pending |
+| News | `/admin/content/topics/new?type=news` | `/admin/content/topics/1663` | Pending |
+| Press | `/admin/content/topics/new?type=press` | `/admin/content/topics/1631` | Pending |
+| Site Update | `/admin/content/topics/new?type=site_update` | `/admin/content/topics/1624` | Pending |
+| Video | `/admin/content/topics/new?type=video` | `/admin/content/topics/1639` | Pending |
+| Gallery | `/admin/content/topics/new?type=gallery` | `/admin/content/topics/1647` | Pending |
+
+**Temporary tracing removed / release boundary:** [Raw restoration proof](../.tmp-qa/image-alt-ci-capture-20261029/temporary-source-restoration.json) confirms `qa-home-story-presentation.mjs`, `quality-gate.yml` and `verify-verification-infrastructure.mts` exactly match the entering baseline bytes. The diagnostic commit/artifact/logs and all original failures remain immutable; the final normal workflow contains no diagnostic tracing. Required checks, canonical commands, Full Release Gates and branch protection retain their owners. Frozen-source affected Draft/Panel/Unified Image runtime and actual Next Build PASS locally as recorded above; actual first-normal CI Alt scope also PASS, while that run retains its separate QA governance FAIL. The subsequent QA-only AST correction passes all four affected source checks. Preview is READY for `65a50eaf` only; normal new-final-SHA Required CI and Vercel Preview are Pending. Full Local E, Public Evidence Preservation, actual Owner Functional/Visual/live persistence review and final merge approval remain independent Pending obligations. No Production occurrence or common cause across all historical Gallery/Article failures is asserted. No Ready, Merge, manual deployment, database, Auth or permissions change is authorized. `globalClosed=false`.
+
+### 27.21 Current — bounded Full E admission evidence recovery — 29 October 2026
+
+**Previous → current / proved QA cause:** PR229 baseline `b771c98c6e0006674ea7cbd6712be53e4c3223b0` retains exact-head CI 8/8 PASS and READY Preview. The preceding [local release review](../.tmp-qa/pr229-final-release-20261029-01/final-closure.json) correctly retained 17/19 reviewed protection bindings and did not run Full E. Existing runtime vectors exercised `assertLocalVerificationProtectionMaintenance` through `planLocalVerification`, and `localVerificationPresentationSource` through `deriveLocalVerificationSourceImpact`; source projection did not attach those indirect assertions to the helpers. Automatic CI also counted newly introduced bare declaration names through the fragment comparison. That correspondence established availability rather than the applicable signature/vector protection required by the existing contract. A new meaningful name-only rejection case reproduces the defect with raw exit 1 before the correction; [counterproof](../.tmp-qa/pr229-admission-recovery-20261029-01/name-only-counterproof.json) and its original log remain retained.
+
+**Existing owners / correction / preserved contracts:** `scripts/lib/isolated-public-verification.mts` rejects only a runtime fragment equal to its bare export name; full signature fragments, applicable vectors and qualified calls retain their existing rules. The existing `scripts/verify-isolated-supabase.mts` test API exposes the two already-compiled helpers and invokes them directly with the existing scenario and maintenance fixtures. Positive source-bound reviews, missing/stale/duplicate/unselected/unrelated reviews, empty-obligation boundaries, ordinary literal spacing/radius, governed visual state/geometry, declared presentation contracts and dynamic class decisions remain independently asserted. The strengthened rule also invalidated the old name-only correspondence for the inspector and qualified selector: their existing controlled Git/raw-source reader and selector fixtures now invoke the actual functions through explicit typed test APIs, preserving every earlier alias case. The same existing verifier now also calls the actual executor admission branch through a typed test API: caller-supplied selectors/impact reject before inspection, and four drift/incomplete/exit-code boundaries return BLOCKED with zero commands, attempts or Browser execution and no reachable filesystem/process port. The final targeted canonical guard passes 233 Windows control groups; no Browser, Docker, database or network execution is selected by that command. No inferred transitive matching, generated expectations, waiver, registry, runtime, harness, command, workflow, Product, adoption manifest or capability owner is added. Source correspondence remains `behavioralPass=false`; actual engine tests and later release execution have separate receipts. The source audit preserves all 912 library and 1002 original verifier assertions, adding 58 verifier assertion sites, under [admission recovery evidence](../.tmp-qa/pr229-admission-recovery-20261029-01/).
+
+**Verification / environment / release boundary:** Syntax, affected strict ESLint and the original Executable Governance leaf PASS. The first post-correction local-risk run reached an unchanged Windows child cleanup control and retained FAIL: the sandbox's exact task-owned `taskkill /PID ... /T /F` returned `Access denied`; a bound owner-context cleanup removed only that control's child tree. The same unchanged canonical guard is verified in the owner context; its original failure is not erased or relabeled. Final admission, Full Local E, Public evidence, cleanup, final-SHA CI/Preview and their actual terminal results belong to this phase's separate receipts and remain unclaimed here until observed. New tests invalidate their affected earlier verification proof; unchanged Alt/Product proof is retained only within its qualified input boundaries, with no reopened investigation. Actual Owner functional/visual and authorized hosted persistence reviews remain Pending.
+
+**Parallel resources / preservation:** the fresh read-only snapshot identifies the other project's `treasury-phase01` PostgreSQL container, network and volume, bound to loopback port5433; the three retained Venisia containers and four Venisia volumes remain separately identified. Planned isolated QA ports57641–57644 have no observed listener conflict. All currently unowned resources, including Treasury, must remain in the canonical lifecycle's native preservation inventory. No other-project database, process or resource is used, stopped or cleaned. Historical default-bridge identity FAIL remains immutable; cause/actor and historical data-content integrity are UNKNOWN, without attributing the change to the other project. The external Desktop closure copy is now absent while canonical historical evidence remains preserved. This phase authorizes only the proved QA correction and its existing release gates; no Ready, merge or deployment is performed. `globalClosed=false`.
+
+### 27.22 Current — QA Phase 06 consolidation — 30 October 2026 — targeted proof, release held
+
+**Previous → current / bounded scope:** Phase 06 starts at PR229 local `2f4220fbf85e735a6f9562d25d63101818f40f50`, two commits ahead of published Draft head `b771c98c6e0006674ea7cbd6712be53e4c3223b0`. Live GitHub confirms its last published Quality Gate success and Vercel Preview READY on b771; neither qualifies the unpublished local changes. The [environment-readiness report](../.tmp-qa/pr229-environment-readiness-20261030/environment-readiness-report.md) remains valid historical evidence: pg control-client disconnect, independent Codex reconnects, Sleep overlap without causation and unchanged Node/V8 runtime trigger UNKNOWN. Admission19/19, original command39 abort and later unchanged diagnostic PASS remain preserved; no Full E PASS is inferred.
+
+| Existing owner | Proven gap and bounded implementation | Verification / preserved boundary |
+| --- | --- | --- |
+| `scripts/lib/isolated-supabase.mts` and existing CLI owner | Preparation previously preceded periodic lease renewal without phase/aggregate bounds. Existing owner now adds phase600s/cumulative1800s budgets, safe phase/duration/connection-age observations, verified-idle renewal through the existing port, transaction/failed-session rejection, shared cancellation, handle revocation and pending-work cleanup. | Existing controlled lease/CLI fixture ports maintained with prior assertions preserved. Final affected checks and source identity belong to Phase06 evidence; no hosted SQL, schema, permission or pinned transport change. |
+| Existing owned-child lifecycle in `isolated-public-verification.mts` | Current execution context is qualified through an owned finite parent/child probe before Docker allocation. Native exit/signal and PID/PPID/time are retained; denied cleanup remains BLOCKED, including after probe self-expiry. | Actual scoped Windows timeout/cancel/abnormal-exit and unrelated-process controls. Windows already-exited-root descendants remain unverified/null; no global orphan-cleanup or universal crash guarantee. |
+| Existing impact/selection/qualified executor in that module | QA/fixture deltas select existing quality owners even without import edges; current source/contract/consumer reasons stay explicit. Deduplicated exact source leaves reuse current execution/evidence ports and reviewed complete eager-import/dependency/runtime fingerprints. Executable Governance has a reviewed current closure; Verification Infrastructure remains selected/unqualified because generated execution is not closed. Safe leaves may run while the aggregate remains BLOCKED. | AST assertion loss/owner-callee regressions reject; unrelated contract assertions and name-only exports remain rejected. This bounded semantic protection is not proof of all possible assertion weakening. Unqualified effects and unknown impact retain Full fallback. |
+| Existing Form guarded-navigation fixture and classifier | Bounded passive metadata timeline adopts existing controlled save/cache boundaries; failure preserves original error and missing evidence. Native V8/pg transport/timeout/cancellation dispositions are separated from unknown initiating cause. | Actual13 scenarios/75 assertions before and after; no Product/Alt changes, added scheduling, field values, credentials or React-commit claim. Source/Browser/Database proof levels remain independent. |
+| Existing QA release contract and this registry | Current-owner limits and evidence meanings are documented in place. | No new engine, registry, workflow, hook or alternate release policy; Required CI, Full E, branch protection and separate Ready/Merge authorization remain unchanged. |
+
+**Consumers / capabilities / adoption:** the affected consumers are the existing isolated QA caller, canonical QA verifier, qualified Form fixture and current CI source adapter. Product Form/Collection manifests and business-consumer adoption do not change. Source qualification does not establish hosted persistence, all-consumer behavior, Owner visual approval or general diagnostic adoption. Original and Treasury resources are protected; any historical Docker bridge identity mismatch remains retained with cause UNKNOWN.
+
+**Evidence / performance / approval:** [Phase06 evidence directory](../.tmp-qa/qa-phase06-consolidation-20261030/) retains actual first failures and successful corrections, source-bound targeted results, process identities, cleanup and preservation. The initial pre-change local-risk comparison used an unqualified sandbox and was stopped with its owned tree; its failure cannot establish a performance baseline. The actual bounded Form comparison retained13/75 in both runs and increased from25.27s to32.96s on adjacent observations; no acceleration or globally comparable timing is claimed. Fixture preparation/Browser/cleanup timings remain distinct, while live Database/Full E performance is unmeasured here. Final verification, commit, preflight and any conditional publication are recorded in the same phase delivery receipt; this entry does not claim an unrun result.
+
+**Release / completion boundary:** scope remains E because verification execution changes. Targeted proof and a working process probe do not establish sustained Environment Readiness or repair the V8 abort. Full Local E, Public Evidence Preservation, applicable native persistence/Owner reviews, final exact-head CI and independent release approval remain separate requirements. The conditional Push is subject to the unchanged pre-push gates; no waiver follows from Source PASS. PR remains Draft, `globalClosed=false`. Stop at Owner Final Architecture & Release Review.
+
+**Earlier targeted checkpoint / review:** frozen Phase06 source passes253 canonical local-risk control groups,92 preparation/lease controls,18 actual Windows owned-process controls, the existing direct Verification Infrastructure source leaf, strict zero-warning ESLint on all7 changed executable files and TypeScript with actual Next ambient types. Counts overlap and are not summed as unique scenarios. The bounded Form fixture retains13 scenarios/75 assertions before and after. Independent review found and corrected complete effect-closure qualification, native signal/identity reporting and actual observer regression coverage; its P1/P2 findings are resolved within scope. Generated Infrastructure execution remains automatically unqualified despite its separately reviewed direct guard PASS. No Full E, Build, Public E2E, native DB or current Linux behavior is claimed by this checkpoint. Final committed-source Preflight and release blockers belong to the phase delivery receipt; no conditional Push gate is waived.
+
+**Post-commit correspondence maintenance / current proof:** the first actual Preflight on local `5308beac4a8afddecacbdb02f167e0ad94cacd43` correctly returned BLOCKED before any candidate launch: five changed contracts lacked maintained direct correspondence. Their existing vectors now call the actual canonical qualification/readiness/pg observer APIs through typed bindings. Actual imported cancellation types test optional Signal identity, abort reason and CLI readonly behavior, including compiler-negative cases. The existing source owner now classifies types/interfaces by AST declaration kind, binds only asserted changed top-level members on the exact lexical imported receiver, and rejects foreign/nested/shadowed types, custom Pick and bare export names. All earlier assertions remain; focused existing planner/source controls PASS174 and the final canonical local-risk mode PASS256, including the owned-process controls. The final bounded preparation mode PASS94; actual Next-context TypeScript verifies its negative type cases. The pg observer retains existing outer failure codes while nonenumerable causes preserve the original disconnect, pg error and secondary receipt error without raw log disclosure. The first BLOCKED result and focused setup failures remain in Phase06 evidence. No signature copying, correspondence waiver, retry masking or Product change follows. The new maintenance commit preserves all preceding commits; final committed-source execution, strict lint and conditional publication outcomes are recorded in the phase delivery receipt.
+
+### 27.23 Current — Phase 06 final stabilization closure — 30 October 2026
+
+**Previous → current / bounded authority:** the Owner resumed from local `7578da69a00c8824d6c7f21fe61b63fb9d9fce87` to address only automatic Infrastructure qualification, process/transport reliability and diagnostic cost. Published PR229 remains Draft on `b771c98c6e0006674ea7cbd6712be53e4c3223b0`, with its existing successful CI and READY Preview; unpublished local evidence is not relabeled as remote proof. The preceding four local commits, Admission19/19, command39 native abort and all earlier failures remain preserved. No Full E, CI, Product/Alt, migration/Auth, Production or Treasury work is included.
+
+| Current owner / consumer | Proven gap → bounded correction | Evidence / remaining qualification |
+| --- | --- | --- |
+| `isolated-public-verification.mts` effect qualification; existing Infrastructure/text/loader/plan consumers | Generated Function/createRequire effects were unresolved. The current owner now binds four reviewed producers, actual selected guard/scheduler/fixture statements,17 literal/recipe Jiti roots,34 eager source modules, actual33-adopter inventory/read inputs, and all909 files/31,063,982 bytes in five native-resolved package distributions, plus locks/config/Node executable/V8/platform/arguments. Unknown or changed inputs reject; no synthetic hash/marker or arbitrary-code evaluator. | Existing focused effect/selection controls PASS19 and peer review clear. Actual footprint `6658ae1b1aac5a1e092e9dfeed514d66f87ec42880d89df0d10ebd1d21357230`; automatic correspondence on the measured snapshot PASS, all three intended leaves selected/qualified, zero leaf execution at that checkpoint. Final canonical execution belongs to the closure receipt. |
+| Existing owned-child lifecycle and Full Quality CLI/public handoff consumers | Windows taskkill from a live root does not establish safe ownership after that root exits. One canonical `ownedProcessCleanupQualification` exposes the missing capability separately from the live-tree probe. Known CLI Full Quality intent refuses before allocation; direct public requests refuse before gates. | Earlier assertions remain; actual finite exit0/9 detached-child/grandchild and admission controls are maintained in the existing verifier. Self-expiry of those probes is not a general cleanup repair. Windows Full E remains BLOCKED pending an Owner architecture decision; no native wrapper/runtime/foreign PID cleanup is introduced. |
+| Existing transport, stack lock and `qa-isolated-supabase.mts` | Close counters lacked observed reason; owner shutdown could inspect tracking before socket-close removal. Bounded first-observed-boundary counters and the existing idempotent session release close that proven tracking race. Existing CLI adds one upstream-only read-only connection lifecycle mode, not a separate runner. | Existing transport controls PASS19. Actual PG run PASS321.901s including cleanup;12 SELECT samples/242.648s, active transaction/query renewal refusal, verified-idle and actual due renewal, observed PgSleep then controlled cancellation. Native `needs_attention / PREPARATION_CANCELLED` remains immutable. Ten owned resources removed/zero remaining;13 accepted/closed sessions, peer_closed12/owner_shutdown1/unclassified0. No Product bootstrap/migrations/gates. |
+| Existing bounded Form fixture and verifier | Normal success always collected full metadata snapshots. Default light ring now retains event order/elapsed prehistory; snapshot copying/RPC is deferred until failure. Exact explicit deep arguments preserve prior bounded permitted facts/success summaries; namespace typos reject before allocation. | Ring128/privacy/immutable-copy/original-error/no-scheduling and all13/75 behavior assertions preserved. Focused actual owner controls PASS28. Six alternating20k-event collector samples separate CPU from Browser/preparation/RPC/clock/callsite cost; no global speed claim. Matched explicit deep and ordinary canonical runs belong to final closure evidence. |
+
+**Evidence validity / resources:** the actual PG run binds six unchanged start/end runtime source hashes. Later inactive qualification changes and the process receipt label clarification do not become a claim of executing the whole final HEAD in that earlier run; reuse is limited to unchanged lease/transport/CLI semantics, with current process controls verified separately. The [closure evidence](../.tmp-qa/qa-phase06-closure-20261030/) preserves original transport control failures, the proven shutdown race, the manual source adapter's missing-review DRIFT and the distinct automatic-source result. Source/behavior/native DB/Owner review retain separate proof levels. Before/after metadata matches all four original containers, five networks and five volumes, with Treasury separately unchanged and no queries/actions against it. Required ports are free; the bounded awake-window query has no matching recorded suspend/reboot event or query error. Neither those snapshots nor the four-minute PG window proves Full E duration or the historical V8/pg/Codex initiating cause, which remains UNKNOWN.
+
+**Consumers / architecture / release:** the affected consumers are existing source guards, the QA CLI and its direct public-gate port, transport readiness and the bounded Form fixture. Product sources, business adoption manifests, contracts/assertions and required CI/release policies retain their owners. Diagnostic adoption outside this fixture, React commit, native business persistence and current Linux execution remain unproved/Pending. Final syntax, strict ESLint, actual Next-context TypeScript, preparation/process/quality controls, the committed-source automatic preflight and its three actual leaves are recorded in the same closure receipt, without duplicate canonical leaf execution or PASS by selection alone. Build inputs are unchanged; no new Product build or Full E is inferred. Preserve all earlier local commits and stop at **Owner Final QA Readiness Review**. Current Windows Full E qualification remains **BLOCKED**, release requirements remain outstanding and `globalClosed=false`.
+
+**Final source checkpoint:** the canonical preparation mode passes94 controls; local-risk mode passes265 overlapping control groups, including22 owned-process controls. A separate existing owned-child mode preserves current PID/PPID, raw exit0/9 and cleanup receipts for those22 controls after a strictly typed admission-test context correction. Its known finite descendants expire and are observed absent; the general Windows exited-root capability remains BLOCKED. The initial TypeScript failure is retained, followed by zero diagnostics on the corrected context, strict zero-warning ESLint and syntax PASS on all six changed executable files. The explicit deep Form comparison passes13/75 once (preparation2677.528ms, execution7842.511ms, included diagnostic collection24.615ms, cleanup71.236ms); the ordinary light arm is reserved for the one committed-source automatic execution. Final automatic results and comparison limits belong to the closure receipt, without implying Full E or release approval.
+
+### 27.24 Current — approved Windows process ownership capability — 30 October 2026
+
+**Terminal evidence and execution consumers:** Root raw exit/signal are distinct from the native helper's own exit/signal. The affected last-handle-close vector passes separately with helper `null/SIGTERM`, unknown Root exit, missing native receipt and cleanup FAIL retained; known contained processes are absent. Metadata never promotes a missing normal execution receipt to execution PASS. Actual imported-type/native-integrity and selection controls PASS23: a task-owned compiled executable byte mutation rejects before launch, restores exact bytes, and immutable provenance cannot be caller-resealed. The exact native `.mts`/`.cs` port changes select the existing Form Browser leaf as an execution consumer even when Product/fixture bytes are unchanged; unrelated/lookalike/documentation and nonsemantic cases do not. The final automatic executor runs that leaf and both qualified quality leaves once; committed-source results belong to the current phase receipt. Stop at **Owner Final Windows Process Readiness Review**.
+
+**Previous → current / Owner authority:** local `6d302abcba76d89e1cb7757e641bf0b7ba829ce4` retained the proven `FINAL_QUALITY_PROCESS_CLEANUP_UNQUALIFIED` blocker: taskkill from a live root could not establish ownership of detached children after root exit. The subsequent read-only [architecture review](../.tmp-qa/qa-engineering-final-consolidation-20261030/final-architecture-review.md) stopped before a native creation/handle capability. The Owner then explicitly approved that bounded capability. Earlier BLOCKED receipts, command39 native abort, Admission19/19 and every preceding commit remain historical evidence; approval does not relabel them PASS.
+
+| Existing owner / affected consumers | Approved change / preserved contract | Evidence boundary |
+| --- | --- | --- |
+| Owned-child lifecycle in `isolated-public-verification.mts`; isolated readiness, qualified leaf execution and public gates | The existing policy/selection/evidence owner delegates Windows creation and held-handle cleanup to `windows-owned-process.mts` and tracked `windows-owned-process.cs`. A private job must own the suspended root before resume and retain native root identity/exit. Ordinary native cleanup requires queried-zero membership before final handle close; the distinct final-close containment certificate follows the current contract review below. Missing assignment/resume/identity/required cleanup proof rejects. | Actual normal/abnormal exit, cancellation, timeout, detached/reparented descendants, parent loss and foreign-process preservation controls remain required. Build availability does not grant actual caller qualification. Linux retains its existing same-UID/starttime/marker owner and qualification boundary. |
+| Native source distribution through the same Windows port | Existing Windows10+ x64 .NET Framework `csc.exe` builds fresh ignored `.tmp-qa/windows-native-build-*` artifacts from an exclusive captured C# snapshot. Source/compiler/explicit Framework input hashes are pinned and checked after compilation; binary/flags/provenance bind the build. Reuse within one Node invocation is published only after provenance is written and byte-verified; every launch rechecks tracked/captured source, compiler, Framework inputs, executable and provenance. The owner control pipe is separate from root NUL stdin; stdout/stderr remain in the existing log path. The job handle is verified noninheritable. A helper watchdog bounds a stalled owner; missing normal terminal/zero-membership proof still fails execution, independently of the fault-containment certificate described below. | No binary is committed or trusted across invocations; no npm dependency, download, global Windows/Docker/Node change, pipeline or replacement canonical command. Exact native receipt and final verification belong to the [current ownership evidence](../.tmp-qa/windows-process-ownership-20261030/). |
+| Existing preparation/lease/transport and CLI consumers | Their implementation and assertions are preserved. The source-identical native PostgreSQL lifecycle proof remains reusable within its measured scope:321.901s including cleanup,242.648s observation, actual due/idle renewal, transaction/query refusal and controlled cancellation. | Native `needs_attention / PREPARATION_CANCELLED`,10 removed/0 remaining resources and observed close reasons remain unchanged. No repeat PG bootstrap, Product/Auth/schema mutation or claim of Full E duration follows. |
+
+**Current reality / preservation:** the fresh before-edit seal binds HEAD6d302abc and all1673 tracked files, with361/361 protected files,142/142 sealed closure receipts and11/11 sealed architecture-review receipts unchanged. The read-only 05:18–05:19UTC environment snapshot retains four containers/five networks/five volumes; all prior retained container/network fields and common volume identity/driver/scope/mount/label metadata match. Treasury's container metadata and loopback5433 listener PID are unchanged; no Treasury query or lifecycle action is taken. Required QA ports are free, available memory6116MiB/commit73%, WSL docker-desktop is Running2, Docker29.7.2 and Balanced/sleep policy are unchanged. No selected suspend/reboot event or query error is recorded in the bounded 05:06–05:19UTC window. These are current metadata observations, not historical V8/Codex causation, database-content integrity or sustained Full E capacity proof.
+
+**Actual process qualification / evidence validity:** the first Windows matrix retains its original failure at the new immediate-exit vector: final native job cleanup was PASS/zero-members, but total-accounting value2 disagreed with an assumed exact1. That value alone does not identify a second process or a root cause. The corrected vector binds the newly observed pre-resume single-root membership and final zero membership; its scoped actual rerun passes. The28 preceding passed controls are reused only across the documented observability/correspondence delta, rather than claimed as a fresh execution of every final-source vector. Their native receipts cover normal/nonzero/crash exit, timeout/cancellation, detached descendants, early/setup failure, owner loss, helper-handle close, concurrent isolation and unrelated-process preservation. The first failure and original logs remain retained.
+
+One existing canonical `--owned-child-controls-only` execution on Linux passes21 controls in18.323s, including immediate root exit, TERM-ignoring detached timeout/cancellation, orphan cleanup and unrelated live-child preservation. It runs inside one fresh labeled container from the already installed immutable Node image, with no network/Docker socket, read-only repository, private TEMP and a fresh writable evidence overlay only. Actual runtime is Node22.23.3/V8 12.4.254.21-node.57/linuxx64; the Windows-only native capability rejects there without compilation. Nine start/end source hashes match, original exit0/logs are retained, and the container is absent afterward. This qualifies the existing Linux process branch on that runtime, not Node24 parity, automatic effect qualification or Full E.
+
+**Ending preservation / remaining approval:** all captured metadata for the original four containers/five networks/five volumes remains unchanged, including Treasury and its loopback5433 listener. Required QA ports are free; the 05:44UTC snapshot has5056MiB available/commit74%/pages-sec0, unchanged host Node24.14.0/V8/binary, WSL/Docker/power/sleep policy and no selected suspend/reboot event or query error in the05:19–05:44UTC window. Protected361/361, prior closure142/142 and architecture-review11/11 seals remain intact; all five unchanged PG preparation/CLI/transport/lock inputs still match the earlier native proof. Current source correspondence, syntax, strict ESLint, TypeScript and final committed-source disposition are recorded in the phase receipt; no pending or failed result is inferred PASS here. Unchanged Form13/75, transport19 and preparation94 evidence is reused only within its valid scope. Product adoption manifests, business contracts, required gates/CI and release authorizations remain intact. No Full E, Push, Ready, Merge or deployment is inferred; `globalClosed=false`. Stop at **Owner Windows Process Ownership & QA Readiness Review**.
+
+**First committed canonical Preflight / bounded correction:** the [first actual automatic execution](../.tmp-qa/windows-process-ownership-20261030/final-automatic-preflight.result.json) on `28a271a3a7fad2874eef85e8422734431fc10032` retains source protection PASS10 and all three selected leaves qualified, but execution is BLOCKED before any root or leaf starts: zero commands executed. The actual CLI projection factory omitted `windowsOwnedProcessCapability` and `spawnWindowsOwnedProcess`; the existing factory now receives those native ports. Its [actual-constructor positive/omitted-port regression](../.tmp-qa/windows-process-ownership-20261030/canonical-native-factory-controls-01.result.json) passes in413.293ms with zero process allocation. Readiness now preserves the original startup-error cause instead of masking it with a secondary no-child error. The original failed execution and evidence remain immutable; this bounded regression does not establish final canonical execution PASS, which remains separately pending.
+
+**Qualified canonical v2 / subsequent bounded build correction:** the [actual second canonical execution](../.tmp-qa/windows-process-ownership-20261030/final-automatic-preflight-v2.result.json) on exact `6a58abdfc8b2341503e21e04af9e05eef56bc234` passes in83.991s: source protection10/PASS with no diagnostics, native readiness/zero-membership PASS722.9ms, and exactly three leaves executed once (Form13/75 in13.236s, Governance4.328s, Infrastructure6.139s). The first BLOCKED receipt is preserved. Subsequent independent review proved build-integrity gaps: compilation used mutable source-path bytes, and reuse could be published before provenance write succeeded. The existing native port now compiles the pinned captured source, checks pinned inputs after compilation and publishes reuse only after verified provenance; controlled actual-body filesystem/compiler failure checks and the one affected native build smoke belong to the phase receipt. C# launch/control/cleanup bytes and Product semantics are unchanged. Reuse of v2 leaf execution is limited to that unchanged scope; these corrections do not themselves establish final-source automatic inspection, final checks or Full E PASS.
+
+**Historical Owner acceptance checkpoint — PARTIAL / readiness BLOCKED:** creation-time native ownership and ordinary/cancelled/timed-out cleanup have actual zero-membership receipts. Abrupt owner death and deliberate last-handle close instead retain creation evidence plus absence of known contained identities; their native terminal/zero-membership receipt is missing, and original root exit remains UNKNOWN. The controls correctly preserve that qualification failure. Kernel handle-close containment is not promoted to a queried-zero receipt; retaining another job handle would change the last-close premise. The Owner's strict complete-lifecycle acceptance therefore remains unresolved, without evidence of an actual surviving foreign or owned process. Full E stays BLOCKED for that acceptance gap. Historical V8/PG/Codex causation and sustained connection/workload capacity remain UNKNOWN. No assertion or admission waiver is introduced; stop at **Owner Final Windows Process Readiness Review**, with `globalClosed=false`.
+
+**Contract-review checkpoint — proof pending:** two evidence kinds are explicit. Ordinary native cleanup retains the existing valid-handle accounting/member-list zero contract. A final Job-handle close cannot support a query after that handle is gone; its distinct safety certificate instead requires native pre-close complete actual membership and process birth times, verified limit0x2000/noninheritability, and helper-only Job-handle ownership. A bounded independent observer holds only target process query/synchronization handles (0x101000), no Job handle, and performs no termination, process discovery or daemon work. All helper/member handles must be live/nonsignaled before READY, then all must signal within one shared at-most6s Stopwatch-and-UTC bound, with every process handle closed on all paths. The same source-built C# executable's fixed `--observe-close` entry provides this read-only native wait primitive as explicit `IndependentObservation` evidence inside the approved capability; no other module, executable, runner, runtime or registry is introduced.
+
+**Receipt separation / required negatives / runtime scope:** missing or corrupt normal-run receipts remain FAIL; an expected-fault containment certificate cannot fabricate queried-zero evidence, original root exit or Product execution PASS. Root exit remains UNKNOWN unless separately observed. Missing/stale/birth-time-mismatched/incomplete target evidence, live or unsignaled targets at deadline, invalid rights/handle ownership, malformed inputs and handle-close failure require negative proof; prior failed receipts remain immutable. Native Windows8+ waits exclude low-power time, so Stopwatch/native and UTC durations plus the bounded awake-window evidence remain separate, with no future Sleep/long-run connection guarantee. Capability admission requires Windows10+ x64; this phase targets the recorded Windows10 Pro10.0.19045 x64/Node24.14.0/V8 13.6.233.17-node.41 context. Availability alone does not qualify untested Windows/Node versions, and the earlier Node22 Linux proof does not qualify this Windows path. At the contract-review checkpoint, new C# source and controls were pending actual verification in the [final acceptance evidence](../.tmp-qa/windows-lifecycle-acceptance-20261030/); no acceptance, Environment Readiness or final-source PASS was claimed by that checkpoint.
+
+**First actual final-acceptance attempt / preserved failure:** [native-closure-acceptance-01](../.tmp-qa/windows-lifecycle-acceptance-20261030/native-closure-acceptance-01.result.json) remains FAIL on its original source hashes. Its first three controls have distinct retained outcomes: owner-death and last-close native certificates PASS for four actual Job members plus the helper/five retained process handles, all closed, in119ms/103ms; the500ms observer-deadline negative correctly returns BLOCKED in506ms. The fourth control fails because its probe required creation denial5, while Windows created an unexecuted suspended candidate. That candidate was safely terminated/signaled and all probe handles closed. No escape is proved; the first candidate's exact private-ancestor membership is UNKNOWN. The aggregate failure is not relabeled PASS.
+
+**Probe-correction checkpoint / partial-progress durability:** [Microsoft nested-job rules](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs) and the [pinned Node24.14.0 libuv job setup](https://github.com/nodejs/node/blob/v24.14.0/deps/uv/src/win/process.c#L65-L114) show why an inner permissive Node Job may permit creation while a private ancestor still forbids leaving its hierarchy. Denial5 is therefore not a universal child-creation invariant. Only the existing probe/test changes: accept denial5, or require a created suspended candidate's PID/birth time in the native exact-private-ancestor checkpoint. An any-Job check is insufficient. A creation-time guard Job inside the same C# capability protects the probe's candidate against unexpected escape or probe crash; that guard is not ancestor proof and introduces no runtime. At this checkpoint new probe verification was pending. The first three controls' native evidence may be reused only across the unchanged owner/observer methods and MTS source, without claiming execution of all changed C# bytes. Their original local JavaScript READY/trigger arrays were lost at the later failure because progress was persisted only on full PASS; the existing verifier now saves partial progress durably. Missing original READY/trigger records remain missing and are not reconstructed. Final acceptance and the ending environment snapshot were pending at that checkpoint.
+
+**Final scoped Windows lifecycle acceptance — PASS / independent Environment Readiness — UNKNOWN:** the [four affected callbacks](../.tmp-qa/windows-lifecycle-acceptance-20261030/native-closure-remaining-four-03.result.json) pass once in4547.1585ms with unchanged execution/input hashes on C#`eaf76080`, NativeMTS`9bcdcd79` and verifier`3be44b9b`. The earlier owner-death/last-close certificates119ms/103ms and correctly BLOCKED500ms-deadline negative506ms are reused only across the proved unchanged methods/source; no fresh aggregate-seven or old29 rerun is claimed. The corrected actual breakaway probe creates an unexecuted suspended candidate and proves that candidate's PID/birth in the exact private ancestor checkpoint, separately from its disposal guard; its original denial5-only failure remains FAIL. Corrupt ordinary native receipts still cause the expected execution/cleanup failure. The22 malformed/stale/incomplete/unbounded certificate negatives are controlled qualification vectors; the actual observer declaration's no-close/deadline/cancellation vector uses mocked child ports with zero OS allocation and does not claim native lifecycle proof or reconstruct missing original READY/trigger events.
+
+**Final affected checks / preservation / limits:** syntax, strict ESLint and TypeScript v4 pass. The [native provenance audit](../.tmp-qa/windows-lifecycle-acceptance-20261030/final-native-provenance-verification.json) passes10 hash checks covering the source snapshot/current C#, executable, compiler, provenance and five Framework inputs. Only [governance-v3](../.tmp-qa/windows-lifecycle-acceptance-20261030/final-governance-v3.result.json) is accepted as current actual source-leaf proof: Executable Governance3226.993ms and Verification Infrastructure5716.2372ms, each root0/helper0 with native queried-zero cleanup PASS and zero remaining registered children. Its erratum preserves v2's incorrect PASS labels over actual root1/MODULE_NOT_FOUND from relative entries/evidence cwd, and v1's missing-signal preallocation rejection; those invocations establish no governance PASS. Automatic source protection retains conservative Full-required/unknown dispositions and zero candidate execution, without a correspondence waiver. The [ending comparison](../.tmp-qa/windows-lifecycle-acceptance-20261030/environment-preservation-after.json) matches all original4containers/5networks/5volumes and Treasury metadata/5433 listener, with QA ports free, unchanged Node/V8/compiler/WSL/Docker/power and no selected sleep/reboot event or query error06:42–07:36UTC. At07:36:59UTC memory is5444MiB available/commit74%/pages-sec3. Protected361/ownership289/closure142/review11 seals and all five retained PG semantic inputs remain unchanged. The07:40UTC read retains PR229 Open/Draft on publishedb771c98c; local acceptance is not remote CI proof. Current tool round-trips are observed; uninterrupted desktop/PG transport, Full E workload capacity and historical V8/PG/Codex initiating causes remain UNKNOWN. This scoped process acceptance does not establish long-run Environment Readiness, run Full E, waive required gates or authorize Push/Ready/Merge/deployment; final committed-source disposition remains in the phase receipt and `globalClosed=false`.
+
+### 27.25 Current — PR 229 contract coverage recovery — 30 October 2026 — bounded correction, Full E held
+
+**Previous to current / actual owners:** the entering local HEAD is `cf544a71f6aa89612109d124edf5127ca0926993`; the earlier [admission rejection](../.tmp-qa/pr229-final-full-e-20261030/current-source-admission-failure.json) remains unchanged. The first 4-to-3 / 22-to-11 / 52-to-39 changes are in `65a3a0e952b6a651b43195b7f3b5a0aec2f8fbf0`. The shared Section contract retained the eleven Form and thirteen Page Block predicates, but its stronger explicit-class/callback/header vectors did not include every original Form input. The existing shared fixture now runs both its stronger profile and the original omitted-class/omitted-callback/div-header profile through the same predicate body. All twenty-two shared assertion sites and five actual-owner mutations remain; no duplicate assertion restores a lexical count. Product owners, callers, canonical compilation ports and adoption manifests are unchanged.
+
+**Confirmed defect / smallest correction:** `localVerificationCommandSteps` had lost recursive own-property validation during the same extraction. An own root wrapper could reach an inherited child command. Every recursive step now requires a valid own string before reading/parsing it, preserving the existing unsupported-to-undefined contract and cycle/shell/newline rejection. Existing `verifyLocalRiskVerificationPlan` gains own/prototype/type/name boundaries and an actual AST assertion-removal counterexample. No PID-based cleanup, lifecycle or Linux branch is changed.
+
+**Admission boundary / unresolved proof contracts:** predicate mapping and a source import are not automatic behavioral equivalence. The existing `qaQuality` count guard and `protectionMaintenance` do not bind imported-helper argument substitution, control/loop context and original vector domains. Their rejection remains active. A count-total substitution, path/commit allowlist, baseline change or receipt waiver is not introduced. The [bounded design review](../.tmp-qa/pr229-contract-coverage-recovery-20261030/assertion-admission-proof-contract-decision.json) identifies the missing proof contract within the current discovery/admission owner. Automatic equivalence acceptance remains BLOCKED rather than inferred.
+
+The four unresolved inputs retain distinct boundaries: `stack.lock.json` is an actual parsed/semantically asserted data input; C# is an actual captured/compiler/native input, with previous native lifecycle evidence retained; neither is a JS import. Positive source-input dataflow binding remains missing. Transport QA has nineteen meaningful cases but lacks a registered execution edge; its source/hash mention is not execution. The operational QA CLI cannot cover itself and still needs actual options/dispatcher guards. None receives invented coverage. Existing conservative Full fallback, executable governance, contract/adoption and assertion integrity gates remain required.
+
+**Evidence / delivery:** the [recovery receipt](../.tmp-qa/pr229-contract-coverage-recovery-20261030/final-recovery-report.json) owns current targeted results, exact hashes/Git identity, preservation and remaining blockers. Pending checks receive no PASS from this text. Prior Windows lifecycle, Admission 19/19, PostgreSQL lease/transport, Alt, failures and public evidence remain valid only within their original input/environment boundaries. No new Product/Browser/hosted persistence, human approval or long-running environment proof is inferred. Full E, new public gate evidence, Pre-Push, Push, new CI and Preview remain NOT RUN while admission is blocked. Required Checks and branch protection remain unchanged; no Treasury operations, global settings, Production writes, Ready, merge or deployment. `globalClosed=false`.
+
+**Observed targeted checkpoint:** the two actual canonical source/SSR profiles pass once (Form6631.041ms, PageBlock6203.1831ms), with unchanged tracked input hashes and native queried-zero cleanup. Syntax for all three changed executable inputs, strict scoped ESLint, TypeScript, Executable Governance and Verification Infrastructure pass. The actual existing planner/source-impact controls pass178 groups after correcting a missing `selectSourceInventory` binding in the evidence caller; the first adapter ReferenceError remains a recorded failed invocation, not a canonical guard correction. The all-consumer Adoption audit did not finish within the caller's180000ms deadline: its original timeout/root exit and native cleanup are retained, so this check is BLOCKED, not PASS and not evidence of a Product failure. No retry follows. These results qualify the bounded corrections only; combined-source automatic admission and release remain blocked, with the final exact commit/inspection/preservation recorded in the recovery receipt.
+
+### 27.26 Current — PR 229 final QA coverage and admission recovery — 30 October 2026
+
+**Previous to current / owners and preserved evidence:** this bounded continuation starts at local `cebe5504a91c760dcfdd9d9c6968524ab650e414`. The earlier ninety-file recovery seal, Automatic Preflight DRIFT, original180s Adoption timeout, Windows lifecycle, PostgreSQL lease/transport and Alt evidence remain unchanged. No Product, schema, Auth, package, workflow, source-graph, Windows Native capability or global setting is changed. Existing `verifySharedChildControls`, release-lock validation, CLI parsing/dispatch and shared Section contract remain the owners; no separate command, runner or registry is added.
+
+**Assertion relocation / actual input contexts:** the shared Section fixture now includes the exact original Page Block profile (preserved/original callback-bearing native input, original-id, omitted eyebrow and Original header), alongside the original Form profile and existing stronger profile. Its original twenty-two assertion sites and five actual-source mutation controls remain. One meaningful additional assertion compares the original Page `createElement(Section, props)` SSR invocation with the direct Form invocation, rather than assuming their rendering context equivalent. The two canonical affected profiles run all three profiles and mutation negatives with current canonical compilation ports; their actual receipts and exact source/dependency identities are in the [final profile result](../.tmp-qa/pr229-final-qa-admission-recovery-20261030/final-form-panel-result.json). These are bounded source/SSR behavior proofs, not Browser, hosted persistence or Owner approval.
+
+**Confirmed admission safety limit:** an [actual current-owner counterexample](../.tmp-qa/pr229-final-qa-admission-recovery-20261030/assertion-count-model-counterexample.json) replaces a meaningful `assert.equal(actual.enabled,true)` with `assert.equal(true,true)` in the same scope/operator/count. Current `qaQuality` reports no decrease although the changed function accepts the invalid input. This demonstrates why imported assertion totals cannot safely authorize relocation. The [relocation boundary](../.tmp-qa/pr229-final-qa-admission-recovery-20261030/assertion-relocation-contract-boundary.json) separates the proved24 predicate mappings/actual vectors from unsupported automatic caller/callee dominance, loader/mutation dependency and finite input/control-context equivalence. The existing conservative rejection remains; no baseline/threshold change, three-path exception, receipt waiver or generic proof interpreter is introduced. Safety of automatic reconciliation is not established, so Full E remains held.
+
+**Four verification inputs / affected maintenance:** the existing verifier adds actual current JSON read/parse/validation and malformed/drift rejection controls; nativeBuild publication/tamper controls use real current C# bytes and bind source snapshot/compiler arguments/provenance; actual CLI options and the full existing dispatcher execute through controlled allocation ports; actual transport and invalid CLI entries execute under the existing owned-child lifecycle. JSON and C# retain their data/compiler-input classification. Loopback transport traffic is distinguished from zero external requests. Their [final input receipt](../.tmp-qa/pr229-final-qa-admission-recovery-20261030/final-input-qualification-result.json) is authoritative for actual outcomes, including any failure. Source graph reachability alone does not confer behavioral PASS, and the current import-only admission graph still lacks these non-import proof edges; no path/hash mention is credited as execution.
+
+**Adoption timeout RCA / one diagnostic:** the [profiled canonical audit](../.tmp-qa/pr229-final-qa-admission-recovery-20261030/adoption-timeout-rca.json) completes once with raw root/helper0, native queried-zero cleanup and unchanged1005 source inputs. Actual output reports source_proof for78 consumers and18 dynamically derived axes. Observed outer203817.4513ms includes unquantified profiler overhead and is not an unprofiled/global benchmark.94.57% of sampled time is the main all-consumer source proof; startup current/negative transport and grouped-negative computations total8.501s and do not explain the main cost. The existing prefix owner already allows1800000ms; only the prior immutable evidence caller imposed180000ms. The diagnostic uses the existing budget, preserving every assertion. No tracked deadline or Adoption optimization is necessary or applied; original timeout remains a separate failed execution and no further Adoption attempt follows.
+
+**Delivery boundary:** the [final recovery report](../.tmp-qa/pr229-final-qa-admission-recovery-20261030/final-qa-admission-report.json) records final source checks, input proof, exact commit/preflight, preserved failures and resource comparison. Pending results are not inferred from this entry. Actual source-only and scoped behavioral PASS remain distinct. Unsupported automatic assertion/input proof remains BLOCKED, long-run transport/capacity and historical V8/PostgreSQL initiating causes remain UNKNOWN. No Full E, fresh public-gate evidence, Pre-Push, Push, new CI/Preview, Ready, merge, deployment, Treasury action or Production write follows while a mandatory blocker remains. `globalClosed=false`.
+
+**Final affected verification checkpoint:** Syntax, strict scoped ESLint, TypeScript, Executable Governance and Verification Infrastructure pass on frozen verifier `bbdc00c3` and shared fixture `6cb240ad`. Both canonical affected profiles pass once (Form3450.3202ms / Page4021.9368ms), all1158 selected source/config and1217 dependency/runtime inputs unchanged, with root/helper0 and native zero-membership cleanup. The actual four-input selection passes once in5886.9884ms; it is a selection of current existing verifier declarations/callbacks, not execution of the unchanged29-case native lifecycle family or Full E. The archived input qualification receipt preserves JSON mutation files, actual parser/dispatcher and native compiler-input controls, transport cases, expected CLI exit1 and every raw/native cleanup record before owned temp removal. The first elevation request was rejected before execution using an obsolete no-tests instruction; the same narrow request was approved after citing this task's explicit current Sections3/6 authorization, with no workaround or scope change. That denial is not counted as a test attempt or rewritten as PASS. The current full admission guard and non-import coverage rejection remain active.
+
+### 27.27 Current — PR 229 approved admission proof recovery — 30 October 2026
+
+**Previous to current / bounded architecture approval:** this continuation enters at `2bdcb0b740659eb126611521a6a58ca6f0ede065`. The Owner explicitly approves a finite Original Predicate → Shared Contract → Actual Consumer → Executed Assertion → Qualified Evidence contract inside the existing source-impact, admission and owned-child owners. The three original assertion buckets, their original inputs and all negative boundaries remain obligations; no count threshold, baseline, path exception or additional runtime/registry/workflow authorizes acceptance. Section27.26's DRIFT, original Adoption timeout, profiled result and prior Full E failures remain historical facts with their original source identities.
+
+**Owners / consumers / proof boundaries:** `deriveLocalVerificationSourceImpact`, `readLocalVerificationInputs`, `inspectLocalVerificationChangeImpact`, `runOwnedVerificationChild` and the existing verifier adapter retain admission and execution ownership. The shared Section fixture and its two actual Form/Page consumers emit optional, bounded native assertion/loader/vector observations only for the owner-supplied invocation nonce. Their normal behavior, existing assertions, source mutations, canonical compilation ports and return/error contracts remain. Finite source projection binds each original predicate, operator, input/control context and actual import/caller/loader to a passed native event. Unknown syntax or incomplete correspondence stays BLOCKED. A live owner invocation seal, full current source manifest, installed dependency bytes, Node/V8/executable identity and original native logs prevent a serialized, altered or stale evidence file from granting admission. Source correspondence and scoped source/SSR behavior remain separate from Browser, hosted persistence, Full E and Owner approval.
+
+**Typed non-import inputs / platform distinction:** the existing verifier observes release-lock read/parse/validation plus actual negative files; C# source/compiler/reference/build provenance; actual CLI parser/dispatcher rejection before allocation; and the owned loopback transport leaf. The public admission owner validates source/dataflow, actual outcomes, original raw exits, artifact bytes and cleanup before granting the four typed edges. Windows requires actual private Job membership from creation and queried-zero cleanup. Linux qualifies its actual process branch and rejection of the unavailable Windows capability; its C# source/compiler-input controls are not Windows native build or lifecycle proof. The original source-guard dependency contract is preserved. Admission's additional package fingerprint utility includes its installed optional/peer inputs with finite file/byte bounds; it executes no new QA engine.
+
+**Deadline / observed development checkpoint:** the existing30-minute quality-prefix budget now also supplies the measured Adoption caller; timer-unsafe, fractional or unbounded child deadlines reject before allocation. One focused execution passes14 actual-declaration controls for the deadline, cancellation, nonzero status, live seal, runtime/dependency closure and corrupt/stale evidence, with unchanged consumed declarations and native queried-zero cleanup. The first preliminary static pass records Syntax5/5 PASS and original ESLint/TypeScript failures in the still-changing semantic proof implementation. A separate preliminary source-only discovery correctly refuses a source manifest changed by concurrent implementation. These failures are retained in the [current evidence directory](../.tmp-qa/pr229-admission-architecture-recovery-20261030/); they do not establish final-source verification. Final predicate/input qualification, unprofiled Adoption, Automatic Preflight and release gates are pending at this checkpoint.
+
+**Preservation / release boundary:** all previous commits and protected evidence remain required, including `.tmp/` and `debug.log`. The current remote read retains PR229 Open/Draft and old CI/Preview success on published`b771c98c`; those results do not qualify this local source. No Product, schema, Auth, migration, canonical command, assertion relaxation, Required Check, branch protection, global setting, Treasury resource or Production write is authorized by this recovery. Full E requires fresh successful Admission, Preflight and environment qualification first. Public evidence, Pre-Push, one authorized push and actual exact-SHA CI/Preview follow only their completed prerequisites. Human Create/Edit Desktop/Mobile/RTL and hosted persistence reviews remain PENDING; Ready, merge and deployment require independent Owner approval. `globalClosed=false`.
+
+**Retained execution checkpoints / evidence completeness:** the second combined invocation runs the actual Form/Page profiles successfully with native zero-membership cleanup, then retains input-entry exit1. Its legacy error suppression leaves the original inner assertion UNKNOWN. The corrected mutation-test selector targets the actual declaration instead of its own string literal; a later input-only invocation passes with durable observations written before validation, fourteen semantic rejection controls and actual Windows provenance/transport/CLI cleanup. Static03 passes Syntax, strict ESLint, TypeScript and the two source guards with1674 selected source inputs unchanged. These are separate scoped results, not an assembled Admission PASS. Actual-envelope adversaries subsequently expose a genuine omission acceptance when a mutant and all its related observations are removed together; that unsafe acceptance remains a failure, requiring completeness derived from the existing helper's literal mutation tuples. The existing CI upload and its exact infrastructure guard now preserve only the source report and two explicitly owned admission/control evidence trees, including hidden paths; broad/private upload rejection remains mandatory. The [final architecture recovery report](../.tmp-qa/pr229-admission-architecture-recovery-20261030/final-architecture-recovery-report.json) records the terminal qualification, exact source identities, preservation and any remaining release blockers; this checkpoint grants no pending result.
+
+**Terminal outcome / mandatory stop:** on frozen selected-source SHA256 `7fba7e77e1427d44e759650375ac0563316fc8a323966b824fbd3e755242c9e3`, Admission05 passes the actual three profiles,25 obligations (24 moved predicates plus recursive command ownership), matched4/22/52 coverage and four typed input edges; its Automatic Preflight passes47 source-protection contracts. Twenty actual-envelope adversarial cases, final Syntax/strict ESLint/TypeScript/Executable Governance, affected Infrastructure controls and scoped Linux Node22 compatibility pass within their recorded source/dependency boundaries. One unprofiled Adoption audit passes in204339.5509ms under the existing1800000ms deadline, with78 consumers,18 dynamic axes and native zero-membership cleanup. These remain scoped results, not Full E or visual approval. A fresh Admission06 on the same frozen source then BLOCKS at19:22:23UTC: the registered transport leaf exits1/signalnull with `QA_TRANSPORT_LISTEN_FAILED` during ordered loopback listener setup127.0.0.1:56165–56168. Its existing catch discards the original OS error and failing port, so those causes remain UNKNOWN; no port-collision, permission, Sleep or V8-crash cause is inferred. The original parent assertion1!=0 and all21 archived control files remain. Both inner and outer native Jobs report queried-zero membership and closed handles; recorded outer helper exit0 does not convert root exit1 into PASS.
+
+**Final readiness / preservation:** the terminal decision is BLOCKED, with no automatic repair or retry following the mandatory failure. Earlier PostgreSQL lease/idle renewal/cancellation evidence passes only its five measured cases. The53.5s synchronous source analysis versus independent60s idle boundary still lacks a measured entry margin; the proposed coupled source/heartbeat probe was NOT RUN because Admission06 failed first. Current tool round-trips, AC power and a bounded awake observation do not prove uninterrupted Application Client or Full E endurance, and historical V8/PostgreSQL initiating causes remain UNKNOWN. All75 planned Full E gates, new public gate evidence, Pre-Push, independent commit, Push, new exact-SHA CI/Preview and hosted Owner reviews are NOT RUN/PENDING. The remote PR remains separately observed Open/Draft on old`b771c98c`; no old CI/Preview result qualifies current local changes. Prior commits, protected files, `.tmp/`, `debug.log`, native evidence and unrelated Treasury resources remain preserved. This terminal documentation append occurs after verification and is recorded separately from the tested source fingerprint; it grants no final-worktree behavioral PASS. See the final report and evidence manifest for exact bytes, failure history and resource limits. `globalClosed=false`; STOP — OWNER FINAL QA & RELEASE REVIEW.
+
+
+### 27.28 Current — QA Foundation Closure01 — 30 October 2026
+
+**Previous to current / scope:** local HEAD2bdcb0b740659eb126611521a6a58ca6f0ede065 enters with the nine preserved admission-recovery modifications. The previous4138-file evidence seal and all prior commits remain immutable. This Owner-approved phase repairs the existing transport setup and its affected admission/error evidence, measures actual source analysis against an isolated upstream-only PostgreSQL connection, and maintains current guards. No Product, Alt, schema/Auth, global setting, parallel QA runtime/registry/workflow, Treasury or Production change is included.
+
+**Owner → contract → consumers:** startHostAccessBridge retains numeric-loopback/exact-service ownership, bounded setup, first-listener/native diagnostics and partial cleanup. Its existing transport QA leaf executes original and new positive/negative/boundary controls. runIsolatedSupabase forwards its current preparation/lifetime cancellation signal, retains only the transport-owned safe cause/diagnostic and preserves the first failure if receipt I/O fails. validateLocalVerificationInputObservations binds the actual registered transport leaf, complete source-derived control obligations and original native/raw artifacts; the existing verifier owns its rejection vectors. Source discovery, lease renewal, cancellation, Admission, execution selection and evidence retain their existing owners. No source-only result becomes behavioral, hosted or human approval.
+
+**Proof / current disposition:** exact observed outcomes, source/runtime/dependency identities, measured setup/source/admission/preflight/evidence/cleanup times, qualified reuse and remaining gaps are owned by the [Foundation01 final report](../.tmp-qa/qa-foundation-closure-01-20261030/final-foundation-report.json) and its raw evidence manifest. The previous generic listen failure retains UNKNOWN original OS errno/port; deliberate occupied-port and simulated-permission controls do not retroactively establish that historical cause. Actual source/PostgreSQL observation distinguishes backend/idle/lease ages, main-thread cancellation delay and public-heartbeat source ordering; it does not claim a Product-free probe executed public gates or establish future endurance. Source changes are frozen before current qualifying execution; earlier original failures remain separately indexed. Applicable capabilities and original vectors remain obligations; unexecuted or unqualified checks remain Pending/Blocked in the report.
+
+**Measured source/PostgreSQL coupling → bounded correction:** the first current upstream-only probe starts with a verified healthy idle backend (~1.5s idle), then actual synchronous analysis takes132218.4285ms (discovery119255.9519ms). The subsequent read fails APPLICATION_CLIENT_DISCONNECTED; the host records idle_timeout as its first observed boundary, and cleanup removes all10owned resources, closes transport and releases all four ports. This proves the current cold-analysis/idle conflict, not the historical initiating cause or which independent timer fired first. Source discovery now remains before allocation through private raw-fact retention in the existing live Admission WeakMap. Exact source/runtime/artifact/explicit-file/delta validation precedes reuse; missing/corrupt/rebound facts fail closed, returned data is cloned, and current request coverage/native descriptors are recomputed. A FinalQuality local-impact request lacking a live qualification rejects before ownership/source work; bounded/default prerequisites are preserved. No failed PG socket is recovered, no suspended client state or parallel cache registry is introduced, and no timeout is increased. The existing Admission controls own the new authority/alias/freshness rejection vectors. Actual post-correction results remain solely in the final report; the original blocked probe and fixture assertion failure are preserved.
+
+**Approval / preservation boundary:** targeted development verification and authorized local logical commit are separate from Full E/Pre-Push. This phase forbids Full E, Push, new CI/Preview, Ready, merge and deployment. PR229 remains Draft on the separately observed old published SHA; its CI/Preview do not qualify local changes. Protected files, .tmp/, debug.log, prior evidence and unrelated resources remain preserved. Human Create/Edit Desktop/Mobile/RTL and hosted persistence reviews remain PENDING. globalClosed=false. STOP — OWNER QA FOUNDATION CLOSURE REVIEW.
+
+### 27.29 Current — QA engineering diagnostics and runtime closure — One-Shot 02
+
+**Previous → current / bounded scope:** this continuation starts at local
+`ff1640d6857b865ce5b1e07643a94f3fb67f8e6b`, preserving all twelve unpublished
+commits and Foundation01's failures and passing scoped evidence. The Owner
+authorizes architecture-preserving diagnostics, measured performance, behavioral
+coverage classification and Linux finalization; Full E and remote release
+actions remain forbidden. Current observed outcomes and frozen identities are
+recorded in the [Engineering02 final report](../.tmp-qa/qa-engineering-completion-02-20261030/final-engineering-report.json).
+
+**Capability → owner → consumer / proved diagnostic gap:** the qualified
+`admin-form-save-cache` fixture already owns its bounded light/deep event ring,
+failure receipt and thirteen controlled shared Form scenarios. A second-save
+dirty DOM mismatch was appended to an aggregate before its page closed; the
+later assertion could therefore lose the first already-proved divergence and
+timeline. The same fixture now retains that first safe scenario/DOM boundary
+and takes the existing ring snapshot only on divergence/failure or explicit
+deep mode. Normal success adds no diagnostic scheduling or awaited capture.
+Original checks, aggregate assertion/order/error, field state and cleanup remain
+owned by the existing fixture and canonical child owner. The safe receipt binds
+component/capability/consumer/contract/runtime and explicitly delegates final
+exit status to the parent. Event order and DOM mismatch do not prove a React
+commit or the causal Product owner; missing evidence remains explicit. Adoption
+is limited to this qualified shared-owner fixture, not all six business editors.
+
+**Performance / runtime ownership:** source-impact semantic/graph/protection
+caches, private live Admission facts, fresh source/runtime/artifact checks and
+conservative fallback retain their existing owners. Unmeasured AST/blob-reading
+opportunities do not authorize new caches or speed claims. The Linux01 outer
+timeout occurred during repeated task-caller identity verification after the
+canonical Transport leaf had completed; no native/process-owner defect follows
+from exit137 alone. Task evidence preparation, execution, finalization and
+cleanup are measured separately. A correction may reuse one freshly measured
+tuple for its adjacent receipt consumers while retaining complete before/after
+source and runtime verification; no general timeout, runtime, engine or workflow
+is changed. Actual Linux/Windows outcomes and matched-input timing limits remain
+in the final report, including original failures and incomplete evidence.
+
+**Behavioral coverage / exceptions:** [QA Section5.1](QA_RELEASE_CLOSURE.md#51-bounded-six-type-content-behavioral-coverage--one-shot-02)
+classifies ten behaviors for the six current content adapters using their actual
+existing tests, assertions and raw fixture evidence. Historical Create/Edit,
+PGlite saves, draft/native tuple checks and Gallery metadata/order retain their
+consumer scopes; changed input closures prevent whole-current-source reuse.
+Synthetic permission actors are not Auth/RLS proof. Current per-type Delete
+receipts and authenticated hosted persistence are unproved. Applicable Alt and
+Caption contracts remain with existing image/Gallery owners; no Alt RCA is
+reopened. Component/source adoption, behavioral coverage, visual presentation
+and Owner approval stay distinct. The phase JSON is evidence, not another
+registry or live Admission authority.
+
+**Delivery / preservation:** targeted Syntax/ESLint/TypeScript, affected
+Governance/Infrastructure, qualified failure capture and Automatic Preflight
+must bind the final source before its authorized local commit. Prior raw
+failures, protected files, `.tmp/`, `debug.log` and Treasury remain preserved.
+CI/Preview on published`b771c98c` does not qualify the new local source. Full E,
+Pre-Push, new-head CI/Preview, public evidence and actual Owner reviews remain
+independent release requirements. No Product, schema, Auth, global setting,
+Production write, Push, Ready, merge or deployment is authorized.
+`globalClosed=false`; human approval remains PENDING.
+
+### 27.30 Current — QA engineering final closure — One-Shot 03
+
+**Previous to current / scope:** starts at `419925762d362504bc9897462fc41f8a899370cf`
+with all thirteen prior local commits and Engineering02's raw failures retained.
+The existing `runOwnedVerificationChild` / `stopChild`, Windows native capability,
+Admission, Automatic Preflight and isolated application owners remain canonical.
+There is no Product, Alt, Auth/schema, package, workflow, global-setting or
+Treasury change. The [Engineering03 final report](../.tmp-qa/qa-engineering-final-closure-03-20261031/final-engineering-closure-report.json)
+owns actual final-source gate results, identities, preservation and release
+disposition; an unexecuted gate remains NOT RUN.
+
+**Proved root cause / bounded correction:** actual held native identities locate
+the additional member at `C:\Windows\System32\conhost.exe`, parented to the Node
+root and inside the exact private Job. In the flags-only comparison,
+`CREATE_NO_WINDOW` to `DETACHED_PROCESS` changes Success/Nonzero Job total from
+two to one and first cleanup snapshot from one to zero, without forced
+termination. The initial pre-cleanup zero assertion is preserved. Separately,
+the original accounting-zero receipt preceded signaling of a known member
+handle; the existing native cleanup loop now requires both zero membership
+and completion of every retained exact-Job member before PASS. Failure-only
+bounded identity/PPID enrichment preserves partial/unavailable observations,
+and all acquired handles close. PPID is never ownership authority. No ordinary
+success polling, new native wrapper or timeout increase is added.
+
+**Verification / adoption boundaries:** the native-correction shared-owner control
+mode passes110 checks, including the twelve native acceptance cases, original
+Success/Nonzero/Timeout/Cancellation, known descendant handle completion, an
+actual zero/one-retained positive and seventeen malformed/omitted ownership
+evidence rejection vectors. Root/helper exits, native receipts, source hashes,
+zero owned children and the earlier failing runs remain separate. Windows-only
+branches leave Linux execution unchanged; qualified earlier Linux evidence is
+reused only for its unchanged consumed scope. Native cleanup success does not
+resolve historical V8/PostgreSQL causation or establish future client endurance.
+
+**Consumer adoption correction:** a subsequent source review proved that the
+long-lived `next start` server still used plain Windows spawn, independently
+of its native-owned test driver. The existing public verification owner now
+adopts the same native capability directly for Public E2E, Admin interactions,
+Admin adoption, media upload and Hero compatibility. Root/helper outcomes,
+unexpected exit, close/log completion and native cleanup stay distinct from
+driver results; the same `stopChild` owns termination. Existing arguments,
+preloads, environments, readiness/driver bounds and Linux direct execution are
+preserved. This bounded consumer correction adds no owner, wrapper, runtime or
+canonical command. The final report must bind its actual targeted adoption
+evidence and renewed source admission. The first Full E attempt remains
+externally interrupted after six closed prefix gates; its seventh gate has no
+qualified terminal result. Separate existing-owner recovery removed ten owned
+resources with zero remaining and preserved the original foreign inventory;
+it does not manufacture the missing original Full E or process receipt.
+
+**Affected diagnostic maintenance:** the second attempt's fresh Admission and
+Automatic Preflight passed on `291ec30e`; six prefix gates passed, then the
+existing connect diagnostic rejected a client-config object solely because its
+expected object omitted the already approved `query_timeout: 30000` policy.
+That expectation predates the bounded-query correction. Its exact comparison
+now requires the field while preserving every earlier assertion and option;
+the connection owner and Product remain unchanged. The original gate exit1,
+native completed/root1/zero-membership evidence, and complete10-resource
+cleanup remain separate from any later run. There is no V8-crash or PostgreSQL
+disconnect classification for this assertion failure. A later source must
+renew Admission and complete its own Full E; earlier partial passes are not
+promoted. Current result and preservation remain in the final report.
+
+**Affected adoption-guard maintenance:** the third attempt on`a574bffc` passed42
+prefix gates, including the complete existing content-editor Browser aggregate,
+then exited1 in the platform-performance command's Admin control-lease verifier.
+Direct unchanged-body controls reproduced an obsolete immediate-await/old-stop
+AST expectation in `verifyAdminMeasurementRestartPolicy` and missing current
+lifecycle ports in `verifyLocalRiskExecutionControls`. The existing verifier is
+the correction owner; native capability and application execution stay intact.
+Its maintained contracts retain the exact driver and fixed Hero prerequisite,
+first-failure-preserving catch, failed-measurement restart refusal, qualified
+native cleanup and Linux shutdown ordering. Projection locals must faithfully
+represent the current owner rather than omit cleanup or suppress its failures.
+Original negatives and cleanup/error assertions remain mandatory. Actual
+targeted results, renewed Admission and any subsequent whole Full E remain
+separate in the final report. The failed third attempt, its native root1/helper
+success/zero-membership receipt and complete10-resource cleanup are preserved;
+no runtime crash, transport outage or Product defect follows from this failure.
+
+**Affected historical-fixture boundary:** before a fourth Full E, the default
+Source/Offline verifier exposed a further controlled-fixture mismatch: its
+nineteen-transform retained-lifecycle scenario inferred the former Async cleanup
+predecessor from the later Native envelope. The unchanged retained-source guard
+correctly rejected that seed. Only the finite fixture may reconstruct the
+historical cleanup shape; the current runtime, retained-source guard, pinned
+production authority and existing negative cases stay unchanged. Substituting
+Native cleanup into that historical candidate must still reject. The default
+consumer's original exit1 and zero-process cleanup are preserved separately
+from targeted corrections and any future Full E. No fourth Full E is inferred
+from this Source/Offline invocation or from earlier partial passes.
+
+**Affected installed-dependency staging:** the fourth Full E on `a292b3d2`
+passed56 gates, then exited1 at Admin Runtime's default Infrastructure footprint
+control. The copied project's dependency junction resolved the actual package
+outside its strict installed-root boundary; that provisioner and predicate
+predate Native application adoption. The unchanged named-control reproduction
+reached its first assertion and retained `unresolved_executable_import_closure`.
+This proves a staging-context conflict; the original CLI's hidden inner error
+remains unavailable. The correction owner is `runOwnedPublicVerification`,
+using Windows private physical same-lock installed bytes with yielding/cancellation,
+bounded preparation, path/link rejection and settled cleanup. The footprint
+owner and actual installed-package-byte mutation stay strict. The exact helper's
+actual24,929-file/652,881,707-byte copy passed in369624.4508ms, followed by the
+unchanged named positive/mutation control. Original dependency bytes, source
+and Git stayed unchanged; the private copy was removed and owned processes
+reached zero. Copy callbacks and their bounded observed gap are distinct from
+actual PostgreSQL continuity. Linux retains its original dependency-linking
+statement; historical Linux transport/process evidence does not establish Linux
+Full E staging. Current final-source checks and any fifth Full E are reported
+separately. Gate57's original
+exit1, native helper success with301 lifetime processes and zero before/after
+cleanup, complete10-resource removal and preserved Treasury metadata remain
+independent facts. Targeted results, any fifth run and final source/CI outcomes
+are recorded separately in the Engineering03 report; no partial run is promoted.
+
+**Affected heartbeat source guard:** a bounded default-tail execution directly
+reproduced the old three-call total rejecting the additional awaited staging
+pulse. Default09's suppressed original inner error remains unknown. The guard
+retains all three original source-site/await-adjacency constraints, separately
+qualifies the private step's checkpoints/pulse/awaited operation, and rejects
+unclassified calls or local shadowing. The runtime lease and scheduling owners
+are unchanged. Scalar counts and exact node-identity predicates avoid rendering
+large AST graphs on rejected variants without relaxing acceptance. Targeted
+guard timings remain separate from system-wide QA performance. Current full
+default acceptance, source protection and release outcomes belong to the report.
+
+**Coverage / approval / release:** the existing sixty-row behavioral matrix in
+QA Section5.1 retains its actual fixture, per-consumer and hosted distinctions.
+Only executed current gates may renew their specific behavior rows; source
+guards do not establish six-type save/readback or Auth/RLS. Per-type Delete and
+hosted persistence gaps remain classified Backlog unless current release impact
+requires them. Owner Create/Edit Desktop/Mobile/RTL functional and visual review
+remains PENDING, with `globalClosed=false`. The current request authorizes Full E
+after fresh qualification and one conditional Push followed by exact-SHA CI and
+Preview; all mandatory gates and preservation still apply. PR229 stays Draft;
+Ready, merge and Production deployment require separate Owner approval.
+
+### 27.31 Current — Combined-source fixture delivery recovery — 31 October 2026
+
+**Previous to current / proven defect:** the Owner resumes the combined source at
+`c80fd87f952aebdd22a77578276b64975c69ed3c`, preserving all nineteen local commits
+and abandoning the proposed Track A/Track B split. Full05's74PASS/1FAIL remains a
+failed complete attempt: its task caller mirrored prepared Admin fixtures under
+`execution`, but `runOwnedPublicVerification` and the Admin Driver consumed the
+constant runtime file. The later ignored caller correction established delivery;
+it was not tracked producer adoption. Its subsequent Build terminated with
+`0xC000013A`; the termination actor remains UNKNOWN and is not reclassified as a
+Product, V8, PostgreSQL or Windows Job defect.
+
+**Existing owner / bounded adoption:** `prepareAdminInteractions` in
+`scripts/lib/isolated-supabase.mts` now persists only `result.fixtures` to the
+owned runtime's `admin-adoption-fixtures.json` before Ready/Return. A private
+helper in that same module performs exclusive first creation, checks the task
+directory and descriptor/path identity, rejects links/multiple links and foreign
+files, verifies previous and returned content hashes, and closes its descriptor.
+Descriptor/path identity uses exact BigInt device/inode and nanosecond birth
+time, without Number rounding; requested private mode is not Windows ACL proof.
+Close failures surface; a simultaneous publication/close failure retains both
+errors, with the original publication failure first and as the aggregate cause.
+These checks qualify private task ownership, not hostile filesystem race immunity.
+The credential envelope is excluded; the existing sanitizer rejects generated
+credentials before allocation. Only basename/hash/size enter the safe receipt.
+Per-run accepted file identity does not introduce another registry or runtime.
+The existing API still permits legitimate changed fixture payloads during later
+preparation: unchanged bytes are not rewritten, while changed bytes update only
+the same verified owned descriptor after checking the previously accepted hash.
+
+**Affected consumers / preserved differences:** the Media Upload CLI now reads
+and compares the producer's file rather than rewriting it. Heavy Editor's
+calibration/reset may repeatedly prepare fixtures; Hero Compatibility and Public
+Read Completeness continue consuming the returned model. Admin Adoption and
+Media Browser drivers receive the same canonical runtime path; the isolated
+Admin readback collector continues reading that file. Account-only Media
+preparation remains an early return without a fixture file. Caller evidence
+mirrors are separate from the canonical handoff. Product consumers, adoption
+manifests, assertions, canonical gate commands and Native process ownership are
+unchanged; this correction develops the existing fixture delivery capability.
+
+**Proof / approval boundary:** implementation is present in tracked source but
+adoption acceptance is BLOCKED by the first bounded verification attempt. Its
+three Syntax checks, strict ESLint, Executable Governance and Verification
+Infrastructure passed. TypeScript exited 2 with nine new errors: eight BigInt
+literal target incompatibilities and one TS7022 verifier annotation error.
+The existing current-infrastructure selector exited 134 after 77 seconds with
+V8 `Committing semi space failed` / heap allocation failure; it emitted no
+completed result, so none of the 34 added controls is claimed PASS. Native Job
+cleanup queried zero active processes without forced termination. Source review
+also found a cyclic-AST identity assertion whose failure formatting can consume
+memory; it is a candidate for correction, not a proved crash site. No second
+repair cycle or rerun was started. The unchanged three executable inputs, raw
+exits and diagnostics are retained under
+`.tmp-qa/combined-source-recovery-20261031/targeted-source-verification-01/`.
+Fresh Admission/Automatic, targeted Build/Admin and Full E were NOT RUN; the
+new Full E allowance remains unused. The correction remains uncommitted for
+review, with the incoming nineteen local commits intact. Source proof is not
+Browser, hosted save/readback, six-type Owner
+Desktop/Mobile/RTL approval, Environment stability, or a successful Full E.
+Fresh final-source Admission/Automatic Preflight and one qualified complete
+75-gate run remain mandatory before any conditional delivery. Historical passes,
+failures, raw-document and evidence-preservation gaps retain their original
+scope. Human Owner reviews remain PENDING; no release step may bypass them.
+`globalClosed=false`. Final execution evidence and release disposition must be
+reported separately on the actual final SHA.
+
+### 27.32 Current — Targeted QA recovery and ordered verification — 31 October 2026
+
+**Previous to current:** the five uncommitted fixture changes at c80fd87f
+remain preserved, together with all nineteen local commits and original raw
+TypeScript exit 2 / V8 exit 134. Eight new BigInt literals were incompatible
+with the unchanged ES2017 target; one inferred values binding required an
+explicit TypeScript property-array annotation. Exact native BigInt device,
+inode and birth-time identity remains required. The AST ownership predicate
+remains strict node identity, but its assertion receives booleans so a failed
+negative cannot format the cyclic AST. This correction does not prove the
+cause or actual site of the earlier V8 allocation failure.
+
+**Existing ownership / affected consumers:** the isolated fixture producer and
+CLI runtime handoff retain Section 27.31's capability and private-file contract.
+The existing public verification owner owns source-floor and dependency order
+for selection, Admission profiles and Public execution, including bare and
+Hero requests. Existing isolated verification controls own the 34 fixture
+cases, bounded AST refusal and source-order failure/cancellation coverage.
+Canonical Full commands, npm lifecycle distinctions, conservative risk
+selection, Required Checks and process ownership remain authoritative.
+There is no parallel runner, guard, registry, Product change or new runtime.
+
+**Conservative qualification boundary:** bare Public, Build Contracts, Media
+Upload Limit and Hero proof CLI consumers, and Heavy Editor before/after
+consumers, currently omit live Admission qualification. They remain blocked for
+fresh qualified execution; an old or serialized receipt does not authorize
+their Build or Browser. This task does not invent a baseline, automatically run
+Admission, or change their canonical commands to bypass that boundary. The
+existing combined-source task caller already passes the live object explicitly.
+
+**Actual proof / STOP:** the single frozen ordered invocation passed all four
+Syntax leaves and strict ESLint, then TypeScript exited 2. The earlier nine
+diagnostics are absent, but two new TS2741 errors remain in the ordering test
+fixture: both controlled ProcessEnv values omit NODE_ENV, required by the
+installed Next ambient type. This is an introduced verification-fixture defect;
+no global TypeScript or runtime setting was changed. The actual sequence stopped
+at that failure: affected Governance/Infrastructure, all 34 Fixture controls,
+the 14 new ordering controls and preparation cancellation proof were NOT RUN.
+Thus AST refusal and the new owner's call-site controls remain unqualified.
+All six launched owned children ended with Native Job cleanup PASS/zero.
+The original V8 exit 134 and its unknown cause remain unchanged; it was not
+rerun or attributed to AST.
+
+Raw exits, source fingerprints and NOT RUN dispositions are retained under
+.tmp-qa/targeted-qa-recovery-20261031/ordered-targeted-verification-01/.
+No second correction or repeat leaf followed the mandatory failure. The six
+changed tracked files remain uncommitted at c80fd87f; all nineteen prior local
+commits remain intact. No Admission, long Build/Admin, Full E, remote CI,
+Preview or release action was executed. A local independent commit still
+requires passing targeted proof; globalClosed=false, with final release and
+human reviews separate.
+
+### 27.33 Current — Final targeted ProcessEnv correction — 31 October 2026
+
+The final bounded correction adds only NODE_ENV: "test" to the two controlled
+ProcessEnv objects at verifier lines 931 and 1015. Their PATH difference,
+credential-filtering input, AST identity predicate, 34 Fixture cases, rejection
+conditions and existing execution order remain unchanged. ES2017, ambient types,
+runtime settings, canonical commands and Required Checks are preserved.
+
+Executable acceptance belongs only to the fresh ordered result and raw exits at
+.tmp-qa/final-targeted-qa-correction-20261031/ordered-targeted-verification-01/:
+Syntax/ESLint/TypeScript must precede AST/Fixture controls, then Governance and
+Infrastructure, then preparation cancellation/cleanup. An early required failure
+prevents dependent stages. The earlier nine-error and two-error TypeScript runs
+and V8 exit 134 retain their original evidence/status; no historical V8 cause
+is inferred from this correction. No new runner, guard or assertion is added.
+
+The original nineteen local commits and six-file worktree are preserved. Only a
+fully passing targeted result permits an independent local commit, bound to the
+same tested executable bytes and source snapshot. Admission, long Build/Admin,
+Full E, CI, Push and release remain outside this task; globalClosed=false.
+
+### 27.34 Current — PostgreSQL transport recovery — 1 November 2026
+
+**Previous → current:** the preserved Targeted attempt on `7b610acf` stopped
+before Build with `APPLICATION_CLIENT_DISCONNECTED`. Its original bridge
+receipt records one `idle_timeout`, and the last successful heartbeat precedes
+the observed PG unexpected end by 61,924ms. The following child was cancelled
+before Resume; its `0xE0000001` exit is a consequence, not the disconnect cause.
+The dependency copy passed with active heartbeats and an earlier healthy lease
+renewal. Aggregate bridge counters do not identify the precise historical socket
+or prove exact CPU timing; those limits remain explicit in
+[the recovery evidence](../.tmp-qa/transport-recovery-20261101-01/audit-causal-chain.json).
+
+**Existing owners and adoption:** `runLocalVerificationSourceFloor` in
+`isolated-public-verification.mts` previously repeated synchronous source checks
+without yielding between syntax units. The live Public caller now supplies its
+existing private `drainControlPulse`; the same source units yield before that
+drain. Source predicates, order, leaf arguments, limits, failure propagation and
+same-live-context reuse remain mandatory. Root Admission and the qualified
+executor have no active PG socket and do not acquire a new heartbeat or timer.
+This is adoption of the existing lifecycle pulse, not a new verification owner.
+
+`observeApplicationClient` in `isolated-supabase.mts` already retained the raw
+Error and cause privately. The old stage/caller projections did not persist its
+safe cause/stack facts. The existing lifecycle now persists a bounded
+`transportDiagnostic` in `failure.json`: fixed codes/message classes, UTC,
+phase, control/scoped identity, a bounded cause chain and symbolic allowlisted
+stack positions. Raw errors, messages, connection strings, paths and credentials
+remain private; `rawErrorRetained=false` stays truthful. Receipt-write failures
+retain the original cause and secondary error without replacing either.
+
+**Affected consumers and verification:** the control observer and renewed/scoped
+clients share the same owner. The existing CLI pulse fixture supplies the added
+diagnostic helper; existing connection diagnostic controls add durable-evidence,
+privacy and boundary cases. The existing ordered-source controls add heartbeat
+yield, failure, cancellation and direct Public adoption proof. Governance and
+Infrastructure, the existing lease/cleanup/transport controls, and bounded live
+read-only PostgreSQL heartbeat/renewal proof remain required in that order.
+Existing package/CI registrations consume these owners unchanged; no Required
+Check, assertion, timeout, transport setting or workflow is relaxed.
+
+Actual results and preserved exits belong to
+[the targeted recovery report](../.tmp-qa/transport-recovery-20261101-01/final-handoff-report.json).
+Historical Admission/Preflight PASS stays valid only for its original inputs;
+it grants no live authority to this modified source. A passing targeted result
+can support the authorized independent local commit. Targeted Admin, Full E,
+remote CI/Preview, all six human content reviews and release closure remain
+separate and unexecuted here. No Alt, Fixture, Windows, Product, migration,
+Auth/permissions, Treasury or global runtime setting change is authorized by
+this correction. `globalClosed=false`; STOP — OWNER TRANSPORT RECOVERY REVIEW.
+
+**Terminal targeted result:** the single ordered invocation passed six Syntax
+leaves, affected strict ESLint, project TypeScript, Executable Governance and
+Verification Infrastructure. It then stopped at the existing
+`--current-infrastructure-only` entry with root exit 1. That entry emitted only
+its existing suppressed-error message and no internal assertion diagnostic;
+the failing internal predicate is UNKNOWN. Connect diagnostics, lease controls,
+transport controls, dedicated cleanup controls and the bounded live PostgreSQL
+proof were NOT RUN. No retry or second correction followed the failure. All
+eleven launched native Jobs queried zero remaining processes and closed their
+handles; no Docker/DB test resources were allocated. The candidate correction
+therefore remains unqualified and uncommitted on `7b610acf`, preserving all
+twenty existing local commits. Only safe final evidence/resource preservation
+and this terminal registry update followed the mandatory stop.
+
+### 27.35 Current — Infrastructure consumer binding recovery — 1 November 2026
+
+**Previous → current:** Section 27.34 retains the original failed invocation.
+The subsequent single authorized diagnostic completed 53 controls and proved
+`ReferenceError: drainControlPulse is not defined` in the first positive
+`verifyLocalRiskExecutionControls` projection, before its result assertions.
+The actual Public ordered-preparation call had adopted the existing private
+pulse, but the existing projected consumer omitted its binding and fixture port.
+This is incomplete verification-consumer adoption, not a Product, Fixture,
+Windows, PostgreSQL configuration, or transport-limit failure.
+
+**Owner correction:** `scripts/verify-isolated-supabase.mts` binds that same port
+in its existing factory and controlled fixture. All existing assertions remain
+intact. The existing current-infrastructure rejection handler now preserves the
+first owned source positions, error kind, assertion operator and bounded safe
+scalar/hash facts; arbitrary messages, stack text and actual/expected strings
+remain private. The original rejection is not replaced. This maintains the
+existing entry rather than introducing a diagnostic engine or runner.
+
+**Preserved adoption and consumers:** the source-floor `drainControlPulse`
+checkpoints and bounded transport cause/stack projection from 27.34 remain in
+their current owners. Existing ordered-floor, local-risk, connection-diagnostic,
+CLI pulse, lease, transport and cleanup controls are the affected consumers.
+Required checks, CI/package registrations, native ownership, transport/lease
+limits, Product, Alt and Fixtures remain unchanged. Historical evidence and all
+twenty commits are preserved; no historical PASS qualifies changed source.
+
+**Qualification:** the current source must pass Syntax, strict ESLint,
+TypeScript, Executable Governance, Verification Infrastructure, current
+infrastructure and transport/error controls before the bounded live read-only
+PG preparation/heartbeat/renewal proof. Cancellation/timeout and cleanup keep
+their existing owners and scoped evidence. Actual results belong to
+[the final recovery handoff](../.tmp-qa/final-infrastructure-transport-recovery-20261101-01/final-handoff-report.json).
+No long Build/Admin, Full E, Push, CI, Vercel, Ready, Merge or deployment is
+authorized here. Commit eligibility depends on all required targeted controls
+passing. Owner review remains pending; `globalClosed=false`.
+
+**Terminal scoped qualification:** the fresh ordered invocation passed all
+fourteen leaves (six Syntax inputs, affected strict ESLint, project TypeScript,
+Executable Governance, Verification Infrastructure, current infrastructure,
+connection diagnostics, control lease and transport). The single live PG proof
+then passed normal/read-only-transaction/active-query behavior, verified-idle
+renewal, 26 synchronous source units totalling 78 seconds, 13 real heartbeat
+samples and due renewal after 241.386 seconds. The maximum measured heartbeat
+gap was 21.831 seconds against the unchanged 60-second idle limit. It used the
+exact current source-floor declaration with controlled downstream leaves; it
+did not rerun Build/Admin or canonical downstream checks.
+
+Active-query cancellation retained its expected native `PREPARATION_CANCELLED`
+result, and the owner cleanup completed with zero owned resources, originals
+unchanged and private environment removed. The final existing cleanup entry
+passed 107 controls. All three qualification invocations exited 0, with no
+automatic retry. Diagnostic/cause/privacy controls use controlled observer
+faults and the actual collector statement with JSON serialization; installed-PG
+EOF/timeout controls cover connection establishment. They do not reconstruct
+historical raw errors or claim a deployed PG outage/disk-failure recovery.
+Only this terminal documentation update followed qualification; runtime inputs
+remain frozen for the authorized independent commit. Release closure and human
+approval remain outside this bounded result. STOP — OWNER TARGETED TRANSPORT REVIEW.
+
+### 27.36 Current — Client diagnostic contract correspondence — 1 November 2026
+
+**Previous → current:** source qualification on `10153fdb` preserved all 47
+existing maintenance predicates, but the newly exported
+`describeOwnedPgClientFailure` had no assertion-level contract reference.
+Behavioral diagnostics passed while source correspondence remained unqualified;
+file reachability alone did not satisfy the existing protection owner.
+
+**Existing owner and consumer:** `isolated-supabase.mts` still owns the helper,
+observer, safe projection and durable collector. The existing
+`verify-isolated-connect-diagnostics.mjs` now imports the actual helper and adds
+one executable frame-equality assertion inside its existing ordinary-stack
+case. It compares candidate-source execution with the real exported owner;
+the original literal frame/privacy/cause/boundary assertions remain intact.
+Candidate-source execution is retained rather than replaced by a canonical
+import. The existing registered `verify:admin-core-closure` and
+`verify:isolated-connect-diagnostics` commands consume this same entry.
+
+**Regression protection:** two bounded negative sources use TypeScript AST
+transforms in the existing diagnostics entry: deleting only the helper must
+fail original extraction, and emptying only its safe-frame projection must fail
+the original observer behavior assertion. Both fail before loopback/client
+connection cases. No production source, guard, registry, harness, assertion
+threshold, transport/lease setting, package registration or CI workflow changes.
+
+Targeted qualification is ordered Syntax, affected ESLint, TypeScript,
+Executable Governance, Verification Infrastructure, real source correspondence,
+error/privacy diagnostics and affected transport controls. Original assertions
+and the previous 47 contract bindings must remain valid. A successful targeted
+commit still requires a new live Admission, Targeted Admin and complete Full E
+for release; no prior receipt grants that authority. Actual results, power
+measurements and the conditional release handoff belong to
+[this task's evidence](../.tmp-qa/correspondence-release-20261101-01/final-handoff-report.json).
+Battery operation is authorized by the Owner; `AC Offline` alone is not a
+canonical rejection condition. Current power/energy/Sleep/resource observations
+and monitored cancellation remain required. Human six-type reviews remain
+separate and pending; `globalClosed=false`.
+
+**Targeted result:** the single ordered invocation passed all ten leaves with
+actual outer exit 0: Syntax (two inputs), strict affected ESLint, project
+TypeScript, Executable Governance, Verification Infrastructure, scoped contract
+correspondence, diagnostics/privacy, control lease and transport. Correspondence
+now protects 48/48 contracts; all previous 47 exact assertion fingerprints remain
+unique. Diagnostics passed 37 cases including both injected contract mutations;
+lease controls passed 95 and transport passed 31. All ten native child receipts
+closed with zero active processes. This scoped result does not claim live
+Admission, Automatic Preflight, Targeted Admin, Full E or human approval.
+
+### 27.37 Existing Git representation / raw-source binding recovery
+
+The previous task-local preparation compared the tested CRLF checkout SHA256
+directly with the LF Git blob SHA256 and stopped before Admission. The original
+failed assertion and evidence remain sealed. This was a cross-domain comparison
+in preparation, not a failure of the 48 protected contracts or transport behavior.
+
+The existing policy is unchanged: `.gitattributes` fixes LF only for SQL
+migrations; this checkout inherits `core.autocrlf=true` and has no root
+`.editorconfig`. QA Section 3.3 keeps the complete source snapshot bound to raw
+file bytes; its canonical-LF effect fingerprints do not replace those hashes.
+Section 3.4 requires explicit input-equivalence accounting. Earlier transport
+recovery already mapped source through `git hash-object --path` and compared the
+mapped identity with index/final blobs while separately retaining the raw SHA.
+
+The fresh copy of the same task-local preparation uses that existing Git mapping
+on the exact tested buffer, then requires mapped blob = index blob = Final HEAD
+blob. It retains independent raw working-tree, immutable blob and raw-evidence
+identities. No source manifest or historical evidence is normalized; no attributes,
+Git configuration, Product, owner API, guard, registry authority or required gate
+is changed. LF/CRLF inputs, actual blob, real mutation, missing/stale input, raw
+evidence mismatch and standalone-CR boundaries are checked at this preparation
+owner. Current source correspondence and ordered targeted results, followed by
+fresh live Admission and conditional release outcomes, are recorded in
+[this task's evidence](../.tmp-qa/line-endings-release-20261101-01/final-handoff-report.md).
+The existing 48 contract bindings and six pending human reviews remain separate;
+no scoped preparation proof establishes Full E or `globalClosed=true`.
+
+### 27.38 Governance Admission — reviewed Infrastructure effect maintenance
+
+The live Admission on `6f521002` passed Syntax, ESLint and TypeScript, then
+stopped before Governance execution at `governanceQualified === true`.
+Current source-bound inspection identifies only Verification Infrastructure as
+selected but unqualified. Form and Executable Governance remain qualified.
+The complete approved/current effect comparison has one changed input: the
+CLI-pulse read-only adopter source gained the existing observer diagnostic port
+in correction `10153fdb`. Runtime, installed dependencies, eager closure,
+producers, generated selectors and every other input remain identical. The
+resulting Infrastructure effect fingerprint was not maintained after that
+approved source correction. This is not a failed Governance execution, borrowed
+receipt, serialization defect or circular Admission dependency.
+
+The existing `qualifyLocalVerificationTargets` owner renews only that reviewed
+Infrastructure fingerprint. Its consumers in `verify-isolated-supabase.mts`
+retain all original assertions and stale/unknown/missing/runtime/cleanup
+rejections; the previous fingerprint becomes an explicit rejected value. The
+existing Infrastructure footprint control binds the actual changed adopter
+input, and existing Admission fixture controls cover selected qualified,
+unqualified, missing, failed and missing-marker Governance paths. No new owner,
+registry authority, harness, profile, command, deadline or required gate exists.
+
+The Admission owner also writes its source-bound eligibility decision and safe
+selection/effect reasons before the source floor. This receipt is explicitly
+eligibility only; the unchanged source-floor exit, marker, source/runtime and
+native-cleanup requirements still precede live authority. A qualifying effect
+with failed execution cannot admit the source. Current ordered verification,
+48-contract correspondence, raw/Git binding and conditional release outcomes
+are retained in [this task's evidence](../.tmp-qa/governance-admission-release-20261101-01/final-handoff-report.md).
+The original failed Admission and historical evidence remain unchanged; six
+human reviews stay pending and `globalClosed=false` until their own conditions.
+
+### 27.39 Control Lease — pending connection error preservation
+
+**Previous → current:** Full E on `21079143` passed 24 gates, then its control
+heartbeat's replacement `pg.Client.connect()` timed out while Gate 25 was
+running. The 5000ms connection budget produced the retained 5010ms observation;
+the child was cancelled afterwards. The operational reason for the stalled
+handshake remains UNKNOWN. Original Admission/Preflight and Targeted Admin5/5
+remain scoped to their original runtime and source; no historical receipt or
+later projection reconstructs the missing failure-time evidence.
+
+**Existing owner and consumers:** the pending-connect catch in
+`scripts/lib/isolated-supabase.mts` previously kept its safe classification,
+elapsed time and bridge counters, but discarded the original pg Error before
+the established-client observer could be attached. That catch now privately
+retains the original Error and reuses `describeOwnedPgClientFailure`, with
+phase `database-connect` and the same bounded elapsed observation. Both cause
+and frozen diagnostic are nonenumerable; existing causes/diagnostics remain
+intact and no self-cause is created. The shared factory's client state stays
+unknown: initial, readiness, scoped and replacement calls are not all labeled
+as established/current control sockets.
+
+The existing `failure.json` collector publishes the safe diagnostic while
+`rawErrorRetained=false` remains the truthful raw-evidence privacy boundary.
+Raw messages, paths, stack text, SQL and credentials are not serialized. The
+generic `asSafeError` policy is unchanged, including application-query privacy.
+Connection classification, capacity/connection/query/lease deadlines, healthy
+return path, fail-closed renewal, cancellation and cleanup remain authoritative.
+There is no new owner, adapter, harness, command, retry or transport setting.
+
+The existing connection diagnostics consumer maintains original assertions and
+adds pending Error/cause/elapsed/privacy/collector and actual-connect lease
+proof. Existing lease and transport controls retain their cancellation/cleanup
+coverage. Canonical package and CI consumers, including Admin Core Closure,
+are unchanged; the first 24 Full E gates and Full E are not rerun here.
+Ordered targeted results, current correspondence, raw/Git binding and final
+resource preservation belong to
+[this recovery evidence](../.tmp-qa/control-lease-recovery-20261101-01/final-handoff-report.md).
+This is diagnostic-gap qualification, not a claimed repair of the historical
+timeout. Six human reviews and release closure remain separate;
+`globalClosed=false`. STOP — OWNER CONTROL LEASE RECOVERY REVIEW.
+
+### 27.40 Consolidated QA Recovery — 2 November 2026
+
+**Previous → current / T1:** the retained Correspondence attempt on the
+`21079143` worktree crossed a directly recorded system Sleep interval from
+06:40:54Z to 07:40:54Z on 1 November, with a hardware-clock resynchronization
+at resume. The suspended host could not execute the existing 30-minute child
+deadline or native watchdog during that interval. The helper's exit5 matches
+the existing watchdog hard-stop path; no source path doubles the deadline.
+The child did start its dependency import path, but its precise later source
+analysis stage and native main-thread/cleanup ordering remain UNKNOWN.
+The missing terminal receipt, root exit UNKNOWN and cleanup FAIL are preserved;
+neither current PID absence nor a later successful control repairs that history.
+
+The existing `runOwnedVerificationChild` collector also discarded a direct,
+cause-less cleanup Error from its safe projection. Its bounded projection now
+retains the cleanup stage, fixed error class, finite code/exit facts and native
+receipt availability without reading arbitrary getters or serializing messages,
+stack text, credentials or raw cause objects. The exact original cleanup Error
+remains private in the rejection's existing cause. Native creation/ownership,
+deadlines, watchdog, cancellation, receipt validation and fail-closed cleanup
+requirements are unchanged. Existing child lifecycle controls cover this
+projection at their real missing-receipt and controlled failure boundaries.
+
+**Dependent scope:** T2 belongs to the existing `qualifyLocalVerificationTargets`
+effect qualification, including exact source/runtime/dependency and command
+bindings for the declared Windows24/Linux22 contexts. No computed hash alone
+is approval and no unknown runtime borrows another context's qualification.
+T3 remains the pending-connect diagnostic candidate in Section27.39; its
+historical PostgreSQL operational initiating cause stays UNKNOWN. No dependent
+package starts before the preceding required qualification succeeds.
+
+Current source identities, ordered positive/negative/boundary outcomes,
+cross-runtime limits, final Git binding and preservation belong to
+[the consolidated recovery handoff](../.tmp-qa/consolidated-qa-recovery-20261102-01/final-handoff-report.md).
+This entry grants no pending result, no Full E, CI or release authority. All
+previous assertions/contracts and the six pending human reviews remain;
+`globalClosed=false`. STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
+
+**Current bounded outcome:** T1 passed its ordered Syntax/ESLint/TypeScript,
+Governance/Infrastructure, 120 owned-child controls, one Correspondence48/48
+execution, and the existing Admission input profile containing the twelve new
+cleanup diagnostic/primary-failure cases. These are scoped current-source
+controls, not a fresh release Admission or Full E. Their terminal Native
+receipts and zero-owned-process cleanup are retained.
+
+The single T2 Linux preparation stopped before either canonical quality leaf:
+`git --version` could not launch (`spawnSync git ENOENT`). The exact safe
+message was recovered by matching its SHA256 to the original failure record;
+no new runtime attempt or calculated fingerprint was accepted. No Linux
+effect was approved and the existing qualifier remains unchanged. The owned
+container was removed, original Docker/Treasury metadata remained unchanged,
+and source preservation passed. T3 and integrated execution remain BLOCKED;
+their candidate source is retained, with no new commit or release action.
+The terminal outcome and later documentation-only source delta are bound in
+the linked recovery handoff. Historical missing-receipt/cleanup gaps remain
+separate and unresolved as historical evidence.
+
+### 27.41 Consolidated QA Final Continuation — 2 November 2026
+
+**Previous → current:** the prior T2 `spawnSync git ENOENT` is now isolated to
+the exact cached `node:22-alpine` image. One actual bounded image diagnostic
+proved that Git is absent from every actual PATH candidate and from the APK
+installed database. Alpine3.24.2 has its musl loader; Node22.23.3's actual
+binary identity is retained. This is a missing executable dependency, not a
+proved PATH or loader defect. T1's qualified code/dependencies and48/48 source
+correspondence remain unchanged and were not rerun.
+
+Git provisioning was attempted only inside an owned container derived from
+that same cached image, with official matching Alpine repository/key/index
+inputs and no host source, Git, credentials, dependencies or Docker socket
+mounted. It stopped before download/install: the task caller required the old
+`--no-network` spelling, while actual APK3.0.8 help documents `--network[=BOOL]`.
+This is a proven task-caller API representation error; it is not evidence that
+APK lacks network-disable capability. The failed input, original safe error,
+four help results and proposed option-only correction are preserved. The
+review correction was not executed and the remaining provisioning paths are
+unqualified. No post-failure provisioning retry was performed.
+
+No derived image or package installation was created. The exact diagnostic
+and provisioning containers were removed, and original Docker/Treasury
+metadata remained unchanged. T2 qualification, its Linux owner/negative
+controls, T3 and Integrated Verification did not begin. Manually reviewed
+Linux effect candidates remain NOT QUALIFIED and were never added to
+`qualifyLocalVerificationTargets`; no tracked QA or Product code changed.
+Two task-only optional metadata reader faults before any container allocation
+are retained separately from the single actual image diagnostic and single
+provisioning attempt. No failed attempt was relabeled PASS.
+
+Current source binding, raw artifacts, preservation and remaining work belong
+to [the final-continuation handoff](../.tmp-qa/consolidated-qa-final-continuation-20261102-01/final-handoff-report.md).
+The five existing modified tracked files and24 local commits are retained,
+with no new commit, CI, Full E or release action. The six human reviews and
+historical PostgreSQL initiating cause remain independent; `globalClosed=false`.
+STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
+
+### 27.42 Autonomous Consolidated QA Recovery — 2 November 2026
+
+**Previous → current / bounded maintenance:** Section27.41's APK3 caller
+spelling was corrected to the executable's documented `--network=no` form.
+The first fetch exposed stale signed indexes with eight official-mirror404s;
+those original errors remain preserved. One explicit signed index refresh
+and offline installation of verified new packages provided real Git2.54.0 in
+an exact-owned derivative of the same cached Alpine/Node22 image. All original
+package versions, Node bytes, trusted keys and original Docker/Treasury
+resources were preserved. Provisioning is dependency preparation, not effect
+qualification; the derived image is task-owned and reversible.
+
+The existing `qualifyLocalVerificationTargets` owns both exact reviewed
+Windows24 and Linux22 effect contexts. Its two source guards retain their
+source/runtime/lock/command binding and original180s limits. Emitted targets
+bind the actual accepted effect fingerprint. Unknown or mixed known contexts
+remain unqualified; partial known/unknown selection retains the original
+per-leaf blocking behavior. Existing selector/actual-footprint controls add
+Linux and mixed-context vectors without removing earlier assertions. Direct
+consumers remain current Infrastructure, Admission and local verification;
+no parallel owner, capability, registry or release approval was introduced.
+
+T1 remains scoped retained PASS only where the exact named executable
+witnesses, Native owner and dependencies are unchanged. Whole-file hashes
+changed by T2 are not presented as a fresh T1 receipt or live Admission.
+T3 remains within `runIsolatedSupabase/connect`: the original pending-connect
+Error stays private in Runtime while bounded stage/elapsed/code/cause facts
+use the existing safe diagnostic projection. Connection5000ms, lease policy,
+retry policy, timeout/cancellation and native cleanup contracts are retained.
+The initiating operational cause of historical Gate25 remains UNKNOWN.
+
+The exact current-source/runtime execution status, positive/negative/boundary
+controls, Correspondence48/48, integrated binding, Native receipts, owned
+cleanup, Git commits and preservation are recorded in
+[the autonomous recovery handoff](../.tmp-qa/autonomous-qa-recovery-20261102-01/final-handoff-report.md).
+This entry grants no qualification from a calculated fingerprint, no new
+live release Admission and no release authority. Historical failed receipts
+remain failed; six human content reviews remain Pending. Product consumers,
+presentation and preserved capabilities are unchanged; `globalClosed=false`.
+STOP — OWNER CONSOLIDATED QA RECOVERY REVIEW.
+
+### 27.43 Gate57 default verifier recovery — 2 November 2026
+
+**Previous → current / owner:** Full E on`193d8b83070f1a2477c589fd5a02cbb2770596fc`
+retains56 PASS, Gate57`verify:admin-runtime` exit1 and18 NOT RUN. Its default
+`verify-isolated-supabase.mts` failure exposed no first assertion. One bounded
+offline reproduction, using the existing physical dependency stager and
+`runOwnedVerificationChild` with the canonical copied-source/Git environment,
+identified`ReferenceError: pendingQualityPrefix is not defined` after81 controls.
+The exception occurred in`verifyFinalQualityGatePlan`'s generated execution
+projection, not in PostgreSQL, Product or the actual scheduler.
+
+The existing verifier now includes the actual pending-prefix declaration and
+keeps completed source-floor lint/typecheck distinct from the pending queue.
+Its complete named ledger still conserves every original canonical prefix and
+Public tail, uniqueness and Hero prerequisite ordering after the source floor.
+Effective missing-binding, duplicated-floor and missing-pending-leaf controls
+protect the correction. Runtime scheduling, deadlines and acceptance gates
+are unchanged. Direct consumers remain Verification Infrastructure, Executable
+Governance and Admin Runtime; no separate guard, runner or registry is added.
+
+The same verifier's existing bounded catch projection now covers its default
+path while retaining exit1 and the original generic failure headline. Default
+control names and string error fields are hashed; raw messages, arbitrary stack
+paths, actual/expected strings and private Cause objects are not emitted.
+Its existing pure control verifies default/current modes, private Cause identity,
+non-Error rejection and projection-failure fallback. The current-infrastructure
+profile's existing proof boundary remains distinct from the complete default path.
+
+Source-bound ordered checks, default/targeted Gate57 outcomes, positive/negative/
+boundary controls, Correspondence/Coverage, Native cleanup, source/Git identity
+and raw preservation belong to [the Gate57 handoff](../.tmp-qa/gate57-recovery-20261102-01/final-handoff-report.md).
+Historical Admission, Targeted Admin5/5 and the56 Full gates retain only their
+original-source scope. No new Full E, Push, CI, Vercel, Ready or merge is granted;
+six human content reviews remain Pending and`globalClosed=false`.
+
+### 27.44 Gate57 consolidated retained-admission fixture recovery — 2 November 2026
+
+**Previous → current / existing owners:** The preceding Gate57 attempt retained
+the pending-prefix correction and safe default failure projection, then stopped
+after715 completed controls at the mandatory live `request.admissionQualification`
+assertion. Its two candidate files and all27 prior commits are preserved.
+The full historical release remains56 PASS /1 FAIL /18 NOT RUN.
+
+The bounded consumer audit identifies stale retained/legacy request fixtures
+and missing invocation/digest bindings in `verifyRetainedFinalQualityAdmissionControls`.
+A rejection caused by absent Admission cannot substitute for the intended
+retained/subset/measurement rejection. The maintained fixture reuses the actual
+qualifier and private invocation state already exercised by
+`verifyAdmissionQualificationControls`, with its existing finite in-memory ports.
+It does not create a WeakMap entry from serialized evidence, make Admission
+optional, alter the Public owner, or grant real Runtime/release authority.
+
+The existing focused retained profile consumes the same qualified controlled
+fixture and preserves positive, negative and boundary assertions before default
+and the Canonical Admin Runtime command. All malformed request cases retain
+valid prerequisite qualification so their own predicate remains observable.
+The completed/pending gate ledger and Hero/Public ordering remain unchanged.
+No Product capability, presentation, guard, runner or registry is introduced.
+
+Actual source/runtime binding and live-object acceptance are separate evidence:
+the task uses the existing real Admission API and current-source inspector in
+one process, and a deliberate ownership sentinel before resource allocation.
+That early boundary does not prove full Public fixture readiness or downstream
+retained/legacy request classification. Controlled tests do not replace it.
+Direct consumers remain Executable Governance, Verification Infrastructure and
+Admin Runtime; CI commands, Required Checks and all owner protections stay intact.
+
+Exact ordered results, fixture audit, proof limits, raw Native receipts, current
+source/commit binding and cleanup belong to
+[the consolidated Gate57 handoff](../.tmp-qa/gate57-consolidated-recovery-20261102-01/final-handoff-report.md).
+The prior sealed failure is immutable and is not reclassified. This entry grants
+no Full E, Push, CI, deployment or merge result; human reviews remain Pending
+and`globalClosed=false`.
+
+### 27.45 Gate57 timing boundary and pre-cleanup Native preservation — 3 November 2026
+
+**Previous → current / bounded findings:** Full E on `d846d9ac` retained56 PASS,
+Gate57 `verify:admin-runtime` TIMEOUT and18 NOT RUN. The unchanged1800000ms
+bound applies to the entire canonical npm composite. Its default verifier
+completed1121 checks and Topics Listing completed53; Feed started only about
+three seconds before termination. The prior repository-root canonical run
+completed in1461734ms; the copied-source Full E child reached1800176ms.
+The first comparable Native checkpoint was already196726.820ms later relative
+to its own Gate57 start. Individual preceding command timestamps and the cause
+of that lag are unavailable. No removable literal leaf duplication, blocking
+cause, Feed defect or performance correction is established. The timeout and
+all original gates/assertions remain unchanged; no historical PASS is reused
+to qualify the failed copied-source run.
+
+**Existing owner / correction:** The two preservation gaps describe one declared
+`owned-process-controls-Np12m0` archive. Its128-file raw snapshot is retained
+but remains unqualified: the late task consumer required a successful Public
+window while `runOwnedPublicVerification` removed the copied source on failure.
+The same Public owner now captures actual settled child results or the original
+error's own `childResult` in private invocation state. Capture is limited to
+declared archive candidates and successful known Windows producer commands;
+unrelated Build/Public/Admin outputs are not retained by this state.
+
+After awaited process/worker closure and before workspace deletion, that owner
+preserves declared archives in its existing run directory and writes
+`public-native-evidence-preservation.json`. Private binding, live Admission,
+source/runtime/lock identity, original child streams and Native receipts precede
+qualification of the copy. Exact physical containment, ordinary unlinked files,
+raw hashes, producer index, file membership and empty directories are checked.
+Inner negative JSON remains opaque. Index rejection can retain raw bytes without
+granting qualification. Preservation failure cannot replace the original child
+error or skip owned cleanup. The receipt grants no Native, gate or live Admission
+PASS, and does not require a successful Public window or a missing gate-summary
+receipt to be reconstructed.
+
+**Consumers / evidence boundary:** The existing isolated verifier's
+`verifyLocalRiskExecutionControls` maintains the actual wrapper/finally projection
+and positive, negative and boundary filesystem controls. Verification
+Infrastructure, Executable Governance, Public execution and future release
+evidence consumers retain their existing ownership. No export, runner, registry,
+cache, timer, retry or Product capability is added. Actual ordered checks,
+Correspondence/Coverage, raw evidence, final source/commit binding and cleanup
+are recorded only in [the scoped recovery handoff](../.tmp-qa/gate57-performance-native-recovery-20261103-01/final-handoff-report.md).
+This entry itself confers no unexecuted result. Historical archive qualification
+cannot be invented retrospectively. Performance cause and release readiness
+remain unresolved; six human reviews remain Pending and`globalClosed=false`.
+
+### 27.46 Gate57 command-boundary timing resolution — 3 November 2026
+
+**Previous → current / measured limits:** The qualified Native preservation
+correction at `3a895cfd` retains494 targeted cases,48 protected correspondences
+and4/22/52 assertion coverage within its recorded scope. Historical Full E stays
+56 PASS / Gate57 TIMEOUT /18 NOT RUN. The1800000ms composite deadline and every
+canonical command/assertion remain unchanged. Existing logs add npm-instance
+initialization checkpoints for the final11 visible commands, not exact process
+lifetimes. The earlier29-heading ledger omitted the two actual `qa:` headers;
+the bound package graph and both raw streams contain31 npm invocations. This is
+an accounting correction, not execution drift or a changed gate count.
+
+**Existing execution owner / bounded measurement:** `runOwnedVerificationChild`
+owns the canonical Gate57 child and its existing stdout/stderr handlers, Native
+lifecycle and cleanup. Gate57-only timing uses child-local npm settings and an
+owned evidence directory. It preserves raw npm timing records and independently
+observes source-bound start banners and completion messages. UTC/monotonic
+receipt observations are delivery boundaries; npm durations use its own wall
+clock. Neither is an exact nested OS process lifetime or CPU/IO measurement.
+Nesting is derived from the existing literal command graph; inclusive parent
+and child durations are not summed. Missing, ambiguous, interrupted or clock-
+inconsistent observations remain explicit PARTIAL/UNKNOWN. Timing records do
+not grant Gate, Native, Admission or release PASS and do not replace the actual
+exit or cleanup. No wrapper, Node hook, new runner, watchdog, cache or global
+configuration is introduced.
+
+**Consumers / proof boundary:** Public Gate57 and a separately authorized
+single targeted diagnostic consume the same child owner. Existing isolated
+verifier controls maintain source/runtime/command/evidence binding, positive,
+negative and boundary cases, timeout/cancellation, raw-error preservation and
+cleanup. Controlled npm fixtures do not qualify the canonical product source
+or prove a performance cause. Own observation/collection costs and remaining
+precision limits belong to the evidence, without an invented clock tolerance.
+
+Actual ordered verification, raw timing tables, source/commit binding, any
+single diagnostic result and the engineering decision are recorded only in
+[the timing-resolution handoff](../.tmp-qa/gate57-timing-resolution-20261103-01/final-handoff-report.md).
+This entry grants no unexecuted outcome. Native Archive still requires live
+release qualification; performance cause and deadline sufficiency remain
+unresolved until the recorded evidence proves them. No Full E, Push or CI is
+performed in this task; human reviews remain Pending and`globalClosed=false`.
+
+### 27.47 PR #229 release freeze and QA stabilization decision — 3 November 2026
+
+**Previous → current:** Section27.46 describes an uncommitted timing delta,
+not a qualified baseline. Its existing control failed with `Missing expected
+exception`: the fixture placed its sentinel in `package.version`, which is not
+published raw in the receipt. This is a fixture expectation failure, not proved
+Product privacy failure. No timing commit or long diagnostic exists. The three
+entering changed files are preserved byte-for-byte, together with a verified
+Git bundle of all29 local commits, in the release checkpoint below. The working
+delta remains frozen; it was neither adopted as qualified nor reverted to evade
+its failure. No Product, execution code, assertion, timeout or CI change was
+made by this review.
+
+**Gate57 decision / existing owner:** Existing evidence does not establish a
+specific larger completion bound. Standalone1461734ms and copied-source Full E
+timeout1800176ms have different execution contexts; the latter is incomplete.
+Default1121 and the final Feed start prove progress, not remaining duration or
+the cause of slowdown. Corrected accounting contains31 npm invocations, including
+the two `qa:` headings; earlier29-heading reports remain historical. The current
+`localVerificationQualityPrefixDeadlineMs` owner returns1800000ms and supplies
+the source floor and every quality-prefix row. Exact-budget and finite-bound
+assertions protect that contract. A scalar increase would affect all those
+consumers. No numeric increase is proposed as evidence-derived, and no new Full E
+or retry was run. Any future mandatory budget revision requires the Owner's
+documented decision and affected existing controls, without weakening assertions.
+
+**Qualified evidence / open gaps:** `d846d9ac` retains focused372, standalone
+default1121 and canonical Gate57 PASS within its recorded source binding.
+`3a895cfd` retains Native preservation controls494, correspondence48/48 and
+assertion coverage4/22/52; live Public archive preservation remains unverified.
+The latest completed release attempt on `d846d9ac` retains live Admission and
+Automatic Preflight PASS, Targeted Admin5/5, then56 PASS / Gate57 TIMEOUT /
+18 NOT_RUN. None is a new release PASS for the dirty working tree. All six
+Article/News/Press/Site Update/Video/Gallery Owner reviews remain Pending.
+
+**Remote reality / closure:** Live GitHub readback retains PR229 Draft at
+`b771c98c`, with8/8 CI jobs PASS and the Git-bound Vercel Preview READY on that
+remote SHA only. Local HEAD stays `3a895cfd`,29 commits ahead; local main,
+origin/main and remote main agree at `a29a9a89`. Five strict branch-protection
+contexts and administrator enforcement are unchanged. No Push, Ready, Merge,
+Production deployment or smoke was performed. Treasury was inspected read-only;
+no application resource was created, stopped or mutated by this review.
+
+**Stabilization / approval:** The bounded review separates the proved Alt
+Product correction, QA infrastructure corrections and QA fixture/projection
+failures. It proposes applying existing risk/evidence-reuse rules, at most two
+corrections per proved cause, and no recursive QA expansion. Optional timing and
+performance tooling is frozen. This is an operating proposal for Owner review,
+not an amendment to the Constitution or QA contract. Current batch remains E;
+future proven bounded A/B batches retain their existing smaller release profile.
+No protection is removed. The smallest next evidence path and its limits, the
+six-type review package, costs and all release blockers are recorded in the
+[two-part release and stabilization report](../.tmp-qa/pr229-release-closure-20261103-01/final-report.md).
+
+**STOP — Owner Release & QA Stabilization Review. `globalClosed=false`.**
+
+### 27.48 PR #229 bounded Gate57 recovery — 3 November 2026
+
+**Previous → current / authorized delta:** The Owner approved bounded recovery
+from `3a895cfd`, preserving all29 commits, the uncommitted timing work and prior
+evidence. The failed credential-publication fixture placed its sentinel in
+`package.version`, which is retained only through package/stream hashes. The
+one-line correction uses a valid literal Node command containing the sentinel;
+the existing command parser projects it into `receipt.source.nodeLeaves`.
+The same Runtime observer, Consumer projection, sanitizer, rejection assertion
+and no-publication assertion remain unchanged. This is correction1 for the
+proved fixture-input cause, not a Product privacy or performance correction.
+
+**Owner / consumers / protection:** The owner remains
+`runOwnedVerificationChild`; its existing isolated-verifier controls cover the
+affected Producer → Runtime → Consumer → Receipt path and positive/negative
+boundaries, including actual short npm execution, cancellation and timeout.
+The existing source-floor/Admission and local-risk qualification commands own
+the checks. No new runner, engine, registry, metric or capability is introduced.
+The shared1800000ms deadline and its controls are unchanged. No Product, Auth,
+Schema, Production or Treasury mutation belongs to this scope.
+
+**Policy / execution boundary:** The approved operational rules are maintained
+in QA_RELEASE_CLOSURE Section3.2.2, their existing owner. Current batch remains E;
+optional measurement/performance expansion is frozen. One existing Gate57
+diagnostic may run only after current-source and environment qualification,
+with the unchanged30-minute child limit. Its result cannot grant release or
+live Public archive qualification. An UNKNOWN cause stops this bounded path;
+any new mandatory budget decision or more than two corrections per proved
+cause requires Owner authority. Six human reviews remain Pending.
+
+Actual attempts, timings, source binding and disposition are retained under
+`.tmp-qa/pr229-gate57-recovery-20261103-01/`; this entry grants no unexecuted PASS.
+The single authorized diagnostic completed with a verifier assertion failure,
+not a timeout. Its first failure proves a separate historical-source fixture
+drift: the async-correction seed retained three later Native archive-preservation
+statements. Correction1 for this cause asserts each exact current statement
+and excludes it only from that historical seed. The live archive owner, all19
+transformation rules, unique-match assertions and after-only negative control
+are preserved. The existing retained-final-quality selector owns validation;
+the diagnostic is not repeated. This cause does not explain the earlier Full E
+timeout, whose cause remains UNKNOWN.
+
+**Observed verification / evidence validity:** The first ordered qualification
+passed in516286ms overall, including536 local-risk/timing controls in85571ms,
+actual npm positive/timeout/cancellation paths and cleanup with zero live
+children. The corrected historical fixture passed372 retained-final-quality
+controls in51665ms, including real workers and source-rejection cases; its
+fresh ordered qualification passed in484591ms overall. Both qualifications
+passed source Syntax, ESLint, TypeScript, Governance/Infrastructure guards,
+current Admission inputs and48/48 automatic correspondence. The second tested
+source manifest is `0d1ecc9fbf020813449ec4102dc0c206f4c12b9659909a1a396705ea94f7e6e9`
+at base HEAD `3a895cfd`. Only the retained-worker fixture declaration changed
+between the two qualified executable sources; the timing owner, controls,
+fixtures, package graph and other executable inputs remain equal. The timing
+controls were therefore not rerun. These are scoped development results; final
+Registry evidence text is a later documentation delta and no current release
+Admission or old-SHA behavioral PASS is inferred from it.
+
+**Single diagnostic / release decision:** The one diagnostic child exited1
+after558446ms (887897ms including preparation/preservation); the unchanged
+1800000ms limit was not reached. It stopped after841 verifier controls at the
+proved historical fixture mismatch. Timing remains PARTIAL_DIAGNOSTIC_ONLY:
+11 matched npm starts/ends and20 unstarted branches. All1777 raw evidence files
+and694 directories were preserved and independently checked against their
+manifests; Native cleanup observed365 processes and zero live/residual children.
+No second Gate57 attempt or Full E was run. Gate57 and the release path remain
+BLOCKED: the earlier latency cause is still UNKNOWN, the authorized diagnostic
+attempt is consumed, and the corrected source has no complete Gate57/Full E
+result. A further bounded diagnostic needs renewed Owner authorization; no
+larger deadline is evidence-derived. Live Public archive qualification,
+Targeted Admin, Full E75/75, exact-final-SHA CI/Preview and all six Owner reviews
+remain release prerequisites. No Push, Ready, Merge or Production action is
+authorized by these scoped passes. This QA/docs delta has no Product/UI change;
+its local development evidence does not grant the pending Product reviews.
+The original fixture failure and all earlier release/Native evidence remain
+historical with their original status. `globalClosed=false`.
+
+### 27.49 PR #229 Heartbeat and Native archive integration — 3 November 2026
+
+**Previous → current / proved scope:** At `aaa4cd6c`, the final authorized
+Gate57 diagnostic stopped after1062 controls at the source heartbeat guard's
+three-call assumption. Its recursive AST traversal also included the Native
+archive source check introduced by `3a895cfd`. The three execution checks still
+had their original awaited drains. The fourth check protects source binding
+before preservation and cannot be deleted. The archive body was synchronous
+but could begin while an existing heartbeat renewal remained pending; the old
+archive fixture's counter/no-op ports did not establish this integration.
+
+**Existing owners / correction1:** `runOwnedPublicVerification` retains the
+fourth source check and adds one passive pulse drain at archive entry. The
+existing Lifecycle callback accepts the private `archive-preservation` phase,
+awaits the same pulse, and defers any recorded heartbeat failure to its
+unchanged outer result boundary. Execution drains still throw that failure.
+No new query, connection, timer, retry, lease, runner or owner is introduced.
+After the archive entry drain, validation and copying remain synchronous.
+Cancellation does not bypass preservation; closed-child identity, live
+Admission, source/runtime/lock binding, raw-file validation and preservation-only
+receipts remain mandatory. Public failures retain priority over archive/cleanup
+failures inside the Public owner; the existing outer lifecycle's heartbeat
+priority remains unchanged.
+
+**Affected consumers / protection:** The existing
+`verifyPublicSourceHeartbeatBoundary` classifies the three execution checks and
+the one archive check structurally, preserving original adjacency, staging,
+shadowing and negative controls. Its bounded scheduling controls and
+`verifyLocalRiskExecutionControls` own the affected positive/negative integration
+proof. Source-floor, Governance/Infrastructure and CI consumers continue to
+reach these same owners; command registration and CI workflows are unchanged.
+No Product, presentation, Auth/RLS, Schema or Treasury behavior is changed.
+
+**Evidence / delivery boundary:** Current task receipts are retained under
+`.tmp-qa/pr229-gate57-heartbeat-archive-20261103-01/`; qualified host snapshots
+are under `.tmp-qa/pr229-gate57-heartbeat-archive-host-20261103-01/`.
+The final executable source passed affected Syntax, strict ESLint, TypeScript
+(19859ms), Governance source (3839ms), Infrastructure source (7104ms),
+`--admin-control-lease-only`100 controls (7050ms), and
+`--local-risk-verification-only`547 controls (76296ms). The latter retains all27
+archive rejection controls and adds11 lifecycle/archive integration cases,
+including the exact lifecycle cancellation signal, source failure, original
+timeout/cancel errors and secondary archive/cleanup failures. Native cleanup
+reported zero live/residual processes, including233 observed processes in the
+local-risk invocation. The first ESLint rejection of a new fixture's `this`
+alias is retained; its constructor factory was corrected without changing
+runtime or assertions. Final verifier ESLint passed in9557ms; the unchanged
+runtime files retain their successful affected ESLint result from13086ms.
+The bounded heartbeat model reproduces source reads during pending renewal
+when only the new archive drain is removed; this is not a live DB failure or
+the historical Gate57 timing diagnosis. Final source, raw evidence and host
+preservation receipts are recorded beside these results.
+Historical evidence remains historical; no older SHA is claimed as
+current execution. This approved task ends at qualified local commit and
+does not authorize Gate57 retry, Full E, Push, Ready, Merge or Production.
+Batch risk remains E. Live Public archive qualification, complete Gate57,
+performance closure, Full E75/75 and subsequent release reviews remain open.
+`globalClosed=false`.
+
+### 27.50 PR #229 Gate57 scoped deadline decision — 3 November 2026
+
+**Previous → current / measured boundary:** The qualified diagnostic on
+`350a607d` retained the 1800000ms limit and ended in Native TIMEOUT after
+1800098ms (1801569.190ms including its child owner). Its 31 planned npm
+invocations contain 23 direct root branches; 22 completed before the final
+Feed branch. The Feed banner arrived with about 6330ms nominal JS budget left.
+Raw evidence preservation and cleanup passed with zero live/residual children.
+This establishes the observed deadline termination, not a CPU, I/O or historical
+slowdown diagnosis. The original partial timing, BLOCKED status and all earlier
+failures remain preserved in the
+[30-minute diagnostic evidence](../.tmp-qa/pr229-fast-final-release-20261103-01/diagnostic/).
+
+The separately authorized single `npm run verify:feed-module-contract-integrity`
+measurement on the same source/runtime passed: Native 16703ms and child
+owner 17393.562ms, with eight observed processes, no forced termination and zero
+live/residual children. Its source/dependency staging matched the preceding
+diagnostic. It had no preceding Gate57 warm-up or inherited Gate57 npm timing
+flags, so comparable isolated inputs do not establish identical timing
+conditions. Its [measurement evidence](../.tmp-qa/pr229-feed-measurement-20261103-01/diagnostic/)
+is an isolated Feed PASS, not Gate57 or release PASS.
+
+**Approved decision / existing owner:** Native prefix plus isolated Feed gives
+1809950.127ms; the more conservative banner-prefix plus child-owner accounting
+gives 1811063.157ms (30:11.063). These reconstructed estimates do not sum nested
+inclusive command durations and are not measured full Gate57 completion bounds.
+The explicitly chosen operational reserve is 20% (362212.631ms), producing
+36:13.276 before rounding up to 37 minutes (2220000ms). The reserve is not a
+measured percentile or worst-case guarantee; scheduling, caches, inherited
+timing settings and outer-command finalization remain sources of variation.
+The Owner approved this 37-minute Gate57-only budget and one attempt, followed
+by Full E75/75 if Gate57 passes and the existing release prerequisites qualify.
+
+The approved change belongs only to the exact `verify:admin-runtime` script
+selection inside `runOwnedPublicVerification`. The shared
+`localVerificationQualityPrefixDeadlineMs` remains 1800000ms for source-floor
+ESLint/TypeScript, Adoption and every other quality-prefix consumer. The actual
+quality execution still passes its selected budget to the existing child owner,
+Native deadline, JS deadline and timing receipt. Cancellation, finite timer-safe
+validation, original error priority, Native archive preservation and cleanup
+remain mandatory. No runner, engine, registry, measurement layer, Product,
+Auth/RLS, Schema, Production or Treasury change is authorized.
+
+**Affected protection / pending proof:** Existing `verifyFinalQualityGatePlan`,
+`verifyAdoptionDeadlineControls`, `verifyLocalRiskExecutionControls` and
+`verifySharedChildControls` own the affected projection, exact-script budget,
+default-budget, timeout/cancellation, error and archive contracts. Maintain
+their assertions and negative cases at those owners; direct quality execution,
+source-floor consumers, command registration and CI workflows remain intact.
+The current recovery evidence is to be retained under
+`.tmp-qa/pr229-gate57-final-recovery-20261103-01/`. At this decision checkpoint,
+the new source, affected controls, single 37-minute Gate57 attempt and Full E
+result are Pending; this entry grants none of them a PASS. Older results retain
+their original source/input bindings and cannot qualify a changed source.
+
+**Delivery boundary:** Current batch remains E. A new Full E75/75 requires the
+actual Gate57 PASS and existing final-source/environment Admission, Preflight
+and Targeted Admin prerequisites. There is no automatic second attempt or
+further deadline increase. Push, Ready, Merge and Production are not authorized
+in this stage; exact-final-SHA CI/Preview and the six Article/News/Press/Site
+Update/Video/Gallery Owner reviews remain separate release conditions.
+The operational policy remains QA_RELEASE_CLOSURE Section3.2.2, with no parallel
+policy or reduced protection. `globalClosed=false`.
+
+**Subsequent scoped operational authorization — 3 November 2026:** The Owner
+authorized the nondefault `pr229-20261103-double-operational` option for this
+PR #229 batch only. Fresh live qualification carries the explicit selection;
+serialized evidence cannot grant execution authority. The existing source-floor,
+Admission-profile and Public prefix/tail owners double their external execution
+budgets, giving the current batch 60-minute default prefixes and 74-minute Gate57.
+Their default 30/37-minute contracts remain unchanged. The task-local host
+snapshot query alone changes from 20 to 40 seconds. Internal readiness,
+heartbeat, cancellation, cleanup, preparation and dependency checkpoints remain
+unchanged, with no global environment switch or new QA owner.
+
+This later authorization supersedes the preceding attempt budget only and
+preserves its evidence/history. Affected protection at the existing owners must
+cover the explicit selection, unchanged defaults and rejected invalid scope;
+fresh Final Source/environment qualification and runtime results are Pending.
+The current E batch permits one Gate57 attempt followed by Full E75/75 through
+the existing Admission, Preflight and Targeted Admin prerequisites. No automatic
+retry, Push, Ready, Merge or Production is authorized; all six Owner reviews
+remain required and `globalClosed=false`.
+
+**Timeout ownership correction after `f26844ed` — 3 November 2026:** Fresh
+Admission and Automatic Preflight passed on that source. Gate57 did not execute:
+the task caller supplied the 139440000ms coordinator aggregate ceiling as the
+diagnostic child limit, beyond the existing Native maximum of 86400000ms.
+Historical cleanup remains FAIL; its original failure and receipts under
+`.tmp-qa/pr229-temporary-budget-release-20261103-01/` are not rewritten by this
+correction or a later result.
+
+The approved existing caller in
+`.tmp-qa/pr229-timeout-ownership-release-20261103-01/` separates
+`diagnosticWrapperDeadlineMs=7200000` (120 minutes) from the unchanged
+139440000ms coordinator-only aggregate ceiling. The wrapper allowance comprises
+74 minutes for Gate57, the existing 10-minute dependency preparation limit and
+36 minutes of explicit operational margin; it is not measured WCET. The
+existing Native process owner strengthens child-limit prevalidation while
+preserving its maximum, generic limits and internal readiness, heartbeat,
+cancellation, cleanup, preparation and dependency checkpoints. No new runner
+or QA owner is introduced.
+
+**Affected verification:** Existing `--owned-child-controls-only` passed 172
+controls in 57727.037ms, including 12 Windows Native acceptance cases and
+timeout/cancellation/cleanup receipts. Outer Native accounting observed 231
+processes, zero live processes and zero residual processes. The actual caller
+validation projection accepted 7200000ms and rejected eight invalid values,
+including 139440000ms; its two direct child ports use 600000ms and
+`diagnosticWrapperDeadlineMs`, while the aggregate remains watchdog-only.
+Evidence: [affected-check result](../.tmp-qa/pr229-timeout-ownership-release-20261103-01/affected-child-checks/result.json)
+and [caller binding proof](../.tmp-qa/pr229-timeout-ownership-release-20261103-01/caller-budget-binding-proof.json).
+Fresh live Admission, Gate57 and Full E on the corrected Final Source remain
+Pending. Earlier Admission/Preflight PASS cannot qualify that changed source.
+Current risk remains E: one Gate57
+attempt precedes Full E75/75 through the existing release prerequisites; all six
+Owner reviews remain required. Push, Ready, Merge and Production remain
+unauthorized, and `globalClosed=false`.
+
+The subsequent Admission on `5d9f18ad` stopped before Gate57 at TypeScript:
+the new controlled deadline test used an environment without required
+`NODE_ENV`. The single fixture correction adds literal `NODE_ENV: "test"`.
+All ten affected deadline vectors and TypeScript (24528ms) pass; the Native
+owner, previously qualified 172 process controls, lifecycle assertions and
+cleanup limits are unchanged. That failed Admission retains its original
+receipts and successful cleanup. Current continuation evidence is retained in
+`.tmp-qa/pr229-timeout-ownership-release-20261103-02/`; fresh live Admission,
+Gate57 and Full E remain Pending until their actual terminal receipts qualify.
+
+
+### 27.51 PR #229 bounded control stability qualification — 4 November 2026
+
+**Baseline and retained evidence:** The Owner accepted source
+`a3c778b024162d9ddc55de9a0773cc545ac2eee1`. The prior run under
+`.tmp-qa/pr229-timeout-ownership-release-20261103-02/` retains Gate57 diagnostic
+PASS (36m22.211s), Targeted Admin5/5 PASS, Full E2/75 followed by
+`APPLICATION_CLIENT_DISCONNECTED`, and completed cleanup. Public preservation
+for that interrupted Full E remains BLOCKED/MISSING_RAW. The observed78.322s
+heartbeat gap and one aggregate bridge `idle_timeout` do not establish the
+historical socket cause or a causal connection between those observations.
+
+**Current owners and scope:** The existing
+`isolated-supabase.mts` client observer/control lease/Public heartbeat lifecycle,
+`isolated-public-verification.mts` source/archive/child consumer, and
+`isolated-supabase-transport.mjs` Bridge remain byte-identical to the retained
+source. The existing `verifyPublicSourceHeartbeatBoundary` fixture adds three
+controlled integration cases for delayed real-event-loop dispatch, pending lease
+serialization, failure identity/cancellation and passive archive preservation.
+All2986 previous assertion call expressions remain in order;22 assertions are
+additive. No runtime correction, retry, timeout, lease, cadence, Product, Auth,
+Schema, migration or workflow change is made. No new QA runner/engine/registry
+is introduced. The passive drain and synchronous source/archive contract remain
+intact; the timer scheduling observation is a limitation, not an incident RCA.
+
+**Affected consumers:** The existing `--admin-control-lease-only` selection and
+`verify:platform-performance`, plus the general verifier reached by
+`verify:verification-infrastructure`/`verify:executable-governance` and the
+canonical release chain. Existing CI invokes the same verifier and requires
+future Exact-HEAD proof; this task does not alter or start CI. Manifest/adoption
+contracts and Product presentation are unchanged; Owner visual review is not
+established or replaced by this fixture proof.
+
+**Live qualification boundary:** A byte-identical copy of the existing task
+connection caller was prepared in
+`.tmp-qa/pr229-control-stability-20261104-01/`. Its sandbox port query first
+failed with CIM access denied, before any test or database allocation. Native
+access then reached the same existing `portSnapshot` command, which exceeded
+its unchanged20000ms deadline (`spawnSync powershell.exe ETIMEDOUT`). The
+live connection test was NOT RUN; this independent preallocation failure is
+retained, not retried or repaired speculatively. No PostgreSQL/Supabase resource
+or Product fixture was allocated. The existing temporary awake helper acquired
+and restored its prior execution state on the same native thread, exit0, with
+no power-plan change. Treasury was not modified.
+
+**Current targeted result:** Eight ordered checks PASS: Syntax, strict ESLint,
+TypeScript, executable governance, control lease103 cases, Bridge31 cases,
+disconnect diagnostics41 cases and cleanup contracts. The three added cases
+passed. All eight Native Jobs completed and cleaned up:11 observed processes,
+zero live/residual processes and zero remaining children. This proves the
+controlled integration only; it does not establish a live PostgreSQL pass.
+
+**Evidence and release decision:** See
+[bounded qualification report](../.tmp-qa/pr229-control-stability-20261104-01/report.json),
+[source/assertion preservation](../.tmp-qa/pr229-control-stability-20261104-01/source-preservation.json),
+[targeted verification](../.tmp-qa/pr229-control-stability-20261104-01/targeted-checks/result.json),
+[preallocation timeout](../.tmp-qa/pr229-control-stability-20261104-01/preallocation-timeout.json)
+and [awake restoration](../.tmp-qa/pr229-control-stability-20261104-01/control-integration-awake-01.finally.json).
+Previous Gate57/Targeted results remain their original evidence; changed verifier
+proof requires its affected checks, and a future release still requires fresh
+live Admission/Preflight plus source/input/environment qualification. No Full E
+resume or gate deletion is permitted. The consumed one-attempt authority is not
+a retry allowance: one renewed Owner decision is needed for bounded operating
+qualification followed, only if eligible, by one new complete Full E75/75.
+Runtime connection stability and release eligibility remain BLOCKED/UNPROVEN;
+no new implementation root cause is established. Combined batch remains E,
+`globalClosed=false`, with no Push, Ready, Merge or Production action.
+
+
+### 27.52 PR #229 Windows snapshot recovery and live connection deadline — 4 November 2026
+
+The Owner authorized one fresh bounded Windows/connection qualification and,
+only after prerequisites, one complete Full E75/75. Preserve the existing
+`a3c778b0` history, prior62-line additive verifier proof and all failed receipts;
+no Product, Auth/RLS, Schema, Treasury, Production, Push, Ready or Merge scope.
+
+**Existing owner correction:** A fresh copy of the existing task connection
+caller changes only the external Windows `portSnapshot` process allowance from
+20000 to40000ms (the approved100% operating margin). The complete query and
+empty-port assertions remain byte-identical. The actual current Windows
+preparation passed; the existing420000ms connection-test limit and480000ms
+Native wrapper limit, lease, heartbeat, cancellation and cleanup are unchanged.
+No new test engine/runner/registry or runtime correction was introduced.
+
+**Actual PostgreSQL result:** The existing owned platform passed readiness and
+network isolation. Three of five real cases PASS: reject renewal during an
+active read-only transaction; reject renewal during an active query; and renew
+a verified idle backend while closing its predecessor. Platform preparation
+consumed192708.250ms. The unchanged total420000ms test deadline then cancelled
+the async observation before its required240000ms due-renewal interval finished.
+Native failure is `PREPARATION_CANCELLED`, with original cancellation reason
+`CONNECTION_READINESS_TIMEOUT`. No new application-client disconnect was
+recorded. This is partial connection proof, not a passing live qualification,
+Public heartbeat endurance, or an RCA for the historical Full E disconnect.
+The fourth due-renewal and fifth active-query cancellation cases are NOT COMPLETE.
+
+**Time, preservation and cleanup:** Inner execution including cleanup took
+446881.964ms; outer invocation including prechecks/cleanup took465721.849ms
+(7m45.722s), within its480000ms bound. Owned cleanup completed with zero remaining
+resources, original resources unchanged and private environment removed. Native
+cleanup PASS observed735 processes and zero live/residual processes; no owned
+children remained. The existing awake helper restored its prior execution state
+on the same native thread. All selected runtime/source bytes remained identical.
+Earlier eight targeted checks remain valid retained proof; they were not rerun.
+
+**Release state:** Admission, Automatic Preflight and Full E were NOT RUN;
+current Full E is0/75 and its newly approved attempt was not consumed. Prior
+Gate57 diagnostic PASS36:22, Targeted Admin5/5 and failed Full E2/75 remain separate
+original receipts. The existing Full E caller was prepared for prerequisite
+reuse but never executed. No gate was skipped or resumed and no automatic retry
+occurred. An independent live-qualification deadline is the current blocker;
+any further attempt/budget decision remains with the Owner. PR release/push
+eligibility is not established; all six Owner reviews retain their prior status,
+and `globalClosed=false`.
+
+Evidence: [final report](../.tmp-qa/pr229-windows-full-e-20261104-01/final-report.json),
+[Windows budget proof](../.tmp-qa/pr229-windows-full-e-20261104-01/windows-budget-validation.json),
+[actual connection receipt](../.tmp-qa/pr229-windows-full-e-20261104-01/current-connection-readiness-02/connection-readiness-result.json),
+[owned lifecycle cleanup](../.tmp-qa/pr229-windows-full-e-20261104-01/current-connection-readiness-02/run/cleanup.json),
+[Native wrapper result](../.tmp-qa/pr229-windows-full-e-20261104-01/current-connection-owner-02/result.json),
+[awake restoration](../.tmp-qa/pr229-windows-full-e-20261104-01/windows-full-e-awake-01.finally.json).
+
+### 27.53 Standing runtime budget rule and PR #229 final continuation — 4 November 2026
+
+The Owner permanently authorizes external QA execution budgets at exactly twice
+their approved original value, without another budget approval. The governing
+rule is maintained in `docs/QA_RELEASE_CLOSURE.md`, Section3.2.2. This later
+authority supersedes the budget-decision blockers in27.51/27.52; their original
+failures, cleanup receipts and incomplete results remain unchanged.
+
+**Owner and scope:** Existing `localVerificationOperationalDeadlineMs` retains
+its implementation and explicit selector. The existing connection CLI binds its
+whole qualification limit420000→840000ms once and records original/effective
+values; its existing Native caller binds480000→960000ms. Windows snapshots stay
+at20000→40000ms. The release coordinator budget is corrected independently of
+already doubled children; no aggregate value enters the Native child port.
+An additive existing-fixture case proves the CLI timer and receipt consume the
+same bound value. Public-owner documentation clarifies this outer allowance;
+its executable behavior is unchanged. Existing assertions, lease, heartbeat,
+cancellation, cleanup and preparation checkpoints are preserved.
+
+**Evidence and pending boundaries:** The previous eight affected checks, live
+three-of-five connection result and cleanup remain separately retained evidence.
+Current affected binding/static checks and fresh actual five-case PostgreSQL
+qualification are required before source freeze, live Admission and Automatic
+Preflight. Gate57 diagnostic36:22 and Targeted Admin5/5 may be reused only with
+explicit Section3.4 equivalence; mandatory Full E still executes all75 gates in
+one fresh attempt. No historical partial receipt becomes a current PASS.
+Current evidence is retained under
+`.tmp-qa/pr229-global-budget-release-20261104-01/`. Combined scope remains E;
+all six Owner reviews retain their existing status and `globalClosed=false`.
+No Push, Ready, Merge or Production action is authorized.
+
+**Affected verification:** Seven current checks PASS: syntax for the three
+affected source files, strict ESLint, TypeScript, executable governance and
+the existing control-lease mode104/104. Its added budget case retains the
+original cancellation code and proves the timer/receipt use840000ms derived
+from420000ms exactly once. Independent preservation review confirms all2986
+original verifier assertions remain in order (now3025), all105 CLI assertions
+and all1386 Public-owner assertions remain, and six runtime-owner executable
+token streams are unchanged. The real connection test body is unchanged.
+Evidence: [targeted checks](../.tmp-qa/pr229-global-budget-release-20261104-01/targeted-checks/result.json),
+[preservation](../.tmp-qa/pr229-global-budget-release-20261104-01/source-preservation.json),
+[connection budget binding](../.tmp-qa/pr229-global-budget-release-20261104-01/connection-budget-binding-proof.json)
+and [Full E budget binding](../.tmp-qa/pr229-global-budget-release-20261104-01/full-e-budget-binding-proof.json).
+
+**Actual live qualification:** Windows port preflight PASS, then all five existing
+PostgreSQL cases PASS. The due-renewal observation ran243336.681ms with12 samples
+and replaced the healthy idle backend; actual active-query cancellation rejected
+the query and preserved native `PREPARATION_CANCELLED` as the expected fault.
+Inner execution including cleanup325140.443ms; outer330782.354ms (5m30.782s),
+finishing immediately within840000/960000ms. Cleanup removed10 owned resources,
+left zero remaining, preserved originals, removed private environment, released
+56165–56168, and left zero owned children; selected source bytes stayed stable.
+This proves the bounded live connection contract, not indefinite endurance or
+the cause of the historical Full E disconnect (still UNKNOWN). Fresh live
+Admission/Automatic Preflight and the single complete Full E remain the next
+release requirements on frozen source.
+Evidence: [live five-case receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-readiness-02/connection-readiness-result.json),
+[Native wrapper receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-owner-02/result.json)
+and [owned cleanup](../.tmp-qa/pr229-global-budget-release-20261104-01/current-connection-readiness-02/run/cleanup.json).
+
+**Final observed release result:** On frozen source
+`015b518b39c6dda8b39ee9296d379bb276d4f0ab`, fresh live Admission (one invocation)
+and Automatic Preflight PASS, followed by **Full E75/75 PASS in one complete
+attempt**, in the canonical order (70 prefix, four Public tails and Admin
+adoption). No retry, skip, resume or cross-attempt result merge occurred.
+The standalone Gate57 and Targeted Admin prerequisites were retained only after
+explicit input/environment qualification; mandatory Gate57 inside Full E ran and
+passed in39m47.552s, within its approved74-minute external limit.
+The full release caller ran00:22:52.106–02:34:43.373 UTC, lasting2h11m51.267s;
+Full E preallocation through cleanup took2h03m30.692s. The caller exited0 and
+same-live-Admission post-cleanup source protection passed.
+
+**Observed control stability and preservation:** The completed Full E recorded
+349 heartbeats,28 healthy renewals, a maximum recorded heartbeat gap35.673s,
+zero Application Client disconnects, and zero Bridge failures or `idle_timeout`
+events; all144 accepted Bridge connections closed. This establishes stability
+within this actual run, not an indefinite guarantee or the historical disconnect
+cause, which remains UNKNOWN. No speculative runtime connection fix was made.
+Independent audit matched all1674 frozen source hashes and the prepared caller,
+all75 Native jobs passed with zero residual processes, and1780 preserved Native
+archive files plus two Public evidence files matched their raw hashes.
+Public preservation is PASS/COMPLETE; earlier failed receipts remain unchanged.
+
+**Cleanup and host restoration:** Full E removed all10 owned resources, removed
+the private environment and build workspace, stopped owned Public processes and
+released its four ports. Final host inspection found the original four containers,
+five networks and five volumes unchanged in the captured metadata; all selected
+QA ports were free. Treasury metadata/listener were unchanged, with zero Treasury
+queries or lifecycle actions. Temporary sleep prevention exited0 after the root
+stop signal and restored the prior execution state on the same native thread;
+power-plan, standby and hibernation policies remained unchanged.
+
+**Documentation closeout and release boundary:** This result is recorded after
+the frozen-source audit as a Registry-only documentation delta. Section3.4 retains
+the runtime PASS on its original tested source; Section15 checks this documentation
+delta separately. The final evidence-equivalence receipt records the documentation
+HEAD and unchanged runtime/dependency/configuration/test inputs without relabeling
+the original receipts as fresh execution on that HEAD. Local verification is
+complete and eligible for the next authorized Push step. Push, Exact-HEAD remote
+CI, Ready, Merge and Production are not performed; all six Owner reviews retain
+their existing status and `globalClosed=false`.
+
+Evidence: [final report](../.tmp-qa/pr229-global-budget-release-20261104-01/final-report.json),
+[terminal release receipt](../.tmp-qa/pr229-global-budget-release-20261104-01/execution/final-release-local-result.json),
+[independent final audit](../.tmp-qa/pr229-global-budget-release-20261104-01/final-verification.json),
+[Full E cleanup](../.tmp-qa/pr229-global-budget-release-20261104-01/full-e/runtime/cleanup.json),
+[final environment](../.tmp-qa/pr229-global-budget-release-20261104-01/environment-final.json),
+[sleep restoration](../.tmp-qa/pr229-global-budget-release-20261104-01/global-budget-awake-01.finally.json),
+and [documentation evidence equivalence](../.tmp-qa/pr229-global-budget-release-20261104-01/documentation-evidence-equivalence.json).
+
+### 27.54 PR #229 CI runtime package source consistency — 4 November 2026
+
+**Previous → current / authority:** HEAD `4a4fc1b1` passed fresh Pre-Push and
+was pushed; Preview became READY on that SHA. Quality Gate run `41765453647`
+finished with seven specialized jobs PASS and the required primary job FAIL
+at `Inspect QA change impact and protection consistency`, before the canonical
+PR-safe gate. Its preserved artifact reports `BLOCKED_SOURCE_CONSISTENCY` and
+`Runtime package contains an unqualified link`, with zero checks, Browser,
+database calls and network requests in that source-inspection receipt. Ready,
+Merge and Production stopped. The Owner then authorized bounded diagnosis,
+a proved correction and affected verification, followed by the guarded release.
+
+**Proved cause and owner:** an unchanged copy of
+`localVerificationInstalledRuntimePackages` in the existing Public Verification
+owner reproduces the rejection on Linux after `npm ci` with the same lockfile
+and npm `10.9.9`. The rejected symbolic link is
+`node_modules/sharp/node_modules/.bin/semver` → `../semver/bin/semver.js`.
+The installed `semver@7.8.5` manifest and lock entry both declare that exact
+command/target. npm generates this binary link on Linux and regular command
+shims on Windows; the old Admission walker rejected both qualified and
+unqualified symbolic links without distinguishing them. This is not an
+Artifact, Product assertion, timeout or PostgreSQL connection failure.
+The original GitHub filesystem is unavailable: the bounded reproduction used
+Node `22.23.3`/Alpine versus CI `22.23.4`/Ubuntu. Its raw diagnostic wrapper
+exit1 is retained because Node appended assertion detail to the expected
+error message; the exact owner rejection and link identity were recorded
+before that wrapper comparison, without a diagnostic retry.
+
+**Review correction:** all six Owner reviews remain **PENDING**, with zero
+formal approvals and zero formal deferrals. The previous release-task inference
+that acceptance of local test results approved those reviews is superseded by
+the Owner's explicit clarification. Historical receipts remain unchanged;
+Gate39's six-family technical proof remains supporting evidence only. Neither
+Full E, CI nor Preview grants Owner Visual Approval. Ready/Merge require a
+proper formal disposition; no exception or deferral is inferred.
+
+**Correction and preserved boundaries:** the same Admission package reader now
+qualifies only a direct relative npm link beneath a physical nested
+`node_modules/.bin`. Its actual manifest name/version/bin and both existing
+locks must agree; target, ancestors and metadata must be physical, and the
+target must be a regular file inside its declared package. Link identity and
+target bytes participate in the existing fingerprint. New metadata reads are
+cached per invocation and charged to the unchanged96MiB/10000-file ceilings.
+Arbitrary, external, absolute, missing, chained, cyclic, directory and
+undeclared links remain rejected. Dependency-only traversal, the separate
+source-guard walker, lifecycle, child execution, Heartbeat, Cancellation,
+Cleanup and every gate schedule are unchanged. Existing extracted-function
+adapters supply the added native read primitive; no new owner or runner exists.
+
+**Affected proof:** the current infrastructure guard passed227 controls,
+including34 new positive/fingerprint, invalid-target, metadata and budget
+controls. A physical Linux fixture using npm-generated links passed10 cases.
+All35 actual Windows Admission package summaries are identical before/after
+the correction and match the prior Pre-Push receipt. The first targeted run
+stopped after118 controls because the outer canonical-factory fixture omitted
+`readlinkSync`; the exact retained error hash proved that missing test port.
+Adding its existing forbidden-operation binding corrected that fixture, and
+the corrected run passed in48.613s with native Cleanup PASS/zero residuals.
+The initial failure remains separate evidence. Independent bounded architecture
+review passes all8 axes with zero blocking issues.
+Affected ESLint and strict project TypeScript both pass; no assertion, rejection
+case or mandatory gate was removed or relaxed.
+
+**Evidence validity:** QA Section3.4 permits retained unaffected Full E75/75
+plus the affected current proof for this bounded read-only qualification
+correction. The combined risk remains E; the previous Full E keeps tested SHA
+`015b518b` and is not relabeled as execution on the corrected HEAD. Only the
+installed-package reader changes in the execution owner; its other52 function
+bodies remain identical. Fresh frozen-source Admission, source-floor and
+Automatic Preflight, plus current-HEAD CI/Preview remain mandatory. Any newly
+proved execution or unbounded impact would require reclassification. Product,
+Auth/RLS, Schema, migrations, Treasury and Production remain outside this
+correction. `globalClosed=false` and all six Owner reviews remain Pending.
+
+Evidence: [bounded RCA](../.tmp-qa/pr229-ci-source-recovery-20261104-01/root-cause.json),
+[raw Linux reproduction](../.tmp-qa/pr229-ci-source-recovery-20261104-01/linux-link-reproduction.json),
+[targeted controls](../.tmp-qa/pr229-ci-source-recovery-20261104-01/targeted-native-corrected/result.json),
+[physical Linux proof](../.tmp-qa/pr229-ci-source-recovery-20261104-01/native-bin-link-result.json),
+[Windows identity equivalence](../.tmp-qa/pr229-ci-source-recovery-20261104-01/windows-package-identity-equivalence.json),
+[bounded architecture review](../.tmp-qa/pr229-ci-source-recovery-20261104-01/architecture-review.json),
+[evidence eligibility](../.tmp-qa/pr229-ci-source-recovery-20261104-01/impact-evidence-eligibility.json),
+[review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json),
+and [original CI failure](../.tmp-qa/pr229-final-release-20261104-01/ci-terminal.json).
+
+### 27.55 PR #229 Admission runtime qualification recovery — 4 November 2026
+
+**Previous → current / proved cause:** after the bounded link correction on
+`644f6975`, CI run `41772023320` stopped at
+`BLOCKED_ADMISSION_QUALIFICATION`; the source-guard owner correctly rejected
+an unreviewed runtime context. Comparing the complete original and rejected
+effect preimages proves exactly three differing runtime fields: Node
+`22.23.3` → `22.23.4`, executable SHA `e966ce74…` → `94efd062…`, and raw
+installed-lock SHA `b56c0007…` → `20505c38…`. Substituting those three fields
+reproduces both rejected fingerprints. The 12/34-file source closures,
+canonical package/config inputs and four Infrastructure generated-input groups
+were unchanged at rejection; the previous npm-link correction did not cause
+this mismatch. Historical Linux qualification used Alpine with mounted
+Windows dependencies; hosted CI used GNU Node and a fresh `npm ci`.
+
+**First missed detection stage and owner:** release environment eligibility
+before Push. The prior handoff explicitly retained hosted Ubuntu qualification
+as a prerequisite; Windows Pre-Push and the physical link fixture did not prove
+that context. `localVerificationSourceGuardEffects` still owns complete effect
+identity, and `qualifyLocalVerificationTargets` still owns strict paired-context
+selection. No hash is accepted merely because it was observed or CI rejected it.
+
+**Bounded correction:** only the primary quality-gate job pins Node `22.23.4`;
+the specialized jobs retain their configuration. The existing Infrastructure
+workflow guard now requires one active `actions/setup-node@v5` with exactly
+that version and npm cache before canonical installation. Seventeen added
+negative cases reject floating/dynamic/alternate runtime inputs, duplicate or
+conditional setup, ignored failure and wrong ordering; all80 prior assertions
+and their multiplicity are preserved. Its reviewed producer SHA and the paired
+Windows/GNU effect values are backed by both actual canonical guards passing
+in each measured context. The retired Alpine values remain historical
+evidence and no longer authorize the current pair. Closure sizes remain12/34;
+the Infrastructure producer delta is explicitly reviewed. Raw installed-lock
+and executable-byte hashing, mixed/unknown rejection, execution sequencing,
+private Admission authority, lifecycle, cancellation and cleanup remain intact.
+
+**Actual affected proof:** both source guards pass2/2 with canonical
+`--experimental-strip-types` on Windows (10.400s) and2/2 on GNU Node `22.23.4`
+with fresh npm installation (9.066s); before/after effects are stable and each
+qualification leaves zero owned children. The GNU executable
+and installed-lock hashes match the rejected CI context exactly. The existing
+current-infrastructure mode passes234 controls on Windows and226 on GNU,
+including seven added runtime-identity and rejected-selector Admission controls;
+both canonical runs preserve their source and leave zero owned children
+(12.140s and10.479s respectively). These are
+platform-specific observed counts, not hosted CI or Product/Browser proof.
+Initial GNU preparation failures remain separate receipts; successful exact-LF
+preparation does not overwrite them or claim that they passed. Independent
+review found that the first task caller omitted the canonical Node option in
+its child arguments; those results remain noncanonical evidence and do not
+grant qualification. Only the affected two guards and targeted profile were
+rerun in each environment with corrected task callers. A separate Windows
+canonical attempt stopped on sandbox Git dubious ownership and cleaned up;
+the established execution owner was restored without changing Git configuration.
+All original receipts remain preserved. Host dependencies were not changed.
+Final task-resource cleanup remains a release prerequisite.
+
+**Evidence validity and release boundary:** QA Section3.4 permits retaining
+unaffected Full E75/75 on its original tested SHA `015b518b` together with the
+fresh affected proof. Combined scope remains E. This bounded runtime-input and
+qualification-value renewal does not change verification execution architecture;
+any later unbounded or execution-authority change requires reclassification.
+Final source freeze/equivalence, fresh Admission and ordered source floor,
+Automatic Pre-Push, and required exact-HEAD CI/Preview remain pending. CI has
+not yet been retried for this correction. All six Owner reviews remain
+**Pending**, with zero approvals and zero formal deferrals; technical test
+acceptance does not approve them. Ready/Merge remain blocked by their required
+formal disposition. Product, Auth/RLS, Schema, Treasury and Production are
+unchanged by this correction, and `globalClosed=false`.
+
+Evidence: [three-field RCA](../.tmp-qa/pr229-admission-recovery-20261104-01/admission-fingerprint-rca.json),
+[workflow source review](../.tmp-qa/pr229-admission-recovery-20261104-01/workflow-detection-source-review.json),
+[canonical Windows guards](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-guards-canonical-owner/qualification-result.json),
+[canonical GNU guards](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-guards-canonical/qualification-result.json),
+[canonical Windows targeted proof](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-targeted-canonical-owner/result.json),
+[canonical GNU targeted proof](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-targeted-canonical/result.json),
+[noncanonical Windows receipt](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-guards/qualification-result.json),
+[noncanonical GNU receipt](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-guards/qualification-result.json),
+[Windows ownership failure](../.tmp-qa/pr229-admission-recovery-20261104-01/windows-guards-canonical/qualification-result.json),
+[first preparation failure](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-preparation-result.json),
+[second preparation failure](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-preparation-gzip-result.json),
+[exact-LF preparation](../.tmp-qa/pr229-admission-recovery-20261104-01/gnu-lf-preparation-result.json),
+[Full E evidence assessment](../.tmp-qa/pr229-admission-recovery-20261104-01/full-e-evidence-eligibility.json)
+and [six-review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json).
+
+### 27.56 PR #229 scoped Owner review deferral — 4 November 2026
+
+**Current disposition:** the Project Owner explicitly accepts the residual risk
+of the six unperformed human reviews and authorizes their formal deferral for
+this PR's release to the separate **QA Stabilization & Optimization** review and
+improvement phase. [Decision OWNER-PR229-REVIEW-DEFERRAL-20261104](https://github.com/ahmedredasadan100/venesia-website/pull/229#issuecomment-6624132969)
+records the authority, scope, accepted risk, review requirements and follow-up
+responsibility. Ahmed owns that follow-up and operational review after release.
+
+Constitution Section 2.2 permits this explicit current Owner decision and
+requires recording its material conflict with QA Section 10's default Owner
+Local Visual Approval requirement. The exception defers only these human
+reviews' release-blocking consequence for PR #229; it neither claims that the
+reviews occurred nor changes the standing release policy. It is not a Runtime
+scope exception under Constitution Section 20.4 or a transferred PR #228 waiver.
+
+| Review | Actual review status | Release disposition | Follow-up owner |
+| --- | --- | --- | --- |
+| Article | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| News | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Press | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Site Update | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Video | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+| Gallery | Pending / not performed | Formally deferred for PR #229 | Ahmed |
+
+Actual approvals remain **0**; scoped formal deferrals are **6**. Closing each
+review still requires actual reviewer/time, source/environment, Create/Edit
+routes, Desktop/Mobile/RTL and the functional/failure/readback observations in
+the existing six-review package. Video retains provider/playback review;
+Gallery retains item Alt, caption and item-operation review. Human visual,
+functional and live-persistence review remains unproved; automated or fixture
+PASS does not replace it. The reviews must be revisited in the independent
+phase, and a new material or security finding retains the ordinary stop rules.
+
+The decision covers tested source `732df14ade1c8a529a3e78a6b83199d84bca53fd`
+and its verified documentation-only decision-record successor, whose final SHA
+and release results belong in the linked PR evidence. It expires with this PR's
+release decision or Owner withdrawal and grants no future exception. Required
+exact-HEAD CI, Branch Protection, architecture proof, cleanup, expected-head
+Standard Merge, automatic Production and safe Smoke remain mandatory. No
+technical/security gate, assertion, GitHub approval or data protection is waived.
+
+The completed Admission recovery has **CI 8/8 PASS** in
+[run 41777363881](https://github.com/ahmedredasadan100/venesia-website/actions/runs/41777363881)
+and [Preview READY](https://vercel.com/venesia-developments-projects/venesia-website/8ncMhErTPx8hEzZSuunw1M3Qggsv)
+on `732df14a`; this supersedes Section 27.55's pre-execution status only.
+Full E **75/75** remains retained evidence from `015b518b`, qualified through the
+existing affected proof and QA Section 3.4. This addendum changes no runtime,
+dependency, test or workflow input; fresh source-bound Pre-Push and exact-HEAD
+CI/Preview are required for its successor. Ready, Merge and Production remain
+unexecuted at this recording point. Previous receipts and historical Pending
+classifications remain intact; the new scoped disposition supersedes their
+zero-deferral release status. `globalClosed=false`.

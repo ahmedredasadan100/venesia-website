@@ -4,7 +4,8 @@ import { validateCoreJourneySelection } from "../fixtures/admin-core-domain-form
 import assert from "node:assert/strict";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { constants as fsConstants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync, type Stats } from "node:fs";
+import * as asyncFs from "node:fs/promises";
 import * as nodeModule from "node:module";
 import net from "node:net";
 import { Worker } from "node:worker_threads";
@@ -16,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
 import { selectSourceInventory, sourceIncluded } from "./verification-source-inventory.mts";
 import { collectExecutableSourceGraph } from "./typescript-executable-graph.mts";
+import { spawnWindowsOwnedProcess, windowsOwnedProcessCapability, type WindowsJobIdentity, type WindowsJobReceipt, type WindowsStopReason } from "./windows-owned-process.mts";
 import type { TopicSeoSource } from "../../src/lib/admin/seo/entity-seo-persistence.ts";
 import type { OwnedLocalHandle } from "./isolated-supabase.mts";
 
@@ -89,12 +91,2007 @@ export type LocalVerificationInputs = {
   changes: readonly Pick<LocalVerificationChange, "file" | "beforeSha256" | "afterSha256">[];
   verificationCoverage?: readonly { file: string; checks: readonly string[] }[];
   verificationNativeGate?: NonNullable<ReturnType<typeof adminAdoptionGate>>;
+  /** Derived from the actual before/current sources. Discovery never confers behavioral PASS. */
+  changeImpact?: LocalVerificationSourceImpact;
+  admissionQualification?: LocalVerificationAdmissionQualification;
+};
+
+/** An invocation receipt, not a reusable approval file or a second check registry. */
+export type LocalVerificationAdmissionQualification = {
+  schema: 1; kind: "owned-admission-qualification"; nonce: string; status: "PASS" | "BLOCKED";
+  baselineHead: string; finalHead: string; sourceSha256: string;
+  runtime: unknown; executions: readonly { entry: string; args: readonly string[]; result: unknown }[];
+  assertions: ReturnType<typeof validateLocalVerificationAssertionRelocations> | null;
+  inputs: ReturnType<typeof validateLocalVerificationInputObservations> | null;
+  artifacts: readonly { path: string; sha256: string }[]; failures: readonly string[];
+  runDirectory: string; durationMs: number; behavioralPass: false; releaseEvidence: false;
+  /** Explicit temporary PR #229 operating budget, sealed with this live invocation. */
+  operationalBudget?: LocalVerificationOperationalBudget;
+};
+// Only this owner's completed, live invocation can grant admission. JSON, even with
+// a correct hash or nonce copied from a former run, cannot recreate this authority.
+const localVerificationAdmissionInvocations = new WeakMap<LocalVerificationAdmissionQualification,
+  { sha256: string; snapshot: () => { finalHead: string; sourceSha256: string; runtime: unknown };
+    sourceFloor: Awaited<ReturnType<typeof runLocalVerificationSourceFloor>>; sourceFloorSha256: string;
+    sourceDiscoverySha256: string;
+    sourceDiscovery: { baselineHead: string; finalHead: string; sourceSha256: string; additionalSourceFiles: readonly string[];
+      changes: LocalVerificationInputs["changes"]; changeImpact: LocalVerificationSourceImpact } }>();
+
+/** Raw facts from the existing verifier; only this owner can qualify them. */
+export type LocalVerificationInputObservations = {
+  schema: 1; kind: "verification-input-observations"; nonce: string; entry: string; executionScope: "affected_input_controls";
+  sources: readonly { file: string; sha256: string }[];
+  sourceWitnesses: readonly Record<string, unknown>[];
+  observations: Record<string, unknown>;
+  artifacts: readonly { path: string; sha256: string }[];
+};
+
+/** One existing prefix budget, also used by its measured Adoption caller. */
+export function localVerificationQualityPrefixDeadlineMs(): number { return 1_800_000; }
+
+export type LocalVerificationOperationalBudget = "pr229-20261103-double-operational";
+/** Explicit outer execution allowance, calculated once from the approved original.
+ * The legacy selector remains sealed into this PR's invocation. Never apply at the
+ * generic process/timer owner or to behavioral readiness, heartbeat, cancellation,
+ * preparation or cleanup contracts; whole qualification execution is an outer budget. */
+export function localVerificationOperationalDeadlineMs(limitMs: number, budget?: LocalVerificationOperationalBudget): number {
+  assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown temporary operational budget.");
+  assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Operational deadline must be a finite timer-safe positive integer.");
+  const result = limitMs * (budget === undefined ? 1 : 2);
+  assert.ok(Number.isSafeInteger(result) && result <= 2_147_483_647, "Expanded operational deadline must be timer-safe.");
+  return result;
+}
+
+/** One source floor inside the existing execution owner, before any dependent behavioral leaf.
+ * A prior floor is private live invocation state, never a serialized receipt or a path-based waiver. */
+async function runLocalVerificationSourceFloor(options: {
+  operationalBudget?: LocalVerificationOperationalBudget;
+  sourceDirectory: string;
+  context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
+  signal: AbortSignal; sources: ReadonlyMap<string, string | Buffer>; changedFiles: readonly string[];
+  verifySource: () => void; governance: readonly { step: string; limitMs: number; successMarker?: string }[]; governanceQualified: boolean;
+  drainControlPulse?: () => Promise<void>;
+  canonical?: { npmCli: string; environment: NodeJS.ProcessEnv; childNames: readonly [string, string]; onStart?: (name: string) => void };
+  prior?: { contextSha256: string; sourceSha256: string; syntaxFiles: string[];
+    checks: Array<{ stage: string; step: string; limitMs: number; result: Awaited<ReturnType<typeof runOwnedVerificationChild>> }> };
+}) {
+  // Public preparation owns a live PG socket. Yield between the existing
+  // synchronous source units so its existing heartbeat/renewal can settle;
+  // draining alone cannot run a timer while this event loop is monopolized.
+  const checkpoint = async () => {
+    options.signal.throwIfAborted();
+    await new Promise<void>(done => setImmediate(done));
+    options.signal.throwIfAborted();
+    await options.drainControlPulse!();
+    options.signal.throwIfAborted();
+  };
+  if (options.drainControlPulse) await checkpoint();
+  options.signal.throwIfAborted(); options.verifySource();
+  let environment: NodeJS.ProcessEnv = { NODE_ENV: "test", CI: "1" };
+  const clean = options.context.cleanEnvironment();
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"])
+    if (clean[key] !== undefined) environment[key] = clean[key];
+  if (options.canonical) environment = { ...options.canonical.environment };
+  const sourceSha256 = digest(JSON.stringify([...options.sources].map(([file, bytes]) => ({ file, sha256: digest(bytes) }))
+    .sort((left, right) => left.file.localeCompare(right.file))));
+  const contextSha256 = digest(JSON.stringify({ sourceDirectory: options.sourceDirectory, sourceSha256, environment,
+    executable: process.execPath, node: process.version, v8: process.versions.v8, execArgv: process.execArgv }));
+  const scripts = JSON.parse(options.sources.get("package.json")!.toString()).scripts as Record<string, string>;
+  assert.equal(scripts.lint, "eslint --max-warnings=0", "Ordered source floor requires the canonical lint command.");
+  assert.equal(scripts.typecheck, "tsc --noEmit", "Ordered source floor requires the canonical TypeScript command.");
+  const syntaxFiles = [...new Set((options.changedFiles.length ? options.changedFiles : [...options.sources.keys()])
+    .filter(file => /\.[cm]?[jt]sx?$/u.test(file) && options.sources.has(file)))].sort();
+  const checks: Array<{ stage: string; step: string; limitMs: number; result: Awaited<ReturnType<typeof runOwnedVerificationChild>> }> = [];
+  const prior = options.prior?.contextSha256 === contextSha256 && options.prior.sourceSha256 === sourceSha256 ? options.prior : undefined;
+  for (const file of syntaxFiles) {
+    if (options.drainControlPulse) await checkpoint();
+    options.signal.throwIfAborted(); options.verifySource();
+    const parsed = ts.createSourceFile(file, options.sources.get(file)!.toString(), ts.ScriptTarget.Latest, false,
+      /\.[cm]?tsx?$/u.test(file) ? (/\.tsx$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS) : /\.jsx$/u.test(file) ? ts.ScriptKind.JSX : ts.ScriptKind.JS);
+    const diagnostics = (parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics;
+    assert.equal(diagnostics.length, 0, "Ordered Syntax check failed: " + file + "; diagnostic=" + (diagnostics[0]?.code ?? "none"));
+  }
+  receipt(options.context, "ordered-source-syntax.json", { status: "PASS", sourceSha256, syntaxFiles,
+    fallback: options.changedFiles.length ? "affected_source" : "complete_source_without_affected_qualification", behaviorExecuted: false });
+  const children = new Set<ChildProcess>(), seen = new Set<string>();
+  let firstFailure: unknown;
+  const run = async (stage: string, step: string, args: string[], limitMs: number) => {
+    limitMs = localVerificationOperationalDeadlineMs(limitMs, options.operationalBudget);
+    if (options.drainControlPulse) await checkpoint();
+    options.signal.throwIfAborted(); options.verifySource();
+    if (seen.has(step)) {
+      assert.equal(checks.find(check => check.step === step)?.limitMs, limitMs, "Duplicate leaf has an ambiguous deadline.");
+      return;
+    }
+    seen.add(step);
+    const retained = prior?.checks.find(check => check.step === step && check.limitMs === limitMs);
+    let result: Awaited<ReturnType<typeof runOwnedVerificationChild>>;
+    if (retained) result = retained.result;
+    else {
+      const name = options.canonical && checks.length < 2 ? options.canonical.childNames[checks.length]! : "ordered-" + (checks.length + 1) + "-" + stage;
+      options.canonical?.onStart?.(name);
+      result = await runOwnedVerificationChild({ sourceDirectory: options.sourceDirectory, context: options.context, children, signal: options.signal },
+        args, environment, name, limitMs);
+    }
+    checks.push({ stage, step, limitMs, result });
+    receipt(options.context, "ordered-source-" + checks.length + ".json", { stage, step, sourceSha256, contextSha256,
+      sameLiveContextReused: Boolean(retained), result });
+    if (result.code !== 0 || result.rawExit.code !== 0 || result.rawExit.signal !== null || result.cleanup.status !== "PASS"
+      || result.cleanup.liveProcesses !== 0 || !result.cleanup.processTreeVerified) {
+      const failure = new Error("Ordered " + stage + " check failed; dependent verification was not started.");
+      Object.defineProperty(failure, "childResult", { value: result }); throw failure;
+    }
+    if (options.drainControlPulse) await checkpoint();
+    options.signal.throwIfAborted(); options.verifySource();
+  };
+  try {
+    await run("eslint", options.canonical ? "npm run lint" : "eslint --max-warnings=0", options.canonical
+      ? [options.canonical.npmCli, "run", "lint"] : [join(options.sourceDirectory, "node_modules/eslint/bin/eslint.js"), "--max-warnings=0"], localVerificationQualityPrefixDeadlineMs());
+    await run("typescript", options.canonical ? "npm run typecheck" : "tsc --noEmit", options.canonical
+      ? [options.canonical.npmCli, "run", "typecheck"] : [join(options.sourceDirectory, "node_modules/typescript/bin/tsc"), "--noEmit"], localVerificationQualityPrefixDeadlineMs());
+    assert.equal(options.governanceQualified, true, "Affected Governance / Contracts lack qualified execution; conservative Full Gate fallback remains required.");
+    for (const target of options.governance) {
+      assert.ok(/^node (?:--experimental-strip-types )?[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)(?: [a-zA-Z0-9_./:=+,-]+)*$/u.test(target.step),
+        "Ordered Governance requires an existing qualified literal Node leaf.");
+      await run("governance", target.step, target.step.split(" ").slice(1), target.limitMs);
+      if (target.successMarker !== undefined) assert.equal(checks.find(check => check.step === target.step)!.result.stdout.includes(target.successMarker), true,
+        "Qualified Governance leaf lacks its original success marker.");
+    }
+  } catch (error) {
+    firstFailure = error;
+    try { receipt(options.context, "ordered-source-floor-failure.json", { status: "BLOCKED", sourceSha256, contextSha256,
+      completed: checks.map(check => ({ stage: check.stage, step: check.step, code: check.result.code })),
+      childResult: error instanceof Error && "childResult" in error ? error.childResult : null, dependentVerificationStarted: false }); }
+    catch { /* preserve the original source check failure */ }
+    throw error;
+  }
+  finally {
+    const cleanup = await Promise.allSettled([...children].map(async child => { await stopChild(child, options.context.cleanEnvironment(), "owner_shutdown"); children.delete(child); }));
+    const failed = cleanup.find(result => result.status === "rejected");
+    if (failed?.status === "rejected") {
+      if (firstFailure !== undefined) {
+        if (firstFailure instanceof Error && Object.isExtensible(firstFailure) && !Object.hasOwn(firstFailure, "sourceFloorCleanupFailure"))
+          Object.defineProperty(firstFailure, "sourceFloorCleanupFailure", { value: failed.reason });
+      } else throw failed.reason;
+    }
+  }
+  return { contextSha256, sourceSha256, syntaxFiles, checks };
+}
+export type LocalVerificationSourceImpact = {
+  proofBoundary: "source_discovery_only";
+  sourceSha256: string; deltaSha256: string;
+  ownerBindings?: readonly { owner: string; capability?: string; files: readonly string[]; manifest: string }[];
+  assertionRelocationDemand?: ReturnType<typeof localVerificationAssertionRelocationRequired>;
+  changes: readonly { file: string; owners: readonly string[]; capabilities: readonly string[]; consumers: readonly string[];
+    contracts: readonly string[]; candidateChecks: readonly string[]; unresolved: readonly string[];
+    semanticChange: boolean; presentationOnly: boolean }[];
+  obligations: readonly { file: string; owner: string; contract: string; before: string | null; after: string | null; addedCapabilityAxis: boolean }[];
+  protections: readonly { file: string; check: string; beforeSha256: string | null; afterSha256: string;
+    semanticChange: boolean; assertionChanges: readonly { sha256: string; references: readonly string[]; contracts: readonly string[] }[];
+    references: readonly string[]; dynamicCapabilityAxes: boolean }[];
+  /** Conservative AST regressions only; this does not establish complete behavioral assertion equivalence. */
+  qaQuality?: readonly { file: string; assertionsBefore: number; assertionsAfter: number; failures: readonly string[];
+    rawFailures?: readonly string[]; qualifiedRelocation?: unknown }[];
+};
+export type LocalVerificationProtectionMaintenance = {
+  file: string; contract: string; protectionFile: string; check: string;
+  beforeSha256: string | null; afterSha256: string;
+  mode: "updated" | "existing_dynamic_axes"; reviewedBy: string; rationale: string;
+  /** Exact changed assertion/vector dependency fingerprint reviewed for this obligation. */
+  assertionSha256?: string;
 };
 /** A reviewed batch evidence record, not an owner/dependency/test registry. */
-export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage"> & {
+export type LocalVerificationImpact = Omit<LocalVerificationInputs, "changes" | "verificationCoverage" | "changeImpact" | "admissionQualification"> & {
   changes: readonly LocalVerificationChange[];
   verificationEntries?: readonly { check: string; entry: string }[];
+  protectionMaintenance?: readonly LocalVerificationProtectionMaintenance[];
 };
+
+/** AST projection only: contract bodies remain authoritative; narrative evidence is not a contract edit. */
+export function localVerificationSemanticSource(file: string, source: string) {
+  const narrativeMetadata = file === "src/lib/admin/interaction-system/adoption-manifest.ts" || file === "src/lib/admin/form-system/adoption-manifest.ts";
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : file.endsWith(".jsx") ? ts.ScriptKind.JSX : /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  assert.deepEqual((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, [],
+    "Cannot classify malformed verification impact source: " + file);
+  const transformed = ts.transform(tree, [context => {
+    const visit: ts.Visitor = node => {
+      if (narrativeMetadata && ts.isPropertyAssignment(node) && node.name.getText(tree).replace(/^["']|["']$/gu, "") === "rationale"
+        && ts.isStringLiteralLike(node.initializer)) return context.factory.updatePropertyAssignment(node, node.name,
+          context.factory.createStringLiteral(node.initializer.text.trim() ? "nonempty narrative" : ""));
+      return ts.visitEachChild(node, visit, context);
+    };
+    return node => ts.visitNode(node, visit) as ts.SourceFile;
+  }]);
+  try { return ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(transformed.transformed[0]); }
+  finally { transformed.dispose(); }
+}
+
+/** Literal spacing/radius presentation only; all other AST nodes and class tokens remain binding. */
+export function localVerificationPresentationSource(file: string, source: string) {
+  const tree = ts.createSourceFile(file, localVerificationSemanticSource(file, source), ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : file.endsWith(".jsx") ? ts.ScriptKind.JSX : ts.ScriptKind.TS);
+  const transformed = ts.transform(tree, [context => {
+    const visit: ts.Visitor = node => {
+      if (ts.isJsxAttribute(node) && node.name.getText(tree) === "className") {
+        const literal = node.initializer && (ts.isStringLiteralLike(node.initializer) ? node.initializer
+          : ts.isJsxExpression(node.initializer) && node.initializer.expression && ts.isStringLiteralLike(node.initializer.expression) ? node.initializer.expression : undefined);
+        if (literal) {
+          const tokens = literal.text.split(/\s+/u).map(token => token
+            .replace(/^((?:[a-z0-9-]+:)*)(p[trblxyse]?)-(?:\d+(?:\.\d+)?|px)$/u, "$1$2-PRESENTATION")
+            .replace(/^((?:[a-z0-9-]+:)*)(rounded(?:-[trblse]{1,2})?)(?:-(?:none|sm|md|lg|xl|[23]xl|full))?$/u, "$1$2-PRESENTATION"));
+          return context.factory.updateJsxAttribute(node, node.name, context.factory.createStringLiteral(tokens.join(" ")));
+        }
+      }
+      return ts.visitEachChild(node, visit, context);
+    };
+    return node => ts.visitNode(node, visit) as ts.SourceFile;
+  }]);
+  try { return ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(transformed.transformed[0]); }
+  finally { transformed.dispose(); }
+}
+
+/** Source-derived execution demand; this coarse detector never grants relocation authority. */
+export function localVerificationAssertionRelocationRequired(input: {
+  baselineSources: ReadonlyMap<string, string | Buffer>;
+  currentSources: ReadonlyMap<string, string | Buffer>;
+}) {
+  const files = new Set<string>(), providers = new Set<string>();
+  const parse = (file: string, value: string) => ts.createSourceFile(file, value, ts.ScriptTarget.Latest, true, /x$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const normalized = (file: string, value: string) => ts.createPrinter({ removeComments: true, newLine: ts.NewLineKind.LineFeed }).printFile(parse(file, value));
+  const observedAdapter = (file: string, value: string | undefined) => {
+    if (!value?.includes("nativeAssert")) return false;
+    const tree = parse(file, value); let found = false;
+    const visit = (node: ts.Node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Proxy"
+        && node.arguments?.[0] && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === "nativeAssert") found = true;
+      ts.forEachChild(node, visit);
+    }; visit(tree); return found;
+  };
+  const observedProviders = new Set<string>(), changedProviders = new Set<string>();
+  for (const file of new Set([...input.baselineSources.keys(), ...input.currentSources.keys()])) {
+    const previous = input.baselineSources.get(file)?.toString(), current = input.currentSources.get(file)?.toString();
+    if (!(observedAdapter(file, previous) || observedAdapter(file, current))) continue;
+    observedProviders.add(file);
+    if (previous === undefined || current === undefined || normalized(file, previous) !== normalized(file, current)) {
+      changedProviders.add(file); providers.add(file); files.add(file);
+    }
+  }
+  const assertions = (tree: ts.SourceFile) => {
+    const scopes = new Map<string, { total: number; comparisons: number; shapes: string[] }>();
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) {
+        const names: string[] = [];
+        for (let parent = node.parent; parent; parent = parent.parent) if (ts.isFunctionDeclaration(parent) && parent.name) names.unshift(parent.name.text);
+        const scope = names.join("/"), value = scopes.get(scope) ?? { total: 0, comparisons: 0, shapes: [] };
+        value.total += 1;
+        if (/^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|notEqual|notStrictEqual|notDeepEqual|notDeepStrictEqual)$/u.test(node.expression.getText(tree))) value.comparisons += 1;
+        value.shapes.push(node.getText(tree)); scopes.set(scope, value);
+      } ts.forEachChild(node, visit);
+    }; visit(tree); return scopes;
+  };
+  for (const [file, before] of input.baselineSources) {
+    const current = input.currentSources.get(file);
+    if (!current || !/^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(file)) continue;
+    const oldTree = parse(file, before.toString()), nextTree = parse(file, current.toString()), previous = assertions(oldTree), next = assertions(nextTree);
+    const consumerChanged = normalized(file, before.toString()) !== normalized(file, current.toString());
+    if ([...previous].some(([scope, value]) => (next.get(scope)?.total ?? 0) < value.total || (next.get(scope)?.comparisons ?? 0) < value.comparisons)) files.add(file);
+    const delegates = new Set<string>();
+    const delegatedProviders = new Set<string>();
+    for (const tree of [oldTree, nextTree]) for (const statement of tree.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+      && statement.moduleSpecifier.text.startsWith(".") && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)) {
+      const base = resolve(ROOT, dirname(file), statement.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+      const target = [base, base + ".mts", base + ".ts", base + ".tsx"].find(candidate => observedProviders.has(candidate));
+      if (target) {
+        delegatedProviders.add(target);
+        for (const element of statement.importClause.namedBindings.elements) if (!element.isTypeOnly) delegates.add(element.name.text);
+      }
+    }
+    if (delegates.size) {
+      let invoked = false;
+      const visit = (node: ts.Node, tree: ts.SourceFile) => { if (ts.isCallExpression(node) && delegates.has(node.expression.getText(tree))) invoked = true; ts.forEachChild(node, child => visit(child, tree)); }; visit(oldTree, oldTree); visit(nextTree, nextTree);
+      if (invoked && (consumerChanged || [...delegatedProviders].some(provider => changedProviders.has(provider)))) { files.add(file); for (const provider of delegatedProviders) providers.add(provider); }
+    }
+  }
+  return { required: files.size > 0, files: [...files].sort(), providers: [...providers].sort() };
+}
+
+/** Finite source correspondence plus actual native assertion observations. Unsupported source stays blocked. */
+export function validateLocalVerificationAssertionRelocations(input: {
+  baselineSources: ReadonlyMap<string, string | Buffer>;
+  currentSources: ReadonlyMap<string, string | Buffer>;
+  observations: readonly unknown[];
+}) {
+  type Value = string | number | boolean | null | undefined | Value[] | { [key: string]: Value };
+  type Environment = Map<string, Value>;
+  type Predicate = { operator: string; actual: Value; expected: Value; case: Value };
+  const failures: Array<{ file: string; scope: string; reason: string }> = [];
+  const obligations: Array<{ file: string; scope: string; site: number; predicate: string; cases: number }> = [];
+  const relocations: Array<{ file: string; scope: string; before: number; after: number; matched: number; beforeFingerprint: string; afterFingerprint: string }> = [];
+  const providerProofs = new Map<string, { file: string; sourceSha256: string; consumers: string[]; assertionSites: number }>();
+  const demand: (condition: unknown, message: string) => asserts condition = (condition, message) => { if (!condition) throw new Error(message); };
+  const record = (value: unknown): Record<string, unknown> => { demand(value !== null && typeof value === "object" && !Array.isArray(value), "Expected bounded observation object"); return value as Record<string, unknown>; };
+  const stable = (value: unknown): string => JSON.stringify(value, (_key, entry: unknown) => {
+    if (entry === undefined) return { $undefined: true };
+    if (entry !== null && typeof entry === "object" && !Array.isArray(entry)) return Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)));
+    return entry;
+  });
+  const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+  const source = (map: ReadonlyMap<string, string | Buffer>, file: string) => { const value = map.get(file); demand(value !== undefined, "Missing source closure member: " + file); return value.toString(); };
+  const parse = (file: string, value: string) => ts.createSourceFile(file, value, ts.ScriptTarget.Latest, true, /x$/u.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const observedAdapter = (tree: ts.SourceFile) => {
+    let found = false;
+    const visit = (node: ts.Node) => { if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Proxy"
+      && node.arguments?.[0] && ts.isIdentifier(node.arguments[0]) && node.arguments[0].text === "nativeAssert") found = true; ts.forEachChild(node, visit); };
+    visit(tree); return found;
+  };
+  const key = (node: ts.Node, tree: ts.SourceFile) => {
+    const project = (part: ts.Node): unknown => {
+      if (ts.isParenthesizedExpression(part)) return project(part.expression);
+      if (ts.isIdentifier(part) || ts.isPrivateIdentifier(part) || ts.isStringLiteralLike(part) || ts.isNumericLiteral(part)
+        || ts.isBigIntLiteral(part) || ts.isRegularExpressionLiteral(part) || ts.isTemplateHead(part)
+        || ts.isTemplateMiddle(part) || ts.isTemplateTail(part) || ts.isJsxText(part)) return [part.kind, part.text];
+      const children: unknown[] = []; ts.forEachChild(part, child => { children.push(project(child)); });
+      const flags = ts.isVariableDeclarationList(part) ? part.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)
+        : ts.isPrefixUnaryExpression(part) || ts.isPostfixUnaryExpression(part) ? part.operator : null;
+      return [part.kind, flags, children];
+    };
+    // Parsing, rather than a context-free scanner, identifies template tails and
+    // regex literals. Literal values remain exact; only trivia is excluded.
+    demand(node.getSourceFile() === tree, "Predicate node belongs to another source closure");
+    return stable(project(node));
+  };
+  const namedScope = (node: ts.Node) => { const names: string[] = []; for (let parent = node.parent; parent; parent = parent.parent) if (ts.isFunctionDeclaration(parent) && parent.name) names.unshift(parent.name.text); return names.join("/"); };
+  const calls = (tree: ts.SourceFile) => {
+    const result: ts.CallExpression[] = [];
+    const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) result.push(node); ts.forEachChild(node, visit); };
+    visit(tree); return result;
+  };
+  const count = (nodes: readonly ts.CallExpression[], tree: ts.SourceFile) => ({ total: nodes.length,
+    comparisons: nodes.filter(node => /^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|notEqual|notStrictEqual|notDeepEqual|notDeepStrictEqual)$/u.test(node.expression.getText(tree))).length });
+  const lookupFunction = (tree: ts.SourceFile, name: string) => {
+    const found: ts.FunctionDeclaration[] = [];
+    const visit = (node: ts.Node) => { if (ts.isFunctionDeclaration(node) && node.name?.text === name) found.push(node); ts.forEachChild(node, visit); }; visit(tree);
+    demand(found.length === 1 && found[0].body, "Ambiguous or missing actual function: " + name); return found[0];
+  };
+  const beneath = (node: ts.Node, ancestor: ts.Node) => { for (let parent: ts.Node | undefined = node; parent; parent = parent.parent) if (parent === ancestor) return true; return false; };
+  const meaningful = (node: ts.Node, tree: ts.SourceFile) => key(node, tree);
+  const objectTerm = (value: Value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
+  const symbol = (kind: string, fields: { [key: string]: Value } = {}): Value => ({ $kind: kind, ...fields });
+  const truthy = (value: Value): boolean => {
+    const object = objectTerm(value);
+    if (object?.$kind === "not") return !truthy(object.value);
+    demand(!object?.$kind || ["react", "function"].includes(String(object.$kind)), "Symbolic/dynamic control cannot authorize an assertion case");
+    return Boolean(value);
+  };
+  const receipts = input.observations.filter(value => value !== null && typeof value === "object" && record(value).kind === "assertion-relocation-observations").map(record);
+  const changed = [...input.baselineSources].filter(([file, value]) => /^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(file) && input.currentSources.has(file) && value.toString() !== input.currentSources.get(file)!.toString());
+  for (const [file, oldSource] of changed) {
+    const oldTree = parse(file, oldSource.toString()), nextTree = parse(file, source(input.currentSources, file));
+    const oldCalls = calls(oldTree), nextCalls = calls(nextTree);
+    const observedImports = new Set<string>();
+    for (const tree of [oldTree, nextTree]) for (const statement of tree.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith(".")
+        || !statement.importClause?.namedBindings || !ts.isNamedImports(statement.importClause.namedBindings)) continue;
+      const base = resolve(ROOT, dirname(file), statement.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+      const target = [base, base + ".mts", base + ".ts", base + ".tsx"].find(candidate => [input.baselineSources, input.currentSources].some(map => {
+        const value = map.get(candidate); return value !== undefined && observedAdapter(parse(candidate, value.toString()));
+      }));
+      if (target) for (const imported of statement.importClause.namedBindings.elements) if (!imported.isTypeOnly) observedImports.add(imported.name.text);
+    }
+    if ((observedAdapter(oldTree) || observedAdapter(nextTree))
+      && ts.createPrinter({ removeComments: true }).printFile(oldTree) !== ts.createPrinter({ removeComments: true }).printFile(nextTree)) {
+      failures.push({ file, scope: "", reason: "Changed observed shared predicate/operator requires direct provider qualification; raw count inflation cannot authorize it" });
+    }
+    const scopes = new Set(oldCalls.map(namedScope));
+    for (const scope of scopes) {
+      const oldScopeCalls = oldCalls.filter(node => namedScope(node) === scope), nextScopeCalls = nextCalls.filter(node => namedScope(node) === scope);
+      const previousCount = count(oldScopeCalls, oldTree), nextCount = count(nextScopeCalls, nextTree);
+      const receipt = receipts.find(value => value.consumer === file && value.scope === scope);
+      let observedDelegation = false;
+      const inspectObserved = (node: ts.Node, tree: ts.SourceFile) => { if (ts.isCallExpression(node) && namedScope(node) === scope && observedImports.has(node.expression.getText(tree))) observedDelegation = true; ts.forEachChild(node, child => inspectObserved(child, tree)); }; inspectObserved(oldTree, oldTree); inspectObserved(nextTree, nextTree);
+      if (nextCount.total >= previousCount.total && nextCount.comparisons >= previousCount.comparisons && !receipt && !observedDelegation) continue;
+      try {
+        const scopeName = scope.split("/").at(-1)!;
+        const oldOwner = lookupFunction(oldTree, scopeName), nextOwner = lookupFunction(nextTree, scopeName);
+        const beforeFingerprint = hash(stable(oldScopeCalls.map(node => key(node, oldTree)))), afterFingerprint = hash(stable(nextScopeCalls.map(node => key(node, nextTree))));
+        // Command ownership changed extraction, rather than moving a Section predicate.
+        if (scopeName === "registeredVerificationNodeEntries") {
+          demand(oldScopeCalls.every(node => node.expression.getText(oldTree) === "assert.ok") && nextScopeCalls.every(node => node.expression.getText(nextTree) === "assert.ok"), "Registered-command assertion operators changed");
+          const currentBody = nextOwner.body!.getText(nextTree), oldBody = oldOwner.body!.getText(oldTree);
+          demand(oldBody.includes("active.has") && oldBody.includes("Object.hasOwn") && oldBody.includes("sourceIncluded") && currentBody.includes("localVerificationCommandSteps"), "Command parser origin is not the supported recursive ownership extraction");
+          const recursive = lookupFunction(nextTree, "localVerificationCommandSteps"), recursiveText = recursive.body!.getText(nextTree);
+          demand(/Object\.hasOwn\(scripts,\s*check\)/u.test(recursiveText) && /typeof scripts\[check\]\s*!==\s*["']string["']/u.test(recursiveText)
+            && recursiveText.includes("active.has(check)") && recursiveText.includes("[\\r\\n]") && recursiveText.includes("localVerificationCommandSteps(scripts, wrapper[1], next)"), "Recursive command owner lost an original boundary");
+          demand(currentBody.includes("Object.hasOwn(scripts, check)") && currentBody.includes("assert.ok(steps") && currentBody.includes("assert.ok(sourceIncluded(entry)"), "Entry owner must preserve its actual assertion operator and private source boundary");
+          const commandProofs: Record<string, unknown>[] = [];
+          for (const observation of input.observations) {
+            if (observation === null || typeof observation !== "object") continue;
+            const envelope = record(observation), raw = envelope.observations;
+            if (raw && typeof raw === "object") {
+              const runtime = record(raw).runtimeProofs;
+              if (Array.isArray(runtime)) for (const proof of runtime) if (proof && typeof proof === "object" && record(proof).control === "registered_node_entries") commandProofs.push(record(proof));
+            }
+            if (envelope.control === "registered_node_entries") commandProofs.push(envelope);
+          }
+          demand(commandProofs.length === 1, "Fresh actual registered-command positive/negative controls are required");
+          const proof = commandProofs[0];
+          demand(proof.actualSourceProjection === true && proof.sourceOwnerSha256 === hash(source(input.currentSources, file)), "Actual parser observations use stale or copied source");
+          const verifierFile = "scripts/verify-isolated-supabase.mts";
+          demand(proof.sourceVerifierSha256 === hash(source(input.currentSources, verifierFile)), "Actual parser controls do not bind the current registered verifier");
+          demand(Array.isArray(proof.events), "Actual parser API observations are missing");
+          const parserEvents = proof.events.map(record).filter(event => event.method === "registeredVerificationNodeEntries");
+          const positive = parserEvents.filter(event => event.outcome === "RETURNED"), negative = parserEvents.filter(event => event.outcome === "REJECTED");
+          demand(positive.length >= 2 && negative.length >= 12 && positive.every(event => Array.isArray(event.result) && event.result.length > 0), "Registered-command controls are incomplete");
+          const negativeNames = negative.map(value => String(value.case));
+          for (const family of ["inherit", "cycle", "newline", "private", "sibling"]) demand(negativeNames.some(name => name.includes(family)), "Missing command boundary family: " + family);
+          demand(negativeNames.some(name => /own string|type/u.test(name)), "Missing recursive own-string type boundary");
+          const mutant = record(proof.mutant);
+          demand(mutant.actualRejected === true && Array.isArray(mutant.removedGuardOutput) && mutant.removedGuardOutput.some(value => typeof value === "string" && value.includes("/../private/")), "Actual private-entry assertion removal must be detected");
+          obligations.push({ file, scope, site: oldOwner.getStart(oldTree), predicate: "recursive-own-literal-command-and-private-entry-boundaries", cases: negative.length + positive.length });
+          relocations.push({ file, scope, before: previousCount.total, after: nextCount.total, matched: previousCount.total, beforeFingerprint, afterFingerprint });
+          continue;
+        }
+        demand(receipt && receipt.schema === 1 && typeof receipt.nonce === "string" && /^[a-f0-9-]{36}$/iu.test(receipt.nonce), "Missing current native Section assertion observations");
+        const calleeFile = String(receipt.calleeFile), subjectFile = String(receipt.subjectFile);
+        demand(/^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(calleeFile) && /^src\/.+\.tsx$/u.test(subjectFile), "Unsupported actual callee/subject source");
+        const calleeSource = source(input.currentSources, calleeFile), subjectSource = source(input.currentSources, subjectFile);
+        demand(source(input.baselineSources, subjectFile) === subjectSource, "Changed subject owner cannot inherit a relocation-only proof");
+        const binding = record(receipt.sourceBindings);
+        demand(binding.consumerRawSha256 === hash(source(input.currentSources, file)) && binding.calleeRawSha256 === hash(calleeSource) && binding.subjectRawSha256 === hash(subjectSource), "Runtime source binding is stale");
+        const readSubject = binding.subjectReadMode === "raw-utf8" ? subjectSource : binding.subjectReadMode === "normalizeVerificationText" ? subjectSource.replace(/\r\n/gu, "\n") : undefined;
+        demand(readSubject !== undefined && binding.subjectReadSha256 === hash(readSubject), "Actual source read/normalization is not bound");
+        demand(typeof binding.canonicalSourcePath === "string" && binding.canonicalSourcePath.replaceAll("\\", "/").endsWith("/" + subjectFile), "Subject read changed owner");
+        const callee = record(binding.callee), exportName = String(callee.export);
+        const calleeTree = parse(calleeFile, calleeSource), calleeOwner = lookupFunction(calleeTree, exportName);
+        const imported = nextTree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier)
+          && resolve(dirname(file), node.moduleSpecifier.text).replaceAll("\\", "/") === resolve(calleeFile).replaceAll("\\", "/"));
+        demand(imported.length === 1 && imported[0].importClause?.namedBindings && ts.isNamedImports(imported[0].importClause.namedBindings)
+          && imported[0].importClause.namedBindings.elements.some(element => !element.propertyName && element.name.text === exportName && !element.isTypeOnly), "Actual helper must use one unshadowed direct canonical import");
+        const shadowedHelper: ts.Node[] = [];
+        const inspectShadow = (node: ts.Node) => {
+          if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name && ts.isIdentifier(node.name) && node.name.text === exportName) shadowedHelper.push(node);
+          ts.forEachChild(node, inspectShadow);
+        }; inspectShadow(nextOwner);
+        demand(shadowedHelper.length === 0, "A local or foreign binding shadows the actual imported helper");
+        const delegates: ts.CallExpression[] = [];
+        const inspectDelegate = (node: ts.Node) => { if (ts.isCallExpression(node) && node.expression.getText(nextTree) === exportName) delegates.push(node); ts.forEachChild(node, inspectDelegate); }; inspectDelegate(nextOwner);
+        demand(delegates.length === 1, "A consumer must invoke its actual helper exactly once");
+        const delegate = delegates[0];
+        demand(ts.isExpressionStatement(delegate.parent) && delegate.parent.parent === nextOwner.body, "Delegation must run directly in the consumer continuation, not a branch/thunk/catch");
+        const delegateIndex = nextOwner.body!.statements.indexOf(delegate.parent);
+        demand(!nextOwner.body!.statements.slice(0, delegateIndex).some(statement => ts.isReturnStatement(statement) || ts.isThrowStatement(statement) || ts.isTryStatement(statement)), "Delegation is unreachable or protected by unsupported control");
+        demand(delegate.arguments.length === 2 && ts.isObjectLiteralExpression(delegate.arguments[1]), "Actual helper ports must be explicit");
+        const ports = delegate.arguments[1], port = (name: string) => ports.properties.find(property => (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) && property.name.getText(nextTree) === name);
+        const loaderPort = port("loadSection"), observePort = port("observe");
+        demand(loaderPort && observePort && ts.isShorthandPropertyAssignment(loaderPort), "Actual source loader and observation ports are required");
+        const allVariables = (tree: ts.SourceFile) => { const result: ts.VariableDeclaration[] = []; const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node)) result.push(node); ts.forEachChild(node, visit); }; visit(tree); return result; };
+        const actualSections = allVariables(calleeTree).filter(node => ts.isIdentifier(node.name) && node.name.text === "Section" && beneath(node, calleeOwner));
+        demand(actualSections.length === 1 && actualSections[0].initializer && ts.isCallExpression(actualSections[0].initializer)
+          && actualSections[0].initializer.expression.getText(calleeTree) === "loadSection" && actualSections[0].initializer.arguments.length === 1
+          && actualSections[0].initializer.arguments[0].getText(calleeTree) === "candidate", "Shared predicates replaced or cached the actual loaded Section");
+        const currentVariables = allVariables(nextTree);
+        const loaderBinding = currentVariables.filter(node => ts.isIdentifier(node.name) && node.name.text === loaderPort.name.text && beneath(node, nextOwner));
+        demand(loaderBinding.length === 1 && loaderBinding[0].initializer && ts.isArrowFunction(loaderBinding[0].initializer), "Actual loader callback changed or is shadowed");
+        const loader = loaderBinding[0].initializer;
+        demand(loader.parameters.length === 1 && ts.isIdentifier(loader.parameters[0].name), "Unsupported loader parameter");
+        const loaderParameter = loader.parameters[0].name.text;
+        let loaderExpression: ts.Expression = loader.body as ts.Expression;
+        while (ts.isAsExpression(loaderExpression) || ts.isParenthesizedExpression(loaderExpression)) loaderExpression = loaderExpression.expression;
+        demand(ts.isPropertyAccessExpression(loaderExpression) && loaderExpression.name.text === "AdminFormSection" && ts.isCallExpression(loaderExpression.expression), "Actual loader must return the canonical compiled Section");
+        const compileCall = loaderExpression.expression;
+        demand(compileCall.arguments[0] && ts.isIdentifier(compileCall.arguments[0]) && compileCall.arguments[0].text === loaderParameter, "Loader ignores or replaces the actual mutant candidate");
+        const compilerName = compileCall.expression.getText(nextTree);
+        const oldSectionCalls: ts.CallExpression[] = [];
+        const inspectOldSection = (node: ts.Node) => {
+          if (ts.isVariableDeclaration(node) && node.initializer) {
+            let initializer = node.initializer;
+            while (ts.isAsExpression(initializer) || ts.isParenthesizedExpression(initializer)) initializer = initializer.expression;
+            if (ts.isObjectBindingPattern(node.name) && node.name.elements.some(element => element.name.getText(oldTree) === "Section" && element.propertyName?.getText(oldTree) === "AdminFormSection") && ts.isCallExpression(initializer)) oldSectionCalls.push(initializer);
+            if (ts.isIdentifier(node.name) && node.name.text === "Section" && ts.isPropertyAccessExpression(initializer) && initializer.name.text === "AdminFormSection" && ts.isCallExpression(initializer.expression)) oldSectionCalls.push(initializer.expression);
+          } ts.forEachChild(node, inspectOldSection);
+        }; inspectOldSection(oldOwner);
+        demand(oldSectionCalls.length === 1 && key(oldSectionCalls[0], oldTree) === key(compileCall, nextTree), "Actual consumer compiler arguments/dependencies changed from the original owner");
+        const argumentSource = delegate.arguments[0];
+        demand(ts.isIdentifier(argumentSource), "Actual consumer source must use its direct read binding");
+        const readBinding = currentVariables.filter(node => ts.isIdentifier(node.name) && node.name.text === argumentSource.text && beneath(node, nextOwner));
+        demand(readBinding.length === 1 && readBinding[0].initializer && ts.isCallExpression(readBinding[0].initializer)
+          && readBinding[0].initializer.expression.getText(nextTree) === "read" && readBinding[0].initializer.arguments.length === 1
+          && ts.isStringLiteral(readBinding[0].initializer.arguments[0]) && readBinding[0].initializer.arguments[0].text === subjectFile, "Actual shared subject read was replaced or cached");
+        const namedVariable = (tree: ts.SourceFile, name: string, within: ts.Node = tree) => { const found = allVariables(tree).filter(node => ts.isIdentifier(node.name) && node.name.text === name && beneath(node, within)); demand(found.length === 1 && found[0].initializer, "Ambiguous dependency/read binding: " + name); return found[0]; };
+        for (const name of ["read", "jiti"]) demand(key(namedVariable(oldTree, name), oldTree) === key(namedVariable(nextTree, name), nextTree), "Canonical read or installed module loader changed");
+        for (const tree of [oldTree, nextTree]) for (const [name, module] of [["createElement", "react"], ["isValidElement", "react"], ["renderToStaticMarkup", "react-dom/server"]]) demand(tree.statements.some(node => ts.isImportDeclaration(node)
+          && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === module && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+          && node.importClause.namedBindings.elements.some(element => !element.propertyName && element.name.text === name)), "Actual React assertion/render import changed owner");
+        if (compileCall.arguments.length === 2) {
+          const dependenciesName = compileCall.arguments[1].getText(nextTree), dependencyVariable = namedVariable(nextTree, dependenciesName, nextOwner);
+          const previousDependencyVariable = namedVariable(oldTree, dependenciesName, oldOwner);
+          demand(key(previousDependencyVariable, oldTree) === key(dependencyVariable, nextTree), "Actual dependency factory invocation changed");
+          let factoryCall = dependencyVariable.initializer!; if (ts.isAwaitExpression(factoryCall)) factoryCall = factoryCall.expression;
+          demand(ts.isCallExpression(factoryCall) && ts.isIdentifier(factoryCall.expression), "Unsupported dependency factory");
+          const factoryName = factoryCall.expression.text;
+          demand(key(lookupFunction(oldTree, factoryName), oldTree) === key(lookupFunction(nextTree, factoryName), nextTree), "Canonical dependency factory changed");
+        } else {
+          demand(compileCall.arguments.length === 3 && ts.isObjectLiteralExpression(compileCall.arguments[2]), "Unsupported compiler dependency ports");
+          const arrayFactories = (tree: ts.SourceFile) => allVariables(tree).filter(node => beneath(node, tree === oldTree ? oldOwner : nextOwner) && ts.isArrayBindingPattern(node.name) && node.name.elements.some(element => ts.isBindingElement(element) && element.name.getText(tree) === "styles"));
+          const previousFactories = arrayFactories(oldTree), currentFactories = arrayFactories(nextTree);
+          demand(previousFactories.length === 1 && currentFactories.length === 1 && key(previousFactories[0], oldTree) === key(currentFactories[0], nextTree), "Actual imported component/style factory changed");
+        }
+        const findCompiler = (tree: ts.SourceFile) => {
+          const declarations: ts.Node[] = [];
+          const visit = (node: ts.Node) => { if (ts.isFunctionDeclaration(node) && node.name?.text === compilerName || ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === compilerName && beneath(node, tree === oldTree ? oldOwner : nextOwner)) declarations.push(node); ts.forEachChild(node, visit); }; visit(tree);
+          demand(declarations.length === 1, "Ambiguous compiler closure"); return declarations[0];
+        };
+        demand(meaningful(findCompiler(oldTree), oldTree) === meaningful(findCompiler(nextTree), nextTree), "Canonical compiler closure changed; fresh different-loader qualification is required");
+        const compiler = record(binding.compiler), callback = record(binding.loaderCallback);
+        demand(compiler.binding === compilerName && typeof compiler.runtimeSource === "string" && compiler.runtimeSha256 === hash(compiler.runtimeSource)
+          && typeof callback.runtimeSource === "string" && callback.runtimeSha256 === hash(callback.runtimeSource), "Actual runtime compiler/callback identity is missing");
+        const runtimeKey = (value: string) => {
+          const tree = parse("runtime.mts", "const __proof = (" + value.replace(/^export\s+(?:default\s+)?/u, "") + ");");
+          const variable = tree.statements[0]; demand(ts.isVariableStatement(variable), "Runtime function source is not a function");
+          const initializer = variable.declarationList.declarations[0].initializer; demand(initializer, "Runtime function source is empty");
+          let expression = initializer; while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+          return key(expression, tree);
+        };
+        const emittedFunctionKey = (node: ts.Node, tree: ts.SourceFile) => {
+          let expression = node; if (ts.isVariableDeclaration(node)) { demand(node.initializer, "Compiler has no value"); expression = node.initializer; }
+          const text = expression.getText(tree).replace(/^export\s+(?:default\s+)?/u, "");
+          const emitted = ts.transpileModule("const __proof = (" + text + ");", { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, removeComments: true } }).outputText;
+          const output = parse("emitted.mts", emitted), statement = output.statements[0]; demand(ts.isVariableStatement(statement), "Unable to project actual runtime function");
+          let initializer = statement.declarationList.declarations[0].initializer!; while (ts.isParenthesizedExpression(initializer)) initializer = initializer.expression;
+          return key(initializer, output);
+        };
+        demand(runtimeKey(compiler.runtimeSource) === emittedFunctionKey(findCompiler(nextTree), nextTree)
+          && runtimeKey(callback.runtimeSource) === emittedFunctionKey(loader, nextTree), "Runtime compiler/callback does not execute its current source declaration");
+        demand(typeof callee.runtimeSource === "string" && callee.runtimeSha256 === hash(callee.runtimeSource)
+          && runtimeKey(callee.runtimeSource) === emittedFunctionKey(calleeOwner, calleeTree), "Runtime helper is not the current actual source function");
+        const subjectTree = parse(subjectFile, subjectSource);
+        const styleImports = subjectTree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+          && node.importClause.namedBindings.elements.some(element => (element.propertyName ?? element.name).text === "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME"));
+        demand(styleImports.length === 1 && ts.isStringLiteral(styleImports[0].moduleSpecifier), "Actual subject style authority is missing");
+        const styleBase = resolve(ROOT, dirname(subjectFile), styleImports[0].moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+        const styleFile = [styleBase, styleBase + ".ts", styleBase + ".tsx"].find(candidate => input.currentSources.has(candidate)); demand(styleFile, "Missing canonical style owner source");
+        demand(source(input.baselineSources, styleFile) === source(input.currentSources, styleFile), "Changed style authority cannot inherit original inputs");
+        const styleTree = parse(styleFile, source(input.currentSources, styleFile)), styleDeclaration = namedVariable(styleTree, "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME");
+        demand(styleDeclaration.initializer && ts.isStringLiteralLike(styleDeclaration.initializer), "Only the actual literal style authority is supported");
+        const premiumValue = styleDeclaration.initializer.text, premiumPort = port("premiumSurfaceClassName");
+        demand(premiumPort && ts.isPropertyAssignment(premiumPort), "Actual style port is missing");
+        const premiumPortExpression = premiumPort.initializer.getText(nextTree);
+        const dependencyBindings = record(binding.dependencyBindings);
+        demand(dependencyBindings.premiumSurfaceClassName === premiumValue, "Runtime style is not the authoritative current owner value");
+        const requiredDependencies = ["AdminCard", "AdminModuleSectionHeader", "adminFormHintClassName", "createElement", "transpileModule",
+          ...(compileCall.arguments.length === 2 ? ["adminFormLabelClassName"] : [])];
+        for (const name of requiredDependencies) demand(Object.hasOwn(dependencyBindings, name), "Missing actual compiler dependency observation: " + name);
+        if (compileCall.arguments.length === 2) demand(dependencyBindings.formStackClassName === "space-y-5", "Canonical compiled Form stack constant changed");
+        for (const [name, value] of Object.entries(dependencyBindings)) {
+          if (name === "premiumSurfaceClassName" || name === "formStackClassName") continue;
+          const dependency = record(value); demand(typeof dependency.runtimeSource === "string" && dependency.runtimeSha256 === hash(dependency.runtimeSource), "Actual dependency function evidence is malformed");
+        }
+        const componentImports = subjectTree.statements.filter(ts.isImportDeclaration).filter(node => ts.isStringLiteral(node.moduleSpecifier)
+          && (node.importClause?.name?.text === "AdminCard" || node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+            && node.importClause.namedBindings.elements.some(element => element.name.text === "AdminModuleSectionHeader")));
+        demand(componentImports.length === 2, "Subject canonical component dependencies changed");
+        for (const imported of componentImports) {
+          demand(ts.isStringLiteral(imported.moduleSpecifier), "Nonliteral component dependency");
+          const base = resolve(ROOT, dirname(subjectFile), imported.moduleSpecifier.text).slice(ROOT.length + 1).replaceAll("\\", "/");
+          const dependency = [base, base + ".tsx", base + ".ts"].find(candidate => input.currentSources.has(candidate)); demand(dependency, "Missing actual component dependency");
+          demand(source(input.baselineSources, dependency) === source(input.currentSources, dependency), "Changed component dependency cannot inherit relocation proof");
+        }
+        const baselinePrelude = new Set(oldOwner.body!.statements.map(statement => key(statement, oldTree)));
+        for (const statement of nextOwner.body!.statements.slice(0, delegateIndex)) {
+          if (baselinePrelude.has(key(statement, nextTree))) continue;
+          if (ts.isVariableStatement(statement)) {
+            for (const declaration of statement.declarationList.declarations) {
+              demand(ts.isIdentifier(declaration.name) && ["observationEnabled", "nonce", "observations", loaderPort.name.text].includes(declaration.name.text), "Consumer added an effect before its actual helper");
+              if (declaration.name.text === "observations") demand(declaration.initializer && ts.isArrayLiteralExpression(declaration.initializer) && declaration.initializer.elements.length === 0, "Observation collector was prefilled or replaced");
+              if (declaration.name.text === "observationEnabled") demand(declaration.initializer?.getText(nextTree) === 'process.env.VENESIA_QA_ASSERTION_RELOCATION_RECEIPT === "1"', "Actual observation flag changed");
+              if (declaration.name.text === "nonce") demand(declaration.initializer?.getText(nextTree) === "process.env.VENESIA_QA_ASSERTION_RELOCATION_NONCE", "Current owner nonce binding changed");
+            } continue;
+          }
+          demand(ts.isIfStatement(statement) && ts.isThrowStatement(statement.thenStatement) && !statement.elseStatement
+            && statement.expression.getText(nextTree).includes("observationEnabled") && statement.expression.getText(nextTree).includes(".test(nonce"),
+          "Consumer has an unsupported control/effect before actual delegation");
+        }
+        // The evidence adapter must really delegate to node:assert, preserving the native exception.
+        demand(calleeTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "node:assert/strict" && node.importClause?.name?.text === "nativeAssert"), "Native assertion module changed");
+        const calleeText = calleeOwner.getText(calleeTree);
+        demand(calleeText.includes("new Proxy(nativeAssert") && calleeText.includes("Reflect.get(target, property, receiver)") && calleeText.includes("Reflect.apply(method, target, args)")
+          && calleeText.includes("throw error;") && calleeText.includes('outcome: "passed"') && calleeText.includes('outcome: "failed"'), "Native assertion delegation/exception path is unsupported");
+        for (const native of ["createElement", "isValidElement"]) demand(calleeTree.statements.some(node => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+          && node.moduleSpecifier.text === "react" && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+          && node.importClause.namedBindings.elements.some(element => !element.propertyName && element.name.text === native)), "React predicate/vector factory changed owner");
+        const forbiddenShadows = new Set(["Reflect", "Proxy", "Object", "Array", "JSON", "Buffer", "Error", "nativeAssert", "createElement", "renderToStaticMarkup", "isValidElement"]);
+        const shadowedNative: ts.Node[] = [];
+        const inspectNative = (node: ts.Node) => {
+          if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name && ts.isIdentifier(node.name) && forbiddenShadows.has(node.name.text)) shadowedNative.push(node);
+          ts.forEachChild(node, inspectNative);
+        }; inspectNative(calleeTree);
+        demand(shadowedNative.length === 0, "Actual assertion/factory native is shadowed");
+        const assertionBindings = currentVariables.filter(node => ts.isIdentifier(node.name) && node.name.text === "assert" && beneath(node, nextOwner));
+        demand(assertionBindings.length === 0, "Consumer native assertions are shadowed");
+        const adapterVariables = allVariables(calleeTree).filter(node => ts.isIdentifier(node.name) && node.name.text === "assert" && beneath(node, calleeOwner));
+        demand(adapterVariables.length === 1 && adapterVariables[0].initializer && ts.isConditionalExpression(adapterVariables[0].initializer), "Actual assertion adapter binding is missing");
+        const adapter = adapterVariables[0].initializer;
+        demand(adapter.condition.getText(calleeTree) === "observe" && adapter.whenFalse.getText(calleeTree) === "nativeAssert"
+          && ts.isNewExpression(adapter.whenTrue) && adapter.whenTrue.expression.getText(calleeTree) === "Proxy"
+          && adapter.whenTrue.arguments?.[0].getText(calleeTree) === "nativeAssert", "Actual assertions do not select the native delegate");
+        const proxyHandler = adapter.whenTrue.arguments?.[1];
+        demand(proxyHandler && ts.isObjectLiteralExpression(proxyHandler), "Native adapter has no explicit handler");
+        const getter = proxyHandler.properties.filter(ts.isMethodDeclaration).find(node => node.name.getText(calleeTree) === "get");
+        demand(getter?.body && getter.parameters.map(parameter => parameter.name.getText(calleeTree)).join(",") === "target,property,receiver", "Native operator receiver binding changed");
+        demand(getter.body.statements.length === 3 && ts.isVariableStatement(getter.body.statements[0])
+          && getter.body.statements[0].getText(calleeTree).replace(/\s+/gu, "") === "constmethod=Reflect.get(target,property,receiver);"
+          && ts.isIfStatement(getter.body.statements[1]) && ts.isReturnStatement(getter.body.statements[1].thenStatement)
+          && getter.body.statements[1].expression.getText(calleeTree).replace(/\s+/gu, "") === 'typeofproperty!=="string"||!["ok","equal","notEqual","throws"].includes(property)'
+          && getter.body.statements[1].thenStatement.expression?.getText(calleeTree) === "method" && !getter.body.statements[1].elseStatement,
+        "Native getter contains an unsupported effect or method substitution");
+        const returned = getter.body.statements.filter(ts.isReturnStatement);
+        demand(returned.length === 1 && returned[0].expression && ts.isArrowFunction(returned[0].expression) && ts.isBlock(returned[0].expression.body), "Native adapter must return its one actual operator wrapper");
+        demand(returned[0].expression.parameters.length === 1 && returned[0].expression.parameters[0].dotDotDotToken
+          && returned[0].expression.parameters[0].name.getText(calleeTree) === "args" && !returned[0].expression.parameters[0].initializer,
+        "Actual received native operands must use the unmodified rest-argument binding");
+        const operatorBody = returned[0].expression.body, operatorTries = operatorBody.statements.filter(ts.isTryStatement), finalReturns = operatorBody.statements.filter(ts.isReturnStatement);
+        demand(operatorBody.statements.length === 5 && ts.isVariableStatement(operatorBody.statements[0])
+          && operatorBody.statements[0].getText(calleeTree).replace(/\s+/gu, "") === "conststack=newError().stack,actualContext={...context};"
+          && ts.isVariableStatement(operatorBody.statements[1]) && operatorBody.statements[1].declarationList.declarations.length === 1
+          && operatorBody.statements[1].declarationList.declarations[0].name.getText(calleeTree) === "result"
+          && !operatorBody.statements[1].declarationList.declarations[0].initializer
+          && ts.isTryStatement(operatorBody.statements[2]) && ts.isExpressionStatement(operatorBody.statements[3])
+          && ts.isCallExpression(operatorBody.statements[3].expression) && operatorBody.statements[3].expression.expression.getText(calleeTree) === "emit"
+          && ts.isReturnStatement(operatorBody.statements[4]), "Native operator wrapper contains unsupported pre/post effects");
+        demand(operatorTries.length === 1 && operatorTries[0].tryBlock.statements.length === 1
+          && operatorTries[0].tryBlock.statements[0].getText(calleeTree).replace(/\s+/gu, "") === "result=Reflect.apply(method,target,args);"
+          && finalReturns.length === 1 && finalReturns[0].expression?.getText(calleeTree) === "result", "Observed pass is not produced by the actual native operator");
+        const nativeCatch = operatorTries[0].catchClause;
+        demand(nativeCatch?.variableDeclaration?.name.getText(calleeTree) === "error" && nativeCatch.block.statements.length === 2
+          && ts.isTryStatement(nativeCatch.block.statements[0]) && ts.isThrowStatement(nativeCatch.block.statements[1])
+          && nativeCatch.block.statements[1].expression?.getText(calleeTree) === "error", "Native failure identity or observation path changed");
+        const unsafeWrites: ts.Node[] = [], extraReturns: ts.Node[] = [];
+        const inspectOperator = (node: ts.Node) => {
+          if (node !== operatorBody && ts.isFunctionLike(node)) return;
+          if (ts.isReturnStatement(node) && node !== operatorBody.statements[4]) extraReturns.push(node);
+          if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+            && /^(?:args|method|target|property|actualContext)(?:\b|\[|\.)/u.test(node.left.getText(calleeTree))) unsafeWrites.push(node);
+          ts.forEachChild(node, inspectOperator);
+        }; inspectOperator(operatorBody);
+        demand(unsafeWrites.length === 0 && extraReturns.length === 0, "Received native operands/method/context were mutated or bypassed");
+        const events = receipt.events, loaders = receipt.loaders, vectors = receipt.vectors, mutants = receipt.mutants;
+        demand(Array.isArray(events) && events.length > 0 && events.length <= 4096 && Array.isArray(loaders) && Array.isArray(vectors) && Array.isArray(mutants), "Bounded actual execution observations are required");
+        const mutationLoops = calleeOwner.body!.statements.filter(ts.isForOfStatement).filter(loop => ts.isVariableDeclarationList(loop.initializer)
+          && loop.initializer.declarations.length === 1 && ts.isArrayBindingPattern(loop.initializer.declarations[0].name)
+          && loop.initializer.declarations[0].name.elements.map(element => element.getText(calleeTree)).join(",") === "label,from,to");
+        demand(mutationLoops.length === 1 && ts.isArrayLiteralExpression(mutationLoops[0].expression), "Actual mutation controls must use one finite source tuple vector");
+        const mutationCases = mutationLoops[0].expression.elements.map(element => {
+          demand(ts.isArrayLiteralExpression(element) && element.elements.length === 3 && element.elements.every(ts.isStringLiteralLike), "Mutation tuple has unsupported source syntax");
+          const [label, from, to] = element.elements.map(value => { demand(ts.isStringLiteralLike(value), "Mutation tuple members must be exact literals"); return value; });
+          return { label: label.text, from: from.text, to: to.text, candidateSha256: hash(readSubject.replaceAll(from.text, to.text)) };
+        });
+        demand(mutationCases.length > 0 && mutationCases.length <= 32 && new Set(mutationCases.map(value => value.label)).size === mutationCases.length
+          && new Set(mutationCases.map(value => value.candidateSha256)).size === mutationCases.length, "Mutation source vectors must be bounded and distinct");
+        const controlSites = calls(calleeTree).filter(node => beneath(node, mutationLoops[0]));
+        demand(controlSites.length === 2 && controlSites.some(node => node.expression.getText(calleeTree) === "assert.notEqual")
+          && controlSites.some(node => node.expression.getText(calleeTree) === "assert.throws"), "Actual mutation loop lost its change/rejection native assertions");
+        demand(mutants.length === mutationCases.length, "Actual mutant observations do not cover the complete source tuple vector");
+        for (const expected of mutationCases) {
+          demand(expected.candidateSha256 !== hash(readSubject), "An actual source mutation became vacuous");
+          const matching = mutants.map(record).filter(value => value.label === expected.label && value.candidateSha256 === expected.candidateSha256
+            && record(value.replacement).from === expected.from && record(value.replacement).to === expected.to);
+          demand(matching.length === 1, "Every effective source mutation requires one exact actual rejection receipt");
+          demand(loaders.map(record).filter(value => value.candidateKind === "mutant" && value.mutation === expected.label
+            && value.candidateSha256 === expected.candidateSha256).length === 1, "Every effective source mutation requires one exact actual loader invocation");
+          demand(events.map(record).filter(value => value.outcome === "failed" && record(value.context).phase === "predicate"
+            && record(value.context).candidateKind === "mutant" && record(value.context).mutation === expected.label
+            && record(value.context).candidateSha256 === expected.candidateSha256).length === 1, "Every effective source mutation requires its actual failed positive predicate");
+          for (const control of controlSites) demand(events.map(record).filter(value => value.outcome === "passed"
+            && value.operator === control.expression.getText(calleeTree) && record(value.context).phase === "control"
+            && record(value.context).mutation === expected.label && record(value.context).candidateSha256 === expected.candidateSha256).length === 1,
+          "Every effective source mutation requires both actual native control outcomes");
+        }
+        demand(loaders.length === mutants.length + 1 && mutants.length > 0, "Each actual mutation must call the actual loader");
+        const originalDigest = hash(readSubject);
+        demand(loaders.some(value => record(value).candidateSha256 === originalDigest && record(value).candidateKind === "original"), "Original actual source was not loaded");
+        const expectedSection = (candidate: string) => {
+          const tree = parse(subjectFile, candidate), section = lookupFunction(tree, "AdminFormSection");
+          const emitted = ts.transpileModule(section.getText(tree), { compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+          const output = parse("actual-section.js", emitted); return hash(lookupFunction(output, "AdminFormSection").getText(output));
+        };
+        for (const value of loaders) {
+          const observed = record(value);
+          const mutation = observed.candidateKind === "original" ? undefined : mutants.map(record).find(value => value.label === observed.mutation);
+          const replacement = mutation ? record(mutation.replacement) : undefined;
+          const candidate = replacement ? readSubject.replaceAll(String(replacement.from), String(replacement.to)) : readSubject;
+          demand(observed.candidateSha256 === hash(candidate) && observed.callbackSha256 === callback.runtimeSha256
+            && observed.actualSectionSha256 === expectedSection(candidate) && observed.actualSectionName === "AdminFormSection", "Actual compiled Section does not originate from the passed canonical candidate");
+        }
+        const locate = (event: Record<string, unknown>) => {
+          const location = record(event.site), url = String(location.file);
+          demand(url.startsWith("file:") && fileURLToPath(url).replaceAll("\\", "/").endsWith("/" + calleeFile), "Assertion came from a foreign helper");
+          demand(Number.isSafeInteger(location.line) && Number.isSafeInteger(location.column), "Invalid actual assertion source coordinates");
+          const position = calleeTree.getPositionOfLineAndCharacter(Number(location.line) - 1, Number(location.column) - 1);
+          const found = calls(calleeTree).filter(node => node.getStart(calleeTree) <= position && position < node.end);
+          demand(found.length === 1 && event.operator === found[0].expression.getText(calleeTree), "Actual assertion operator/site is not the bound AST call"); return found[0];
+        };
+        for (const value of events) { const event = record(value); locate(event); demand(event.outcome === "passed" || event.outcome === "failed", "Unknown native assertion outcome"); }
+        const allSharedSites = calls(calleeTree).filter(node => beneath(node, calleeOwner));
+        for (const site of allSharedSites) demand(events.some(value => { const event = record(value); return event.outcome === "passed" && locate(event) === site; }), "A current shared assertion site was not actually invoked successfully");
+        for (const value of mutants) {
+          const mutation = record(value), replacement = record(mutation.replacement);
+          demand(typeof replacement.from === "string" && typeof replacement.to === "string", "Actual source mutation is missing");
+          const candidate: string = readSubject.replaceAll(replacement.from, replacement.to);
+          demand(candidate !== readSubject && mutation.sourceSha256 === originalDigest && mutation.candidateSha256 === hash(candidate), "Mutation was vacuous or used another source");
+          const failed = record(mutation.failedPredicate), failedContext = record(failed.context);
+          demand(failedContext.phase === "predicate" && failedContext.candidateSha256 === mutation.candidateSha256, "Unrelated setup error cannot prove predicate rejection");
+          locate({ ...failed, outcome: "failed" });
+          demand(events.some(value => { const event = record(value); return event.outcome === "failed" && stable(event.site) === stable(failed.site) && stable(event.context) === stable(failed.context); }), "Missing actual failed positive predicate");
+        }
+        const buildProjector = (tree: ts.SourceFile, owner: ts.Node) => {
+          const variables = allVariables(tree);
+          const scopeOf = (node: ts.Node) => { let parent = node.parent; while (parent && !ts.isBlock(parent) && !ts.isForOfStatement(parent) && !ts.isFunctionLike(parent) && !ts.isSourceFile(parent)) parent = parent.parent; return parent ?? tree; };
+          const findVariable = (name: string, at: ts.Node) => {
+            const matching = variables.filter(node => ts.isIdentifier(node.name) && node.name.text === name && node.getStart(tree) < at.getStart(tree) && beneath(at, scopeOf(node)));
+            matching.sort((left, right) => right.getStart(tree) - left.getStart(tree)); return matching[0];
+          };
+          let work = 0;
+          const evaluate = (expression: ts.Expression, environment: Environment, seen = new Set<ts.Node>()): Value => {
+            demand(++work <= 500_000 && seen.size <= 64, "Finite predicate projection budget exceeded");
+            while (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression) || ts.isNonNullExpression(expression) || ts.isSatisfiesExpression(expression)) expression = expression.expression;
+            if (ts.isStringLiteralLike(expression)) return expression.text;
+            if (ts.isNumericLiteral(expression)) return Number(expression.text);
+            if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+            if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+            if (expression.kind === ts.SyntaxKind.NullKeyword) return null;
+            if (ts.isRegularExpressionLiteral(expression)) { const literal = expression.text, last = literal.lastIndexOf("/"); return symbol("regex", { pattern: literal.slice(1, last), flags: literal.slice(last + 1) }); }
+            if (ts.isIdentifier(expression)) {
+              const name = expression.text;
+              if (environment.has(name)) return environment.get(name);
+              if (name === "undefined") return undefined;
+              if (name === "Section") return symbol("section-owner");
+              if (name === "premiumSurfaceClassName") return premiumValue;
+              const declaration = findVariable(name, expression);
+              if (declaration?.initializer) { demand(!seen.has(declaration), "Recursive value binding is unsupported"); return evaluate(declaration.initializer, environment, new Set([...seen, declaration])); }
+              if (["source", "candidate", "formSource"].includes(name)) return symbol("subject-source");
+              throw new Error("Unsupported finite identifier: " + name);
+            }
+            if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) return symbol("function", { body: key(expression.body, tree) });
+            if (ts.isArrayLiteralExpression(expression)) {
+              const values: Value[] = [];
+              for (const element of expression.elements) { if (ts.isSpreadElement(element)) { const spread = evaluate(element.expression, environment, seen); demand(Array.isArray(spread), "Only finite array spreads are supported"); values.push(...spread); } else { demand(!ts.isOmittedExpression(element), "Sparse vectors are unsupported"); values.push(evaluate(element, environment, seen)); } }
+              demand(values.length <= 32, "Finite vector array bound exceeded"); return values;
+            }
+            if (ts.isObjectLiteralExpression(expression)) {
+              const value: { [key: string]: Value } = {};
+              for (const property of expression.properties) {
+                if (ts.isSpreadAssignment(property)) { const spread = objectTerm(evaluate(property.expression, environment, seen)); demand(spread, "Only finite object spreads are supported"); Object.assign(value, spread); }
+                else { demand(ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property), "Unsupported vector member"); const name = property.name.getText(tree).replace(/^["']|["']$/gu, ""); demand(!name.startsWith("$"), "Reserved symbolic member"); value[name] = evaluate(ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer, environment, seen); }
+              } return value;
+            }
+            if (ts.isConditionalExpression(expression)) return evaluate(truthy(evaluate(expression.condition, environment, seen)) ? expression.whenTrue : expression.whenFalse, environment, seen);
+            if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) return symbol("not", { value: evaluate(expression.operand, environment, seen) });
+            if (ts.isBinaryExpression(expression)) {
+              const left = evaluate(expression.left, environment, seen);
+              if (expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) return left === undefined || left === null ? evaluate(expression.right, environment, seen) : left;
+              const right = evaluate(expression.right, environment, seen);
+              if (expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) return symbol("and", { left, right });
+              if (expression.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken) return stable(left) === stable(right);
+              if (expression.operatorToken.kind === ts.SyntaxKind.BarBarToken) return truthy(left) ? left : right;
+              throw new Error("Unsupported predicate binary operator");
+            }
+            if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
+              if (ts.isPropertyAccessExpression(expression) && expression.name.text === "ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME") {
+                demand(expression.getText(tree) === premiumPortExpression, "A same-named style value came from a foreign binding"); return premiumValue;
+              }
+              const base = evaluate(expression.expression, environment, seen);
+              const member = ts.isPropertyAccessExpression(expression) ? expression.name.text : evaluate(expression.argumentExpression!, environment, seen);
+              demand(typeof member === "string" || typeof member === "number", "Dynamic property access is unsupported");
+              if (Array.isArray(base)) { if (member === "length") return base.length; return base[Number(member)]; }
+              const object = objectTerm(base); demand(object, "Unknown finite property receiver");
+              if (object.$kind === "component" || object.$kind === "output-property") return symbol("output-property", { element: object.$kind === "component" ? base : object.element,
+                path: [...(object.$kind === "output-property" ? object.path as Value[] : []), String(member)] });
+              if (object.$kind === "match" && member === "length") return symbol("match-count", { target: object.target, pattern: object.pattern });
+              if (object.$kind === "react" && member === "props") return object.props;
+              return object[String(member)];
+            }
+            if (ts.isCallExpression(expression)) {
+              const name = expression.expression.getText(tree);
+              if (name === "read") { demand(expression.arguments.length === 1 && ts.isStringLiteral(expression.arguments[0]) && expression.arguments[0].text === subjectFile, "Source path changed"); return symbol("subject-source"); }
+              if (name === "Section") { demand(expression.arguments.length === 1, "Unsupported Section invocation"); return symbol("component", { props: evaluate(expression.arguments[0], environment, seen) }); }
+              if (name === "createElement") {
+                const type = evaluate(expression.arguments[0], environment, seen), props = expression.arguments[1] ? evaluate(expression.arguments[1], environment, seen) : {};
+                const fields = objectTerm(props); demand(fields, "React vector props must be finite");
+                const properties = { ...fields }; if (expression.arguments.length === 3) properties.children = evaluate(expression.arguments[2], environment, seen); demand(expression.arguments.length <= 3, "Multiple React children are unsupported");
+                return objectTerm(type)?.$kind === "section-owner" ? symbol("component", { props: properties }) : symbol("react", { type, props: properties });
+              }
+              if (name === "renderToStaticMarkup") { const element = evaluate(expression.arguments[0], environment, seen); demand(objectTerm(element)?.$kind === "component", "Only canonical Section markup is projected"); return symbol("render", { element }); }
+              if (name === "isValidElement") return symbol("valid-element", { element: evaluate(expression.arguments[0], environment, seen) });
+              if (ts.isPropertyAccessExpression(expression.expression)) {
+                const receiver = evaluate(expression.expression.expression, environment, seen), member = expression.expression.name.text;
+                if (member === "entries") { demand(Array.isArray(receiver) && expression.arguments.length === 0, "Only literal vector entries are supported"); return receiver.map((value, index) => [index, value]); }
+                if (member === "includes" || member === "match") return symbol(member === "includes" ? "includes" : "match", { target: receiver, pattern: evaluate(expression.arguments[0], environment, seen) });
+                if (member === "replaceAll") return symbol("mutation", { target: receiver, from: evaluate(expression.arguments[0], environment, seen), to: evaluate(expression.arguments[1], environment, seen) });
+              }
+              throw new Error("Unsupported finite call: " + name);
+            }
+            throw new Error("Unsupported predicate syntax: " + ts.SyntaxKind[expression.kind]);
+          };
+          const contexts = (node: ts.Node) => {
+            const loops: ts.ForOfStatement[] = [];
+            for (let parent = node.parent; parent && beneath(parent, owner); parent = parent.parent) if (ts.isForOfStatement(parent)) loops.unshift(parent);
+            let environments: Environment[] = [new Map()];
+            for (const loop of loops) {
+              demand(ts.isVariableDeclarationList(loop.initializer) && loop.initializer.declarations.length === 1, "Finite loop binding required");
+              const pattern = loop.initializer.declarations[0].name, expanded: Environment[] = [];
+              for (const environment of environments) {
+                const values = evaluate(loop.expression, environment); demand(Array.isArray(values), "Only literal finite loop cases are supported");
+                for (const value of values) {
+                  const next = new Map(environment);
+                  if (ts.isIdentifier(pattern)) next.set(pattern.text, value);
+                  else { demand(ts.isArrayBindingPattern(pattern) && Array.isArray(value), "Unsupported finite loop destructuring"); pattern.elements.forEach((element, index) => { demand(ts.isBindingElement(element) && ts.isIdentifier(element.name), "Unsupported loop binding"); next.set(element.name.text, value[index]); }); }
+                  expanded.push(next);
+                }
+              } demand(expanded.length <= 256, "Finite case expansion bound exceeded"); environments = expanded;
+            }
+            return environments.filter(environment => {
+              for (let parent = node.parent; parent && beneath(parent, owner); parent = parent.parent) if (ts.isIfStatement(parent)) {
+                const selected = truthy(evaluate(parent.expression, environment));
+                if (beneath(node, parent.thenStatement) !== selected) return false;
+              } return true;
+            });
+          };
+          const canonical = (value: Value): Value => {
+            if (Array.isArray(value)) return value.map(canonical);
+            const object = objectTerm(value); if (!object) return value;
+            const normalized = Object.fromEntries(Object.entries(object).map(([name, entry]) => [name, canonical(entry)]));
+            return normalized;
+          };
+          const predicates = (node: ts.CallExpression, environment: Environment): Predicate[] => {
+            const operator = node.expression.getText(tree), args = node.arguments;
+            demand(args.length > 0, "Assertion has no tested argument");
+            const actual = evaluate(args[0], environment), expected = args[1] && !["assert.ok", "assert"].includes(operator) ? evaluate(args[1], environment) : true;
+            const result: Predicate[] = [];
+            const add = (value: Value, wanted: Value, nativeOperator: string) => {
+              const object = objectTerm(value);
+              if (object?.$kind === "and" && wanted === true) { add(object.left, true, nativeOperator); add(object.right, true, nativeOperator); return; }
+              if (object?.$kind === "not") { add(object.value, wanted === true ? false : wanted === false ? true : wanted, nativeOperator); return; }
+              result.push({ operator: ["assert", "assert.ok"].includes(nativeOperator) ? "truth" : nativeOperator, actual: canonical(value), expected: canonical(wanted), case: environment.has("profile") ? canonical(environment.get("profile")) : null });
+            }; add(actual, expected, operator); return result;
+          };
+          const dependencyFingerprint = (node: ts.CallExpression) => {
+            const fragments = new Set<string>(), visited = new Set<ts.Node>();
+            const visit = (part: ts.Node) => {
+              if (ts.isIdentifier(part) && !(ts.isPropertyAccessExpression(part.parent) && part.parent.name === part)
+                && !(ts.isPropertyAssignment(part.parent) && part.parent.name === part)) {
+                let declaration: ts.VariableDeclaration | undefined = findVariable(part.text, part);
+                if (!declaration) declaration = variables.find(candidate => ts.isObjectBindingPattern(candidate.name)
+                  && candidate.name.elements.some(element => ts.isIdentifier(element.name) && element.name.text === part.text)
+                  && candidate.getStart(tree) < part.getStart(tree) && beneath(part, scopeOf(candidate)));
+                if (declaration?.initializer && !visited.has(declaration)) {
+                  visited.add(declaration); demand(visited.size <= 64, "Finite dependency binding bound exceeded");
+                  fragments.add(key(declaration.initializer, tree)); visit(declaration.initializer);
+                }
+              } ts.forEachChild(part, visit);
+            };
+            for (const argument of node.arguments.slice(0, 2)) visit(argument);
+            const controls: string[] = [];
+            for (let parent = node.parent; parent && beneath(parent, owner); parent = parent.parent) {
+              if (ts.isIfStatement(parent)) controls.push("if:" + key(parent.expression, tree) + ":" + beneath(node, parent.thenStatement));
+              if (ts.isForOfStatement(parent)) controls.push("for:" + key(parent.expression, tree));
+            }
+            return stable({ fragments: [...fragments].sort(), controls });
+          };
+          return { evaluate, contexts, predicates, canonical, dependencyFingerprint };
+        };
+        const original = buildProjector(oldTree, oldOwner), shared = buildProjector(calleeTree, calleeOwner);
+        const passed = events.map(record).filter(event => event.outcome === "passed" && record(event.context).candidateKind === "original");
+        const witnesses: Array<{ node: ts.CallExpression; context: Record<string, unknown>; predicates: Predicate[] }> = [];
+        const decoded = (value: unknown): unknown => { const facts = record(value); if (facts.type === "undefined") return undefined; if (facts.type === "null") return null; return facts.value; };
+        for (const event of passed) {
+          const node = locate(event), context = record(event.context), cases = shared.contexts(node);
+          demand(context.phase === "predicate" && context.mutation === null && context.candidateSha256 === originalDigest, "Actual positive event has a foreign candidate/control origin");
+          const matching = cases.filter(environment => {
+            const profile = objectTerm(environment.get("profile")); if (!profile) return false;
+            const native = objectTerm(profile.nativeProps), header = environment.get("header"), headerElement = objectTerm(header);
+            const observedNative = record(context.nativeProps), observedHeader = record(context.header);
+            return environment.get("vector") === context.vector && native?.name === observedNative.name && native?.defaultValue === observedNative.defaultValue
+              && native?.required === observedNative.required && native?.disabled === observedNative.disabled && Object.hasOwn(native!, "onChange") === observedNative.hasOnChange
+              && profile.id === context.id && Object.hasOwn(profile, "eyebrow") && (profile.eyebrow !== undefined) === context.eyebrowPresent
+              && stable(profile.eyebrow) === stable(decoded(context.eyebrow)) && (profile.className !== undefined) === context.classNamePresent
+              && stable(profile.className) === stable(decoded(context.className)) && Boolean(headerElement) === observedHeader.present
+              && (!headerElement || headerElement.type === observedHeader.type && objectTerm(headerElement.props)?.children === observedHeader.text
+                && stable(Object.fromEntries(Object.entries(objectTerm(headerElement.props)!).filter(([name]) => name.startsWith("data-")))) === stable(observedHeader.markers))
+              && (environment.has("presentation") ? environment.get("presentation") ?? "undefined" : "omitted") === context.presentation
+              && (!environment.has("text") || environment.get("text") === context.metadataText);
+          });
+          demand(matching.length === 1, "Actual event does not identify one exact source-derived finite input case");
+          const predicates = shared.predicates(node, matching[0]);
+          const firstComponent = (value: Value): { [key: string]: Value } | undefined => {
+            if (Array.isArray(value)) { for (const entry of value) { const found = firstComponent(entry); if (found) return found; } return undefined; }
+            const object = objectTerm(value); if (!object) return undefined;
+            if (object.$kind === "component") return object;
+            for (const entry of Object.values(object)) { const found = firstComponent(entry); if (found) return found; } return undefined;
+          };
+          const component = firstComponent(predicates[0].actual), componentProps = component && objectTerm(component.props);
+          demand(componentProps && (Object.hasOwn(componentProps, "surface") ? componentProps.surface : "omitted") === context.surface
+            && (Object.hasOwn(componentProps, "presentation") ? componentProps.presentation ?? "undefined" : "omitted") === context.presentation, "Actual event changed its source-derived surface/presentation context");
+          demand(Array.isArray(event.arguments), "Native actual argument facts are missing");
+          const facts = event.arguments.map(record);
+          if (event.operator === "assert.ok") demand(facts[0].type === "boolean" && facts[0].value === true, "Truth assertion did not execute on a real true scalar");
+          else if (event.operator === "assert.equal") {
+            demand(facts.length >= 2, "Comparison did not execute both real operands");
+            if (facts[0].type === "react-element" || facts[1].type === "react-element") demand(facts[0].reference === facts[1].reference && facts[0].role === facts[1].role, "React identity was replaced by matching shapes");
+            else demand(stable(facts[0]) === stable(facts[1]), "Actual native equal operands differ");
+          }
+          witnesses.push({ node, context, predicates });
+        }
+        const paritySites = witnesses.filter(witness => {
+          const node = witness.node, first = node.arguments[0], second = node.arguments[1];
+          return node.expression.getText(calleeTree) === "assert.equal" && first && ts.isCallExpression(first) && first.expression.getText(calleeTree) === "renderToStaticMarkup"
+            && first.arguments[0] && ts.isCallExpression(first.arguments[0]) && first.arguments[0].expression.getText(calleeTree) === "createElement"
+            && first.arguments[0].arguments[0]?.getText(calleeTree) === "Section" && first.arguments[0].arguments[1]?.getText(calleeTree) === "props"
+            && second?.getText(calleeTree) === "panel";
+        });
+        const originalVectors = vectors.map(record).filter(vector => record(vector.context).candidateKind === "original");
+        demand(originalVectors.length > 0 && originalVectors.every(vector => paritySites.some(witness => witness.context.vector === record(vector.context).vector
+          && stable(witness.context.header) === stable(record(vector.context).header))), "Original React/direct invocation boundary lacks actual parity evidence");
+        const compatible = (old: Predicate, next: Predicate) => {
+          const equalTruth = (predicate: Predicate) => predicate.operator === "truth" || predicate.operator === "assert.equal" && typeof predicate.expected === "boolean";
+          if (stable(old.actual) === stable(next.actual) && stable(old.expected) === stable(next.expected) && (old.operator === next.operator || equalTruth(old) && equalTruth(next))) return true;
+          const actual = objectTerm(old.actual), stronger = objectTerm(next.actual);
+          if (equalTruth(old) && old.expected === true && actual?.$kind === "includes" && next.operator === "assert.equal" && next.expected === 1 && stronger?.$kind === "match-count") {
+            const regex = objectTerm(stronger.pattern);
+            return regex?.$kind === "regex" && /^[gu]*$/u.test(String(regex.flags)) && /^[a-zA-Z0-9_ ='"-]+$/u.test(String(regex.pattern))
+              && regex.pattern === actual.pattern && stable(stronger.target) === stable(actual.target);
+          } return false;
+        };
+        const retainedProjector = buildProjector(nextTree, nextOwner);
+        const currentKeys = new Map<string, ts.CallExpression[]>(); for (const node of nextScopeCalls) { const entry = key(node, nextTree); currentKeys.set(entry, [...(currentKeys.get(entry) ?? []), node]); }
+        let matched = 0;
+        for (const old of oldScopeCalls) {
+          const operator = old.expression.getText(oldTree);
+          const entry = key(old, oldTree), retained = currentKeys.get(entry) ?? [];
+          const negative = operator === "assert.notEqual" || operator === "assert.throws";
+          const originalDependencies = original.dependencyFingerprint(old);
+          // Equal assertion syntax can occur in distinct Section/Field loops.
+          // Consume only the matching dataflow/control site; another identical
+          // spelling remains available for its own original obligation.
+          const retainedIndex = retained.findIndex(next => negative || originalDependencies === retainedProjector.dependencyFingerprint(next));
+          if (retainedIndex >= 0) {
+            const next = retained.splice(retainedIndex, 1)[0];
+            if (negative && originalDependencies !== retainedProjector.dependencyFingerprint(next)) {
+              const oldCases = original.contexts(old), nextCases = retainedProjector.contexts(next);
+              for (const environment of oldCases) {
+                const from = environment.get("from"), to = environment.get("to");
+                demand(typeof from === "string" && typeof to === "string" && (nextCases.some(candidate => candidate.get("from") === from && candidate.get("to") === to)
+                  || mutants.some(value => { const replacement = record(record(value).replacement); return replacement.from === from && replacement.to === to; })), "A retained negative site lost an original input mutation");
+              }
+            } else demand(originalDependencies === retainedProjector.dependencyFingerprint(next), "A retained assertion changed its input, control or canonical dependency binding");
+            matched += 1; continue;
+          }
+          if (operator === "assert.notEqual" || operator === "assert.throws" || operator === "assert.ok" && old.arguments[0] && ts.isCallExpression(old.arguments[0]) && old.arguments[0].expression.getText(oldTree) === "rejects") {
+            const mutationCases = original.contexts(old);
+            for (const environment of mutationCases) {
+              const from = environment.get("from"), to = environment.get("to");
+              demand(typeof from === "string" && typeof to === "string" && mutants.some(value => { const mutation = record(value), replacement = record(mutation.replacement); return replacement.from === from && replacement.to === to; }), "An original actual-source negative case was lost");
+            }
+            obligations.push({ file, scope, site: old.getStart(oldTree), predicate: operator + ":actual-source-mutation-rejection", cases: mutationCases.length }); matched += 1; continue;
+          }
+          const cases = original.contexts(old);
+          demand(cases.length > 0, "Original assertion was not reachable in a finite case");
+          for (const environment of cases) for (const predicate of original.predicates(old, environment)) {
+            demand(witnesses.some(witness => witness.predicates.some(candidate => compatible(predicate, candidate))), "An original predicate/operator/input case has no actual canonical native execution witness");
+          }
+          obligations.push({ file, scope, site: old.getStart(oldTree), predicate: hash(stable(cases.map(environment => original.predicates(old, environment)))), cases: cases.length }); matched += 1;
+        }
+        demand(matched === oldScopeCalls.length, "A declining bucket contains an unmatched original assertion");
+        relocations.push({ file, scope, before: previousCount.total, after: nextCount.total, matched, beforeFingerprint, afterFingerprint });
+        const previousProvider = providerProofs.get(calleeFile);
+        providerProofs.set(calleeFile, { file: calleeFile, sourceSha256: hash(calleeSource), consumers: [...new Set([...(previousProvider?.consumers ?? []), file])].sort(), assertionSites: allSharedSites.length });
+      } catch (error) { failures.push({ file, scope, reason: error instanceof Error ? error.message : "Unsupported assertion relocation proof" }); }
+    }
+  }
+  return { status: failures.length ? "BLOCKED" as const : "PASS" as const, obligations, failures, relocations, providers: [...providerProofs.values()] };
+}
+
+/** Source-derived candidates, not a second registry and not proof that an assertion executed. */
+export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<string, string>>,
+  changes: LocalVerificationInputs["changes"], current: ReadonlyMap<string, string | Buffer>, before: ReadonlyMap<string, string | Buffer>): LocalVerificationSourceImpact {
+  const authorities = ["src/lib/admin/interaction-system/adoption-manifest.ts", "src/lib/admin/form-system/adoption-manifest.ts"];
+  const parse = (file: string, source: string) => ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true,
+    file.endsWith(".tsx") ? ts.ScriptKind.TSX : file.endsWith(".jsx") ? ts.ScriptKind.JSX : /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  // One discovery invocation owns both immutable source versions. Never reuse a projection across calls or source bytes.
+  const semanticCache = new Map<string, Map<string, string>>();
+  const semanticSource = (file: string, source: string) => {
+    const versions = semanticCache.get(file), cached = versions?.get(source);
+    if (cached !== undefined) return cached;
+    const projected = localVerificationSemanticSource(file, source);
+    const next = versions ?? new Map<string, string>(); next.set(source, projected); semanticCache.set(file, next);
+    return projected;
+  };
+  const name = (node: ts.PropertyName) => ts.isIdentifier(node) || ts.isStringLiteralLike(node) ? node.text : "";
+  const unique = (values: Iterable<string>) => [...new Set(values)].sort();
+  const text = (sources: ReadonlyMap<string, string | Buffer>, file: string) => sources.get(file)?.toString();
+  const codeSources = new Proxy(new Map([...current].filter(([file]) => /\.[cm]?[jt]sx?$/u.test(file)).map(([file, source]) => [file, source.toString()])), {
+    get(target, property) {
+      if (property === "get") return (file: string) => { assert.ok(target.has(file), "Graph dependency is outside the bound source snapshot: " + file); return target.get(file); };
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const pathCache = new WeakMap<ts.Node, ReadonlySet<string>>();
+  const sourcePaths = (node: ts.Node) => {
+    const cached = pathCache.get(node); if (cached) return new Set(cached);
+    const paths = new Set<string>();
+    const visit = (part: ts.Node) => {
+      if (ts.isStringLiteralLike(part) && /^(?:src|scripts|tests)\/[a-zA-Z0-9_./()[\]@+-]+\.(?:[cm]?[jt]sx?|css|sql)$/u.test(part.text)) paths.add(part.text);
+      ts.forEachChild(part, visit);
+    };
+    visit(node); pathCache.set(node, paths); return new Set(paths);
+  };
+  type Owner = { owner: string; capability?: string; files: string[]; manifest: string; current: boolean };
+  type Consumer = { id: string; manifest: string; files: string[] };
+  const owners: Owner[] = [], consumers: Consumer[] = [], unresolvedAuthorities = new Set<string>();
+  for (const sources of [before, current]) for (const file of authorities) {
+    const source = text(sources, file);
+    if (source === undefined) { unresolvedAuthorities.add(file + ":missing_authority"); continue; }
+    const tree = parse(file, source);
+    const visit = (node: ts.Node) => {
+      if (ts.isObjectLiteralExpression(node)) {
+        const fields = new Map(node.properties.filter(ts.isPropertyAssignment).map(property => [name(property.name), property.initializer]));
+        const paths = (keys: string[]) => unique(keys.flatMap(key => fields.has(key) ? [...sourcePaths(fields.get(key)!)] : []));
+        const string = (key: string) => { const value = fields.get(key); return value && ts.isStringLiteralLike(value) ? value.text : undefined; };
+        if (fields.has("executableBindings") && string("owner")) owners.push({ owner: string("owner")!,
+          capability: ts.isPropertyAssignment(node.parent) ? name(node.parent.name) : undefined, files: paths(["sourceFiles"]), manifest: file, current: sources === current });
+        if (string("classification") === "independent_runtime" && string("id")) owners.push({ owner: string("id")!, files: paths(["sourceFiles"]), manifest: file, current: sources === current });
+        if (fields.has("capabilityAudit")) {
+          const files = paths(["sourceFiles", "pageSourceFiles", "presentationSourceFiles"]);
+          if (string("id") && files.length) consumers.push({ id: string("id")!, manifest: file, files });
+          else unresolvedAuthorities.add(file + ":generated_or_dynamic_consumer");
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+  }
+  const graphCache = new Map<string, Set<string>>(), graphProblems = new Map<string, string>();
+  const references = (entry: string) => {
+    const cached = graphCache.get(entry); if (cached) return cached;
+    const found = new Set<string>([entry]);
+    try {
+      assert.ok(current.has(entry), "Entry missing from bound source snapshot.");
+      const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry], symbolAware: false, sourceOverrides: codeSources });
+      for (const [file, tree] of graph) { found.add(file); for (const target of sourcePaths(tree)) found.add(target); }
+    } catch { graphProblems.set(entry, "unresolved_source_graph:" + entry); }
+    graphCache.set(entry, found); return found;
+  };
+  const checks: Array<{ check: string; entries: string[]; references: Set<string> }> = [];
+  for (const check of Object.keys(scripts).sort()) {
+    if (!/^(?:verify|qa):[a-zA-Z0-9:_-]+$/u.test(check)) continue;
+    try {
+      const entries = registeredVerificationNodeEntries(scripts, check), targets = new Set<string>();
+      for (const entry of entries) for (const target of references(entry)) targets.add(target);
+      checks.push({ check, entries, references: targets });
+    } catch { /* Unsupported shell/native entries cannot authorize source-derived coverage. */ }
+  }
+  const obligations: LocalVerificationSourceImpact["obligations"][number][] = [];
+  const exportedShapes = (file: string, source: string | undefined) => {
+    const result = new Map<string, string>(); if (source === undefined || !/\.[cm]?[jt]sx?$/u.test(file)) return result;
+    const semantic = semanticSource(file, source), tree = parse(file, semantic);
+    const authority = authorities.includes(file), explicitContract = /(?:^|[\/._-])contracts?(?:[\/._-]|$)/iu.test(file);
+    if (authority) { result.set("manifest-obligations", semantic); return result; }
+    for (const node of tree.statements) {
+      if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+      if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) result.set(node.name.text, node.getText(tree));
+      else if (ts.isFunctionDeclaration(node)) result.set(node.name?.text ?? "default",
+        node.getText(tree).slice(0, node.body ? node.body.getStart(tree) - node.getStart(tree) : undefined));
+      else if (ts.isVariableStatement(node)) for (const declaration of node.declarationList.declarations) {
+        if (explicitContract) result.set(declaration.name.getText(tree), declaration.getText(tree));
+        else if (declaration.initializer && (ts.isArrowFunction(declaration.initializer) || ts.isFunctionExpression(declaration.initializer))) {
+          const functionValue = declaration.initializer;
+          result.set(declaration.name.getText(tree), declaration.name.getText(tree) + ":" + (declaration.type?.getText(tree) ?? "") + ":"
+            + functionValue.getText(tree).slice(0, functionValue.body.getStart(tree) - functionValue.getStart(tree)));
+        }
+      }
+    }
+    return result;
+  };
+  const capabilityAxes = (source: string | undefined) => {
+    const rows = new Map<string, string>(); if (!source) return rows;
+    const tree = parse(authorities[0], localVerificationSemanticSource(authorities[0], source));
+    for (const statement of tree.statements) if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) {
+      if (declaration.name.getText(tree) !== "ADMIN_CURRENT_SHARED_CAPABILITY_SET" || !declaration.initializer || !ts.isCallExpression(declaration.initializer)) continue;
+      const object = declaration.initializer.arguments[0];
+      if (object && ts.isObjectLiteralExpression(object)) for (const property of object.properties) if (ts.isPropertyAssignment(property)) rows.set(name(property.name), property.initializer.getText(tree));
+    }
+    return rows;
+  };
+  for (const change of changes) {
+    const previousBytes = before.get(change.file), nextBytes = current.get(change.file);
+    const previous = previousBytes?.toString(), next = nextBytes?.toString();
+    assert.equal(previousBytes === undefined ? null : digest(previousBytes), change.beforeSha256, "Impact baseline bytes differ: " + change.file);
+    assert.equal(nextBytes === undefined ? null : digest(nextBytes), change.afterSha256, "Impact current bytes differ: " + change.file);
+    const oldShapes = exportedShapes(change.file, previous), newShapes = exportedShapes(change.file, next);
+    const oldAxes = capabilityAxes(change.file === authorities[0] ? previous : undefined), newAxes = capabilityAxes(change.file === authorities[0] ? next : undefined);
+    const onlyAxesAdded = newAxes.size > oldAxes.size && [...oldAxes].every(([key, value]) => newAxes.get(key) === value);
+    // Dynamic-axis preservation is intentionally narrow: the rest of the authority must be unchanged.
+    const withoutAxes = (source: string | undefined) => {
+      if (source === undefined) return "";
+      const tree = parse(change.file, source);
+      for (const statement of tree.statements) if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations)
+        if (declaration.name.getText(tree) === "ADMIN_CURRENT_SHARED_CAPABILITY_SET" && declaration.initializer)
+          return semanticSource(change.file, source.slice(0, declaration.initializer.getStart(tree)) + "{}" + source.slice(declaration.initializer.end));
+      return semanticSource(change.file, source);
+    };
+    const pureAxisAddition = onlyAxesAdded && withoutAxes(previous) === withoutAxes(next);
+    for (const contract of unique([...oldShapes.keys(), ...newShapes.keys()])) if (oldShapes.get(contract) !== newShapes.get(contract)) obligations.push({
+      file: change.file, owner: unique(owners.filter(owner => owner.files.includes(change.file)).map(owner => owner.owner)).join(", ") || change.file,
+      contract: change.file + "#" + contract, before: oldShapes.has(contract) ? digest(oldShapes.get(contract)!) : null,
+      after: newShapes.has(contract) ? digest(newShapes.get(contract)!) : null, addedCapabilityAxis: pureAxisAddition && contract === "manifest-obligations",
+    });
+  }
+  const protections: LocalVerificationSourceImpact["protections"][number][] = [];
+  const needsDynamicAxes = obligations.some(obligation => obligation.addedCapabilityAxis);
+  const authorityTree = parse(authorities[0], needsDynamicAxes ? text(current, authorities[0]) ?? "" : "");
+  const keyDeriver = authorityTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "adminSharedCapabilityKeys");
+  const keyReturn = keyDeriver?.body?.statements.length === 1 && ts.isReturnStatement(keyDeriver.body.statements[0]) ? keyDeriver.body.statements[0].expression : undefined;
+  let keyExpression = keyReturn;
+  while (keyExpression && (ts.isAsExpression(keyExpression) || ts.isTypeAssertionExpression(keyExpression) || ts.isParenthesizedExpression(keyExpression))) keyExpression = keyExpression.expression;
+  const derivesActualKeys = Boolean(keyDeriver?.parameters.length === 1 && keyExpression && ts.isCallExpression(keyExpression)
+    && keyExpression.expression.getText(authorityTree) === "Object.keys" && keyExpression.arguments.length === 1
+    && keyExpression.arguments[0].getText(authorityTree) === keyDeriver.parameters[0].name.getText(authorityTree));
+  // File reachability does not establish that an assertion protects this changed export.
+  // Compare explicit test inputs with declared shapes; never manufacture expected values.
+  const exportedKinds = (file: string, source: string | undefined) => {
+    const kinds = new Map<string, { runtime: boolean; members: ReadonlyMap<string, string> }>();
+    if (source === undefined) return kinds;
+    const tree = parse(file, semanticSource(file, source));
+    for (const node of tree.statements) {
+      if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+      if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
+        const members = ts.isInterfaceDeclaration(node) ? node.members : ts.isTypeLiteralNode(node.type) ? node.type.members : [];
+        kinds.set(node.name.text, { runtime: false, members: new Map(members.flatMap(member => member.name
+          ? [[name(member.name), member.getText(tree)] as const] : [])) });
+      } else if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) {
+        if (node.name) kinds.set(node.name.text, { runtime: true, members: new Map() });
+      } else if (ts.isVariableStatement(node)) for (const declaration of node.declarationList.declarations)
+        kinds.set(declaration.name.getText(tree), { runtime: true, members: new Map() });
+    }
+    return kinds;
+  };
+  const contractShapeFiles = new Map(unique(obligations.map(obligation => obligation.file)).map(file => [file, {
+    previous: exportedShapes(file, text(before, file)), next: exportedShapes(file, text(current, file)),
+    previousKinds: exportedKinds(file, text(before, file)), nextKinds: exportedKinds(file, text(current, file)),
+  }]));
+  const compactShape = (value: string) => value.replace(/\s+/gu, "").replace(/;(?=\})/gu, "");
+  const obligationShapes = obligations.map(obligation => {
+    const key = obligation.contract.slice(obligation.file.length + 1);
+    const { previous, next, previousKinds, nextKinds } = contractShapeFiles.get(obligation.file)!;
+    const declaration = nextKinds.get(key) ?? previousKinds.get(key);
+    return { ...obligation, key, previous: previous.get(key) ?? "", next: next.get(key) ?? "",
+      siblings: [...previous, ...next].filter(([name]) => name !== key).map(([, shape]) => shape),
+      runtime: declaration?.runtime === true, valueExport: declaration?.runtime === true,
+      changedTypeMembers: declaration?.runtime === false ? new Set(unique([
+        ...(previousKinds.get(key)?.members.keys() ?? []), ...(nextKinds.get(key)?.members.keys() ?? []),
+      ]).filter(member => previousKinds.get(key)?.members.get(member) !== nextKinds.get(key)?.members.get(member))) : new Set<string>() };
+  });
+  const assertionShapes = (file: string, source: string | undefined) => {
+    const shapes = new Map<string, { references: string[]; contracts: string[] }>(); if (source === undefined) return shapes;
+    const tree = parse(file, semanticSource(file, source));
+    const bindings = new Map<string, ts.Node[]>(), imports = new Map<string, string>(), importedNames = new Map<string, string>();
+    const bindingScopes = new Map<ts.Node, ts.Node>(), typedApiBindings = new Map<string, Array<{ target: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
+    const typedValueBindings = new Map<string, Array<{ target: string; typeName: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
+    let shadowedPick = false;
+    const detectPick = (node: ts.Node) => {
+      if ((ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)
+        || ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node) || ts.isTypeParameterDeclaration(node) || ts.isImportSpecifier(node)
+        || ts.isImportClause(node) || ts.isNamespaceImport(node) || ts.isImportEqualsDeclaration(node)) && node.name?.getText(tree) === "Pick") shadowedPick = true;
+      ts.forEachChild(node, detectPick);
+    };
+    detectPick(tree);
+    // Bind only the receiver's actual imported type, or an unshadowed built-in Pick of it.
+    // A nested generic/object type does not type its outer receiver as the imported owner.
+    const receiverImport = (type: ts.TypeNode): { imported: ts.ImportTypeNode; members: ReadonlySet<string> | null } | undefined => {
+      while (ts.isParenthesizedTypeNode(type)) type = type.type;
+      if (ts.isImportTypeNode(type)) return { imported: type, members: null };
+      if (!shadowedPick && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === "Pick"
+        && type.typeArguments?.length === 2 && ts.isImportTypeNode(type.typeArguments[0])) {
+        const selector = type.typeArguments[1], keys = ts.isUnionTypeNode(selector) ? selector.types : [selector];
+        if (keys.every(key => ts.isLiteralTypeNode(key) && ts.isStringLiteral(key.literal)))
+          return { imported: type.typeArguments[0], members: new Set(keys.map(key => ((key as ts.LiteralTypeNode).literal as ts.StringLiteral).text)) };
+      }
+      return undefined;
+    };
+    const moduleTarget = (specifier: string) => {
+      if (!specifier.startsWith(".")) return undefined;
+      const base = resolve(ROOT, dirname(file), specifier).slice(ROOT.length + 1).replaceAll("\\", "/");
+      return [base, base + ".ts", base + ".tsx", base + ".mts", base + ".mjs", base + "/index.ts"].find(candidate => current.has(candidate) || before.has(candidate));
+    };
+    const declarationScope = (declaration: ts.Node) => {
+      let scope = declaration.parent;
+      while (scope && !ts.isSourceFile(scope) && !ts.isBlock(scope) && !ts.isFunctionLike(scope)) scope = scope.parent;
+      return scope ?? tree;
+    };
+    const nearest = <T,>(part: ts.Node, candidates: readonly T[], scopeOf: (candidate: T) => ts.Node): readonly T[] => {
+      for (let scope = part.parent; scope; scope = scope.parent) {
+        const local = candidates.filter(candidate => scopeOf(candidate) === scope);
+        if (local.length) return local;
+      }
+      return [];
+    };
+    const register = (key: string, node: ts.Node, declaration: ts.Node) => {
+      bindingScopes.set(node, declarationScope(declaration)); bindings.set(key, [...(bindings.get(key) ?? []), node]);
+    };
+    const declarations = (node: ts.Node) => {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) register(node.name.text, node.initializer, node);
+      if (ts.isFunctionDeclaration(node) && node.name && node.body) register(node.name.text, node.body, node);
+      if (ts.isParameter(node) && ts.isIdentifier(node.name)) register(node.name.text, node.initializer ?? node, node);
+      if ((ts.isParameter(node) || ts.isVariableDeclaration(node)) && ts.isIdentifier(node.name) && node.type) {
+        const parameterName = node.name.text;
+        const receiver = receiverImport(node.type), imported = receiver?.imported;
+        if (imported && ts.isLiteralTypeNode(imported.argument) && ts.isStringLiteral(imported.argument.literal)) {
+          const target = moduleTarget(imported.argument.literal.text), members = receiver!.members;
+          if (target && !imported.isTypeOf && imported.qualifier && ts.isIdentifier(imported.qualifier)) typedValueBindings.set(parameterName,
+            [...(typedValueBindings.get(parameterName) ?? []), { target, typeName: imported.qualifier.text, scope: declarationScope(node), members }]);
+          else if (target && imported.isTypeOf && !imported.qualifier) typedApiBindings.set(parameterName,
+            [...(typedApiBindings.get(parameterName) ?? []), { target, scope: declarationScope(node), members }]);
+        }
+      }
+      if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith(".")) {
+        const target = moduleTarget(node.moduleSpecifier.text);
+        if (target) {
+          if (node.importClause?.name) imports.set(node.importClause.name.text, target);
+          const named = node.importClause?.namedBindings;
+          if (named && ts.isNamedImports(named)) for (const element of named.elements) {
+            imports.set(element.name.text, target); importedNames.set(element.name.text, (element.propertyName ?? element.name).text);
+          }
+        }
+      }
+      ts.forEachChild(node, declarations);
+    };
+    declarations(tree);
+    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, testedTypeMembers: Set<string>, tested = true): string[] => {
+      const targets = sourcePaths(node);
+      const visit = (part: ts.Node) => {
+        if (tested && ts.isStringLiteralLike(part)) fragments.add(part.text.replace(/\s+/gu, ""));
+        if (tested && ts.isPropertyAssignment(part) && (ts.isIdentifier(part.name) || ts.isStringLiteralLike(part.name))) fragments.add(part.name.text);
+        if (tested && ts.isPropertyAccessExpression(part) && ts.isIdentifier(part.expression)) {
+          const local = nearest(part, bindings.get(part.expression.text) ?? [], binding => bindingScopes.get(binding)!);
+          const typed = local.length === 1 ? nearest(part, typedValueBindings.get(part.expression.text) ?? [], binding => binding.scope)
+            .filter(binding => binding.scope === bindingScopes.get(local[0])) : [];
+          if (typed.length === 1) {
+            const binding = typed[0], contract = binding.target + "#" + binding.typeName;
+            if ((!binding.members || binding.members.has(part.name.text))
+              && obligationShapes.some(obligation => obligation.contract === contract && obligation.changedTypeMembers.has(part.name.text))) {
+              targets.add(binding.target); testedTypeMembers.add(contract);
+            }
+          }
+        }
+        if (tested && ts.isCallExpression(part) && !/^(?:assert|check|expect)(?:\.|$)/u.test(part.expression.getText(tree))) {
+          if (ts.isIdentifier(part.expression)) {
+            const shadowed = nearest(part, bindings.get(part.expression.text) ?? [], binding => bindingScopes.get(binding)!);
+            const target = shadowed.length ? undefined : imports.get(part.expression.text), symbol = importedNames.get(part.expression.text);
+            if (target && symbol) calls.add(target + "#" + symbol);
+          } else if (ts.isPropertyAccessExpression(part.expression)) {
+            const receiver = part.expression.expression, member = part.expression.name.text, typed = ts.isIdentifier(receiver) ? typedApiBindings.get(receiver.text) : undefined;
+            const local = ts.isIdentifier(receiver) ? nearest(part, bindings.get(receiver.text) ?? [], binding => bindingScopes.get(binding)!) : [];
+            const typedTargets = new Set((local.length === 1 ? nearest(part, typed ?? [], binding => binding.scope)
+              .filter(binding => binding.scope === bindingScopes.get(local[0]) && (!binding.members || binding.members.has(member))) : []).map(binding => binding.target));
+            if (typedTargets.size === 1) for (const target of typedTargets) { targets.add(target); calls.add(target + "#" + part.expression.name.text); }
+            else if (!typed?.length) calls.add(part.expression.name.text);
+          }
+        }
+        const propertyName = ts.isIdentifier(part) && (ts.isPropertyAccessExpression(part.parent) && part.parent.name === part
+          || ts.isPropertyAssignment(part.parent) && part.parent.name === part || ts.isPropertySignature(part.parent) && part.parent.name === part
+          || ts.isMethodDeclaration(part.parent) && part.parent.name === part);
+        if (ts.isIdentifier(part) && !propertyName && !seen.has(part.text)) {
+          seen.add(part.text);
+          const candidates = nearest(part, bindings.get(part.text) ?? [], binding => bindingScopes.get(binding)!);
+          const imported = candidates.length ? undefined : imports.get(part.text); if (imported) targets.add(imported);
+          const importedName = importedNames.get(part.text); if (tested && imported && importedName) testedExports.add(imported + "#" + importedName);
+          if (candidates?.length === 1) {
+            if (!ts.isBlock(candidates[0]) && !ts.isParameter(candidates[0])) closure.add(candidates[0].getText(tree));
+            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, testedTypeMembers, tested && !ts.isBlock(candidates[0]))) targets.add(target);
+          }
+        }
+        ts.forEachChild(part, visit);
+      };
+      visit(node); return unique(targets);
+    };
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|check|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) {
+        const callee = node.expression.getText(tree);
+        const argumentsUnderTest = callee === "check" ? node.arguments.slice(1, 2) : /^(?:assert|assert\.ok|expect)$/u.test(callee) ? node.arguments.slice(0, 1) : node.arguments.slice(0, 2);
+        // Callback-based check wrappers have their assertions inspected independently.
+        if (!argumentsUnderTest.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) || callee !== "check") {
+          const closure = new Set<string>(), fragments = new Set<string>(), calls = new Set<string>(), testedExports = new Set<string>(), testedTypeMembers = new Set<string>();
+          const references = unique(argumentsUnderTest.flatMap(argument => dependencyPaths(argument, new Set(), closure, fragments, calls, testedExports, testedTypeMembers)));
+          const contracts = obligationShapes.filter(obligation => references.includes(obligation.file) && (obligation.valueExport && testedExports.has(obligation.contract)
+            || testedTypeMembers.has(obligation.contract)
+            || obligation.runtime && (calls.has(obligation.contract) || calls.has(obligation.key)) || [...fragments].some(fragment => {
+            if (fragment.length < 2 || /^(?:true|false|null|undefined|number|string|boolean|object|function|any|unknown|void|never|readonly|export|type|const|interface|\d+)$/u.test(fragment)) return false;
+            const previous = compactShape(obligation.previous), next = compactShape(obligation.next), expected = compactShape(fragment);
+            // An export name proves availability only, not applicable contract protection.
+            if (expected === obligation.key) return false;
+            return previous.includes(expected) !== next.includes(expected)
+              && !obligation.siblings.some(shape => compactShape(shape).includes(expected));
+          }))).map(obligation => obligation.contract);
+          shapes.set(JSON.stringify([callee, argumentsUnderTest.map(argument => argument.getText(tree)), unique(closure)]), { references, contracts: unique(contracts) });
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree); return shapes;
+  };
+  const protectionCache = new Map<string, Omit<LocalVerificationSourceImpact["protections"][number], "check" | "references">>();
+  const obligationFiles = new Set(obligations.map(obligation => obligation.file));
+  for (const check of obligations.length ? checks : []) for (const file of check.entries) {
+    const entryReferences = references(file);
+    if (![...obligationFiles].some(target => entryReferences.has(target))) continue;
+    const cached = protectionCache.get(file);
+    if (cached) { protections.push({ ...cached, check: check.check, references: unique(entryReferences) }); continue; }
+    const source = text(current, file); if (source === undefined) continue;
+    const previous = text(before, file), tree = parse(file, needsDynamicAxes ? source : "");
+    // This recognizes the existing dynamic capability audit, not arbitrary caller declarations.
+    const keyDeclarations = new Set<string>(); let importsAuthority = false, rejectsMissingAxis = false, iteratesAxes = false;
+    for (const statement of tree.statements) {
+      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) && /interaction-system\/adoption-manifest\.ts$/u.test(statement.moduleSpecifier.text)) {
+        const text = statement.getText(tree); importsAuthority ||= text.includes("ADMIN_CURRENT_SHARED_CAPABILITY_SET") && text.includes("adminSharedCapabilityKeys");
+      }
+      if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name) && declaration.initializer
+        && ts.isCallExpression(declaration.initializer) && declaration.initializer.expression.getText(tree) === "adminSharedCapabilityKeys"
+        && declaration.initializer.arguments.length === 1 && declaration.initializer.arguments[0].getText(tree) === "ADMIN_CURRENT_SHARED_CAPABILITY_SET") keyDeclarations.add(declaration.name.text);
+    }
+    const inspect = (node: ts.Node) => {
+      if (ts.isForOfStatement(node) && ts.isIdentifier(node.expression) && keyDeclarations.has(node.expression.text)
+        && /ADMIN_CURRENT_SHARED_CAPABILITY_SET\[\s*capability\s*\]/u.test(node.statement.getText(tree))
+        && /decisions\[\s*capability\s*\]/u.test(node.statement.getText(tree))) iteratesAxes = true;
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "push"
+        && node.arguments.some(argument => ts.isStringLiteralLike(argument) && argument.text === "unclassified_capability_axis")) rejectsMissingAxis = true;
+      ts.forEachChild(node, inspect);
+    };
+    inspect(tree);
+    const beforeSha256 = before.has(file) ? digest(before.get(file)!) : null, afterSha256 = digest(current.get(file)!);
+    const semanticChange = beforeSha256 !== afterSha256 && (previous === undefined || semanticSource(file, previous) !== semanticSource(file, source));
+    const oldAssertions = semanticChange ? assertionShapes(file, previous) : new Map<string, { references: string[]; contracts: string[] }>();
+    const newAssertions = semanticChange ? assertionShapes(file, source) : new Map<string, { references: string[]; contracts: string[] }>();
+    const protection = { file, beforeSha256, afterSha256, semanticChange,
+      assertionChanges: [...newAssertions].filter(([shape]) => !oldAssertions.has(shape)).map(([shape, projection]) => ({ sha256: digest(shape), ...projection })),
+      dynamicCapabilityAxes: derivesActualKeys && importsAuthority && iteratesAxes && rejectsMissingAxis };
+    protectionCache.set(file, protection);
+    protections.push({ ...protection, check: check.check, references: unique(entryReferences) });
+  }
+  const rows = changes.map(change => {
+    const matched = owners.filter(owner => owner.files.includes(change.file));
+    const registered = consumers.filter(consumer => consumer.files.includes(change.file) || matched.some(owner => consumer.files.some(entry =>
+      [...references(entry)].some(target => owner.files.includes(target)))));
+    const qualityChecks = /^(?:scripts|tests)\//u.test(change.file)
+      ? ["verify:executable-governance", "verify:verification-infrastructure"].filter(check => Object.hasOwn(scripts, check)) : [];
+    const covering = checks.filter(check => check.references.has(change.file));
+    const unresolved = unique([...(matched.length ? unresolvedAuthorities : []), ...(covering.length ? [] : ["no_positive_source_protection_relationship"]),
+      ...registered.flatMap(consumer => consumer.files.flatMap(entry => graphProblems.has(entry) ? [graphProblems.get(entry)!] : []))]);
+    const previous = text(before, change.file), next = text(current, change.file), code = /\.[cm]?[jt]sx?$/u.test(change.file);
+    const semanticChange = previous === undefined || next === undefined || !code || semanticSource(change.file, previous) !== semanticSource(change.file, next);
+    const presentationOnly = Boolean(semanticChange && previous !== undefined && next !== undefined && /\.[jt]sx$/u.test(change.file)
+      && localVerificationPresentationSource(change.file, previous) === localVerificationPresentationSource(change.file, next));
+    return { file: change.file, owners: matched.length ? unique(matched.map(owner => owner.owner)) : [change.file], capabilities: unique(matched.flatMap(owner => owner.capability ? [owner.capability] : [])),
+      consumers: unique(registered.map(consumer => consumer.manifest + "#" + consumer.id)),
+      contracts: unique([...obligations.filter(row => row.file === change.file).map(row => row.contract), ...registered.map(consumer => consumer.manifest)]),
+      candidateChecks: unique([...covering.map(check => check.check), ...qualityChecks]), unresolved, semanticChange, presentationOnly };
+  });
+  const assertionRelocationDemand = localVerificationAssertionRelocationRequired({ baselineSources: before, currentSources: current });
+  const demanded = new Set([...assertionRelocationDemand.files, ...assertionRelocationDemand.providers]);
+  const qaQuality = changes.filter(change => /^(?:scripts|tests)\/.+\.[cm]?[jt]sx?$/u.test(change.file)).map(change => {
+    const assertions = (source: string | undefined) => {
+      const found: ts.CallExpression[] = [], coverage = new Map<string, number>(); if (source === undefined) return { found, coverage };
+      const tree = parse(change.file, semanticSource(change.file, source));
+      const visit = (node: ts.Node) => {
+        if (ts.isCallExpression(node) && /^(?:assert(?:\.[A-Za-z]+)?|expect(?:\.[A-Za-z]+)?)$/u.test(node.expression.getText(tree))) {
+          found.push(node);
+          const scope: string[] = [];
+          for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent)
+            if (ts.isFunctionDeclaration(parent) && parent.name) scope.unshift(parent.name.text);
+          const key = JSON.stringify([scope, "assertion_count"]);
+          coverage.set(key, (coverage.get(key) ?? 0) + 1);
+          if (/^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual|notEqual|notStrictEqual|notDeepEqual|notDeepStrictEqual)$/u.test(node.expression.getText(tree))) {
+            const strict = JSON.stringify([scope, "comparison_count"]);
+            coverage.set(strict, (coverage.get(strict) ?? 0) + 1);
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(tree); return { found, coverage };
+    };
+    const previous = assertions(text(before, change.file)), next = assertions(text(current, change.file));
+    const predicate = (call: ts.CallExpression) => JSON.stringify(call.arguments.slice(0,
+      /\.(?:ok|throws|rejects)$/u.test(call.expression.getText()) ? 1 : 2).map(argument => argument.getText()));
+    const identities = new WeakMap<ts.CallExpression, { operator: string; predicate: string; scope: string }>();
+    const identity = (call: ts.CallExpression) => {
+      const cached = identities.get(call); if (cached) return cached;
+      const scope: string[] = [];
+      for (let parent: ts.Node | undefined = call.parent; parent; parent = parent.parent)
+        if (ts.isFunctionDeclaration(parent) && parent.name) scope.unshift(parent.name.text);
+      const value = { operator: call.expression.getText(), predicate: predicate(call), scope: JSON.stringify(scope) }; identities.set(call, value); return value;
+    };
+    const original = new Map<string, number>(), currentOperators = new Map<string, Set<string>>();
+    for (const call of previous.found) { const value = identity(call), id = JSON.stringify(value); original.set(id, (original.get(id) ?? 0) + 1); }
+    for (const call of next.found) { const value = identity(call), id = value.scope + value.predicate;
+      const operators = currentOperators.get(id) ?? new Set<string>(); operators.add(value.operator); currentOperators.set(id, operators); }
+    const tautology = (call: ts.CallExpression) => {
+      const operator = call.expression.getText(), first = call.arguments[0], second = call.arguments[1];
+      if (!first) return true;
+      if (/^(?:assert(?:\.ok)?|expect)$/u.test(operator) && [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.StringLiteral,
+        ts.SyntaxKind.NumericLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral].includes(first.kind)) return true;
+      return /^assert\.(?:equal|strictEqual|deepEqual|deepStrictEqual)$/u.test(operator) && second !== undefined && first.getText() === second.getText();
+    };
+    let formal = false;
+    for (const call of next.found) if (tautology(call)) {
+      const id = JSON.stringify(identity(call)), count = original.get(id) ?? 0;
+      if (count === 0) formal = true; else original.set(id, count - 1);
+    }
+    const operatorChanged = previous.found.some(call => { const value = identity(call), operators = currentOperators.get(value.scope + value.predicate);
+      return operators !== undefined && !operators.has(value.operator); });
+    return { file: change.file, assertionsBefore: previous.found.length, assertionsAfter: next.found.length,
+      failures: [...(next.found.length < previous.found.length ? ["qa_assertion_count_decreased_requires_explicit_protection_review"]
+        : [...previous.coverage].some(([key, count]) => (next.coverage.get(key) ?? 0) < count)
+          ? ["qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"] : []),
+        ...(formal ? ["qa_new_tautological_assertion_cannot_replace_protection"] : []),
+        ...(operatorChanged ? ["qa_predicate_operator_changed_requires_equivalence_proof"] : []),
+        ...(demanded.has(change.file) && next.found.length >= previous.found.length
+          && [...previous.coverage].every(([key, count]) => (next.coverage.get(key) ?? 0) >= count)
+          ? ["qa_assertion_relocation_requires_qualified_execution"] : [])] };
+  });
+  const sorted = <T extends { file: string }>(rows: readonly T[]) => [...rows].sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
+  return { proofBoundary: "source_discovery_only", ownerBindings: [...new Map(owners.filter(owner => owner.current).map(owner => [JSON.stringify(owner), owner])).values()],
+    sourceSha256: digest(JSON.stringify(sorted([...current].map(([file, source]) => ({ file, sha256: digest(source) }))))),
+    deltaSha256: digest(JSON.stringify(sorted(changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))))), changes: rows, obligations, protections, qaQuality, assertionRelocationDemand };
+}
+
+/** Trusted event data identifies Git objects; no ref strings, network lookup or missing-history fallback is accepted. */
+export function resolveLocalVerificationCiBaseline(input: { eventName: string; event: unknown; githubSha: string; checkoutHead: string },
+  history: { exists(sha: string): boolean; isAncestor(ancestor: string, descendant: string): boolean; parents(sha: string): readonly string[] }) {
+  const sha = (value: unknown, label: string, requireLocalCommit = true) => {
+    assert.ok(typeof value === "string" && /^[a-f0-9]{40}$/u.test(value) && value !== "0".repeat(40), "Invalid or missing immutable CI " + label);
+    if (requireLocalCommit) assert.ok(history.exists(value), "Missing local Git history for CI " + label); return value;
+  };
+  const current = sha(input.checkoutHead, "checkout HEAD"), expected = sha(input.githubSha, "GITHUB_SHA");
+  assert.equal(current, expected, "CI checkout HEAD differs from GITHUB_SHA.");
+  assert.ok(input.event && typeof input.event === "object" && !Array.isArray(input.event), "Invalid immutable CI event payload.");
+  const event = input.event as Record<string, unknown>; let baseline: string;
+  if (input.eventName === "pull_request") {
+    const request = event.pull_request as { base?: { sha?: unknown }; head?: { sha?: unknown }; merge_commit_sha?: unknown } | undefined;
+    baseline = sha(request?.base?.sha, "pull request base"); const head = sha(request?.head?.sha, "pull request head");
+    // The captured GitHub event can carry the previous test merge here. Only immutable checkout,
+    // event base/head and their exact Git topology authorize admission; advisory metadata never does.
+    if (request?.merge_commit_sha !== undefined && request.merge_commit_sha !== null) sha(request.merge_commit_sha, "pull request advisory merge metadata", false);
+    if (current !== head) {
+      const parents = history.parents(current);
+      assert.equal(parents.length, 2, "CI merge checkout requires exactly two Git parents.");
+      assert.deepEqual(parents.map((parent, index) => sha(parent, "pull request merge parent " + index)), [baseline, head],
+        "CI merge checkout parents differ from the immutable pull request base and head.");
+    }
+    assert.ok(history.isAncestor(head, current), "Pull request head is not an ancestor of the actual CI checkout.");
+  } else {
+    assert.equal(input.eventName, "push", "Unsupported CI event for source impact.");
+    baseline = sha(event.before, "push before"); assert.equal(sha(event.after, "push after"), current, "Push event differs from the actual CI checkout.");
+  }
+  assert.ok(history.isAncestor(baseline, current), "CI baseline is not an ancestor of the actual checkout; no fallback or fetch was attempted.");
+  return { baselineHead: baseline, finalHead: current, eventName: input.eventName };
+}
+
+/** Bounded public Git bindings only; no event text, credentials, paths or Git error output is retained. */
+export function localVerificationCiDiagnostic(input: { eventName: string; event: unknown; githubSha: string; checkoutHead: string; lastCommitLookup?: string;
+  lastCommitProbe?: { sha: string; exitCode: number | null; identity: string | null } },
+  probe: (operation: "identity" | "objectType" | "parents" | "ancestry", sha: string, descendant?: string) => { exitCode: number | null; output: string }) {
+  const canonical = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{40}$/u.test(value);
+  const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const field = (container: Record<string, unknown>, key: string) => {
+    const value = container[key]; return { present: Object.hasOwn(container, key), type: value === null ? "null" : Array.isArray(value) ? "array" : typeof value,
+      value: canonical(value) ? value : null };
+  };
+  const event = object(input.event), request = object(event.pull_request);
+  const bindings = { checkoutHead: field(object(input), "checkoutHead"), githubSha: field(object(input), "githubSha"),
+    base: field(object(request.base), "sha"), head: field(object(request.head), "sha"), mergeCommitSha: field(request, "merge_commit_sha"),
+    pushBefore: field(event, "before"), pushAfter: field(event, "after"), lastCommitLookup: field(object(input), "lastCommitLookup") };
+  const query = (operation: "identity" | "objectType" | "parents" | "ancestry", sha: string, descendant?: string) => {
+    try {
+      const result = probe(operation, sha, descendant);
+      return { exitCode: Number.isInteger(result.exitCode) && result.exitCode! >= 0 && result.exitCode! <= 255 ? result.exitCode : null, output: result.output.trim() };
+    } catch { return { exitCode: null, output: "" }; }
+  };
+  const objects = [...new Set(Object.values(bindings).flatMap(binding => binding.value ? [binding.value] : []))].map(sha => {
+    const identity = query("identity", sha), kind = query("objectType", sha), parents = query("parents", sha), values = parents.output.split(/\s+/u).filter(Boolean);
+    return { sha, identity: { exitCode: identity.exitCode, value: canonical(identity.output) ? identity.output : null },
+      objectType: { exitCode: kind.exitCode, value: ["commit", "tree", "blob", "tag"].includes(kind.output) ? kind.output : null },
+      parents: { exitCode: parents.exitCode, values: values.length <= 8 && values.every(canonical) ? values : [], complete: parents.exitCode === 0 && values.length <= 8 && values.every(canonical) } };
+  });
+  const ancestry = bindings.checkoutHead.value ? [...new Set([bindings.base.value, bindings.head.value, bindings.mergeCommitSha.value, bindings.pushBefore.value].filter((sha): sha is string => sha !== null))]
+    .map(ancestor => { const result = query("ancestry", ancestor, bindings.checkoutHead.value!); return { ancestor, descendant: bindings.checkoutHead.value,
+      exitCode: result.exitCode, isAncestor: result.exitCode === 0 ? true : result.exitCode === 1 ? false : null }; }) : [];
+  const original = input.lastCommitProbe;
+  return { schema: "ci_event_binding_diagnostic_v1", eventName: ["pull_request", "push"].includes(input.eventName) ? input.eventName : "unsupported",
+    bindings, originalCommitProbe: original ? { operation: "identity", sha: canonical(original.sha) ? original.sha : null,
+      exitCode: Number.isInteger(original.exitCode) && original.exitCode! >= 0 && original.exitCode! <= 255 ? original.exitCode : null,
+      identity: canonical(original.identity) ? original.identity : null } : null, objects, ancestry };
+}
+
+/** Automatic source correspondence is distinct from reviewed local admission and from behavioral/runtime proof. */
+export function deriveLocalVerificationSourceCoherence(scripts: Readonly<Record<string, string>>, actual: LocalVerificationInputs) {
+  const analysis = actual.changeImpact; assert.ok(analysis, "Automatic coherence requires complete actual source discovery.");
+  assert.equal(analysis.sourceSha256, actual.sourceSha256, "Automatic selector has stale source snapshot bytes.");
+  const changes = actual.changes.map(({ file, beforeSha256, afterSha256 }) => ({ file, beforeSha256, afterSha256 }))
+    .sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
+  assert.equal(new Set(changes.map(change => change.file)).size, changes.length, "Automatic source delta contains duplicate selectors.");
+  assert.equal(analysis.deltaSha256, digest(JSON.stringify(changes)), "Automatic selector has stale or partial changed-file bindings.");
+  assert.deepEqual(analysis.changes.map(change => change.file).sort(), changes.map(change => change.file).sort(), "Automatic selector omits actual changed inputs.");
+  const correspondence = analysis.obligations.map(obligation => {
+    const protections = analysis.protections.filter(protection => protection.references.includes(obligation.file)
+      && (protection.semanticChange && protection.beforeSha256 !== protection.afterSha256
+        && actual.changes.some(change => change.file === protection.file && change.beforeSha256 === protection.beforeSha256 && change.afterSha256 === protection.afterSha256)
+        && protection.assertionChanges.some(assertion => assertion.references.includes(obligation.file) && assertion.contracts.includes(obligation.contract))
+        || obligation.addedCapabilityAxis && protection.dynamicCapabilityAxes && !protection.semanticChange && protection.beforeSha256 === protection.afterSha256));
+    const consumers = analysis.changes.find(change => change.file === obligation.file)?.consumers ?? [];
+    return { file: obligation.file, owner: obligation.owner, contract: obligation.contract, consumers, protected: protections.length > 0,
+      protections: protections.map(protection => ({ file: protection.file, check: protection.check, afterSha256: protection.afterSha256 })),
+      reason: protections.length ? "bound_changed_assertion_or_existing_dynamic_axis" : "missing_applicable_source_protection" };
+  });
+  const functional = analysis.changes.filter(change => /\.[cm]?[jt]sx?$/u.test(change.file) && change.semanticChange && !change.presentationOnly);
+  const unknowns = analysis.changes.flatMap(change => change.unresolved.map(reason => ({ file: change.file, reason })));
+  const names = [...new Set(analysis.changes.flatMap(change => change.candidateChecks))].sort();
+  const targeted = names.map(check => {
+    assert.ok(Object.hasOwn(scripts, check), "Automatic candidate is not a current canonical command.");
+    const reasons = analysis.changes.filter(change => change.candidateChecks.includes(check)).map(change => ({ file: change.file,
+      owners: change.owners, capabilities: change.capabilities, contracts: change.contracts, consumers: change.consumers }));
+    return { check, command: scripts[check], steps: localVerificationCommandSteps(scripts, check) ?? [], reasons,
+      proofLevel: "unexecuted_source_candidate" as const, effects: ["unknown"], executionAllowed: false };
+  });
+  const failures = correspondence.filter(row => !row.protected);
+  const qualityFailures = (analysis.qaQuality ?? []).flatMap(row => row.failures.map(reason => ({ file: row.file, reason })));
+  const preflight = Object.keys(scripts).filter(check => /^(?:lint|typecheck|(?:verify|qa):[a-zA-Z0-9:_-]+)$/u.test(check)).sort().map(check => {
+    const selected = names.includes(check) || check === "lint" || check === "typecheck";
+    const affected = analysis.changes.filter(change => change.candidateChecks.includes(check));
+    let owner: string[];
+    try { owner = registeredVerificationNodeEntries(scripts, check); }
+    catch { owner = ["package.json#scripts." + check]; }
+    return { check, selected, reason: check === "lint" || check === "typecheck" ? "mandatory_source_floor"
+      : selected ? "affected_source_or_required_qa_quality_guard" : "no_positive_source_relationship_not_an_unaffected_behavior_claim",
+      owner, affectedOwners: [...new Set(affected.flatMap(change => change.owners))].sort(),
+      contract: [...new Set(affected.flatMap(change => change.contracts))].sort(), command: scripts[check],
+      durationMs: 0, result: "NOT RUN" as const, evidence: null, sourceSha256: actual.sourceSha256,
+      proofBoundary: "source_discovery_only" as const };
+  });
+  return { status: failures.length || qualityFailures.length ? "DRIFT" : "PASS_AUTOMATIC_SOURCE_PROTECTION", exitCode: failures.length || qualityFailures.length ? 2 : 0,
+    sourceSha256: actual.sourceSha256, automatic: true, ownerReviewSatisfied: false, behavioralPass: false, releaseEvidence: false,
+    fast: { profile: "fast_source", checksExecuted: 4 + correspondence.length, candidateCommandsExecuted: 0, browserExecuted: false, databaseCalls: 0,
+      checks: ["actual_snapshot_binding", "complete_changed_file_binding", "current_contract_projection", "applicable_source_protection_correspondence"], correspondence },
+    targeted, preflight, qaQuality: analysis.qaQuality ?? [], functionalEvidenceRequired: functional.map(change => ({ file: change.file, owners: change.owners, consumers: change.consumers,
+      required: ["functional_behavior", "affected_native_integration_or_readback"], sourceChecksAdequate: false })),
+    fullRequired: functional.length > 0 || unknowns.length > 0, fullCommand: "ci:check", unknowns,
+    diagnostics: [...failures.map(row => `file=${row.file}; owner=${row.owner}; contract=${row.contract}; consumers=${row.consumers.join(",") || "unresolved"}; missing applicable assertion/vector protection.`),
+      ...qualityFailures.map(row => `file=${row.file}; owner=existing QA quality guards; contract=assertion preservation; ${row.reason}`)] };
+}
+
+/** Bounded Admission package bytes; optional/peer traversal is explicit, separate from the unchanged source-guard proof. */
+export function localVerificationInstalledRuntimePackages(packageNames: Iterable<string>, includeInstalledOptionalAndPeers = false) {
+  const packages: Array<{ root: string; files: number; bytes: number; sha256: string }> = [];
+  const seen = new Set<string>(), queue = [...packageNames].map(name => ({ name, from: join(ROOT, "package.json"), optional: false }));
+  const binMetadata = new Map<string, Record<string, unknown>>();
+  let totalBytes = 0, totalFiles = 0;
+  while (queue.length) {
+    const request = queue.shift()!;
+    assert.ok(/^(?:@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+$/u.test(request.name)
+      && !request.name.split("/").some(part => part === "." || part === ".."), "Runtime dependencies require literal installed package names.");
+    const native = nodeModule.createRequire(request.from);
+    let directory: string;
+    try { directory = dirname(native.resolve(request.name)); }
+    catch (error) {
+      if (!includeInstalledOptionalAndPeers) throw error;
+      // Export-restricted packages can expose only a native/other subpath. The
+      // native resolver's own search directories still identify their manifest.
+      const manifest = (native.resolve.paths(request.name) ?? []).map(at => join(at, request.name, "package.json"))
+        .filter(file => file.startsWith(join(ROOT, "node_modules") + sep)).find(file => existsSync(file));
+      if (!manifest) {
+        if (request.optional && error && typeof error === "object" && "code" in error && error.code === "MODULE_NOT_FOUND") continue;
+        throw error;
+      }
+      directory = dirname(manifest);
+    }
+    while (directory !== dirname(directory) && (!existsSync(join(directory, "package.json"))
+      || JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).name !== request.name)) directory = dirname(directory);
+    const relative = directory.slice(ROOT.length + 1).replaceAll("\\", "/");
+    assert.ok(directory.startsWith(join(ROOT, "node_modules") + sep) && /^node_modules\//u.test(relative), "Runtime dependency escaped the installed project.");
+    if (includeInstalledOptionalAndPeers) assert.ok(lstatSync(directory).isDirectory() && !lstatSync(directory).isSymbolicLink()
+      && realpathSync(directory) === directory, "Runtime package root has an unqualified link.");
+    if (seen.has(relative)) continue; seen.add(relative);
+    const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name: string; dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>; peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> };
+    assert.equal(manifest.name, request.name);
+    const files: Array<{ file: string; sha256: string; linkTarget?: string; target?: string }> = []; let bytes = 0;
+    const walk = (at: string) => { for (const name of readdirSync(at).sort()) {
+      const file = join(at, name), stat = lstatSync(file);
+      if (stat.isSymbolicLink() && includeInstalledOptionalAndPeers) {
+        // npm creates these POSIX command links for nested dependencies. Admit
+        // only the exact lock-bound bin mapping, never arbitrary internal links.
+        const modules = dirname(at);
+        assert.ok(at === join(modules, ".bin") && modules === join(dirname(modules), "node_modules")
+          && modules.startsWith(directory + sep), "Runtime package contains an unqualified link.");
+        const linkTarget = readlinkSync(file);
+        const parsed = /^\.\.\/((?:@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+)\/([a-zA-Z0-9._/-]+)$/u.exec(linkTarget);
+        assert.ok(parsed && [...parsed[1].split("/"), ...parsed[2].split("/")].every(part => part && part !== "." && part !== "..")
+          && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(name), "Runtime bin link requires a direct relative package target.");
+        const packageDirectory = join(modules, parsed[1]), target = join(packageDirectory, parsed[2]);
+        const physical = (value: string, regularFile: boolean) => {
+          for (let current = value; current !== ROOT; current = dirname(current)) {
+            assert.ok(current.startsWith(ROOT + sep), "Runtime bin path escaped the installed project.");
+            const currentStat = lstatSync(current);
+            assert.ok(!currentStat.isSymbolicLink() && realpathSync(current) === current
+              && (current === value && regularFile ? currentStat.isFile() : currentStat.isDirectory()), "Runtime bin target or ancestor has an unqualified link or type.");
+          }
+        };
+        physical(at, false); physical(target, true);
+        const manifestFile = join(packageDirectory, "package.json"), installedFile = join(ROOT, "node_modules/.package-lock.json"), lockedFile = join(ROOT, "package-lock.json");
+        const metadata = (metadataFile: string) => {
+          physical(metadataFile, true);
+          const cached = binMetadata.get(metadataFile); if (cached) return cached;
+          const content = readFileSync(metadataFile); totalBytes += content.length; totalFiles++;
+          assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+          const value = JSON.parse(content.toString("utf8")) as Record<string, unknown>;
+          assert.ok(value && typeof value === "object" && !Array.isArray(value), "Runtime bin metadata must be an object.");
+          binMetadata.set(metadataFile, value); return value;
+        };
+        const actual = metadata(manifestFile) as { name?: string; version?: string; bin?: Record<string, unknown> };
+        const packagePath = packageDirectory.slice(ROOT.length + 1).replaceAll("\\", "/");
+        const installed = (metadata(installedFile).packages as Record<string, Record<string, unknown>> | undefined)?.[packagePath];
+        const locked = (metadata(lockedFile).packages as Record<string, Record<string, unknown>> | undefined)?.[packagePath];
+        assert.ok(installed && locked && installed.link !== true && locked.link !== true, "Runtime bin package lacks an installed lock identity.");
+        for (const field of ["version", "resolved", "integrity", "link", "bin"]) assert.deepEqual(installed[field], locked[field], "Runtime bin installed and project locks differ.");
+        assert.equal(actual.name, parsed[1], "Runtime bin package name differs from its path.");
+        assert.ok(typeof actual.version === "string" && actual.version === installed.version, "Runtime bin package version differs from its lock.");
+        assert.ok(actual.bin && typeof actual.bin === "object" && !Array.isArray(actual.bin)
+          && Object.hasOwn(actual.bin, name) && actual.bin[name] === parsed[2]
+          && Object.values(actual.bin).filter(value => value === parsed[2]).length === 1, "Runtime bin command lacks a unique declared mapping.");
+        assert.deepEqual(actual.bin, installed.bin, "Runtime bin manifest differs from its locked mapping.");
+        assert.equal(realpathSync(file), target, "Runtime bin link resolves outside its declared target.");
+        const content = readFileSync(target), size = content.length + Buffer.byteLength(linkTarget);
+        bytes += size; totalBytes += size; totalFiles++;
+        assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+        files.push({ file: file.slice(directory.length + 1).replaceAll("\\", "/"), sha256: digest(content), linkTarget,
+          target: target.slice(ROOT.length + 1).replaceAll("\\", "/") });
+        continue;
+      }
+      assert.equal(stat.isSymbolicLink(), false, "Runtime package contains an unqualified link.");
+      if (stat.isDirectory()) walk(file);
+      else { assert.ok(stat.isFile()); const content = readFileSync(file); bytes += content.length; totalBytes += content.length; totalFiles++;
+        assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+        files.push({ file: file.slice(directory.length + 1).replaceAll("\\", "/"), sha256: digest(content) }); }
+    } };
+    walk(directory); packages.push({ root: relative, files: files.length, bytes, sha256: digest(JSON.stringify(files)) });
+    const dependencies = manifest.dependencies ?? {}, optional = includeInstalledOptionalAndPeers ? manifest.optionalDependencies ?? {} : {};
+    const peers = includeInstalledOptionalAndPeers ? manifest.peerDependencies ?? {} : {};
+    for (const name of [...new Set([...Object.keys(dependencies), ...Object.keys(optional), ...Object.keys(peers)])].sort()) queue.push({ name,
+      from: join(directory, "package.json"), optional: Object.hasOwn(optional, name)
+        || !Object.hasOwn(dependencies, name) && Object.hasOwn(peers, name) && manifest.peerDependenciesMeta?.[name]?.optional === true });
+  }
+  return packages.sort((left, right) => left.root.localeCompare(right.root));
+}
+
+/** Actual installed/runtime identity; mismatch or an unresolved bounded package closure rejects qualification. */
+export function localVerificationAdmissionRuntimeIdentity(packageNames: Iterable<string>) {
+  const installedSource = readFileSync(join(ROOT, "node_modules/.package-lock.json"), "utf8"), projectSource = readFileSync(join(ROOT, "package-lock.json"), "utf8");
+  const installed = JSON.parse(installedSource).packages as Record<string, Record<string, unknown>>;
+  const locked = JSON.parse(projectSource).packages as Record<string, Record<string, unknown>>;
+  assert.ok(installed && locked && Object.hasOwn(installed, "node_modules/typescript"));
+  for (const [file, value] of Object.entries(installed)) for (const field of ["version", "resolved", "integrity", "link"])
+    assert.deepEqual(value[field], locked[file]?.[field], "Installed package differs from the current package lock.");
+  const packages = localVerificationInstalledRuntimePackages(packageNames, true);
+  for (const entry of packages) {
+    assert.ok(Object.hasOwn(installed, entry.root), "Runtime package is absent from the installed lock.");
+    const manifest = JSON.parse(readFileSync(join(ROOT, entry.root, "package.json"), "utf8")) as { version?: string };
+    assert.equal(manifest.version, installed[entry.root].version, "Actual runtime package version differs from the installed lock.");
+  }
+  return { node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+    executable: process.execPath, executableSha256: digest(readFileSync(process.execPath)), execArgv: [...process.execArgv],
+    installedLockSha256: digest(installedSource), projectLockSha256: digest(projectSource), installedDependenciesMatchProjectLock: true as const, packages };
+}
+
+/** Recompute the native eager executable closure from bound bytes; generated/unresolved execution is never qualified. */
+export function localVerificationSourceGuardEffects(entry: string, sources: ReadonlyMap<string, string | Buffer>, runtime: {
+  node: string; v8: string; modules: string; platform: string; arch: string; executableSha256: string; installedLockSha256: string; execArgv: readonly string[];
+} = { node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+  executableSha256: digest(readFileSync(process.execPath)), installedLockSha256: existsSync(join(ROOT, "node_modules/.package-lock.json"))
+    ? digest(readFileSync(join(ROOT, "node_modules/.package-lock.json"))) : "", execArgv: process.execArgv },
+  installedLockSource = existsSync(join(ROOT, "node_modules/.package-lock.json")) ? readFileSync(join(ROOT, "node_modules/.package-lock.json"), "utf8") : "") {
+  const unresolved: string[] = [];
+  const overrides = new Proxy(new Map([...sources].map(([file, source]) => [file, source.toString()])), {
+    get(target, property) {
+      if (property === "get") return (file: string) => { assert.ok(target.has(file), "Executable closure dependency is outside the bound snapshot: " + file); return target.get(file); };
+      const value: unknown = Reflect.get(target, property, target); return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const closure: Array<{ file: string; sha256: string }> = [];
+  const dynamicInputs: Array<{ owner: string; selector: string; file: string; sha256: string }> = [];
+  const reviewedDynamic = new Map<string, string>();
+  const runtimePackages: Array<{ root: string; files: number; bytes: number; sha256: string }> = [];
+  const additionalEntries = new Set<string>();
+  if (entry === "scripts/verify-verification-infrastructure.mts") {
+    try {
+      // Current, manually reviewed producers only. The complete bytes bind the
+      // callee, temporary input, extraction predicate and controlled port wiring.
+      // A renamed/added call or path is not renewed by merely recomputing a hash.
+      const producers = new Map([
+        ["scripts/verify-verification-infrastructure.mts", "46f62c6228eb2306df1af056704a4c3c41dcd98b4a92ef54bf82531bbfb2a9a3"],
+        ["scripts/lib/verification-module-loader.mjs", "23b537191a2f7eafc6b15ac9631faa1f701bfa0b7858c8870eff19254532d9e4"],
+        ["scripts/fixtures/verification-text-contract.mjs", "392c0e259233b4c8e67b03375c4e5f5eb66c9754a9843cfcaa64deb8778366e7"],
+        ["scripts/fixtures/admin-core-query-presentation-plan.mjs", "0edabba8604f429fe2ce8ddf8738fc545c395ee559f851c086305e7153552001"],
+      ]);
+      const read = (file: string) => {
+        assert.ok(/^(?:scripts|src)\/[a-zA-Z0-9_./()[\]@+-]+\.[cm]?[jt]sx?$/u.test(file)
+          && !file.split("/").some(part => part === "." || part === ".."), "Unsafe dynamic execution input.");
+        const value = sources.get(file); assert.ok(value !== undefined, "Missing bound dynamic execution input."); return value.toString().replaceAll("\r\n", "\n");
+      };
+      const parse = (file: string) => ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+      const nodes = <T extends ts.Node>(tree: ts.Node, predicate: (node: ts.Node) => node is T) => {
+        const found: T[] = []; const visit = (node: ts.Node) => { if (predicate(node)) found.push(node); ts.forEachChild(node, visit); }; visit(tree); return found;
+      };
+      const bind = (owner: string, selector: string, file: string, source: string) => dynamicInputs.push({ owner, selector, file, sha256: digest(source) });
+      for (const [file, approved] of producers) {
+        const actual = digest(read(file)); assert.equal(actual, approved, "Unreviewed dynamic execution producer."); reviewedDynamic.set(file, actual);
+      }
+      const textOwner = "scripts/fixtures/verification-text-contract.mjs", textTree = parse(textOwner);
+      const adoptersFile = "scripts/fixtures/verification-text-adopters.json", adoptersBytes = sources.get(adoptersFile);
+      assert.ok(adoptersBytes !== undefined, "Missing source-bound adopter inventory.");
+      const adopters = JSON.parse(adoptersBytes.toString()) as unknown;
+      assert.ok(Array.isArray(adopters) && adopters.every(file => typeof file === "string") && new Set(adopters).size === adopters.length);
+      bind(textOwner, "read_only_adopter_inventory", adoptersFile, adoptersBytes.toString().replaceAll("\r\n", "\n"));
+      for (const file of adopters as string[]) bind(textOwner, "read_only_adopter_source", file, read(file));
+      const specs = nodes(textTree, ts.isForOfStatement).filter(node => ts.isArrayLiteralExpression(node.expression)
+        && node.expression.elements.every(element => ts.isObjectLiteralExpression(element)
+          && element.properties.some(property => ts.isPropertyAssignment(property) && property.name.getText(textTree) === "forbidden")));
+      assert.equal(specs.length, 1); assert.ok(ts.isArrayLiteralExpression(specs[0].expression));
+      for (const element of specs[0].expression.elements) {
+        assert.ok(ts.isObjectLiteralExpression(element));
+        const fields = new Map(element.properties.map(property => { assert.ok(ts.isPropertyAssignment(property) && ts.isStringLiteral(property.initializer));
+          return [property.name.getText(textTree), property.initializer.text] as const; }));
+        const file = fields.get("owner")!, variable = fields.get("variable")!, owner = parse(file);
+        bind(textOwner, "read_only_guard_input", fields.get("file")!, read(fields.get("file")!));
+        for (const needle of [fields.get("required")!, fields.get("forbidden")!]) {
+          const selected = owner.statements.filter(node => ts.isExpressionStatement(node) && (node.getText(owner).includes(JSON.stringify(needle))
+            || node.getText(owner).includes("'" + needle.replaceAll("\n", "\\n") + "'")));
+          assert.equal(selected.length, 1, "Generated guard selector must be unique.");
+          const calls = nodes(selected[0], ts.isCallExpression);
+          assert.equal(calls.length, 2); assert.ok(calls.some(call => call.expression.getText(owner) === "assert.ok"));
+          assert.ok(calls.some(call => call.expression.getText(owner) === variable + ".includes"
+            && call.arguments.length === 1 && ts.isStringLiteral(call.arguments[0]) && call.arguments[0].text === needle));
+          bind(textOwner, "actual_assertion_statement", file, selected[0].getText(owner));
+        }
+      }
+      const schedulingFile = "scripts/verify-admin-core-query-fixture-contract.mjs", schedulingTree = parse(schedulingFile);
+      const scheduling = schedulingTree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "verifyCoreQueryFixtureScheduling");
+      assert.equal(scheduling.length, 1); bind(textOwner, "actual_scheduling_declaration", schedulingFile, scheduling[0].getText(schedulingTree));
+      const fixtureFile = "scripts/fixtures/admin-core-query-presentation-fixtures.mts", fixtureTree = parse(fixtureFile);
+      const loops = nodes(fixtureTree, ts.isForOfStatement).filter(node => node.expression.getText(fixtureTree) === "plan" && node.initializer.getText(fixtureTree) === "const spec");
+      assert.equal(loops.length, 1);
+      assert.equal(nodes(loops[0], ts.isIdentifier).some(node => ["process", "globalThis", "global", "require", "eval", "Function", "fetch", "WebSocket"].includes(node.text)), false,
+        "Generated scheduling loop cannot acquire an ambient execution/transport port.");
+      bind(schedulingFile, "actual_controlled_fixture_loop", fixtureFile, loops[0].getText(fixtureTree));
+      const planFile = "scripts/fixtures/admin-core-query-presentation-plan.mjs", planTree = parse(planFile);
+      const recipes = planTree.statements.flatMap(node => ts.isVariableStatement(node) ? node.declarationList.declarations.filter(row => row.name.getText(planTree) === "recipes") : []);
+      assert.equal(recipes.length, 1); assert.ok(recipes[0].initializer && ts.isObjectLiteralExpression(recipes[0].initializer));
+      const recipeArrays: ts.ArrayLiteralExpression[] = recipes[0].initializer.properties.map(property => {
+        assert.ok(ts.isPropertyAssignment(property) && ts.isArrayLiteralExpression(property.initializer)); return property.initializer;
+      });
+      for (const statement of planTree.statements.filter(ts.isForOfStatement)) for (const assignment of nodes(statement.statement, ts.isBinaryExpression)) {
+        if (!ts.isElementAccessExpression(assignment.left) || assignment.left.expression.getText(planTree) !== "recipes") continue;
+        assert.equal(assignment.operatorToken.kind, ts.SyntaxKind.EqualsToken); assert.ok(ts.isArrayLiteralExpression(assignment.right)); recipeArrays.push(assignment.right);
+      }
+      const recipePaths = new Set(recipeArrays.map(array => { const first = array.elements[0]; assert.ok(ts.isStringLiteral(first)); return first.text; }));
+      let recipeImports = 0;
+      for (const call of nodes(planTree, ts.isCallExpression).filter(call => ts.isPropertyAccessExpression(call.expression) && call.expression.getText(planTree) === "jiti.import")) {
+        assert.equal(call.arguments.length, 1); const argument = call.arguments[0];
+        if (ts.isStringLiteral(argument)) additionalEntries.add(resolve(ROOT, dirname(planFile), argument.text).slice(ROOT.length + 1).replaceAll("\\", "/"));
+        else {
+          assert.equal(argument.getText(planTree).replaceAll(" ", ""), "'../../src/lib/admin/'+modulePath+'.ts'"); recipeImports++;
+          for (const path of recipePaths) { assert.ok(/^[a-zA-Z0-9_/-]+$/u.test(path) && !path.split("/").includes("..")); additionalEntries.add("src/lib/admin/" + path + ".ts"); }
+        }
+      }
+      assert.equal(recipeImports, 1); assert.ok(additionalEntries.size > 8);
+      for (const file of additionalEntries) read(file);
+    } catch {
+      unresolved.push(entry + ":unresolved_reviewed_generated_execution_inputs"); reviewedDynamic.clear();
+    }
+  }
+  try {
+    assert.ok(sources.has(entry), "Missing source guard entry.");
+    const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: [entry, ...additionalEntries], sourceOverrides: overrides, symbolAware: false, nativeEagerImports: true });
+    const packageNames = new Set<string>();
+    for (const [file, tree] of graph) {
+      const bytes = sources.get(file); assert.ok(bytes !== undefined, "Executable closure escaped its immutable source snapshot.");
+      closure.push({ file, sha256: digest(bytes.toString().replaceAll("\r\n", "\n")) });
+      const dynamicLoaders = new Set(["require", "createRequire", "eval", "Function"]);
+      for (const statement of tree.statements) if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)
+        && statement.moduleSpecifier.text === "node:module" && statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings))
+        for (const binding of statement.importClause.namedBindings.elements) if ((binding.propertyName ?? binding.name).text === "createRequire") dynamicLoaders.add(binding.name.text);
+      const visit = (node: ts.Node) => {
+        if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)
+          && /^(?:@\/|@src\/|file:|https?:|\/|[A-Za-z]:)/u.test(node.moduleSpecifier.text)) unresolved.push(file + ":unresolved_native_module_alias");
+        if (entry === "scripts/verify-verification-infrastructure.mts" && (ts.isImportDeclaration(node) || ts.isExportDeclaration(node))
+          && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && !node.moduleSpecifier.text.startsWith(".") && !nodeModule.isBuiltin(node.moduleSpecifier.text)) {
+          const parts = node.moduleSpecifier.text.split("/"); packageNames.add(parts[0].startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+        }
+        if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && ts.isIdentifier(node.expression) && dynamicLoaders.has(node.expression.text))
+          if (!reviewedDynamic.has(file)) unresolved.push(file + ":unresolved_dynamic_execution:" + node.expression.text);
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+    }
+    if (entry === "scripts/verify-verification-infrastructure.mts" && reviewedDynamic.size) {
+      packageNames.add("js-yaml");
+      const seen = new Set<string>(), queue = [...packageNames].map(name => ({ name, from: join(ROOT, "package.json") }));
+      let totalBytes = 0, totalFiles = 0;
+      while (queue.length) {
+        const request = queue.shift()!, native = nodeModule.createRequire(request.from);
+        let directory = dirname(native.resolve(request.name));
+        while (directory !== dirname(directory) && (!existsSync(join(directory, "package.json"))
+          || JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).name !== request.name)) directory = dirname(directory);
+        const relative = directory.slice(ROOT.length + 1).replaceAll("\\", "/");
+        assert.ok(directory.startsWith(join(ROOT, "node_modules") + sep) && /^node_modules\//u.test(relative), "Runtime dependency escaped the installed project.");
+        if (seen.has(relative)) continue; seen.add(relative);
+        const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name: string; dependencies?: Record<string, string> };
+        assert.equal(manifest.name, request.name);
+        const files: Array<{ file: string; sha256: string }> = []; let bytes = 0;
+        const walk = (at: string) => { for (const name of readdirSync(at).sort()) {
+          const file = join(at, name), stat = lstatSync(file); assert.equal(stat.isSymbolicLink(), false, "Runtime package contains an unqualified link.");
+          if (stat.isDirectory()) walk(file);
+          else { assert.ok(stat.isFile()); const content = readFileSync(file); bytes += content.length; totalBytes += content.length; totalFiles++;
+            assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+            files.push({ file: file.slice(directory.length + 1).replaceAll("\\", "/"), sha256: digest(content) }); }
+        } };
+        walk(directory); runtimePackages.push({ root: relative, files: files.length, bytes, sha256: digest(JSON.stringify(files)) });
+        for (const name of Object.keys(manifest.dependencies ?? {}).sort()) queue.push({ name, from: join(directory, "package.json") });
+      }
+      runtimePackages.sort((left, right) => left.root.localeCompare(right.root));
+    }
+  } catch { unresolved.push(entry + ":unresolved_executable_import_closure"); }
+  const inputs = ["package.json", "package-lock.json", "tsconfig.json"].map(file => {
+    const bytes = sources.get(file); if (bytes === undefined) unresolved.push(file + ":missing_execution_input");
+    return { file, sha256: bytes === undefined ? null : digest(bytes.toString().replaceAll("\r\n", "\n")) };
+  });
+  for (const hash of [runtime.executableSha256, runtime.installedLockSha256]) if (!/^[a-f0-9]{64}$/u.test(hash)) unresolved.push("missing_runtime_or_installed_dependency_identity");
+  try {
+    assert.equal(digest(installedLockSource), runtime.installedLockSha256);
+    const installed = JSON.parse(installedLockSource).packages as Record<string, Record<string, unknown>>;
+    const locked = JSON.parse(sources.get("package-lock.json")!.toString()).packages as Record<string, Record<string, unknown>>;
+    assert.ok(installed && locked && Object.hasOwn(installed, "node_modules/typescript"));
+    for (const [file, value] of Object.entries(installed)) for (const field of ["version", "resolved", "integrity", "link"])
+      assert.deepEqual(value[field], locked[file]?.[field], "Installed package differs from the current package lock.");
+  } catch { unresolved.push("installed_dependencies_do_not_match_current_lock"); }
+  closure.sort((left, right) => left.file.localeCompare(right.file));
+  const reasons = [...new Set(unresolved)].sort();
+  const generated = entry === "scripts/verify-verification-infrastructure.mts" ? { producers: [...reviewedDynamic].map(([file, sha256]) => ({ file, sha256 })),
+    fragments: dynamicInputs, dynamicSourceEntries: [...additionalEntries].sort(), runtimePackages } : null;
+  return { entry, closure, inputs, runtime, generated, unresolved: reasons,
+    fingerprint: reasons.length ? null : digest(JSON.stringify({ schema: "native-source-guard-effects-v1", entry, closure, inputs, runtime, ...(generated ? { generated } : {}) })) };
+}
+
+/** One reviewed effect contract for an existing canonical leaf, never an arbitrary-command execution registry. */
+export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string, string>>, analysis: LocalVerificationSourceImpact, fixtureSha256: string,
+  sourceGuardSha256: Readonly<Record<string, string>> = {}) {
+  const entry = "scripts/qa-admin-form-guarded-navigation.mts";
+  const step = "node --experimental-strip-types " + entry + " --save-cache-only";
+  const fixtureApproved = fixtureSha256 === "2209ce6ae21e7c3ed2855cad5f5a6a904971735084d0f90aafce066fe71d7dbf";
+  const bindings = (analysis.ownerBindings ?? []).filter(binding => binding.capability === "form_runtime");
+  const commands = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(step)).sort();
+  // This exact native port executes the existing Browser leaf. A QA lifecycle
+  // change needs that consumer proof even when Product/fixture bytes are unchanged.
+  const nativePort = (file: string) => ["scripts/lib/windows-owned-process.mts", "scripts/lib/windows-owned-process.cs"].includes(file);
+  const reasons = analysis.changes.filter(change => change.semanticChange && !change.presentationOnly && (nativePort(change.file)
+    || commands.some(check => change.candidateChecks.includes(check)) && (change.file === entry || change.file === "src/lib/admin/form-system/adoption-manifest.ts" || bindings.some(binding => binding.files.includes(change.file))
+      || change.capabilities.includes("form_runtime") || change.contracts.some(contract => bindings.some(binding => contract.startsWith(binding.manifest))))));
+  const blockers = [
+    ...(!fixtureApproved ? ["qualified_fixture_bytes_changed_review_effect_contract"] : []),
+    ...(!bindings.length ? ["missing_current_manifest_form_runtime_owner"] : []),
+    ...(!commands.length ? ["missing_exact_registered_save_cache_leaf"] : []),
+    ...(analysis.changes.some(change => ["package.json", "package-lock.json"].includes(change.file) && change.semanticChange) ? ["dependency_or_command_contract_changed"] : []),
+  ];
+  const targets = reasons.length && !blockers.length ? [{ kind: "browser_behavior" as "browser_behavior" | "source_guard", family: "admin-form-save-cache", entry, step,
+    canonicalChecks: commands.filter(check => reasons.some(change => nativePort(change.file) || change.candidateChecks.includes(check))),
+    owners: [...new Set(bindings.map(binding => binding.owner))].sort(), capabilities: [...new Set(bindings.flatMap(binding => binding.capability ? [binding.capability] : []))].sort(),
+    contracts: [...new Set([...bindings.map(binding => binding.manifest), ...reasons.flatMap(change => change.contracts)])].sort(),
+    consumers: [...new Set(reasons.flatMap(change => change.consumers))].sort(),
+    reasons: reasons.map(change => ({ file: change.file, owners: change.owners, capabilities: change.capabilities, contracts: change.contracts, consumers: change.consumers })),
+    fixtureSha256, effects: ["browser", "owned_filesystem", "owned_process", "owned_loopback_http"], supportedPlatforms: ["win32", "linux"], limitMs: 300_000,
+    proofLevel: "shared_owner_controlled_browser_behavior" as "shared_owner_controlled_browser_behavior" | "source_guard_execution",
+    successMarker: "", nativePersistenceVerified: false, businessConsumerAdoptionVerified: false }] : [];
+  const qualityReasons = analysis.changes.filter(change => /^(?:scripts|tests)\//u.test(change.file) && change.semanticChange);
+  // These are reviewed effect contracts for two existing direct source leaves, not their npm composites.
+  // The complete native eager import closure, dependency lock and actual runtime must match reviewed effect bytes.
+  // Exact Windows24 and GNU Linux22.23.4/fresh-install contexts share this order.
+  // The historical Alpine/Windows-mounted dependency context is not inherited.
+  const sourceGuards = [
+    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", "790abdafab8c3f07a7be31e533e5fba2237f121a65e54a367f33fe16758ed759"], marker: "Executable governance PASS" },
+    { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: ["cf94c6af79418b32c7953a4e5f4e88a6463844d26b3f185ec270e627a3d15c46", "1dc7b9131ac32554129437c7709e60dbc1cb793b49e6eaf73782c71fd808eeec"], marker: "PASS verification infrastructure:" },
+  ];
+  const knownContexts = sourceGuards.map(guard => guard.sha256.indexOf(sourceGuardSha256[guard.entry])).filter(index => index >= 0);
+  const mixedContexts = new Set(knownContexts).size > 1;
+  const qualityBlockers: string[] = [];
+  const selections = [{ family: "admin-form-save-cache", selected: reasons.length > 0, qualified: targets.length > 0,
+    reason: reasons.length ? blockers.length ? "effect_contract_blocked" : "affected_qualified_form_runtime" : "no_affected_form_runtime",
+    command: step, owner: bindings.map(binding => binding.owner), contract: bindings.map(binding => binding.manifest) }];
+  for (const guard of sourceGuards) {
+    const command = "node --experimental-strip-types " + guard.entry;
+    const canonicalChecks = Object.keys(scripts).filter(check => localVerificationCommandSteps(scripts, check)?.includes(command)).sort();
+    const affected = qualityReasons.filter(change => change.candidateChecks.includes(guard.check)
+      || canonicalChecks.some(check => change.candidateChecks.includes(check)));
+    const failures = [...(!guard.sha256.every(value => /^[a-f0-9]{64}$/u.test(value)) || new Set(guard.sha256).size !== guard.sha256.length
+      || !guard.sha256.includes(sourceGuardSha256[guard.entry]) || mixedContexts ? ["qualified_source_guard_bytes_changed_review_effect_contract:" + guard.entry] : []),
+      ...(!canonicalChecks.length ? ["missing_exact_registered_source_guard:" + guard.entry] : []),
+      ...(analysis.changes.some(change => ["package.json", "package-lock.json"].includes(change.file) && change.semanticChange) ? ["dependency_or_command_contract_changed"] : [])];
+    if (affected.length) qualityBlockers.push(...failures);
+    selections.push({ family: guard.entry, selected: affected.length > 0, qualified: affected.length > 0 && !failures.length,
+      reason: affected.length ? failures.length ? "effect_contract_blocked" : "mandatory_qa_quality_guard" : "no_changed_qa_input",
+      command, owner: [guard.entry], contract: ["docs/QA_RELEASE_CLOSURE.md#3.2.2"] });
+    if (affected.length && !failures.length) targets.push({ kind: "source_guard", family: guard.entry, entry: guard.entry, step: command,
+      canonicalChecks, owners: [guard.entry], capabilities: ["verification_quality"], contracts: ["docs/QA_RELEASE_CLOSURE.md#3.2.2"],
+      consumers: [...new Set(affected.map(change => change.file))].sort(),
+      reasons: affected.map(change => ({ file: change.file, owners: change.owners, capabilities: change.capabilities, contracts: change.contracts, consumers: change.consumers })),
+      fixtureSha256: sourceGuardSha256[guard.entry], effects: ["source_read", "owned_temp_filesystem", "owned_process"], supportedPlatforms: ["win32", "linux"], limitMs: 180_000,
+      proofLevel: "source_guard_execution", successMarker: guard.marker, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false });
+  }
+  return { targets: [...new Map(targets.map(target => [target.step, target])).values()]
+    .sort((left, right) => Number(left.kind === "browser_behavior") - Number(right.kind === "browser_behavior")), blockers: [...new Set([...blockers, ...qualityBlockers])],
+    blocking: [...new Set([...(reasons.length ? blockers : []), ...qualityBlockers])], selections,
+    applicable: reasons.length > 0 || qualityReasons.length > 0, unqualifiedRemainUnderExistingGates: true as const };
+}
+
+/** A changed obligation cannot be silently blessed by changed Product bytes or a free-form waiver. */
+export function assertLocalVerificationProtectionMaintenance(impact: LocalVerificationImpact, actual: LocalVerificationInputs) {
+  const analysis = actual.changeImpact;
+  if (!analysis) return; // The real admission reader always supplies this; legacy pure callers are not release admission.
+  assert.equal(analysis.proofBoundary, "source_discovery_only");
+  assert.deepEqual(analysis.changes.map(row => row.file).sort(), actual.changes.map(row => row.file).sort(),
+    "Derived impact must cover every actual changed file.");
+  for (const obligation of analysis.obligations) {
+    const diagnostic = `Contract drift: file=${obligation.file}; owner=${obligation.owner}; contract=${obligation.contract}`;
+    const reviews = (impact.protectionMaintenance ?? []).filter(row => row.file === obligation.file && row.contract === obligation.contract);
+    assert.equal(reviews.length, 1, diagnostic + "; missing unique reviewed protection maintenance.");
+    const review = reviews[0];
+    assert.ok(review.reviewedBy?.trim() && review.rationale?.trim(), diagnostic + "; protection review is incomplete.");
+    const protection: LocalVerificationSourceImpact["protections"][number] | undefined = analysis.protections.find(row => row.file === review.protectionFile && row.check === review.check);
+    assert.ok(protection && protection.references.includes(obligation.file), diagnostic + "; protection has no bound source relationship.");
+    assert.equal(review.beforeSha256, protection.beforeSha256, diagnostic + "; stale protection baseline bytes.");
+    assert.equal(review.afterSha256, protection.afterSha256, diagnostic + "; stale protection current bytes.");
+    assert.ok(impact.changes.some(row => row.checks.includes(review.check)), diagnostic + "; protection check is not selected fresh.");
+    if (review.mode === "updated") {
+      const changed = actual.changes.find(row => row.file === review.protectionFile);
+      assert.ok(changed && /^(?:scripts|tests)\//u.test(changed.file) && protection.semanticChange
+        && protection.assertionChanges.some(assertion => assertion.sha256 === review.assertionSha256 && assertion.references.includes(obligation.file) && assertion.contracts.includes(obligation.contract)),
+        diagnostic + "; updated protection must contain a real verification-source change.");
+      assert.equal(changed.beforeSha256, review.beforeSha256); assert.equal(changed.afterSha256, review.afterSha256);
+    } else {
+      assert.equal(review.mode, "existing_dynamic_axes", diagnostic + "; unknown maintenance mode.");
+      assert.ok(obligation.addedCapabilityAxis && protection.dynamicCapabilityAxes && !protection.semanticChange
+        && protection.beforeSha256 === protection.afterSha256,
+      diagnostic + "; unchanged protection is valid only for proven existing dynamic capability-axis expansion.");
+    }
+  }
+  for (const review of impact.protectionMaintenance ?? []) assert.ok(analysis.obligations.some(row => row.file === review.file && row.contract === review.contract),
+    `Unexpected protection maintenance: file=${review.file}; contract=${review.contract}`);
+}
+
+/** Exact literal command/argv identity only; unsupported command shapes are never pruned. */
+export function localVerificationCommandSteps(scripts: Readonly<Record<string, string>>, check: string, active = new Set<string>()): string[] | undefined {
+  // Validate every recursive wrapper before reading its command; a prototype
+  // property cannot authorize an executable package step.
+  if (!/^[a-zA-Z0-9:_-]+$/u.test(check) || !Object.hasOwn(scripts, check)
+    || active.has(check) || typeof scripts[check] !== "string" || /[\r\n]/u.test(scripts[check])) return undefined;
+  const next = new Set([...active, check]), result: string[] = [];
+  for (const raw of scripts[check].split("&&")) {
+    const step = raw.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
+    if (wrapper) {
+      const nested = localVerificationCommandSteps(scripts, wrapper[1], next); if (!nested) return undefined;
+      result.push(...nested);
+    } else if (/^node (?:--experimental-strip-types )?[a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts)(?: [a-zA-Z0-9_./:=+,-]+)*$/u.test(step)) result.push(step);
+    else return undefined;
+  }
+  return result.length ? result : undefined;
+}
 
 /** Select existing named checks; unresolved impact widens to the unchanged full gate. */
 export function planLocalVerification(scripts: Readonly<Record<string, string>>, impact: LocalVerificationImpact, actual: LocalVerificationInputs, request?: PublicGateRequest) {
@@ -115,11 +2112,17 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   const bindings = (rows: LocalVerificationInputs["changes"]) => rows.map(({ file, beforeSha256, afterSha256 }) =>
     ({ file, beforeSha256, afterSha256 })).sort((a, b) => a.file.localeCompare(b.file));
   assert.deepEqual(bindings(impact.changes), bindings(actual.changes), "Risk evidence must cover every actual changed file and byte identity.");
+  assertLocalVerificationProtectionMaintenance(impact, actual);
+  assert.deepEqual((actual.changeImpact?.qaQuality ?? []).flatMap(row => row.failures.map(reason => ({ file: row.file, reason }))), [],
+    "QA assertion coverage decreased; preserve the original assertions or obtain explicit protection review before admission.");
   const present = (value: unknown) => typeof value === "string" && value.trim().length > 0;
   const risks = ["A", "B", "C", "D", "E"] as const;
   let rank = 0, bounded = true;
   const selected = new Set<string>(["lint", "typecheck"]);
   const unresolvedVerificationInputs: string[] = [];
+  for (const discovery of actual.changeImpact?.changes ?? []) if (discovery.unresolved.length) bounded = false;
+  if (actual.changeImpact?.obligations.some(obligation => /(?:^|[\/._-])contracts?(?:[\/._-]|$)/iu.test(obligation.file)
+    || /(?:^|\/)adoption-manifest\.[cm]?ts$/u.test(obligation.file))) rank = Math.max(rank, 2);
   for (const row of impact.changes) {
     assert.ok(sourceIncluded(row.file), "Risk evidence cannot include private or generated source.");
     for (const sha of [row.beforeSha256, row.afterSha256]) if (sha !== null) assert.match(sha, /^[a-f0-9]{64}$/u);
@@ -157,13 +2160,34 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   }
   assert.ok(Object.hasOwn(scripts, "lint") && Object.hasOwn(scripts, "typecheck"));
   const mode = rank <= 1 && bounded ? "bounded" : "full";
-  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...selected])];
-  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs, ...(nativeGate ? { nativeGate } : {}) };
+  const coveredChains = fullPrefix.map(check => localVerificationCommandSteps(scripts, check)).filter((chain): chain is string[] => Boolean(chain));
+  const invokedChecks = new Set<string>();
+  const collectInvocations = (name: string, active = new Set<string>()) => {
+    if (active.has(name) || !localVerificationCommandSteps(scripts, name)) return;
+    const next = new Set([...active, name]);
+    for (const step of scripts[name].split("&&")) {
+      const nested = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step.trim());
+      if (nested) { invokedChecks.add(nested[1]); collectInvocations(nested[1], next); }
+    }
+  };
+  for (const check of fullPrefix) collectInvocations(check);
+  const redundantAdditionalChecks = mode === "full" ? [...selected].filter(check => {
+    if (fullPrefix.includes(check) || !invokedChecks.has(check)) return false;
+    const additional = localVerificationCommandSteps(scripts, check);
+    return Boolean(additional && coveredChains.some(chain => chain.some((_, index) => additional.every((step, offset) => chain[index + offset] === step))));
+  }) : [];
+  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...[...selected].filter(check => !redundantAdditionalChecks.includes(check))])];
+  return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs,
+    redundantAdditionalChecks,
+    ...(actual.changeImpact ? { changeImpact: actual.changeImpact } : {}),
+    fast: { profile: "fast" as const, prefix: [...selected], tail: [], releaseEvidence: false as const },
+    ...(nativeGate ? { nativeGate } : {}) };
 }
 
 /** Bounded requests cannot borrow an older subset/retained/measurement admission. */
 export function assertLocalVerificationRequest(request: PublicGateRequest, plan: ReturnType<typeof planLocalVerification>) {
   assert.ok(request.localVerification);
+  assert.ok(!("profile" in plan) && !("releaseEvidence" in plan), "A Fast report cannot authorize release execution.");
   if (plan.nativeGate) assert.deepEqual(localVerificationNativeGate(request), plan.nativeGate,
     "Native tail coverage cannot be borrowed by a different request, script, cohort or argument selection.");
   assert.deepEqual(plan.unresolvedVerificationInputs, [],
@@ -178,7 +2202,7 @@ export function assertLocalVerificationRequest(request: PublicGateRequest, plan:
 }
 
 /** Bind reviewed impact to Git's actual delta and source bytes; Git remains the membership owner. */
-function readLocalVerificationInputs(context: PrivatePublicVerificationContext, impact: LocalVerificationImpact,
+function readLocalVerificationInputs(context: Pick<PrivatePublicVerificationContext, "cleanEnvironment">, impact: LocalVerificationImpact,
   manifest: readonly { file: string; sha256: string }[], additionalSourceFiles: readonly string[], request: PublicGateRequest, previous?: LocalVerificationInputs): LocalVerificationInputs {
   assert.match(impact.baselineHead, /^[a-f0-9]{40}$/u);
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(),
@@ -189,8 +2213,10 @@ function readLocalVerificationInputs(context: PrivatePublicVerificationContext, 
     git("merge-base", "--is-ancestor", impact.baselineHead, finalHead);
   }
   const baselineFiles = previous ? undefined : new Set(git("ls-tree", "-r", "--name-only", "-z", impact.baselineHead).toString("utf8").split("\0").filter(Boolean));
-  const changed = new Set([...git("diff", "--no-renames", "--name-only", "-z", impact.baselineHead, "--").toString("utf8").split("\0").filter(Boolean), ...additionalSourceFiles]);
+  const changed = new Set([...git("diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z", impact.baselineHead, "--").toString("utf8").split("\0").filter(Boolean), ...additionalSourceFiles]);
   if (previous) assert.deepEqual([...changed].sort(), previous.changes.map(row => row.file));
+  // The verified immutable baseline blob supplies both its digest and discovery bytes in this invocation.
+  const baselineBytes = new Map<string, ReturnType<typeof git>>();
   const changes = [...changed].sort().map(file => {
     const source = safeSourcePath(file), exists = existsSync(source);
     if (exists) {
@@ -198,43 +2224,1044 @@ function readLocalVerificationInputs(context: PrivatePublicVerificationContext, 
     }
     const afterSha256 = exists ? digest(readFileSync(source)) : null;
     if (exists) assert.equal(manifest.find(row => row.file === file)?.sha256, afterSha256, "The source snapshot omits or differs from changed source.");
-    return { file, beforeSha256: previous ? previous.changes.find(row => row.file === file)!.beforeSha256 : baselineFiles!.has(file) ? digest(git("show", impact.baselineHead + ":" + file)) : null,
+    if (!previous && baselineFiles!.has(file)) baselineBytes.set(file, git("show", impact.baselineHead + ":" + file));
+    return { file, beforeSha256: previous ? previous.changes.find(row => row.file === file)!.beforeSha256 : baselineBytes.has(file) ? digest(baselineBytes.get(file)!) : null,
       afterSha256 };
   });
   const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
   const verificationNativeGate = localVerificationNativeGate(request);
   if (previous) assert.deepEqual(verificationNativeGate, previous.verificationNativeGate, "Cached executable coverage cannot change its selected native tail.");
-  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest, request);
-  return { baselineHead: impact.baselineHead, finalHead, sourceSha256: digest(JSON.stringify(manifest)), changes, verificationCoverage,
+  const sourceSha256 = digest(JSON.stringify(manifest));
+  if (previous) assert.equal(sourceSha256, previous.sourceSha256, "Cached source discovery cannot survive a changed source manifest.");
+  const admissionQualification = request.admissionQualification;
+  const qualifiedInvocation = admissionQualification ? assertLocalVerificationAdmissionQualification(admissionQualification,
+    { baselineHead: impact.baselineHead, finalHead, sourceSha256 }) : undefined;
+  if (qualifiedInvocation) {
+    assert.deepEqual(qualifiedInvocation.sourceDiscovery.additionalSourceFiles, [...additionalSourceFiles],
+      "Preallocation source discovery cannot change its explicit additional files even when their bytes are already tracked.");
+    assert.deepEqual(qualifiedInvocation.sourceDiscovery.changes, changes,
+      "Preallocation source discovery differs from the current exact Git and explicit-file delta.");
+  }
+  if (previous) assert.equal(admissionQualification, previous.admissionQualification, "Admission cannot change during an active verification.");
+  const verificationCoverage = previous?.verificationCoverage ?? localVerificationCoverage(scripts, impact, manifest, request).map(row => ({
+    ...row, checks: [...new Set([...row.checks, ...(admissionQualification?.inputs?.coverage ?? [])
+      .filter(binding => binding.file === row.file && impact.changes.some(change => change.file === row.file && change.checks.includes(binding.check))
+        && registeredVerificationNodeEntries(scripts, binding.check).includes(binding.entry))
+      .map(binding => binding.check)])].sort(),
+  }));
+  const changeImpact = previous?.changeImpact ?? (() => {
+    // Reuse only this owner's private, source-bound pure discovery. The current
+    // request's coverage/native descriptor and live evidence are checked above.
+    // Every returned discovery is cloned; a caller cannot mutate the private fact.
+    const discovery = qualifiedInvocation ? structuredClone(qualifiedInvocation.sourceDiscovery.changeImpact) : (() => {
+    const currentSources = new Map(manifest.map(row => { const source = readFileSync(safeSourcePath(row.file)); assert.equal(digest(source), row.sha256,
+      "Impact source differs from the bound manifest: " + row.file); return [row.file, source] as const; }));
+    const baselineSources = new Map(currentSources);
+    for (const change of changes) {
+      if (change.beforeSha256 === null) baselineSources.delete(change.file);
+      else baselineSources.set(change.file, baselineBytes.get(change.file)!);
+    }
+    return deriveLocalVerificationSourceImpact(scripts, changes, currentSources, baselineSources);
+    })();
+    if (!admissionQualification) return discovery;
+    assert.equal(admissionQualification.assertions?.status, "PASS");
+    const relocations = admissionQualification.assertions.relocations;
+    return { ...discovery, qaQuality: discovery.qaQuality?.map(row => {
+      const proofs = relocations.filter(proof => proof.file === row.file);
+      const providers = admissionQualification.assertions!.providers.filter(proof => proof.file === row.file);
+      return proofs.length || providers.length ? { ...row, rawFailures: row.failures, failures: row.failures.filter(reason =>
+        !(proofs.length && ["qa_assertion_count_decreased_requires_explicit_protection_review", "qa_assertion_owner_or_operator_coverage_decreased_requires_explicit_protection_review"].includes(reason))
+        && reason !== "qa_assertion_relocation_requires_qualified_execution"),
+        qualifiedRelocation: { predicates: proofs, providers } } : row;
+    }) };
+  })();
+  return { baselineHead: impact.baselineHead, finalHead, sourceSha256, changes, verificationCoverage,
+    changeImpact, ...(admissionQualification ? { admissionQualification } : {}),
     ...(verificationNativeGate ? { verificationNativeGate } : {}) };
+}
+
+/** Revalidation is deliberately separate from pure source discovery. */
+function assertLocalVerificationAdmissionQualification(value: LocalVerificationAdmissionQualification,
+  binding: { baselineHead: string; finalHead: string; sourceSha256: string }) {
+  const invocation = localVerificationAdmissionInvocations.get(value);
+  assert.ok(invocation, "Admission requires this owner's live qualified execution; serialized or old receipts cannot authorize it.");
+  assert.equal(value.status, "PASS");
+  assert.equal(digest(JSON.stringify(value)), invocation.sha256, "Admission receipt was altered after qualification.");
+  assert.equal(digest(JSON.stringify(invocation.sourceFloor)), invocation.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
+  for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const) assert.equal(value[key], binding[key], "Admission receipt has a stale source or baseline.");
+  const current = invocation.snapshot();
+  assert.equal(current.finalHead, binding.finalHead); assert.equal(current.sourceSha256, binding.sourceSha256);
+  assert.deepEqual(current.runtime, value.runtime, "Admission runtime or dependency bytes changed.");
+  assert.ok(invocation.sourceDiscovery, "Live admission lacks its private preallocation source discovery; cold analysis on an active control connection is forbidden.");
+  assert.equal(digest(JSON.stringify(invocation.sourceDiscovery)), invocation.sourceDiscoverySha256,
+    "Private preallocation source discovery is missing or corrupt.");
+  for (const key of ["baselineHead", "finalHead", "sourceSha256"] as const)
+    assert.equal(invocation.sourceDiscovery[key], binding[key], "Private preallocation source discovery has a stale binding.");
+  for (const artifact of value.artifacts) {
+    const file = resolve(ROOT, artifact.path);
+    assert.ok(artifact.path.startsWith(".tmp-qa/") && !artifact.path.split("/").some(part => part === ".." || !part)
+      && file.startsWith(resolve(ROOT, ".tmp-qa") + sep), "Admission artifact escaped owned evidence.");
+    assert.ok(lstatSync(file).isFile() && realpathSync(file) === file, "Admission artifact cannot traverse links.");
+    assert.equal(digest(readFileSync(file)), artifact.sha256, "Admission artifact is missing or corrupt.");
+  }
+  return invocation;
+}
+
+/** Execute only the existing finite consumer/input profiles under the existing child owner.
+ * No Docker, DB, Browser, release result or caller-supplied receipt is accepted here. */
+export async function qualifyLocalVerificationAdmission(options: { baselineHead?: string; additionalSourceFiles?: readonly string[];
+  operationalBudget?: LocalVerificationOperationalBudget;
+  ci?: { eventName: string; event: unknown; githubSha: string } }, signal: AbortSignal): Promise<LocalVerificationAdmissionQualification> {
+  signal.throwIfAborted();
+  const operationalBudget = options.operationalBudget;
+  const admissionDeadlineMs = localVerificationOperationalDeadlineMs(300_000, operationalBudget);
+  const started = performance.now(), nonce = globalThis.crypto.randomUUID();
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"])
+    if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: environment, windowsHide: true,
+    timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
+  if (operationalBudget !== undefined) git("merge-base", "--is-ancestor", "9edaf02f4cd476315d71b306d5f786f3d8d1efd0", "HEAD");
+  // Reuse immutable CI baseline selection. Its source-only DRIFT is diagnostic,
+  // never permission to omit the fresh behavioral qualification below.
+  const additional = [...(options.additionalSourceFiles ?? [])];
+  const initial = inspectLocalVerificationChangeImpact({ ...options, additionalSourceFiles: additional, automatic: true });
+  assert.ok("baselineHead" in initial && initial.baselineHead && initial.changeImpact,
+    "Admission qualification requires a resolved immutable baseline and source discovery.");
+  assert.ok("fast" in initial && initial.fast.correspondence.every(row => row.protected),
+    "Admission observations cannot repair missing source contract protection.");
+  const baselineHead = initial.baselineHead;
+  const sourceSnapshot = () => {
+    const manifest = selectSourceInventory(git("ls-files", "-z").toString("utf8").split("\0").filter(Boolean), additional).flatMap(file => {
+      const absolute = safeSourcePath(file); if (!existsSync(absolute)) return [];
+      assert.ok(lstatSync(absolute).isFile() && realpathSync(absolute) === absolute, "Admission source cannot traverse links.");
+      return [{ file, sha256: digest(readFileSync(absolute)) }];
+    });
+    return { finalHead: git("rev-parse", "HEAD").toString("utf8").trim(), sourceSha256: digest(JSON.stringify(manifest)), manifest };
+  };
+  const before = sourceSnapshot();
+  assert.equal(before.finalHead, initial.finalHead); assert.equal(before.sourceSha256, initial.sourceSha256);
+  const currentSources = new Map(before.manifest.map(row => {
+    const bytes = readFileSync(safeSourcePath(row.file)); assert.equal(digest(bytes), row.sha256); return [row.file, bytes] as const;
+  }));
+  const baselineSources = new Map(currentSources);
+  for (const change of initial.actualDelta) {
+    if (change.beforeSha256 === null) baselineSources.delete(change.file);
+    else { const bytes = git("show", baselineHead + ":" + change.file); assert.equal(digest(bytes), change.beforeSha256); baselineSources.set(change.file, bytes); }
+  }
+  const profiles = [
+    { entry: "scripts/verify-admin-form-system.mts", args: ["--field-row-composition"], receipt: "assertion-relocation-observations" },
+    { entry: "scripts/verify-page-block-editor-presentation.mts", args: ["--panel-composition"], receipt: "assertion-relocation-observations" },
+    { entry: "scripts/verify-isolated-supabase.mts", args: ["--admission-qualification-only"], receipt: "verification-input-observations" },
+  ];
+  assert.equal(new Set(profiles.map(profile => [profile.entry, ...profile.args].join(" "))).size, profiles.length, "Admission cannot execute a duplicate leaf.");
+  const scripts = JSON.parse(currentSources.get("package.json")!.toString()).scripts as Record<string, string>;
+  for (const profile of profiles) assert.ok(Object.keys(scripts).some(check => {
+    try { return registeredVerificationNodeEntries(scripts, check).includes(profile.entry); } catch { return false; }
+  }), "Admission profile must use an existing registered executable owner.");
+  const graph = collectExecutableSourceGraph({ root: ROOT, entrySourceFiles: profiles.map(profile => profile.entry),
+    sourceOverrides: new Map([...currentSources].filter(([file]) => /\.[cm]?[jt]sx?$/u.test(file)).map(([file, bytes]) => [file, bytes.toString()])),
+    symbolAware: false, nativeEagerImports: true });
+  const packageNames = new Set<string>(["typescript", "react", "react-dom"]);
+  for (const tree of graph.values()) {
+    const visit = (node: ts.Node) => {
+      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        const specifier = node.moduleSpecifier.text;
+        if (!specifier.startsWith(".") && !nodeModule.isBuiltin(specifier)) {
+          assert.ok(!/^(?:@\/|@src\/|file:|https?:|\/|[A-Za-z]:)/u.test(specifier), "Admission has an unresolved native module alias.");
+          const parts = specifier.split("/"); packageNames.add(parts[0].startsWith("@") ? parts.slice(0, 2).join("/") : parts[0]);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }; visit(tree);
+  }
+  const runtime = localVerificationAdmissionRuntimeIdentity(packageNames);
+  const snapshot = () => { const source = sourceSnapshot(); return { finalHead: source.finalHead, sourceSha256: source.sourceSha256,
+    runtime: localVerificationAdmissionRuntimeIdentity(packageNames) }; };
+  const assertSnapshot = () => assert.deepEqual(snapshot(), { finalHead: before.finalHead, sourceSha256: before.sourceSha256, runtime },
+    "Admission source, dependency or runtime closure changed during execution.");
+  const evidenceRoot = resolve(ROOT, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true });
+  assert.equal(realpathSync(evidenceRoot), evidenceRoot, "Admission evidence cannot traverse links.");
+  const runDirectory = realpathSync(mkdtempSync(join(evidenceRoot, "admission-qualification-")));
+  const context = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
+  const children = new Set<ChildProcess>(), executions: Array<LocalVerificationAdmissionQualification["executions"][number]> = [];
+  const assertionsRaw: unknown[] = [], artifacts = new Map<string, string>(), failures: string[] = [];
+  let inputRaw: LocalVerificationInputObservations | undefined;
+  let assertions: LocalVerificationAdmissionQualification["assertions"] = null, inputs: LocalVerificationAdmissionQualification["inputs"] = null;
+  let sourceFloor: Awaited<ReturnType<typeof runLocalVerificationSourceFloor>> | undefined;
+  const addArtifact = (absolute: string, expected?: string) => {
+    assert.ok(absolute.startsWith(evidenceRoot + sep) && lstatSync(absolute).isFile() && realpathSync(absolute) === absolute,
+      "Admission artifact is not an owned regular evidence file.");
+    const relative = absolute.slice(ROOT.length + 1).replaceAll("\\", "/"), sha256 = digest(readFileSync(absolute));
+    if (expected !== undefined) assert.equal(sha256, expected, "Admission raw artifact fingerprint differs.");
+    const prior = artifacts.get(relative); assert.ok(prior === undefined || prior === sha256, "Admission evidence changed before preservation.");
+    artifacts.set(relative, sha256);
+  };
+  const validateChild = (result: Awaited<ReturnType<typeof runOwnedVerificationChild>>) => {
+    assert.equal(result.code, 0); assert.deepEqual(result.rawExit, { code: 0, signal: null });
+    assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0); assert.equal(result.cleanup.processTreeVerified, true);
+    if (process.platform === "win32") {
+      const identity = result.nativeJobIdentity, native = result.nativeJobReceipt;
+      assert.ok(identity && native && result.nativeCapability);
+      assert.equal(identity.ownerJobAssignedBeforeResume, true); assert.equal(identity.jobHandleNonInheritable, true);
+      assert.equal(identity.effectiveLimitFlags, 0x2000); assert.ok(identity.jobBeforeResume.processIds.includes(identity.rootPid));
+      assert.equal(native.jobToken, identity.jobToken); assert.equal(native.rootPid, identity.rootPid);
+      assert.equal(native.status, "PASS"); assert.equal(native.reason, "completed"); assert.equal(native.rootExitCode, 0);
+      assert.deepEqual(result.helperExit, { code: 0, signal: null }); assert.equal(native.nativeFailure, null);
+      assert.equal(native.cleanup.activeProcessesAfterCleanup, 0); assert.deepEqual(native.cleanup.activeProcessIdsAfterCleanup, []);
+      assert.equal(native.cleanup.rootHandleExited, true); assert.equal(native.cleanup.jobHandleClosed, true);
+      assert.equal(result.nativeCapability.sourceSha256, digest(currentSources.get("scripts/lib/windows-owned-process.cs")!));
+    } else assert.equal(process.platform, "linux", "Admission cleanup is unqualified for this platform.");
+  };
+  try {
+    const targets = "qualifiedTargets" in initial ? initial.qualifiedTargets : undefined;
+    const governanceQualified = targets ? targets.selections.every(selection => !selection.selected || selection.qualified)
+      : !initial.actualDelta.some(change => /^(?:scripts|tests)\//u.test(change.file));
+    receipt(context, "governance-qualification.json", { status: governanceQualified ? "PASS" : "BLOCKED", proofBoundary: "source_effect_eligibility_only",
+      baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
+      selections: targets?.selections.map(({ family, selected, qualified, reason }) => ({ family, selected, qualified, reason })) ?? [],
+      blocking: targets?.blocking ?? [],
+      sourceGuardEffects: "sourceGuardEffects" in initial ? initial.sourceGuardEffects.map(({ entry, fingerprint, unresolved }) => ({ entry, fingerprint, unresolved })) : [] });
+    sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory: ROOT, context, signal, sources: currentSources,
+      operationalBudget,
+      changedFiles: initial.actualDelta.map(change => change.file), verifySource: assertSnapshot,
+      governance: targets?.targets.filter(target => target.kind === "source_guard") ?? [],
+      governanceQualified });
+    for (const [index, profile] of profiles.entries()) {
+      signal.throwIfAborted(); assertSnapshot();
+      const args = ["--experimental-strip-types", profile.entry, ...profile.args];
+      const env = { ...environment, VENESIA_QA_ASSERTION_RELOCATION_RECEIPT: "1", VENESIA_QA_ASSERTION_RELOCATION_NONCE: nonce,
+        VENESIA_QA_ADMISSION_NONCE: nonce };
+      const result = await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, args, env, "admission-" + (index + 1), admissionDeadlineMs);
+      executions.push({ entry: profile.entry, args, result }); validateChild(result); assertSnapshot();
+      let raw: unknown;
+      if (profile.receipt === "assertion-relocation-observations") {
+        const lines = result.stdout.split(/\r?\n/u).filter(line => line.startsWith("{")).flatMap(line => {
+          try { return [JSON.parse(line) as Record<string, unknown>]; } catch { return []; }
+        }).filter(value => value.kind === profile.receipt);
+        assert.equal(lines.length, 1, "The actual consumer must emit exactly one successful observation envelope."); raw = lines[0];
+        assert.equal((raw as Record<string, unknown>).consumer, profile.entry); assertionsRaw.push(raw);
+      } else {
+        const envelope = JSON.parse(result.stdout) as { status: unknown; rawObservations: LocalVerificationInputObservations };
+        assert.equal(envelope.status, "PASS"); inputRaw = envelope.rawObservations; raw = inputRaw;
+        assert.equal(inputRaw.entry, profile.entry);
+        for (const artifact of inputRaw.artifacts) addArtifact(resolve(ROOT, artifact.path), artifact.sha256);
+      }
+      assert.ok(raw && typeof raw === "object" && !Array.isArray(raw));
+      assert.equal((raw as Record<string, unknown>).schema, 1); assert.equal((raw as Record<string, unknown>).nonce, nonce,
+        "Missing or stale observations cannot prove this invocation.");
+    }
+    assertions = validateLocalVerificationAssertionRelocations({ baselineSources, currentSources, observations: [...assertionsRaw, inputRaw] });
+    inputs = validateLocalVerificationInputObservations({ sources: currentSources, observations: inputRaw });
+    assert.equal(assertions.status, "PASS", "Original predicates lack qualified source/execution correspondence.");
+    assert.equal(inputs.status, "PASS", "Four verification inputs lack qualified actual-consumer evidence.");
+    assertSnapshot();
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : "Admission qualification failed.");
+    if (sourceFloor && error instanceof Error && "childResult" in error) executions.push({ entry: profiles[executions.length]?.entry ?? "unknown",
+      args: profiles[executions.length]?.args ?? [], result: error.childResult });
+  } finally {
+    for (const child of children) {
+      try { await stopChild(child, environment, "owner_shutdown"); children.delete(child); }
+      catch (error) { failures.push(error instanceof Error ? error.message : "Admission cleanup failed."); }
+    }
+    if (children.size) failures.push("Admission retained an undrained owned child.");
+  }
+  const collect = (directory: string) => {
+    for (const name of readdirSync(directory).sort()) {
+      const absolute = join(directory, name), stat = lstatSync(absolute);
+      assert.equal(stat.isSymbolicLink(), false, "Admission evidence contains an unqualified link.");
+      if (stat.isDirectory()) collect(absolute); else addArtifact(absolute);
+    }
+  };
+  try { collect(runDirectory); } catch (error) { failures.push(error instanceof Error ? error.message : "Admission evidence preservation failed."); }
+  const value: LocalVerificationAdmissionQualification = { schema: 1, kind: "owned-admission-qualification", nonce,
+    ...(operationalBudget === undefined ? {} : { operationalBudget }),
+    status: failures.length ? "BLOCKED" : "PASS", baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
+    runtime, executions, assertions, inputs, artifacts: [...artifacts].sort(([left], [right]) => left.localeCompare(right)).map(([path, sha256]) => ({ path, sha256 })),
+    failures, runDirectory, durationMs: performance.now() - started, behavioralPass: false, releaseEvidence: false };
+  receipt(context, "admission-result.json", value);
+  if (value.status === "PASS") {
+    assert.ok(sourceFloor, "Admission cannot pass without its ordered source floor.");
+    const sourceDiscovery = structuredClone({ baselineHead, finalHead: before.finalHead, sourceSha256: before.sourceSha256,
+      additionalSourceFiles: [...additional], changes: initial.actualDelta, changeImpact: initial.changeImpact });
+    localVerificationAdmissionInvocations.set(value, { sha256: digest(JSON.stringify(value)), snapshot, sourceFloor, sourceFloorSha256: digest(JSON.stringify(sourceFloor)),
+      sourceDiscovery, sourceDiscoverySha256: digest(JSON.stringify(sourceDiscovery)) });
+  }
+  return value;
+}
+
+/** Read-only source consistency entry: no owned lifecycle, fixture, Browser, database or verification check starts. */
+export function inspectLocalVerificationChangeImpact(options: { baselineHead?: string; additionalSourceFiles?: readonly string[]; impact?: LocalVerificationImpact;
+  automatic?: boolean; ci?: { eventName: string; event: unknown; githubSha: string }; admissionQualification?: LocalVerificationAdmissionQualification }) {
+  const inspectionStarted = performance.now();
+  const timings = { sourceSnapshotAndHashMs: 0, sourceDiscoveryMs: 0, contractCoherenceMs: 0, totalMs: 0 };
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const context = { cleanEnvironment: () => ({ ...environment }) };
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: context.cleanEnvironment(), windowsHide: true,
+    timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
+  const checkoutHead = git("rev-parse", "HEAD").trim();
+  let baselineHead = options.baselineHead;
+  if (options.ci) {
+    assert.equal(options.automatic, true, "CI source selection requires automatic source coherence.");
+    assert.equal(options.impact, undefined, "CI source coherence cannot fabricate or borrow local approval records.");
+    assert.deepEqual(options.additionalSourceFiles ?? [], [], "CI source selection accepts committed source only.");
+    let lastCommitLookup: string | undefined, lastCommitProbe: { sha: string; exitCode: number | null; identity: string | null } | undefined;
+    const exitStatus = (failure: unknown) => failure !== null && typeof failure === "object" && "status" in failure && typeof failure.status === "number" ? failure.status : null;
+    const history = { exists: (sha: string) => {
+      lastCommitLookup = sha;
+      try { const identity = git("rev-parse", "--verify", sha + "^{commit}").trim(); lastCommitProbe = { sha, exitCode: 0, identity }; return identity === sha; }
+      catch (failure) { lastCommitProbe = { sha, exitCode: exitStatus(failure), identity: null }; return false; }
+    },
+      isAncestor: (ancestor: string, descendant: string) => { try { git("merge-base", "--is-ancestor", ancestor, descendant); return true; } catch { return false; } },
+      parents: (sha: string) => git("show", "--no-patch", "--format=%P", sha, "--").trim().split(/\s+/u).filter(Boolean) };
+    try { baselineHead = resolveLocalVerificationCiBaseline({ ...options.ci, checkoutHead }, history).baselineHead; }
+    catch (error) {
+      const ciBinding = localVerificationCiDiagnostic({ ...options.ci, checkoutHead, ...(lastCommitLookup ? { lastCommitLookup } : {}), ...(lastCommitProbe ? { lastCommitProbe } : {}) }, (operation, sha, descendant) => {
+        const commands = { identity: ["rev-parse", "--verify", sha + "^{commit}"], objectType: ["cat-file", "-t", sha],
+          parents: ["show", "--no-patch", "--format=%P", sha, "--"], ancestry: ["merge-base", "--is-ancestor", sha, descendant!] };
+        try { return { exitCode: 0, output: git(...commands[operation]) }; }
+        catch (failure) { return { exitCode: exitStatus(failure), output: "" }; }
+      });
+      return { status: "BLOCKED_SOURCE_CONSISTENCY", exitCode: 1, releaseEvidence: false, checksExecuted: 0, browserExecuted: false,
+        databaseCalls: 0, networkRequests: 0, diagnostic: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid CI source admission.", ciBinding,
+        timings: { ...timings, totalMs: performance.now() - inspectionStarted } };
+    }
+    git("diff", "--no-ext-diff", "--no-textconv", "--quiet", "HEAD", "--");
+  }
+  assert.ok(baselineHead && /^[a-f0-9]{40}$/u.test(baselineHead), "An explicit immutable impact baseline is required.");
+  const tracked = git("ls-files", "-z").split("\0").filter(Boolean), additional = [...(options.additionalSourceFiles ?? [])];
+  const files = selectSourceInventory(tracked, additional);
+  for (const file of additional) assert.ok(existsSync(safeSourcePath(file)), "Explicit additional source is missing: " + file);
+  const snapshotStarted = performance.now();
+  const manifest = files.flatMap(file => {
+    const path = safeSourcePath(file); if (!existsSync(path)) return [];
+    assert.ok(lstatSync(path).isFile() && realpathSync(path) === path, "Impact source cannot traverse a symlink or junction: " + file);
+    return [{ file, sha256: digest(readFileSync(path)) }];
+  });
+  const sourceSha256 = digest(JSON.stringify(manifest));
+  timings.sourceSnapshotAndHashMs = performance.now() - snapshotStarted;
+  const finalHead = git("rev-parse", "HEAD").trim();
+  const impact = options.impact ?? { baselineHead, finalHead, sourceSha256, changes: [] };
+  assert.equal(impact.baselineHead, baselineHead, "The reviewed impact baseline differs from the explicitly requested baseline.");
+  const discoveryStarted = performance.now();
+  const actual = readLocalVerificationInputs(context, impact, manifest, additional, { additionalSourceFiles: additional,
+    ...(options.admissionQualification ? { admissionQualification: options.admissionQualification } : {}) });
+  timings.sourceDiscoveryMs = performance.now() - discoveryStarted;
+  // Discovery includes Git binding, graph and assertion analysis; timing never authorizes coverage or changes its identity.
+  const measuredTimings = () => ({ ...timings, totalMs: performance.now() - inspectionStarted });
+  const base = { baselineHead: actual.baselineHead, finalHead: actual.finalHead, sourceSha256: actual.sourceSha256,
+    actualDelta: actual.changes, changeImpact: actual.changeImpact, releaseEvidence: false as const,
+    proofBoundary: "source_discovery_only" as const, checksExecuted: 0, browserExecuted: false, databaseCalls: 0, networkRequests: 0,
+    admissionQualification: actual.admissionQualification ?? null };
+  if (options.automatic) {
+    assert.equal(options.impact, undefined, "Automatic source coherence cannot replace reviewed local admission.");
+    const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+    const coherenceStarted = performance.now();
+    const coherence = deriveLocalVerificationSourceCoherence(scripts, actual);
+    timings.contractCoherenceMs = performance.now() - coherenceStarted;
+    const sourceBytes = new Map(manifest.map(row => { const bytes = readFileSync(safeSourcePath(row.file));
+      assert.equal(digest(bytes), row.sha256, "Source effect closure snapshot changed: " + row.file); return [row.file, bytes] as const; }));
+    const sourceGuardEffects = ["scripts/verify-executable-governance.mts", "scripts/verify-verification-infrastructure.mts"]
+      .map(entry => localVerificationSourceGuardEffects(entry, sourceBytes));
+    const qualifiedTargets = qualifyLocalVerificationTargets(scripts, actual.changeImpact!, digest(readFileSync(safeSourcePath("scripts/qa-admin-form-guarded-navigation.mts"), "utf8").replaceAll("\r\n", "\n")),
+      Object.fromEntries(sourceGuardEffects.map(effect => [effect.entry, effect.fingerprint ?? ""])));
+    return { ...base, ...coherence, checksExecuted: coherence.fast.checksExecuted, candidateCommandsExecuted: 0,
+      qualifiedTargets, sourceGuardEffects,
+      ciBinding: options.ci ? { eventName: options.ci.eventName, checkoutHead } : null, timings: measuredTimings() };
+  }
+  if (!options.impact) return { ...base, status: actual.changeImpact!.obligations.length ? "DRIFT" : "REVIEW_REQUIRED", exitCode: 2,
+    diagnostics: actual.changeImpact!.obligations.map(obligation => `file=${obligation.file}; owner=${obligation.owner}; contract=${obligation.contract}; reviewed protection maintenance is required.`), timings: measuredTimings() };
+  try {
+    const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+    const coherenceStarted = performance.now();
+    const plan = planLocalVerification(scripts, impact, actual);
+    timings.contractCoherenceMs = performance.now() - coherenceStarted;
+    assert.deepEqual(plan.unresolvedVerificationInputs, [], "Source consistency requires positive executable coverage for every changed verification input.");
+    return { ...base, status: "PASS_SOURCE_CONSISTENCY", exitCode: 0, plan,
+      diagnostics: ["Source consistency only. Selected checks have not executed; behavior and release readiness remain unverified."], timings: measuredTimings() };
+  } catch (error) {
+    return { ...base, status: "DRIFT", exitCode: 2, diagnostics: [error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Invalid reviewed source consistency evidence."], timings: measuredTimings() };
+  }
+}
+
+/** A later PASS cannot overwrite an earlier terminal failure from the same immutable leaf. */
+export function localVerificationFamilyReceipt(stdout: string, family: string) {
+  const matching: Record<string, unknown>[] = [];
+  for (const line of stdout.split(/\r?\n/u)) if (line.startsWith("{")) {
+    let value: unknown;
+    try { value = JSON.parse(line); } catch { continue; }
+    if (value && typeof value === "object" && !Array.isArray(value) && "family" in value && value.family === family)
+      matching.push(value as Record<string, unknown>);
+  }
+  assert.equal(matching.length, 1, "The canonical leaf must emit exactly one matching terminal family receipt.");
+  return matching[0]!;
+}
+
+/** Classify only owner-observed causal facts. Assertion text and a retry can never establish a Product cause. */
+export function localVerificationFailureClassification(facts: {
+  stage: "execution" | "terminal_receipt" | "cleanup" | "evidence";
+  error?: unknown; exitCode?: number | null; childReason?: string | null;
+  nativeEvidence?: { stderr: string; stderrSha256: string; signal?: string | null };
+}) {
+  const categories = ["Product", "QA / Test", "Fixture", "Harness", "Environment", "UNKNOWN"] as const;
+  const error = facts.error instanceof Error ? facts.error : undefined;
+  const ownedCause = error?.cause;
+  const code = error && "code" in error ? String(error.code) : ownedCause && typeof ownedCause === "object" && "code" in ownedCause ? String(ownedCause.code) : null;
+  const operatingSystemCodes = ["EACCES", "EPERM", "ENOSPC", "EROFS", "ENOENT", "EMFILE", "ENFILE"];
+  if (code && operatingSystemCodes.includes(code)) return { category: categories[4], technicalKind: facts.stage + "_os_failure",
+    failureClass: "Environment Failure", rootCause: "UNKNOWN", confidence: "observed_os_code",
+    evidence: "The owner observed the operating-system error code " + code + ".", osCode: code };
+  const native = facts.nativeEvidence;
+  if (native && /^[a-f0-9]{64}$/u.test(native.stderrSha256) && facts.exitCode !== 0 &&
+      (facts.exitCode === 2147483651 || native.signal === "SIGABRT") &&
+      /(?:^|\n)[^\n]*Check failed: jit_page_->allocations_\.erase\(addr\) == 1\./u.test(native.stderr))
+    return { category: "Runtime Crash" as const, failureClass: "Node/V8 Runtime Crash", rootCause: "UNKNOWN",
+      technicalKind: "owned_node_v8_native_abort", confidence: "native_fatal_and_exit",
+      evidence: "Owned child retained the V8 CHECK fatal, native abort exit/signal and stderr SHA-256; the initiating defect remains UNKNOWN.",
+      evidenceSha256: native.stderrSha256, osCode: null };
+  if (code === "APPLICATION_CLIENT_DISCONNECTED") return { category: "Database Transport" as const,
+    failureClass: "Database Transport Failure", rootCause: "UNKNOWN", technicalKind: "owned_pg_control_connection_disconnected",
+    confidence: "observed_owner_error_code", evidence: "The owned PostgreSQL control client disconnected; no Codex, Sleep, Docker or memory cause is inferred.", osCode: null };
+  if (facts.stage === "terminal_receipt" && facts.exitCode === 0) return { category: categories[2], technicalKind: "terminal_receipt_contract_violation",
+    failureClass: "QA / Harness Failure", rootCause: "UNKNOWN", confidence: "owner_validated_protocol_violation",
+    evidence: "The canonical process exited zero but its required family receipt failed explicit owner validation.", osCode: null };
+  return { category: categories[5], technicalKind: facts.stage + (facts.childReason ? "_" + facts.childReason : "_failure"),
+    failureClass: facts.childReason === "timeout" ? "Timeout" : facts.childReason === "cancelled" ? "Cancellation" : "UNKNOWN",
+    rootCause: "UNKNOWN", confidence: facts.childReason === "timeout" || facts.childReason === "cancelled" ? "observed_termination_reason" : "insufficient_causal_evidence",
+    evidence: "The original failure is retained. Exit status, assertion labels, cancellation and timeout alone do not establish a Product, Test, Fixture, Harness or Environment root cause.", osCode: null };
+}
+
+/** Explicit targeted mode reuses the same child lifecycle; it never fabricates Supabase readiness or replaces a release gate. */
+export async function executeLocalVerificationTargets(options: { baselineHead: string }, signal: AbortSignal) {
+  const started = performance.now();
+  const invocationId = "impact-" + globalThis.crypto.randomUUID();
+  // Recompute the actual delta and existing manifest bindings here. A caller cannot supply a stale or altered selector.
+  assert.deepEqual(Object.keys(options), ["baselineHead"], "Targeted execution accepts only an immutable baseline, never supplied impact analysis.");
+  let input = inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead, automatic: true });
+  if ("changeImpact" in input && input.changeImpact?.qaQuality?.some(row => row.failures.length)
+      && "fast" in input && input.fast.correspondence.every(row => row.protected)) {
+    const admissionQualification = await qualifyLocalVerificationAdmission({ baselineHead: options.baselineHead }, signal);
+    if (admissionQualification.status === "PASS") input = inspectLocalVerificationChangeImpact({ baselineHead: options.baselineHead,
+      automatic: true, admissionQualification });
+    else return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1,
+      results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0, browserExecuted: false,
+      durationMs: performance.now() - started, attempt: 0, retry: 0, fullGatesPreserved: true, admissionQualification };
+  }
+  if (input.status !== "PASS_AUTOMATIC_SOURCE_PROTECTION" || input.exitCode !== 0 || !("qualifiedTargets" in input) || !input.changeImpact)
+    return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1, results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0,
+      browserExecuted: false, durationMs: performance.now() - started, attempt: 0, retry: 0, fullGatesPreserved: true };
+  const changeImpact = input.changeImpact;
+  const phaseTimings = { sourceInspectionMs: performance.now() - started, snapshotVerificationMs: 0, executionMs: 0, evidenceAndCleanupMs: 0 };
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", CI: "1", GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.fsmonitor", GIT_CONFIG_VALUE_0: "false" };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT", "LOCALAPPDATA", "PLAYWRIGHT_BROWSERS_PATH"])
+    if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: environment, windowsHide: true, timeout: 30_000,
+    maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
+  const verifySource = () => {
+    const snapshotStarted = performance.now();
+    assert.equal(git("rev-parse", "HEAD").trim(), input.finalHead, "Targeted execution has a changed commit.");
+    const manifest = selectSourceInventory(git("ls-files", "-z").split("\0").filter(Boolean), []).flatMap(file => {
+      const path = safeSourcePath(file); if (!existsSync(path)) return [];
+      assert.ok(lstatSync(path).isFile() && realpathSync(path) === path, "Targeted source cannot traverse links.");
+      return [{ file, sha256: digest(readFileSync(path)) }];
+    });
+    assert.equal(digest(JSON.stringify(manifest)), input.sourceSha256, "Targeted execution has a stale source snapshot.");
+    assert.equal(changeImpact.sourceSha256, input.sourceSha256);
+    const scripts = JSON.parse(readFileSync(safeSourcePath("package.json"), "utf8")).scripts as Record<string, string>;
+    const sourceBytes = new Map(manifest.map(row => { const bytes = readFileSync(safeSourcePath(row.file));
+      assert.equal(digest(bytes), row.sha256, "Source effect closure snapshot changed: " + row.file); return [row.file, bytes] as const; }));
+    const sourceGuardEffects = ["scripts/verify-executable-governance.mts", "scripts/verify-verification-infrastructure.mts"]
+      .map(entry => localVerificationSourceGuardEffects(entry, sourceBytes));
+    assert.ok("sourceGuardEffects" in input, "Missing complete source guard effect closure.");
+    assert.deepEqual(sourceGuardEffects, input.sourceGuardEffects, "Targeted source guard effect closure changed before execution.");
+    assert.deepEqual(qualifyLocalVerificationTargets(scripts, changeImpact,
+      digest(readFileSync(safeSourcePath("scripts/qa-admin-form-guarded-navigation.mts"), "utf8").replaceAll("\r\n", "\n")),
+      Object.fromEntries(sourceGuardEffects.map(effect => [effect.entry, effect.fingerprint ?? ""]))), input.qualifiedTargets, "Targeted selector is stale or incomplete.");
+    phaseTimings.snapshotVerificationMs += performance.now() - snapshotStarted;
+  };
+  verifySource();
+  const qualified = input.qualifiedTargets;
+  if (!qualified.targets.length) return { status: qualified.applicable ? "BLOCKED" as const : "NOT RUN" as const, exitCode: qualified.applicable ? 1 : 0,
+    sourceReport: input, commitSha: input.finalHead, sourceSha256: input.sourceSha256, results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0, browserExecuted: false, durationMs: performance.now() - started,
+    attempt: 0, retry: 0, reason: qualified.applicable ? qualified.blockers : ["no_affected_qualified_family"], fullGatesPreserved: true };
+  assert.equal(new Set(qualified.targets.map(row => row.step)).size, qualified.targets.length, "A qualified leaf cannot execute twice in one path.");
+  if (qualified.targets.some(target => !target.supportedPlatforms.includes(process.platform))) return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1,
+    results: [], runId: invocationId, flakyStatus: "NOT_RUN", executedCommands: 0, commandAttempts: 0, browserExecuted: false, attempt: 0, retry: 0,
+    reason: ["qualified_process_tree_cleanup_not_proved_for_platform"], durationMs: performance.now() - started, fullGatesPreserved: true };
+  const evidenceRoot = resolve(ROOT, ".tmp-qa"); mkdirSync(evidenceRoot, { recursive: true });
+  assert.ok(lstatSync(evidenceRoot).isDirectory() && realpathSync(evidenceRoot) === evidenceRoot, "Targeted evidence root cannot traverse links.");
+  const runDirectory = realpathSync(mkdtempSync(join(evidenceRoot, "impact-targeted-")));
+  assert.ok(runDirectory.startsWith(evidenceRoot + sep));
+  let processReadiness: Awaited<ReturnType<typeof verifyOwnedProcessReadiness>>;
+  try {
+    processReadiness = await verifyOwnedProcessReadiness({ sourceDirectory: ROOT,
+      context: { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) }, signal });
+  } catch (error) {
+    return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1, results: [], runId: invocationId,
+      commitSha: input.finalHead, sourceSha256: input.sourceSha256, executedCommands: 0, commandAttempts: 0,
+      attempt: 0, retry: 0, flakyStatus: "NOT_RUN", browserExecuted: false, durationMs: performance.now() - started,
+      reason: ["owned_process_execution_context_not_qualified"], evidenceReference: ".tmp-qa/" + runDirectory.slice(evidenceRoot.length + 1).replaceAll("\\", "/") + "/process-readiness.json",
+      failurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Owned process readiness failed", fullGatesPreserved: true };
+  }
+  const results: Array<Record<string, unknown>> = [];
+  const sourceFloorContext = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
+  const sourceFloorSources = new Map(selectSourceInventory(git("ls-files", "-z").split("\0").filter(Boolean), [])
+    .filter(file => existsSync(safeSourcePath(file))).map(file => [file, readFileSync(safeSourcePath(file))] as const));
+  let sourceFloor: Awaited<ReturnType<typeof runLocalVerificationSourceFloor>>;
+  try {
+    const prior = input.admissionQualification ? assertLocalVerificationAdmissionQualification(input.admissionQualification,
+      { baselineHead: input.baselineHead, finalHead: input.finalHead, sourceSha256: input.sourceSha256 }).sourceFloor : undefined;
+    sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory: ROOT, context: sourceFloorContext, signal,
+      sources: sourceFloorSources, changedFiles: input.actualDelta.map(change => change.file), verifySource,
+      governance: qualified.targets.filter(target => target.kind === "source_guard"), governanceQualified: qualified.blocking.length === 0, prior });
+  } catch (error) {
+    const childResult = error instanceof Error && "childResult" in error ? error.childResult : null;
+    return { sourceReport: input, status: "BLOCKED" as const, exitCode: 1, results: [], runId: invocationId,
+      commitSha: input.finalHead, sourceSha256: input.sourceSha256, executedCommands: 0, commandAttempts: 0,
+      attempt: 0, retry: 0, flakyStatus: "NOT_RUN", browserExecuted: false, durationMs: performance.now() - started,
+      reason: ["ordered_source_floor_failed"], originalChildResult: childResult,
+      failurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Ordered source floor failed", fullGatesPreserved: true };
+  }
+  let browserExecuted = false, executedCommands = 0;
+  for (const [targetIndex, target] of qualified.targets.entries()) {
+  const targetName = `targeted-${targetIndex + 1}-${target.kind}`;
+  const tempDirectory = join(runDirectory, "temp-" + (targetIndex + 1)); mkdirSync(tempDirectory);
+  environment.TEMP = environment.TMP = tempDirectory;
+  const context = { runDirectory, sanitize: (value: string) => value, cleanEnvironment: () => ({ ...environment }) };
+  const children = new Set<ChildProcess>();
+  let child: Awaited<ReturnType<typeof runOwnedVerificationChild>> | undefined;
+  let failure: unknown, cleanupFailure: unknown;
+  let failureStage: "execution" | "terminal_receipt" = "execution";
+  let cleanupStarted = 0;
+  let fixture: { family?: string; status?: string; proofLevel?: string; scenariosStarted?: number; scenariosCompleted?: number;
+    browserExecuted?: boolean; databaseExecuted?: boolean; nativePersistenceVerified?: boolean; businessConsumerAdoptionVerified?: boolean;
+    cleanup?: Array<{ resource: string; status: string }>; deniedForeignRequests?: unknown[];
+    timings?: { preparationMs: number; executionMs: number; cleanupMs: number } } | undefined;
+  try {
+    signal.throwIfAborted(); verifySource();
+    child = target.kind === "source_guard" ? sourceFloor.checks.find(check => check.stage === "governance" && check.step === target.step)?.result : undefined;
+    child ??= await runOwnedVerificationChild({ sourceDirectory: ROOT, context, children, signal }, target.step.split(" ").slice(1),
+      environment, targetName, target.limitMs);
+    phaseTimings.executionMs += child.durationMs;
+    assert.equal(child.code, 0, "Qualified canonical leaf failed; retain its original stdout/stderr and exit code.");
+    failureStage = "terminal_receipt";
+    if (target.kind === "browser_behavior") {
+    assert.equal(qualified.targets.filter(row => row.kind === "browser_behavior").length, 1, "Only the qualified existing Form family is executable.");
+    assert.equal(target.step, "node --experimental-strip-types scripts/qa-admin-form-guarded-navigation.mts --save-cache-only");
+    fixture = localVerificationFamilyReceipt(child.stdout, target.family) as typeof fixture;
+    assert.ok(fixture, "A successful process without the actual family receipt is not behavioral proof.");
+    assert.equal(fixture.status, "PASS"); assert.equal(fixture.proofLevel, target.proofLevel);
+    assert.equal(fixture.scenariosStarted, 13); assert.equal(fixture.scenariosCompleted, 13);
+    assert.equal(fixture.browserExecuted, true); assert.equal(fixture.databaseExecuted, false);
+    assert.equal(fixture.nativePersistenceVerified, false); assert.equal(fixture.businessConsumerAdoptionVerified, false);
+    assert.deepEqual(fixture.cleanup?.map(row => [row.resource, row.status]), [["browser", "PASS"], ["server", "PASS"], ["temp", "PASS"]]);
+    assert.deepEqual(fixture.deniedForeignRequests, []);
+    } else {
+      assert.equal(target.kind, "source_guard");
+      assert.equal(target.step, "node --experimental-strip-types " + target.entry);
+      assert.ok(target.successMarker && child.stdout.includes(target.successMarker), "Source guard terminal success evidence is missing.");
+    }
+    failureStage = "execution";
+    assert.equal(child.cleanup.status, "PASS");
+    assert.equal(child.cleanup.liveProcesses, 0);
+    if (process.platform === "linux") assert.equal(child.cleanup.processTreeVerified, true);
+    failureStage = "execution";
+    verifySource();
+  } catch (error) { failure = error; }
+  finally {
+    cleanupStarted = performance.now();
+    try {
+      for (const active of children) await stopChild(active, environment);
+      assert.equal(children.size, 0, "Targeted child termination must precede temporary cleanup.");
+      assert.equal(realpathSync(tempDirectory), tempDirectory);
+      const inspect = (directory: string): void => { for (const name of readdirSync(directory)) {
+        const path = join(directory, name), stat = lstatSync(path); assert.equal(stat.isSymbolicLink(), false, "Refuse linked targeted temporary cleanup.");
+        if (stat.isDirectory()) inspect(path);
+      } };
+      inspect(tempDirectory); rmSync(tempDirectory, { recursive: true, force: true });
+    } catch (error) { cleanupFailure = error; }
+  }
+  const logs = (kind: "stdout" | "stderr") => {
+    const path = ownedPath(context, `public-${targetName}.${kind}.log`);
+    return existsSync(path) ? readFileSync(path, "utf8") : "";
+  };
+  let evidenceFailure: unknown;
+  let stdout = child?.stdout ?? "", stderr = child?.stderr ?? "";
+  try { stdout = child?.stdout ?? logs("stdout"); stderr = child?.stderr ?? logs("stderr"); } catch (error) { evidenceFailure = error; }
+  const status = failure || cleanupFailure || evidenceFailure ? "FAIL" as const : "PASS" as const;
+  const retainedChild = failure instanceof Error && "childResult" in failure ? failure.childResult as {
+    code?: number | null; signal?: string | null; durationMs?: number; reason?: string | null;
+    identity?: { pid: number | null; ppid: number; spawnedAtUtc: string }; rawExit?: { code: number | null; signal: string | null };
+    stdout?: string | null; stderr?: string | null; cleanup?: unknown;
+  } : undefined;
+  const rawExit = child ? child.rawExit : retainedChild ? retainedChild.rawExit
+    ?? { code: retainedChild.code === undefined ? null : retainedChild.code, signal: retainedChild.signal ?? null } : null;
+  if (!child && retainedChild?.durationMs !== undefined) phaseTimings.executionMs += retainedChild.durationMs;
+  const originalCause = failure ? localVerificationFailureClassification({ stage: failureStage, error: failure,
+    exitCode: rawExit?.code, childReason: retainedChild?.reason,
+    nativeEvidence: { stderr, stderrSha256: digest(stderr), signal: rawExit?.signal } }) : null;
+  const cause = originalCause ?? (status === "PASS" ? null : localVerificationFailureClassification({
+    stage: cleanupFailure ? "cleanup" : evidenceFailure ? "evidence" : failureStage,
+    error: cleanupFailure ?? evidenceFailure ?? failure, exitCode: rawExit?.code, childReason: retainedChild?.reason,
+    nativeEvidence: { stderr, stderrSha256: digest(stderr), signal: rawExit?.signal },
+  }));
+  phaseTimings.evidenceAndCleanupMs += performance.now() - cleanupStarted;
+  const result = { status, runId: invocationId, commitSha: input.finalHead, sourceSha256: input.sourceSha256, owners: target.owners, capabilities: target.capabilities,
+    contracts: target.contracts, consumers: target.consumers, test: target.entry, canonicalChecks: target.canonicalChecks, command: target.step,
+    durationMs: child?.durationMs ?? retainedChild?.durationMs ?? performance.now() - started, attempt: 1, retry: 0,
+    flakyStatus: "NOT_ASSESSED_SINGLE_ATTEMPT", attempts: [{ attempt: 1, retry: 0, status, cause }], cause, originalCause,
+    cleanupCause: cleanupFailure ? localVerificationFailureClassification({ stage: "cleanup", error: cleanupFailure }) : null,
+    exitCode: rawExit?.code === undefined ? null : rawExit.code,
+    childOutcome: retainedChild ? { ...retainedChild, rawExit } : child ? { code: child.code, rawExit, identity: child.identity, cleanup: child.cleanup } : null,
+    timings: { ...phaseTimings, source: input.timings, fixture: fixture?.timings ?? null, finalReceiptWriteIncluded: false },
+    proofLevel: target.proofLevel, behavioralPass: target.kind === "browser_behavior" && status === "PASS", fixture: fixture ?? null, nativePersistenceVerified: false, businessConsumerAdoptionVerified: false,
+    selected: true, reason: target.reasons, owner: target.owners, contract: target.contracts,
+    evidenceReference: ".tmp-qa/" + runDirectory.slice(evidenceRoot.length + 1).replaceAll("\\", "/") + "/" + targetName + "-result.json",
+    evidence: { stdoutSha256: digest(stdout), stderrSha256: digest(stderr), stdout, stderr },
+    cleanup: { childProcessesClosed: children.size === 0, ownedTempRemoved: !existsSync(tempDirectory), status: cleanupFailure ? "FAIL" : "PASS" },
+    failurePreserved: failure instanceof Error ? failure.message.split(/\r?\n/u)[0] : failure ? "Original execution failed" : null,
+    cleanupFailurePreserved: cleanupFailure instanceof Error ? cleanupFailure.message.split(/\r?\n/u)[0] : cleanupFailure ? "Owned cleanup failed" : null };
+  const receiptStarted = performance.now();
+  try { receipt(context, targetName + "-result.json", result); } catch (error) { evidenceFailure = error; }
+  const receiptPersistenceMs = performance.now() - receiptStarted;
+  const finalStatus = evidenceFailure ? "FAIL" as const : status;
+  results.push(evidenceFailure ? { ...result, status: "FAIL" as const, evidencePersistence: "FAIL", originalCause,
+      originalAttempt: { status: result.status, cause: result.cause, exitCode: result.exitCode },
+      attempts: [{ attempt: 1, retry: 0, status: "FAIL" as const, cause: localVerificationFailureClassification({ stage: "evidence", error: evidenceFailure }) }],
+      cause: localVerificationFailureClassification({ stage: "evidence", error: evidenceFailure }),
+      evidenceFailurePreserved: evidenceFailure instanceof Error ? evidenceFailure.message.split(/\r?\n/u)[0] : "Evidence persistence failed" }
+    : { ...result, originalCause, receiptPersistenceMs });
+  executedCommands += child || retainedChild?.identity && Number.isSafeInteger(retainedChild.identity.pid) && retainedChild.identity.pid! > 0 ? 1 : 0;
+  browserExecuted ||= fixture?.browserExecuted === true;
+  if (finalStatus !== "PASS") break;
+  }
+  const preflight = qualified.selections.map(selection => {
+    const result = results.find(row => row.command === selection.command);
+    return { ...selection, sourceSha256: input.sourceSha256, durationMs: result?.durationMs ?? 0,
+      result: result?.status ?? "NOT RUN", evidence: result?.evidenceReference ?? null,
+      reason: result ? selection.reason : selection.selected && selection.qualified ? "blocked_or_prior_leaf_failed" : selection.reason };
+  });
+  const status = results.length !== qualified.targets.length || results.some(result => result.status !== "PASS") ? "FAIL" as const
+    : qualified.blocking.length ? "BLOCKED" as const : "PASS" as const;
+  const report = { sourceReport: input, status, exitCode: status === "PASS" ? 0 : 1, commitSha: input.finalHead, sourceSha256: input.sourceSha256,
+    results, preflight, processReadiness, executedCommands, commandAttempts: results.length, runId: invocationId, flakyStatus: "NOT_ASSESSED_SINGLE_ATTEMPT",
+    timings: { ...phaseTimings, source: input.timings }, browserExecuted,
+    qualifiedBehavioralPass: results.some(result => result.proofLevel === "shared_owner_controlled_browser_behavior" && result.status === "PASS"),
+    behavioralPass: false, releaseEvidence: false, durationMs: performance.now() - started, attempt: 1, retry: 0, fullGatesPreserved: true };
+  try { receipt({ runDirectory, sanitize: (value: string) => value }, "targeted-result.json", report); }
+  catch (error) { return { ...report, status: "FAIL" as const, exitCode: 1,
+    evidenceFailurePreserved: error instanceof Error ? error.message.split(/\r?\n/u)[0] : "Evidence persistence failed" }; }
+  return report;
 }
 
 /** Inspect literal registered command chains without executing or expanding the gate prefix. */
 export function registeredVerificationNodeEntries(scripts: Readonly<Record<string, string>>, check: string): string[] {
-  const resolved = new Map<string, Set<string>>(), active = new Set<string>();
-  const visit = (name: string): Set<string> => {
-    assert.ok(/^[a-zA-Z0-9:_-]+$/u.test(name) && Object.hasOwn(scripts, name) && typeof scripts[name] === "string",
-      "Verification wrappers must name an existing literal package command.");
-    assert.ok(!active.has(name), "Verification package command cycles cannot prove executable coverage.");
-    const cached = resolved.get(name); if (cached) return cached;
-    active.add(name);
-    const command = scripts[name];
-    assert.ok(!/[\r\n]/u.test(command), "Verification commands cannot contain shell line separators.");
-    const entries = new Set<string>();
-    for (const part of command.split("&&")) {
-      const step = part.trim(), wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
-      if (wrapper) {
-        for (const entry of visit(wrapper[1])) entries.add(entry);
-      } else {
-        const node = /^node (?:--experimental-strip-types )?([a-zA-Z0-9_./-]+\.(?:mjs|mts|js|ts))(?: [a-zA-Z0-9_./:=+,-]+)*$/u.exec(step);
-        assert.ok(node && sourceIncluded(node[1]),
-          "Verification coverage requires literal Node entries or argument-free npm run wrappers; shell, environment and dynamic commands are unsupported.");
-        entries.add(node[1]);
+  assert.ok(/^[a-zA-Z0-9:_-]+$/u.test(check) && Object.hasOwn(scripts, check),
+    "Verification wrappers must name an existing literal package command.");
+  const steps = localVerificationCommandSteps(scripts, check);
+  assert.ok(steps, "Verification coverage requires literal Node entries or argument-free npm run wrappers; shell, environment, cycles and dynamic commands are unsupported.");
+  return [...new Set(steps.map(step => {
+    const words = step.split(" "), entry = words[1] === "--experimental-strip-types" ? words[2] : words[1];
+    assert.ok(sourceIncluded(entry), "A verification entry cannot include private or generated source.");
+    return entry;
+  }))];
+}
+
+/** Bounded four-input protocol only; orchestration owns nonce, outer cleanup and artifact byte verification. */
+export function validateLocalVerificationInputObservations(input: {
+  sources: ReadonlyMap<string, string | Buffer>; observations: unknown;
+}) {
+  const failures: string[] = [], entry = "scripts/verify-isolated-supabase.mts", check = "verify:isolated-supabase";
+  const coverage: Array<{ file: string; check: string; entry: string; evidence: Record<string, unknown> }> = [];
+  let stage = "envelope", nativeAcceptancePlatform: "win32" | "linux" | null = null;
+  const record = (value: unknown): Record<string, unknown> => {
+    assert.ok(value !== null && typeof value === "object" && !Array.isArray(value));
+    assert.ok([Object.prototype, null].includes(Object.getPrototypeOf(value))); return value as Record<string, unknown>;
+  };
+  const rows = (value: unknown) => { assert.ok(Array.isArray(value) && value.length <= 10_000); return value as unknown[]; };
+  const strings = (value: unknown) => { const result = rows(value); assert.ok(result.every(row => typeof row === "string"));
+    assert.equal(new Set(result).size, result.length); return result as string[]; };
+  const trees = new Map<string, ts.SourceFile>();
+  const source = (file: string) => { const bytes = input.sources.get(file); assert.ok(bytes !== undefined); return bytes.toString(); };
+  const tree = (file: string) => {
+    let parsed = trees.get(file); if (parsed) return parsed;
+    parsed = ts.createSourceFile(file, source(file), ts.ScriptTarget.Latest, true, /\.[cm]?ts$/u.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+    assert.deepEqual((parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, []); trees.set(file, parsed); return parsed;
+  };
+  const nodes = (at: ts.Node) => { const result: ts.Node[] = []; const visit = (node: ts.Node) => { result.push(node); ts.forEachChild(node, visit); }; visit(at); return result; };
+  const declaration = (file: string, name: string) => {
+    const parsed = tree(file), found = name === "$module" ? [parsed] : name === "$dispatch" ? parsed.statements.filter(ts.isTryStatement)
+      : parsed.statements.filter(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+    assert.equal(found.length, 1); return found[0]!;
+  };
+  // Structural expression identity retains literals and operators, rather than names or a source hash alone.
+  const keys = new WeakMap<ts.Node, string>();
+  const key = (node: ts.Node): string => {
+    const cached = keys.get(node); if (cached !== undefined) return cached;
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isNonNullExpression(node) || ts.isTypeAssertionExpression(node)) return key(node.expression);
+    const children: string[] = []; ts.forEachChild(node, child => { children.push(key(child)); });
+    const literal = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null;
+    const result = "[" + node.kind + ":" + JSON.stringify(literal) + ":" + children.join(",") + "]"; keys.set(node, result); return result;
+  };
+  const expression = (value: string) => {
+    const parsed = ts.createSourceFile("input-proof.ts", "(" + value + ")", ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    assert.deepEqual((parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics, []);
+    const statement = parsed.statements[0]; assert.ok(statement && ts.isExpressionStatement(statement)); return statement.expression;
+  };
+  const has = (at: ts.Node, value: string) => { const expected = key(expression(value)); return nodes(at).some(node => key(node) === expected && live(node, at)); };
+  const requireExpressions = (at: ts.Node, expressions: string[]) => { for (const value of expressions) assert.ok(has(at, value), "Required behavioral expression absent."); };
+  const noTautologies = (at: ts.Node) => {
+    for (const node of nodes(at)) {
+      if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name)
+        assert.notEqual(node.name.getText(), "assert", "A local assertion receiver cannot qualify the imported guard.");
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "assert") {
+      if (node.expression.name.text === "ok" && node.arguments[0]) assert.ok(![ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword,
+        ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NumericLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral].includes(node.arguments[0].kind));
+      if (["equal", "deepEqual", "strictEqual", "deepStrictEqual"].includes(node.expression.name.text) && node.arguments.length >= 2)
+        assert.notEqual(key(node.arguments[0]!), key(node.arguments[1]!));
       }
     }
-    active.delete(name); resolved.set(name, entries); return entries;
   };
-  return [...visit(check)];
+  const directCall = (at: ts.Node, name: string) => nodes(at).filter((node): node is ts.CallExpression => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || node.expression.text !== name) return false;
+    for (let parent = node.parent; parent && parent !== at; parent = parent.parent)
+      if (ts.isFunctionLike(parent) || ts.isIfStatement(parent) || ts.isConditionalExpression(parent) || ts.isIterationStatement(parent, false)) return false;
+    return true;
+  });
+  const live = (candidate: ts.Node, at: ts.Node): boolean => {
+    const ownerName = ts.isFunctionDeclaration(at) ? at.name?.text : ts.isTryStatement(at) ? "$dispatch" : "$module";
+    const knownIf = (condition: ts.Expression) => {
+      if (ownerName === "verifyWindowsOwnedProcessContracts") return ['process.platform === "win32"', 'process.platform === "linux"'].some(value => key(condition) === key(expression(value)));
+      if (ownerName === "nativeBuild") return key(condition) === key(expression("build"));
+      if (ownerName !== "options") return false;
+      if (nodes(condition).some(node => node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)) return false;
+      return ["!output", 'key === "--platform-only" || key === "--cleanup-only"', "flags.has(key)", 'injection && injection !== "before-handoff"'].some(value => key(condition) === key(expression(value)))
+        || has(condition, "values.has(key)") && has(condition, 'argv[index + 1].startsWith("--")');
+    };
+    for (let part: ts.Node = candidate; part !== at; part = part.parent) {
+      const parent: ts.Node | undefined = part.parent; if (!parent) return false;
+      if (ts.isIfStatement(parent) && !knownIf(parent.expression)) return false;
+      if (ts.isConditionalExpression(parent)) {
+        if (ownerName !== "$dispatch" || !["--connection-lifecycle-only", "--final-public-proof", "--build-contracts-proof", "--media-upload-limit-proof", "--hero-compatibility-proof"]
+          .some(flag => key(parent.condition) === key(expression("args.includes(" + JSON.stringify(flag) + ")")))) return false;
+      }
+      if (ts.isIterationStatement(parent, false)) {
+        if (ownerName === "options" && ts.isForStatement(parent) && parent.condition && key(parent.condition) === key(expression("index < argv.length"))) continue;
+        if (ownerName === "$module" && ts.isForOfStatement(parent)
+          && key(parent.expression) === key(expression('["idle_timeout", "session_lifetime_timeout", "owner_shutdown", "peer_closed"]'))) continue;
+        if (!ts.isForOfStatement(parent) || !ts.isIdentifier(parent.expression)
+          || !(["negative", "routes", "invalid"].includes(parent.expression.text) && ["verifyReleaseLockInputContracts", "verifyIsolatedCliInputContracts"].includes(ownerName ?? ""))) return false;
+      }
+      if (ts.isFunctionLike(parent) && parent !== at) {
+        const holder = parent.parent;
+        if (ts.isCallExpression(holder) && holder.arguments.some(argument => argument === parent)
+          && (["control", "prove", "check", "assert.throws", "assert.rejects"].includes(holder.expression.getText())
+            || ownerName === "$module" && at.getSourceFile().fileName === "scripts/qa-isolated-supabase-transport.mjs"
+              && holder.expression.getText() === "transportSetupCase" && directCall(at, "transportSetupCase").includes(holder))) {
+          if (holder.expression.getText() === "control" && ownerName === "verifySharedChildControls"
+            && !directCall(at, "control").includes(holder)) return false;
+        } else if (ts.isVariableDeclaration(holder) && ts.isIdentifier(holder.name)
+          && ["read", "invoke"].includes(holder.name.text) && directCall(at, holder.name.text).length > 0) {
+          // Existing local helpers are invoked by the positive vector in this exact declaration.
+        } else if (ts.isFunctionDeclaration(parent) && parent.name && directCall(at, parent.name.text).length > 0) {
+          // Existing native contract helper; its returned observations are consumed by the caller.
+        } else return false;
+      }
+      if (ts.isBlock(parent)) {
+        const index = parent.statements.findIndex(statement => statement === part);
+        if (index >= 0) for (const previous of parent.statements.slice(0, index)) {
+          if (ts.isReturnStatement(previous) || ts.isThrowStatement(previous) || ts.isBreakStatement(previous) || ts.isContinueStatement(previous)) return false;
+          if (ts.isIfStatement(previous) && nodes(previous.thenStatement).some(node => ts.isReturnStatement(node) || ts.isThrowStatement(node)) && !knownIf(previous.expression)) return false;
+        }
+      }
+    }
+    return true;
+  };
+  try {
+    const raw = record(input.observations); assert.equal(raw.schema, 1); assert.equal(raw.kind, "verification-input-observations");
+    assert.equal(raw.entry, entry); assert.equal(raw.executionScope, "affected_input_controls");
+    assert.ok(typeof raw.nonce === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(raw.nonce));
+    const observedSources = new Map<string, string>();
+    for (const value of rows(raw.sources)) { const row = record(value); assert.ok(typeof row.file === "string" && typeof row.sha256 === "string");
+      assert.equal(observedSources.has(row.file), false); assert.equal(digest(source(row.file)), row.sha256); observedSources.set(row.file, row.sha256); }
+    const witnessed = new Set<string>();
+    for (const value of rows(raw.sourceWitnesses)) {
+      const witness = record(value); assert.ok(typeof witness.file === "string" && typeof witness.declaration === "string");
+      assert.ok(observedSources.has(witness.file)); const id = witness.file + "#" + witness.declaration; assert.equal(witnessed.has(id), false); witnessed.add(id);
+      const parsed = tree(witness.file), actual = declaration(witness.file, witness.declaration), calls: Array<{ expression: string; arguments: string[]; position: number }> = [];
+      for (const node of nodes(actual)) if (ts.isCallExpression(node)) calls.push({ expression: node.expression.getText(parsed),
+        arguments: node.arguments.map(argument => argument.getText(parsed)), position: node.getStart(parsed) });
+      assert.equal(witness.kind, ts.SyntaxKind[actual.kind]); assert.equal(witness.text, actual.getText(parsed));
+      assert.equal(witness.sha256, digest(actual.getText(parsed))); assert.deepEqual(witness.calls, calls);
+    }
+    const bound = (file: string, name: string) => { assert.ok(witnessed.has(file + "#" + name)); return declaration(file, name); };
+    const shared = bound(entry, "verifySharedChildControls"), json = bound(entry, "verifyReleaseLockInputContracts"), cli = bound(entry, "verifyIsolatedCliInputContracts");
+    const nativeControls = bound(entry, "verifyWindowsOwnedProcessContracts");
+    for (const node of [shared, json, cli, nativeControls, bound(entry, "readSource")]) noTautologies(node);
+    const admission = bound(entry, "admissionQualificationOnly");
+    requireExpressions(admission, ["verifySharedChildControls({ admissionOnly: true })"]);
+    assert.equal(directCall(admission, "verifySharedChildControls").length, 1);
+    requireExpressions(shared, ['import("./lib/isolated-supabase.mts")', "verifyIsolatedCliInputContracts(lifecycleOwner.IsolatedSupabaseError)",
+      'run("transport-contracts", [path.join(root, "scripts/qa-isolated-supabase-transport.mjs")], undefined, 30_000)',
+      'run("cli-missing-output", ["--experimental-strip-types", path.join(root, "scripts/qa-isolated-supabase.mts")], undefined, 30_000)',
+      'assert.deepEqual(result.rawExit, { code: 0, signal: null })', 'assert.deepEqual(result.rawExit, { code: 1, signal: null })',
+      'assert.equal(result.cleanup.liveProcesses, 0)', 'assert.deepEqual(failures, [{ status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" }])']);
+    const jsonCalls = directCall(shared, "verifyReleaseLockInputContracts"), cliCalls = directCall(shared, "verifyIsolatedCliInputContracts");
+    assert.equal(jsonCalls.length, 1); assert.equal(cliCalls.length, 1); assert.equal(directCall(shared, "verifyWindowsOwnedProcessContracts").length, 1);
+    assert.equal(key(jsonCalls[0]!.arguments[0]!), key(expression("lifecycleOwner"))); assert.equal(jsonCalls[0]!.arguments.length, 2);
+    assert.ok(ts.isArrowFunction(jsonCalls[0]!.arguments[1]!));
+    const lifecycleBindings = nodes(shared).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "lifecycleOwner");
+    assert.equal(lifecycleBindings.length, 1); assert.ok(lifecycleBindings[0]!.initializer);
+    assert.equal(key(lifecycleBindings[0]!.initializer!), key(expression('await import("./lib/isolated-supabase.mts")')));
+    for (const [at, names] of [[admission, ["verifySharedChildControls"]], [shared, ["verifyReleaseLockInputContracts", "verifyIsolatedCliInputContracts", "verifyWindowsOwnedProcessContracts"]]] as const)
+      for (const node of nodes(at)) if ((ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isFunctionDeclaration(node)) && node.name)
+        assert.ok(!(names as readonly string[]).includes(node.name.getText()), "A local alias cannot qualify an unused canonical helper.");
+    for (const file of [entry, "scripts/lib/windows-owned-process.mts"]) assert.ok(tree(file).statements.some(node => ts.isImportDeclaration(node)
+      && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === "node:assert/strict" && node.importClause?.name?.text === "assert"));
+    const body = record(raw.observations); assert.equal(body.status, "PASS"); assert.equal(body.sourceInputsUnchanged, true);
+    const runtime = record(body.runtime); assert.ok(runtime.platform === "win32" || runtime.platform === "linux"); nativeAcceptancePlatform = runtime.platform;
+    for (const field of ["dockerExecuted", "unrelatedNativeLifecycleReexecuted", "automaticQualificationClaimed"]) assert.equal(body[field], false);
+    assert.equal(body.databaseCalls, 0); assert.equal(body.externalNetworkRequests, 0); assert.equal(body.originalFinallyExecuted, true);
+    const proofs = new Map<string, Record<string, unknown>>();
+    for (const value of rows(body.runtimeProofs)) { const proof = record(value); assert.ok(typeof proof.control === "string"); assert.equal(proofs.has(proof.control), false); proofs.set(proof.control, proof); }
+    const proof = (control: string) => { const value = proofs.get(control); assert.ok(value); return value; };
+    const artifacts = new Map<string, string>();
+    for (const value of rows(raw.artifacts)) { const row = record(value); assert.ok(typeof row.path === "string" && typeof row.sha256 === "string");
+      assert.match(row.path, /^\.tmp-qa\/[a-zA-Z0-9._/-]+$/u); assert.ok(!row.path.split("/").some(part => part === "." || part === ".."));
+      assert.match(row.sha256, /^[a-f0-9]{64}$/u); assert.equal(artifacts.has(row.path), false); artifacts.set(row.path, row.sha256); }
+    const archive = proof(nativeAcceptancePlatform === "win32" ? "windows_native_evidence_archive" : "owned_child_evidence_archive"); assert.ok(typeof archive.directory === "string");
+    const archiveRelative = archive.directory.replaceAll("\\", "/").split("/.tmp-qa/"); assert.equal(archiveRelative.length, 2);
+    assert.match(archiveRelative[1]!, /^owned-process-controls-[a-zA-Z0-9_-]+$/u); const archiveRoot = ".tmp-qa/" + archiveRelative[1] + "/";
+    const archived = new Map<string, string>();
+    for (const value of rows(archive.files)) { const row = record(value); assert.ok(typeof row.file === "string" && typeof row.sha256 === "string");
+      assert.equal(archived.has(row.file), false); assert.equal(artifacts.get(archiveRoot + row.file), row.sha256); archived.set(row.file, row.sha256); }
+    assert.ok(artifacts.has(archiveRoot + "evidence-index.json"));
+    stage = "json_read_parse_validation";
+    const lockFile = "scripts/fixtures/isolated-supabase/stack.lock.json", lockProof = proof("actual_release_lock_input");
+    assert.equal(lockProof.status, "PASS"); assert.equal(lockProof.input, lockFile); assert.equal(lockProof.sourceSha256, digest(source(lockFile)));
+    assert.equal(lockProof.actualOwnerReadParseValidation, true); assert.equal(lockProof.tempFixtureCleanupVerified, true);
+    requireExpressions(json, ['readSource("scripts/fixtures/isolated-supabase/stack.lock.json")', "JSON.parse(input)", "owner.readReleaseLock(file)",
+      "assert.deepEqual(actual, expected)", 'assert.throws(() => read("{"), SyntaxError)',
+      "assert.throws(() => read(JSON.stringify(changed)), error => error instanceof owner.IsolatedSupabaseError && error.code === code)",
+      "assert.equal(actual.compose.sha256, sha256(readSource(actual.compose.path)))", "assert.equal(actual.transport.sha256, sha256(readSource(actual.transport.path)))"]);
+    const negativeBindings = nodes(json).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "negative");
+    assert.equal(negativeBindings.length, 1); const negativeArray = negativeBindings[0]!.initializer; assert.ok(negativeArray && ts.isArrayLiteralExpression(negativeArray));
+    const negativeContracts = [
+      ["schema drift", "UNAPPROVED_RELEASE", 'value => { Object.assign(value, { schemaVersion: 2 }); }'],
+      ["release drift", "UNAPPROVED_RELEASE", 'value => { value.release.commit = "0".repeat(40); }'],
+      ["release source drift", "INCOMPLETE_RELEASE_LOCK", 'value => { value.release.sourceBaseUrl = "https://example.invalid/"; }'],
+      ["missing upstream inputs", "INCOMPLETE_RELEASE_LOCK", 'value => { value.files = []; }'],
+      ["duplicate upstream input", "DUPLICATE_LOCK_PATH", 'value => { value.files.push({ ...value.files[0]! }); }'],
+      ["unsafe upstream path", "UNSAFE_UPSTREAM_PATH", 'value => { value.files[0]!.path = "docker/../outside.sql"; }'],
+      ["upstream digest drift", "UNSAFE_UPSTREAM_PATH", 'value => { value.files[0]!.sha256 = "unqualified"; }'],
+      ["missing image", "INVALID_IMAGE_SET", 'value => { delete value.images.db; }'],
+      ["mutable image", "UNPINNED_IMAGE", 'value => { value.images.db!.reference = "supabase/postgres:latest"; }'],
+      ["image config drift", "UNPINNED_IMAGE", 'value => { value.images.db!.configDigest = "unqualified"; }'],
+      ["image manifest mismatch", "UNPINNED_IMAGE", 'value => { value.images.db!.manifestDigest = "sha256:" + "0".repeat(64); }'],
+      ["compose content drift", "SOURCE_HASH_MISMATCH", 'value => { value.compose.sha256 = "0".repeat(64); }'],
+      ["transport content drift", "TRANSPORT_SOURCE_HASH_MISMATCH", 'value => { value.transport.sha256 = "0".repeat(64); }'],
+      ["transport owner substitution", "TRANSPORT_SOURCE_HASH_MISMATCH", 'value => { value.transport.path = "scripts/qa-isolated-supabase-transport.mjs"; }'],
+    ];
+    assert.equal(negativeArray.elements.length, negativeContracts.length);
+    for (const [index, contract] of negativeContracts.entries()) { const tuple: ts.Expression | undefined = negativeArray.elements[index]; assert.ok(tuple && ts.isArrayLiteralExpression(tuple) && tuple.elements.length === 3);
+      for (const field of [0, 1]) { const value: ts.Expression | undefined = tuple.elements[field]; assert.ok(value && ts.isStringLiteral(value)); assert.equal(value.text, contract[field]); }
+      assert.equal(key(tuple.elements[2]!), key(expression(contract[2]!))); }
+    assert.deepEqual(strings(lockProof.names), ["actual current JSON bytes parse and validate through the existing release lock owner", ...negativeContracts.map(row => row[0]), "malformed JSON rejects before any lifecycle entry"]);
+    const lifecycle = "scripts/lib/isolated-supabase.mts", readLock = bound(lifecycle, "readReleaseLock");
+    requireExpressions(readLock, ['JSON.parse(readFileSync(lockPath, "utf8"))',
+      'requireThat(value.schemaVersion === 1 && object(value.release).commit === RELEASE_COMMIT, "UNAPPROVED_RELEASE", "provenance")']);
+    requireExpressions(bound(lifecycle, "runIsolatedSupabase"), ["readReleaseLock(lockPath)"]);
+    const jsonFiles = rows(lockProof.inputArtifacts); assert.equal(jsonFiles.length, 16);
+    for (let i = 0; i < jsonFiles.length; i++) { const row = record(jsonFiles[i]); assert.equal(row.file, "release-lock-inputs/lock-" + (i + 1) + ".json"); assert.equal(archived.get(String(row.file)), row.sha256); }
+    stage = "cli_actual_parser_dispatcher";
+    const cliProof = proof("actual_cli_parser_dispatcher"); assert.equal(cliProof.status, "PASS"); assert.equal(cliProof.source, "scripts/qa-isolated-supabase.mts");
+    assert.equal(cliProof.sourceSha256, digest(source("scripts/qa-isolated-supabase.mts"))); assert.equal(strings(cliProof.names).length, 29);
+    assert.equal(cliProof.actualParserAndDispatcher, true); assert.equal(cliProof.actualResourceAllocations, 0);
+    requireExpressions(cli, ["api.dispatchActualCli()", "assert.deepEqual(result.calls, [])", "assert.equal(result.exitCode, 1)",
+      'assert.deepEqual(JSON.parse(result.stderr), { status: "needs_attention", stage: "cli", code })',
+      'assert.deepEqual(result.calls, [{ name, input: ["--output", output] }])', "assert.equal(parsed.handoff, undefined)"]);
+    requireExpressions(cli, ['readSource("scripts/qa-isolated-supabase.mts")', 'options.getText(tree) + "\\nasync function dispatchActualCli(){" + dispatch[0]!.getText(tree) + "}"',
+      'new Function(...Object.keys(ports), body + ";return {options,dispatchActualCli};")(...Object.values(ports))']);
+    const cliFile = "scripts/qa-isolated-supabase.mts", options = bound(cliFile, "options"), dispatch = bound(cliFile, "$dispatch");
+    requireExpressions(options, ['new IsolatedSupabaseError("OUTPUT_REQUIRED", "cli")', 'new IsolatedSupabaseError("INVALID_ARGUMENT", "cli")',
+      "values.has(key)", 'argv[index + 1].startsWith("--")']);
+    requireExpressions(dispatch, ["proofModes.length <= 1", "options(args)", "runIsolatedSupabase(options(args))"]);
+    stage = "native_compiler_and_owned_execution";
+    const nativeProof = proof("windows_imported_type_and_source_contracts"), publication = record(nativeProof.nativeBuildPublication), integrity = record(nativeProof.nativeIntegrity);
+    assert.equal(nativeProof.status, "PASS"); assert.equal(publication.status, "PASS"); assert.equal(publication.checks, 10); assert.equal(strings(publication.cases).length, 10);
+    assert.equal(publication.actualNativeSourceInput, "scripts/lib/windows-owned-process.cs"); assert.equal(publication.actualNativeSourceSha256, digest(source("scripts/lib/windows-owned-process.cs")));
+    assert.equal(integrity.status, "PASS"); assert.equal(integrity.actualRootProcessesAllocated, 0);
+    requireExpressions(nativeControls, ['readSource("scripts/lib/windows-owned-process.cs")', "windowsOwnedProcessCapability()", "assert.equal(native.sourceSha256, sha256(nativeSource))",
+      'assert.equal(readFileSync(native.sourceSnapshot, "utf8"), nativeSource)', "assert.equal(provenance.flags.at(-1), native.sourceSnapshot)"]);
+    const nativeOwner = "scripts/lib/windows-owned-process.mts", build = bound(nativeOwner, "nativeBuild");
+    requireExpressions(build, ['join(ROOT, "scripts/lib/windows-owned-process.cs")', "readFileSync(source)", 'writeFileSync(sourceSnapshot, bytes, { flag: "wx", mode: 0o600 })',
+      'assert.equal(hash(readFileSync(source)), sourceSha256, "Native source changed during compilation.")',
+      'assert.equal(hash(readFileSync(compiler)), compilerSha256, "Native compiler changed during compilation.")',
+      'writeFileSync(provenance, provenanceBytes, { flag: "wx", mode: 0o600 })']);
+    assert.ok(nodes(build).some(node => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "execFileSync"
+      && node.arguments.length === 3 && key(node.arguments[0]!) === key(expression("compiler")) && key(node.arguments[1]!) === key(expression("flags"))));
+    assert.ok(ts.isFunctionDeclaration(build) && build.body); assert.equal(build.parameters.length, 0); noTautologies(build);
+    for (const node of nodes(build)) if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && node.name) assert.notEqual(node.name.getText(), "process");
+    for (const statement of tree(nativeOwner).statements) {
+      if (ts.isVariableStatement(statement)) for (const value of statement.declarationList.declarations) assert.notEqual(value.name.getText(), "process");
+      if (ts.isImportDeclaration(statement) && statement.importClause) {
+        assert.notEqual(statement.importClause.name?.text, "process"); const named = statement.importClause.namedBindings;
+        if (named && ts.isNamespaceImport(named)) assert.notEqual(named.name.text, "process");
+        if (named && ts.isNamedImports(named)) for (const value of named.elements) assert.notEqual(value.name.text, "process");
+      }
+    }
+    const first = build.body.statements[0];
+    assert.ok(first && ts.isExpressionStatement(first) && ts.isCallExpression(first.expression)); assert.equal(first.expression.expression.getText(), "assert.equal");
+    assert.equal(key(first.expression.arguments[0]!), key(expression("process.platform"))); assert.equal(key(first.expression.arguments[1]!), key(expression('"win32"')));
+    const flagBindings = nodes(build).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "flags");
+    assert.equal(flagBindings.length, 1); const flagArray = flagBindings[0]!.initializer; assert.ok(flagArray && ts.isArrayLiteralExpression(flagArray));
+    assert.equal(key(flagArray.elements.at(-1)!), key(expression("sourceSnapshot")));
+    const native = record(body.native); let built: Record<string, unknown> | null = null;
+    if (nativeAcceptancePlatform === "win32") {
+      assert.equal(native.status, "PASS"); built = record(native.native);
+      assert.equal(integrity.modifiedOwnedExecutableRejectedBeforeSpawn, true); assert.equal(integrity.originalExecutableRestored, true);
+      assert.equal(built.sourceSha256, digest(source("scripts/lib/windows-owned-process.cs"))); assert.equal(rows(built.frameworkReferences).length, 5);
+      assert.equal(integrity.executableSha256, built.executableSha256);
+      for (const field of ["sourceSnapshot", "provenance", "executable"]) { assert.ok(typeof built[field] === "string"); const relative: string[] = String(built[field]).replaceAll("\\", "/").split("/.tmp-qa/");
+        assert.equal(relative.length, 2); assert.match(relative[1]!, /^windows-native-build-[a-zA-Z0-9_-]+\/[^/]+$/u); assert.ok(artifacts.has(".tmp-qa/" + relative[1])); }
+    } else {
+      assert.equal(native.status, "BLOCKED"); assert.equal(native.native, undefined); assert.equal(native.missingProof, "windows_native_job_launch_unavailable");
+      assert.equal(integrity.scope, "non_windows_platform_rejection_before_compiler_or_spawn");
+      assert.equal(integrity.capabilityStatus, "BLOCKED"); assert.equal(integrity.platform, "linux"); assert.equal(integrity.nativeExecuted, false); assert.equal(integrity.compilerProcessesExecuted, 0);
+      requireExpressions(nativeControls, ['assert.equal(capability.status, "BLOCKED")']);
+    }
+    const owned = (control: string, file: string, exitCode: number) => {
+      const row = proof(control); assert.equal(row.entry, file); const result = record(row.actualResult); assert.equal(result.code, exitCode);
+      assert.deepEqual(result.rawExit, { code: exitCode, signal: null }); assert.deepEqual(row.rawExit, result.rawExit); assert.deepEqual(row.cleanup, result.cleanup);
+      const cleanup = record(result.cleanup); assert.equal(cleanup.status, "PASS"); assert.equal(cleanup.liveProcesses, 0); assert.equal(cleanup.processTreeVerified, true);
+      assert.equal(cleanup.platform, nativeAcceptancePlatform);
+      const prefix = control === "actual_owned_transport_leaf" ? "public-transport-contracts" : "public-cli-missing-output";
+      for (const stream of ["stdout", "stderr"] as const) {
+        assert.equal(typeof result[stream], "string");
+        assert.equal(archived.get(prefix + "." + stream + ".log"), digest(result[stream] as string), "Owned raw stream differs from its archived bytes.");
+      }
+      if (nativeAcceptancePlatform === "linux") {
+        assert.equal(cleanup.method, "linux-marker-and-process-identity"); assert.ok(Number.isSafeInteger(cleanup.observedProcesses) && Number(cleanup.observedProcesses) >= 1);
+        const identity = record(result.identity); assert.ok(Number.isSafeInteger(identity.pid) && Number(identity.pid) > 1);
+        assert.ok(result.nativeJobReceipt == null && result.nativeJobIdentity == null && result.nativeCapability == null);
+        const lifecycleOwner = bound("scripts/lib/isolated-public-verification.mts", "runOwnedVerificationChild");
+        assert.ok(nodes(lifecycleOwner).some(node => ts.isVariableDeclaration(node) && node.name.getText() === "markerKey" && node.initializer
+          && ts.isStringLiteral(node.initializer) && node.initializer.text === "VENESIA_QA_OWNED_CHILD"));
+        return { row, result };
+      }
+      assert.ok(built); assert.equal(cleanup.method, "windows-private-job");
+      const receipt = record(result.nativeJobReceipt), identity = record(result.nativeJobIdentity), capability = record(result.nativeCapability);
+      assert.equal(receipt.status, "PASS"); assert.equal(receipt.nativeFailure, null); assert.equal(receipt.rootExitCode, exitCode); assert.equal(receipt.rootSignal, null);
+      for (const field of ["jobToken", "helperPid", "rootPid", "rootCreationTimeFileTime"]) assert.deepEqual(receipt[field], identity[field]);
+      assert.equal(receipt.ownerJobAssignedBeforeResume, true); assert.equal(receipt.jobHandleNonInheritable, true); assert.equal(receipt.effectiveLimitFlags, 8192); assert.equal(receipt.resumeSucceeded, true);
+      const zero = record(receipt.cleanup); assert.equal(zero.status, "PASS"); assert.equal(zero.activeProcessesAfterCleanup, 0); assert.deepEqual(zero.activeProcessIdsAfterCleanup, []);
+      assert.equal(zero.rootHandleExited, true); assert.equal(zero.processTreeVerified, true); assert.equal(zero.jobHandleClosed, true);
+      for (const field of ["sourceSha256", "executableSha256", "compilerSha256", "provenance"]) assert.equal(capability[field], built[field]);
+      for (const suffix of [".native-identity.json", ".native-result.json"]) assert.ok(archived.has(prefix + suffix));
+      return { row, result };
+    };
+    stage = "transport_actual_entry";
+    const transport = owned("actual_owned_transport_leaf", "scripts/qa-isolated-supabase-transport.mjs", 0);
+    const transportModule = bound("scripts/qa-isolated-supabase-transport.mjs", "$module"); noTautologies(transportModule);
+    const registrations: Array<{ position: number; names: string[] }> = [], helperPushes = new Set<ts.Node>();
+    const caseBindings = nodes(transportModule).filter(node => (ts.isVariableDeclaration(node) || ts.isParameter(node)) && node.name.getText() === "cases");
+    assert.equal(caseBindings.length, 1); const caseBinding = caseBindings[0];
+    assert.ok(caseBinding && ts.isVariableDeclaration(caseBinding) && caseBinding.initializer && ts.isArrayLiteralExpression(caseBinding.initializer));
+    assert.equal(caseBinding.initializer.elements.length, 0);
+    for (const helperName of ["check", "protocolCase", "transportSetupCase"]) {
+      const helper = declaration("scripts/qa-isolated-supabase-transport.mjs", helperName); assert.ok(ts.isFunctionDeclaration(helper) && helper.body);
+      assert.equal(helper.parameters.length, 2); assert.equal(helper.parameters[0]!.name.getText(), "name");
+      const pushes = nodes(helper).filter((node): node is ts.CallExpression => ts.isCallExpression(node) && node.expression.getText() === "cases.push");
+      assert.equal(pushes.length, 1); assert.equal(pushes[0]!.arguments.length, 1); const pushedName = pushes[0]!.arguments[0];
+      assert.ok(pushedName && ts.isIdentifier(pushedName) && pushedName.text === "name");
+      assert.ok(live(pushes[0]!, helper)); helperPushes.add(pushes[0]!);
+      if (helperName !== "protocolCase") {
+        assert.equal(helper.parameters[1]!.name.getText(), "run"); assert.equal(helper.body.statements.length, 2);
+        const first = helper.body.statements[0]; assert.ok(first && ts.isExpressionStatement(first));
+        let action: ts.Expression = first.expression;
+        if (helperName === "transportSetupCase") { assert.ok(ts.isAwaitExpression(action)); action = action.expression; }
+        assert.equal(key(action), key(expression("run()"))); assert.equal(helper.body.statements[1]!.getText(), pushes[0]!.parent.getText());
+      }
+      const calls = directCall(transportModule, helperName); assert.ok(calls.length > 0);
+      assert.equal(nodes(transportModule).filter(node => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === helperName).length, calls.length,
+        "Conditional or indirect transport registrations are not qualified.");
+      for (const call of calls) {
+        assert.ok(live(call, transportModule)); assert.equal(call.arguments.length, 2); const label = call.arguments[0]; assert.ok(label && ts.isStringLiteral(label));
+        if (helperName !== "protocolCase") assert.ok(ts.isArrowFunction(call.arguments[1]!));
+        if (helperName !== "check") assert.ok(ts.isAwaitExpression(call.parent));
+        registrations.push({ position: call.getStart(), names: [label.text] });
+      }
+    }
+    for (const push of nodes(transportModule).filter((node): node is ts.CallExpression => ts.isCallExpression(node) && node.expression.getText() === "cases.push")) {
+      if (helperPushes.has(push)) continue;
+      assert.ok(live(push, transportModule)); assert.equal(push.arguments.length, 1); const label = push.arguments[0]!;
+      if (ts.isStringLiteral(label)) registrations.push({ position: push.getStart(), names: [label.text] });
+      else {
+        assert.ok(ts.isTemplateExpression(label) && label.templateSpans.length === 1);
+        let loop: ts.Node | undefined = push.parent; while (loop && loop !== transportModule && !ts.isForOfStatement(loop)) loop = loop.parent;
+        assert.ok(loop && ts.isForOfStatement(loop) && ts.isArrayLiteralExpression(loop.expression)
+          && ts.isVariableDeclarationList(loop.initializer) && loop.initializer.declarations.length === 1);
+        const binding = loop.initializer.declarations[0]!.name, span = label.templateSpans[0]!;
+        assert.ok(ts.isIdentifier(binding) && ts.isIdentifier(span.expression) && span.expression.text === binding.text);
+        // live() accepts only the existing literal four-reason loop here. No expression or callback is evaluated.
+        const names = loop.expression.elements.map(reason => { assert.ok(ts.isStringLiteral(reason)); return label.head.text + reason.text + span.literal.text; });
+        registrations.push({ position: push.getStart(), names });
+      }
+    }
+    const expectedCases = registrations.sort((a, b) => a.position - b.position).flatMap(row => row.names);
+    assert.ok(expectedCases.length > 0); assert.equal(new Set(expectedCases).size, expectedCases.length);
+    assert.equal(transport.row.status, "PASS"); assert.equal(transport.row.checks, expectedCases.length); assert.deepEqual(strings(transport.row.cases), expectedCases);
+    assert.equal(transport.result.stderr, ""); assert.ok(typeof transport.result.stdout === "string");
+    const terminal = record(JSON.parse(transport.result.stdout)); assert.equal(terminal.status, "PASS"); assert.equal(terminal.checks, expectedCases.length); assert.deepEqual(terminal.cases, expectedCases);
+    for (const field of ["dockerExecuted", "productionAccess", "externalConnections"]) assert.equal(terminal[field], false);
+    requireExpressions(transportModule, ["runContainerPipe('db', input, output)", "assert.equal(requestDigest, hash(request))",
+      "assert.equal(hash(Buffer.concat(chunks)), hash(reply))", "assert.equal(snapshot.active, 0)", "assert.equal(snapshot.localProcesses, 0)", "assert.equal(bridge.snapshot().listeners.length, 0)"]);
+    requireExpressions(transportModule, ["validateTransportOptions({ ...options, dockerHost: 'tcp://remote.invalid:2375' })",
+      "validateTransportOptions({ ...options, ports: { ...ports, extra: 56169 } })", "validateTransportOptions({ ...options, ports: { ...ports, rest: ports.db } })",
+      "runContainerPipe('https://external.invalid')"]);
+    requireExpressions(transportModule, ["assert.equal(setupTimers, 1)", "assert.equal(first, second)",
+      "assert.deepEqual(actual.snapshot().cleanup, { status: 'PASS', listeners: 0, pendingListenerCloses: 0, active: 0, localProcesses: 0, pendingSocketCloses: 0, setupTimerActive: false })",
+      "assert.equal(attempted, 1)", "assert.equal(failure.diagnostic.listenerIndex, 0)", "assert.equal(failure.cause.code, original.code)", "assert.equal(holder.listening, true)",
+      "assert.equal(attempted, 3)", "assert.equal(failure.diagnostic.listenerIndex, 2)",
+      "assert.deepEqual(failure.cause, { name: 'Error', code: 'EACCES', errno: -13, syscall: 'listen', address: '127.0.0.1', port: ports.rest, phase: 'listen' })",
+      "assert.equal(Object.isFrozen(failure.cause), true)", "assert.equal(Object.isFrozen(failure.diagnostic), true)",
+      "assert.ok(Object.getOwnPropertySymbols(failure).some(key => failure[key] === original))",
+      "assert.equal(JSON.stringify(failure).includes(secret), false)", "assert.equal(inspect(failure).includes(secret), false)",
+      "assert.equal(failure.cause.syscall, null)", "assert.equal(inspect(failure).includes('private unstructured failure'), false)",
+      "assert.equal(error.diagnostic.cleanup.status, 'NOT_STARTED')", "assert.equal(servers, 0)", "assert.equal(timers, 0)",
+      "assert.equal(getEventListeners(controller.signal, 'abort').length, 0)", "assert.equal(failure.code, 'QA_TRANSPORT_CANCELLED')",
+      "assert.equal(failure.code, 'QA_TRANSPORT_SETUP_TIMEOUT')", "assert.equal(failure.diagnostic.originalErrorRetainedPrivately, false)",
+      "assert.equal(snapshot.failure.code, 'QA_TRANSPORT_CANCELLED')", "assert.equal(snapshot.cleanup.pendingSocketCloses, 0)",
+      "assert.deepEqual(unhandled, [])", "assert.equal(actual.snapshot().failure.phase, 'active_listener')", "assert.equal(actual.snapshot().failure.causeCode, 'EIO')",
+      "assert.equal(failure.diagnostic.cleanup.status, 'FAIL')", "assert.equal(failure.cause.code, 'EACCES')",
+      "assert.rejects(closing, /QA_TRANSPORT_CLEANUP_INCOMPLETE/u)", "assert.equal(actual.snapshot().cleanup.pendingListenerCloses, 1)", "assert.equal(cleared, true)"]);
+    const setupCleanup = declaration("scripts/qa-isolated-supabase-transport.mjs", "setupCleanup");
+    requireExpressions(setupCleanup, ["assert.equal(error.diagnostic.cleanup.status, expected)", "assert.equal(error.diagnostic.cleanup.listeners, 0)",
+      "assert.equal(error.diagnostic.cleanup.active, 0)", "assert.equal(error.diagnostic.cleanup.localProcesses, 0)",
+      "assert.equal(error.diagnostic.cleanup.pendingSocketCloses, 0)", "assert.equal(error.diagnostic.cleanup.setupTimerActive, false)"]);
+    stage = "cli_actual_no_allocation_entry";
+    const rejected = owned("actual_cli_no_allocation_rejection", cliFile, 1); assert.equal(rejected.result.stdout, ""); assert.equal(rejected.row.applicationOutputSupplied, false);
+    assert.deepEqual(rejected.row.failure, { status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" });
+    assert.ok(typeof rejected.result.stderr === "string"); assert.equal(rejected.row.stderrSha256, digest(rejected.result.stderr));
+    assert.deepEqual(rejected.result.stderr.split(/\r?\n/u).filter(line => line.trim().startsWith("{")).map(line => JSON.parse(line)), [rejected.row.failure]);
+    for (const [file, role, control] of [[lockFile, "read_parse_validate_data", "actual_release_lock_input"], ["scripts/lib/windows-owned-process.cs", "compiled_native_owner", "windows_imported_type_and_source_contracts"],
+      ["scripts/qa-isolated-supabase-transport.mjs", "owned_executable_leaf", "actual_owned_transport_leaf"], [cliFile, "actual_parser_dispatcher_and_rejection", "actual_cli_parser_dispatcher"]])
+      coverage.push({ file: file!, check, entry, evidence: { kind: "qualified_input_control_observations",
+        role: file === "scripts/lib/windows-owned-process.cs" && nativeAcceptancePlatform === "linux" ? "platform_rejection_and_compiler_input_controls_only" : role,
+        control, nonce: raw.nonce, artifacts: [...artifacts.keys()] } });
+  } catch { failures.push("four_input_observations_invalid:" + stage); }
+  return { status: failures.length ? "BLOCKED" as const : "PASS" as const, failures, coverage: failures.length ? [] : coverage,
+    nativeAcceptancePlatform, nativeAcceptanceStatus: failures.length ? "BLOCKED" : nativeAcceptancePlatform === "win32" ? "ACTUAL_NATIVE_EXECUTION" : "PLATFORM_REJECTION_AND_SOURCE_CONTRACT_ONLY",
+    nativeExecuted: !failures.length && nativeAcceptancePlatform === "win32",
+    proofLimits: nativeAcceptancePlatform === "linux" ? ["C# compiler inputs use controlled ports; Windows capability rejects this platform before compiler/spawn.", "No Windows native build or lifecycle execution is established; this evidence cannot qualify Windows Full E."]
+      : ["Only the affected input controls execute; the unchanged broader native lifecycle matrix is not rerun.", "Full E admission additionally requires the owner's fresh nonce, outer cleanup and complete artifact/dependency/runtime closure."],
+    proofBoundary: "source_and_behavior_observations_only" as const, requiresOwnerNonceOuterReceiptAndArtifactClosure: true };
 }
 
 /** Positive executable proof only; dynamic/non-import fixture use cannot authorize a bounded gate. */
@@ -1651,6 +4678,8 @@ export async function loadRetainedFinalQualityAdmissionAsync(admissionSha256: st
 
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
+  /** Live proof from this owner's qualification, never a serialized approval record. */
+  admissionQualification?: LocalVerificationAdmissionQualification;
   /** Reviewed batch-local impact evidence; this creates no persistent impact registry. */
   localVerification?: LocalVerificationImpact;
   /** Full ci:check prefix, followed once by the existing build/Public/Admin gates. */
@@ -1762,13 +4791,13 @@ export function registerOwnedAdminMeasurement(context: PrivatePublicVerification
   adminCredentials.set(context, Object.freeze({ ...credentials }));
 }
 
-function ownedPath(context: PrivatePublicVerificationContext, name: string) {
+function ownedPath(context: Pick<PrivatePublicVerificationContext, "runDirectory">, name: string) {
   assert.ok(!isAbsolute(name) && !name.split(/[\\/]/u).includes(".."));
   const path = resolve(context.runDirectory, name);
   assert.ok(path.startsWith(resolve(context.runDirectory) + sep));
   return path;
 }
-function receipt(context: PrivatePublicVerificationContext, name: string, value: unknown) {
+function receipt(context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize">, name: string, value: unknown) {
   const text = JSON.stringify(value, null, 2);
   assert.equal(context.sanitize(text), text, "Public receipt contains a generated credential.");
   writeFileSync(ownedPath(context, name), `${text}\n`, { flag: "wx", mode: 0o600 });
@@ -1944,27 +4973,633 @@ async function gitHead(context: PrivatePublicVerificationContext) {
   });
 }
 
-async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
-  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
+async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv, reason: WindowsStopReason = "owner_shutdown") {
+  const windows = (child as ChildProcess & { verificationWindowsCleanup?: (reason: WindowsStopReason) => Promise<{
+    status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null; nativeJobReceipt: WindowsJobReceipt | null;
+  }> }).verificationWindowsCleanup;
+  if (process.platform === "win32" && windows) return windows(reason);
+  const owned = (child as ChildProcess & { verificationLinuxCleanup?: () => Promise<{
+    status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null;
+  }> }).verificationLinuxCleanup;
+  if (process.platform === "linux" && owned) return owned();
+  let forcedTermination = false, terminationExitCode: number | null = null;
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return {
+    status: "PASS" as const, platform: process.platform, method: "closed-child", processTreeVerified: false,
+    forcedTermination, observedProcesses: Number(Boolean(child.pid)), liveProcesses: 0,
+    residualProcessesAfterExit: process.platform === "win32" && child.pid ? null : 0,
+    descendantObservation: process.platform === "win32" && child.pid ? "UNVERIFIED_AFTER_ROOT_EXIT" : "root-only",
+  };
   if (process.platform === "win32") {
     await new Promise<void>((done, reject) => {
       const killer = spawn("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { env: environment, windowsHide: true, stdio: "ignore" });
       const timer = setTimeout(() => { killer.kill(); reject(new Error("Owned child cleanup exceeded its bound.")); }, 15_000);
-      killer.once("error", () => { clearTimeout(timer); reject(new Error("Owned child cleanup failed.")); });
+      killer.once("error", (error: NodeJS.ErrnoException) => { clearTimeout(timer); reject(new Error("Owned child cleanup failed.", {
+        cause: { code: typeof error.code === "string" && /^[A-Z0-9_]+$/u.test(error.code) ? error.code : null },
+      })); });
       killer.once("close", code => {
-        clearTimeout(timer);
-        if (code === 0 || child.exitCode !== null || child.signalCode !== null) done();
-        else reject(new Error("Owned child cleanup failed."));
+        clearTimeout(timer); terminationExitCode = code;
+        // A concurrent root exit cannot qualify a failed tree termination command.
+        if (code === 0) done();
+        else reject(new Error("Owned child cleanup failed.", { cause: { exitCode: code, signal: killer.signalCode } }));
       });
     });
-  } else child.kill("SIGTERM");
+    forcedTermination = true;
+  } else {
+    child.kill("SIGTERM");
+    await new Promise<void>(done => {
+      if (child.exitCode !== null || child.signalCode !== null) return done();
+      const timer = setTimeout(done, 1_500);
+      child.once("close", () => { clearTimeout(timer); done(); });
+    });
+    if (child.exitCode === null && child.signalCode === null) { child.kill("SIGKILL"); forcedTermination = true; }
+  }
   if (child.exitCode === null && child.signalCode === null) await new Promise<void>((done, reject) => {
     const timer = setTimeout(() => reject(new Error("Owned child did not stop.")), 15_000);
     child.once("close", () => { clearTimeout(timer); done(); });
   });
+  return { status: "PASS" as const, platform: process.platform, method: process.platform === "win32" ? "windows-taskkill-tree" : "owned-child-signals",
+    processTreeVerified: process.platform === "win32", forcedTermination, terminationExitCode, observedProcesses: 1, liveProcesses: 0, residualProcessesAfterExit: 0 };
 }
 
-export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
+/** One owned Node-child lifecycle shared by Public gates and qualified targeted verification. */
+export function runOwnedVerificationChild(ports: {
+  sourceDirectory: string;
+  context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
+  children: Set<ChildProcess>;
+  signal: AbortSignal;
+}, args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number): Promise<{ code: number; stdout: string; stderr: string; durationMs: number;
+  rawExit: { code: number | null; signal: NodeJS.Signals | null }; identity: { pid: number | null; ppid: number; spawnedAtUtc: string };
+  cleanup: { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
+    observedProcesses: number; liveProcesses: number; residualProcessesAfterExit: number | null };
+  nativeJobIdentity?: WindowsJobIdentity | null; nativeJobReceipt?: WindowsJobReceipt | null;
+  nativeCapability?: { executable: string; executableSha256: string; sourceSha256: string; compilerSha256: string; provenance: string };
+  helperExit?: { code: number | null; signal: NodeJS.Signals | null };
+  helperIdentity?: { pid: number | null; ppid: number };
+  timingEvidence?: { file: string; sha256: string; status: "COMPLETE_DIAGNOSTIC_ONLY" | "PARTIAL_DIAGNOSTIC_ONLY";
+    overhead: { setupMs: number; observerMs: number; readParseMs: number; serializationMs: number; writeMs: number } } }> {
+  const { sourceDirectory, context, children, signal } = ports;
+  const started = performance.now();
+  return new Promise((done, reject) => {
+    signal.throwIfAborted();
+    assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Owned child deadline must be a finite timer-safe positive integer.");
+    const stdoutPath = ownedPath(context, `public-${name}.stdout.log`), stderrPath = ownedPath(context, `public-${name}.stderr.log`);
+    assert.equal(existsSync(stdoutPath) || existsSync(stderrPath), false, "Owned child evidence already exists; refuse duplicate execution.");
+    const gate57Timing = (() => {
+      // Unrelated owners/argv perform no additional filesystem or runtime work.
+      if (args.length !== 3 || args[1] !== "run" || args[2] !== "verify:admin-runtime") return undefined;
+      const invocationArgv = [...args], setupStarted = performance.now(), nodeDirectory = dirname(process.execPath);
+      const npmCli = [join(nodeDirectory, "node_modules/npm/bin/npm-cli.js"), resolve(nodeDirectory, "../lib/node_modules/npm/bin/npm-cli.js"),
+        resolve(nodeDirectory, "../share/nodejs/npm/bin/npm-cli.js")].find(file => existsSync(file) && lstatSync(file).isFile());
+      if (!npmCli || args[0] !== npmCli) return undefined;
+      const npmRoot = resolve(dirname(npmCli), ".."), npmPackageFile = join(npmRoot, "package.json");
+      let npmPackage: { version?: string };
+      try { npmPackage = JSON.parse(readFileSync(npmPackageFile, "utf8")) as { version?: string }; } catch { return undefined; }
+      // An unsupported package manager retains its original command/environment;
+      // absence of this version-specific observer is never timing qualification.
+      if (npmPackage.version !== "11.9.0") return undefined;
+      const enabled = true, issues = new Set<string>();
+      const packageFile = join(sourceDirectory, "package.json"), packageBytes = readFileSync(packageFile);
+      const pkg = JSON.parse(packageBytes.toString()) as { name?: string; version?: string; scripts?: Record<string, string> };
+      const scripts = pkg.scripts ?? {}, preorder: Array<{ id: number; script: string; parentId: number | null }> = [], postorder: number[] = [];
+      const nodeLeaves = enabled ? localVerificationCommandSteps(scripts, "verify:admin-runtime") : undefined;
+      if (enabled && (!nodeLeaves || typeof pkg.name !== "string" || typeof pkg.version !== "string")) issues.add("UNSUPPORTED_BOUND_COMMAND_OR_PACKAGE");
+      if (nodeLeaves) {
+        const visit = (script: string, parentId: number | null) => {
+          const id = preorder.length; preorder.push({ id, script, parentId });
+          if (scripts["pre" + script] || scripts["post" + script]) issues.add("UNMODELED_NPM_LIFECYCLE_SCRIPT");
+          for (const step of scripts[script]!.split("&&")) { const wrapper = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step.trim()); if (wrapper) visit(wrapper[1]!, id); }
+          postorder.push(id);
+        };
+        visit("verify:admin-runtime", null);
+        if (new Set(preorder.map(row => row.script)).size !== preorder.length) issues.add("REPEATED_SCRIPT_INVOCATION_AMBIGUOUS");
+      }
+      const checkedFile = (file: string) => {
+        const stat = lstatSync(file); assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && realpathSync(file) === file,
+          "Owned npm timing evidence requires a physical ordinary file."); return stat;
+      };
+      const boundFiles = [npmPackageFile, npmCli, ...(enabled ? ["lib/npm.js", "lib/utils/timers.js", "lib/utils/display.js", "lib/utils/log-file.js",
+        "lib/commands/run.js", "node_modules/@npmcli/run-script/lib/run-script-pkg.js", "node_modules/proc-log/lib/index.js"].map(file => join(npmRoot, file)) : [])]
+        .map(file => { checkedFile(file); return { file, sha256: digest(readFileSync(file)) }; });
+      const runtime = { node: process.version, v8: process.versions.v8, modules: process.versions.modules, platform: process.platform, arch: process.arch,
+        executable: process.execPath, executableSha256: digest(readFileSync(process.execPath)), parentExecArgv: [...process.execArgv], npmVersion: npmPackage.version ?? null,
+        npmPackageManagerOutsideProjectLock: true, npmSourceBinding: "Finite installed format-producing source files; not a complete npm dependency closure", files: boundFiles };
+      const directory = ownedPath(context, `public-${name}-npm-timing`);
+      if (enabled) {
+        assert.equal(existsSync(directory), false, "Preserve earlier npm timing evidence rather than reusing its directory.");
+        mkdirSync(directory, { mode: 0o700 }); assert.equal(realpathSync(directory), directory);
+        assert.ok(directory.startsWith(realpathSync(context.runDirectory) + sep));
+      }
+      const clockOriginMonotonicMs = performance.now(), startedWall = Date.now(), setupMs = clockOriginMonotonicMs - setupStarted;
+      let ownerTimeoutReferenceMonotonicMs: number | null = null;
+      const starts: Array<{ script: string; planId: number | null; deliveryMonotonicMs: number; deliveryUtc: string; nominalRemainingMs: number | null; wallMinusMonotonicMs: number }> = [];
+      const ends: Array<{ npmCommandInclusiveWallMs: number; deliveryMonotonicMs: number; deliveryUtc: string; nominalRemainingMs: number | null; wallMinusMonotonicMs: number }> = [];
+      const carries = { stdout: "", stderr: "" }, dropping = { stdout: false, stderr: false };
+      const lastDelivery: Partial<Record<"stdout" | "stderr", { utcMs: number; monotonicMs: number }>> = {};
+      const packageIdentity = `${pkg.name}@${pkg.version}`, bannerPrefix = `> ${packageIdentity} `;
+      const knownScripts = new Set(preorder.map(row => row.script)), ansi = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
+      let observerMs = 0, observerCalls = 0, observedCharacters = 0, droppedLines = 0;
+      const stamp = (stream: "stdout" | "stderr") => { const now = performance.now(), deliveryUtc = new Date().toISOString(), utcMs = Date.parse(deliveryUtc), previous = lastDelivery[stream];
+        if (previous && now >= previous.monotonicMs && utcMs < previous.utcMs) issues.add("DELIVERY_UTC_MOVED_BACKWARDS_WITH_MONOTONIC_PROGRESS");
+        lastDelivery[stream] = { utcMs, monotonicMs: now };
+        return { deliveryMonotonicMs: now - started, deliveryUtc,
+        nominalRemainingMs: ownerTimeoutReferenceMonotonicMs === null ? null : limitMs - (now - ownerTimeoutReferenceMonotonicMs),
+        wallMinusMonotonicMs: Date.now() - startedWall - (now - clockOriginMonotonicMs) }; };
+      const line = (stream: "stdout" | "stderr", raw: string) => {
+        const value = raw.replace(ansi, "").replace(/\r$/u, "");
+        if (stream === "stdout" && value.startsWith(bannerPrefix)) {
+          const script = value.slice(bannerPrefix.length);
+          if (!knownScripts.has(script)) { issues.add("UNEXPECTED_SCRIPT_BANNER"); return; }
+          if (starts.length >= preorder.length) { issues.add("EXCESS_START_EVENTS"); return; }
+          const expected = preorder[starts.length]!, matches = expected.script === script;
+          if (!matches) issues.add("START_PREORDER_MISMATCH");
+          starts.push({ script, planId: matches ? expected.id : null, ...stamp(stream) });
+        } else if (stream === "stderr") {
+          const match = /^npm timing command:run Completed in (-?[0-9]+)ms$/u.exec(value);
+          if (!match) return;
+          const duration = Number(match[1]);
+          if (!Number.isSafeInteger(duration) || ends.length >= preorder.length) { issues.add("INVALID_OR_EXCESS_END_EVENT"); return; }
+          if (duration < 0) issues.add("NEGATIVE_NPM_WALL_DURATION");
+          ends.push({ npmCommandInclusiveWallMs: duration, ...stamp(stream) });
+        }
+      };
+      const observe = (stream: "stdout" | "stderr", chunk: string) => {
+        if (!enabled) return;
+        const before = performance.now(); observerCalls++; observedCharacters += chunk.length;
+        try {
+          let offset = 0;
+          while (offset < chunk.length) {
+            const newline = chunk.indexOf("\n", offset), end = newline < 0 ? chunk.length : newline;
+            if (!dropping[stream]) {
+              const segment = chunk.slice(offset, end);
+              if (carries[stream].length + segment.length <= 4096) carries[stream] += segment;
+              else {
+                const prefix = (carries[stream] + segment.slice(0, 4096)).replace(ansi, "");
+                if (prefix.startsWith(bannerPrefix) || prefix.startsWith("npm timing command:run")) issues.add("TIMING_LINE_CARRY_BOUND");
+                carries[stream] = ""; dropping[stream] = true; droppedLines++;
+              }
+            }
+            if (newline >= 0) { if (!dropping[stream]) line(stream, carries[stream]); carries[stream] = ""; dropping[stream] = false; offset = newline + 1; }
+            else break;
+          }
+        } catch { issues.add("OBSERVER_PARSE_FAILURE"); }
+        finally { observerMs += performance.now() - before; }
+      };
+      const finish = (facts: { code: number | null; reason: string | null; stdout: string | null; stderr: string | null;
+        cleanup?: Cleanup; nativeJobIdentity: WindowsJobIdentity | null; nativeJobReceipt: WindowsJobReceipt | null }) => {
+        const readStarted = performance.now();
+        for (const stream of ["stdout", "stderr"] as const) if (carries[stream]) { issues.add("UNTERMINATED_STREAM_LINE"); carries[stream] = ""; }
+        const files: Array<{ file: string; bytes: number; sha256: string }> = [], closedFiles: Array<{ file: string; bytes: number; sha256: string }> = [];
+        const timings: Array<{ script: string; commandInclusiveWallMs: number; npmInclusiveWallMs: number; id: string }> = [];
+        let rawMemberCount: number | null = null, rawNamesSha256: string | null = null;
+        let captureFailure: unknown;
+        try {
+          assert.deepEqual(args, invocationArgv, "Owned npm argv changed during execution.");
+          assert.equal(digest(readFileSync(packageFile)), digest(packageBytes), "Bound npm package scripts changed during execution.");
+          for (const row of boundFiles) { checkedFile(row.file); assert.equal(digest(readFileSync(row.file)), row.sha256, "Installed npm format source changed during execution."); }
+          assert.equal(digest(readFileSync(process.execPath)), runtime.executableSha256);
+          if (facts.stdout === null || facts.stderr === null || facts.cleanup?.status !== "PASS" || facts.cleanup.liveProcesses !== 0 || facts.cleanup.processTreeVerified !== true) issues.add("CLOSED_CHILD_EVIDENCE_UNAVAILABLE");
+          if (ownerTimeoutReferenceMonotonicMs === null) issues.add("OWNER_TIMEOUT_REFERENCE_UNAVAILABLE");
+          for (const [file, text] of [[stdoutPath, facts.stdout], [stderrPath, facts.stderr]] as const) if (text !== null) {
+            checkedFile(file); const bytes = readFileSync(file); assert.equal(digest(bytes), digest(text), "Closed child stream differs from its timing binding.");
+            closedFiles.push({ file, bytes: bytes.length, sha256: digest(bytes) });
+          }
+          if (process.platform === "win32") {
+            if (!facts.nativeJobIdentity || !facts.nativeJobReceipt) issues.add("NATIVE_CLOSURE_EVIDENCE_UNAVAILABLE");
+            else {
+              if (facts.nativeJobReceipt.status !== "PASS" || facts.nativeJobReceipt.cleanup.activeProcessesAfterCleanup !== 0
+                || facts.nativeJobReceipt.jobToken !== facts.nativeJobIdentity.jobToken || facts.nativeJobReceipt.rootPid !== facts.nativeJobIdentity.rootPid)
+                issues.add("NATIVE_CLOSURE_EVIDENCE_UNQUALIFIED");
+              for (const [suffix, value] of [["native-identity", facts.nativeJobIdentity], ["native-result", facts.nativeJobReceipt]] as const) {
+              const file = ownedPath(context, `public-${name}.${suffix}.json`); checkedFile(file);
+              const bytes = readFileSync(file); assert.deepEqual(JSON.parse(bytes.toString()), value, "Closed Native receipt differs from its timing binding.");
+              closedFiles.push({ file, bytes: bytes.length, sha256: digest(bytes) });
+              }
+            }
+          }
+          if (enabled) {
+            const stat = lstatSync(directory); assert.ok(stat.isDirectory() && !stat.isSymbolicLink() && realpathSync(directory) === directory);
+            const names = readdirSync(directory).sort(); rawMemberCount = names.length; rawNamesSha256 = digest(JSON.stringify(names));
+            if (names.length > preorder.length) issues.add("EXCESS_TIMING_FILE_MEMBERSHIP");
+            else for (const member of names) {
+              const file = join(directory, member), stat = checkedFile(file);
+              if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{3}Z-timing\.json$/u.test(member)) { issues.add("UNEXPECTED_TIMING_FILE_NAME"); continue; }
+              if (stat.size > 8_000_000) { issues.add("TIMING_FILE_PARSE_BOUND"); continue; }
+              const bytes = readFileSync(file), row = { file, bytes: bytes.length, sha256: digest(bytes) }; files.push(row);
+              let value: unknown; try { value = JSON.parse(bytes.toString()); } catch { issues.add("MALFORMED_TIMING_JSON"); continue; }
+              if (!value || typeof value !== "object" || Array.isArray(value)) { issues.add("INVALID_TIMING_JSON"); continue; }
+              const data = value as { metadata?: { id?: unknown; command?: unknown; version?: unknown; logfiles?: unknown }; timers?: Record<string, unknown>; unfinishedTimers?: unknown };
+              const command = data.metadata?.command, id = data.metadata?.id, commandMs = data.timers?.["command:run"], npmMs = data.timers?.npm;
+              const dateParts = typeof id === "string" ? /^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2})_([0-9]{2})_([0-9]{2})_([0-9]{3})Z$/u.exec(id) : null;
+              const utc = dateParts ? `${dateParts[1]}T${dateParts[2]}:${dateParts[3]}:${dateParts[4]}.${dateParts[5]}Z` : null;
+              const validId = utc !== null && Number.isFinite(Date.parse(utc)) && new Date(Date.parse(utc)).toISOString() === utc;
+              if (!Array.isArray(command) || command.length !== 2 || command[0] !== "run" || typeof command[1] !== "string" || !knownScripts.has(command[1])
+                || typeof id !== "string" || !validId || member !== id + "-timing.json" || data.metadata?.version !== "11.9.0"
+                || !Array.isArray(data.metadata.logfiles) || data.metadata.logfiles.length !== 0
+                || !Number.isSafeInteger(commandMs) || !Number.isSafeInteger(npmMs) || (commandMs as number) < 0 || (npmMs as number) < (commandMs as number)
+                || !data.unfinishedTimers || typeof data.unfinishedTimers !== "object" || Array.isArray(data.unfinishedTimers) || Object.keys(data.unfinishedTimers).length !== 0) {
+                issues.add("UNQUALIFIED_TIMING_METADATA_OR_WALL_CLOCK"); continue;
+              }
+              timings.push({ script: command[1], commandInclusiveWallMs: commandMs as number, npmInclusiveWallMs: npmMs as number, id });
+            }
+            assert.deepEqual(readdirSync(directory).sort(), names, "Npm timing membership changed after Native closure.");
+            for (const row of files) { checkedFile(row.file); assert.equal(digest(readFileSync(row.file)), row.sha256, "Npm timing bytes changed after capture."); }
+          }
+        } catch (error) { captureFailure = error; issues.add("TIMING_EVIDENCE_INTEGRITY_OR_IO_FAILURE"); }
+        const startedIds = new Set(starts.flatMap(row => row.planId === null ? [] : [row.planId]));
+        const observedPostorder = postorder.filter(id => startedIds.has(id));
+        if (ends.length > observedPostorder.length) issues.add("END_POSTORDER_AMBIGUOUS");
+        const byScript = new Map<string, typeof timings[number]>();
+        for (const row of timings) { if (byScript.has(row.script)) issues.add("DUPLICATE_TIMING_COMMAND"); else byScript.set(row.script, row); }
+        const completedPrefix = observedPostorder.slice(0, ends.length).map(id => preorder[id]!);
+        const mappingUnambiguous = enabled && issues.size === 0 && starts.every(row => row.planId !== null) && ends.length === timings.length
+          && byScript.size === timings.length && completedPrefix.length === ends.length
+          && completedPrefix.every((row, index) => byScript.get(row.script)?.commandInclusiveWallMs === ends[index]!.npmCommandInclusiveWallMs)
+          && timings.every(row => completedPrefix.some(invocation => invocation.script === row.script));
+        if (!mappingUnambiguous) issues.add("END_FILE_SEQUENCE_OR_DURATION_AMBIGUOUS");
+        const reconciled = ends.map((end, index) => ({ ...end, planId: mappingUnambiguous ? completedPrefix[index]!.id : null,
+          script: mappingUnambiguous ? completedPrefix[index]!.script : null, timingFileMatched: mappingUnambiguous }));
+        const complete = enabled && facts.code === 0 && facts.reason === null && starts.length === preorder.length && ends.length === preorder.length && timings.length === preorder.length;
+        if (!complete) issues.add("INCOMPLETE_OR_INTERRUPTED_NPM_OBSERVATIONS");
+        const status = complete && issues.size === 0 ? "COMPLETE_DIAGNOSTIC_ONLY" as const : "PARTIAL_DIAGNOSTIC_ONLY" as const;
+        const readParseMs = performance.now() - readStarted, receiptFile = `public-${name}.npm-timing.json`;
+        const value = { schema: 1, status, enabled, gate: "verify:admin-runtime", childArgv: invocationArgv, childArgvSha256: digest(JSON.stringify(invocationArgv)),
+          source: { packageFile, packageSha256: digest(packageBytes), sourceDirectory, invocationPreorder: preorder, invocationPostorder: postorder, nodeLeaves: nodeLeaves ?? null }, runtime,
+          child: { code: facts.code, reason: facts.reason, nativeJobIdentity: facts.nativeJobIdentity, nativeJobReceipt: facts.nativeJobReceipt,
+            cleanup: facts.cleanup ?? null, rawFiles: closedFiles, stdout: { file: stdoutPath, sha256: facts.stdout === null ? null : digest(facts.stdout) }, stderr: { file: stderrPath, sha256: facts.stderr === null ? null : digest(facts.stderr) } },
+          observations: { starts, ends: reconciled, mappingUnambiguous, unobservedOrUnfinished: preorder.filter(row => !reconciled.some(end => end.planId === row.id && end.timingFileMatched)).map(row => ({ id: row.id, script: row.script, startObserved: startedIds.has(row.id), endAttribution: "UNKNOWN" })),
+            futureUnstartedBranchesPrunedOnlyForNonzero: facts.reason === "nonzero_exit" && mappingUnambiguous,
+            clockPolicy: "Delivery timestamps only; wall-minus-monotonic is recorded without a tolerance or clock-accuracy claim. Cross-pipe order never defines a stack." },
+          rawTimingDirectory: enabled ? directory : null, files, timings, issues: [...issues], nominalLimitMs: limitMs,
+          rawMembership: { memberCount: rawMemberCount, sortedNamesSha256: rawNamesSha256, hashedOrdinaryFiles: files.length,
+            allMemberBytesHashed: rawMemberCount !== null && rawMemberCount === files.length,
+            incompleteRawMetadataNeverQualifies: true, rawFilesRetainedInOwnedDirectory: true },
+          clockOrigins: { ownerInvocationMonotonicMs: started, ownerTimeoutReferenceMonotonicMs, wallComparisonOriginMonotonicMs: clockOriginMonotonicMs,
+            wallComparisonOriginUtcMs: startedWall, nominalRemainingIsExactNativeRemaining: false,
+            boundary: "Owner timeout reference is captured immediately before its existing setTimeout. Invocation setup, Native root creation/duration and cleanup have separate origins." },
+          overhead: { setupMs, observerMs, readParseMs, observerCalls, observedCharacters, carryLimitCharacters: 4096, droppedNonCandidateLines: droppedLines, maximumEventsPerStream: preorder.length,
+            serializationAndWriteMs: "Measured after receipt completion in the returned timingEvidence reference", npmChildTimingEffect: "UNKNOWN_UNTIL_BOUNDED_PROBE" },
+          attribution: { npmTimers: "Date.now inclusive wall durations; nested durations must not be summed as CPU or total elapsed time", cpu: "UNKNOWN", io: "UNKNOWN", wait: "UNKNOWN", historicalTimeoutCause: "UNKNOWN" },
+          qualificationGranted: false, nativePassGranted: false, gatePassGranted: false, releaseEvidence: false };
+        const serializationStart = performance.now(), text = JSON.stringify(value, null, 2) + "\n", serializationMs = performance.now() - serializationStart;
+        assert.equal(context.sanitize(text), text, "Npm diagnostic receipt contains a generated credential.");
+        const writeStart = performance.now(); writeFileSync(ownedPath(context, receiptFile), text, { flag: "wx", mode: 0o600 }); const writeMs = performance.now() - writeStart;
+        if (captureFailure !== undefined) throw captureFailure;
+        return { file: receiptFile, sha256: digest(text), status, overhead: { setupMs, observerMs, readParseMs, serializationMs, writeMs } };
+      };
+      return { environment: enabled ? { npm_config_timing: "true", npm_config_logs_dir: directory, npm_config_logs_max: "0" } : {}, observe, finish,
+        beginDeadline: () => { ownerTimeoutReferenceMonotonicMs = performance.now(); } };
+    })();
+    const invocationEnvironment = gate57Timing ? { ...env, ...gate57Timing.environment } : env;
+    if (process.platform === "linux") {
+      assert.equal(typeof process.getuid, "function", "Owned Linux cleanup needs current-user process identity.");
+      assert.ok(readFileSync("/proc/self/stat", "utf8").length > 0 && lstatSync("/proc").isDirectory(), "Owned Linux cleanup needs inspectable procfs.");
+    }
+    // This nonsecret marker is inherited by the reviewed Playwright fixture, including its detached Chromium groups.
+    // Linux discovery never retains environment contents and excludes every process older than this owned root.
+    const markerKey = "VENESIA_QA_OWNED_CHILD", marker = globalThis.crypto.randomUUID();
+    const spawnedAtUtc = new Date().toISOString();
+    const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args, cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
+      identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs }) : undefined;
+    const child = windows?.child ?? spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
+      detached: process.platform === "linux", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    children.add(child); let stdout = "", stderr = "", failed = false;
+    let processFailure: Error | undefined;
+    type Cleanup = Awaited<ReturnType<typeof stopChild>>;
+    let cleanupPromise: Promise<Cleanup> | undefined;
+    let failureReason: "timeout" | "cancelled" | "output_limit" | "process_failure" | undefined;
+    if (process.platform === "linux" && child.pid) {
+      try {
+      type Identity = { pid: number; ppid: number; group: number; start: string; state: string };
+      const readIdentity = (pid: number): Identity | undefined => {
+        try {
+          const raw = readFileSync(`/proc/${pid}/stat`, "utf8"), fields = raw.slice(raw.lastIndexOf(")") + 2).trim().split(/\s+/u);
+          assert.ok(fields.length > 19 && /^\d+$/u.test(fields[19]!), "Owned Linux process identity is malformed.");
+          return { pid, state: fields[0]!, ppid: Number(fields[1]), group: Number(fields[2]), start: fields[19]! };
+        } catch (error) {
+          if (["ENOENT", "ESRCH"].includes(String((error as NodeJS.ErrnoException).code))) return undefined;
+          throw new Error("Owned Linux process identity cannot be inspected.");
+        }
+      };
+      const rootIdentity = readIdentity(child.pid), observed = new Map<number, Identity>();
+      if (rootIdentity) observed.set(rootIdentity.pid, rootIdentity);
+      const live = (identity: Identity) => !["Z", "X", "x"].includes(identity.state);
+      const snapshot = (): Identity[] => {
+        assert.ok(rootIdentity, "Owned Linux root identity was not captured; cleanup is unverified.");
+        const inspectionDeadline = performance.now() + 1_000;
+        const names = readdirSync("/proc").filter(value => /^\d+$/u.test(value));
+        assert.ok(names.length <= 32_768, "Owned Linux process discovery exceeded its bound.");
+        const current = new Map<number, Identity>();
+        for (const value of names) {
+          assert.ok(performance.now() < inspectionDeadline, "Owned Linux process identity discovery exceeded its time bound.");
+          const pid = Number(value), identity = readIdentity(pid);
+          if (!identity || BigInt(identity.start) < BigInt(rootIdentity.start)) continue;
+          try {
+            if (lstatSync(`/proc/${pid}`).uid !== process.getuid!()) {
+              const prior = observed.get(pid);
+              assert.ok((!prior || prior.start !== identity.start) && identity.group !== rootIdentity.pid, "Owned Linux process changed its user identity.");
+              continue;
+            }
+          }
+          catch (error) { if (["ENOENT", "ESRCH"].includes(String((error as NodeJS.ErrnoException).code))) continue; throw error; }
+          current.set(pid, identity);
+        }
+        const owned = new Map<number, Identity>();
+        for (const identity of current.values()) {
+          assert.ok(performance.now() < inspectionDeadline, "Owned Linux process marker discovery exceeded its time bound.");
+          const prior = observed.get(identity.pid);
+          if ((prior && prior.start === identity.start) || identity.group === rootIdentity.pid) { owned.set(identity.pid, identity); continue; }
+          try {
+            const environment = readFileSync(`/proc/${identity.pid}/environ`);
+            assert.ok(environment.length <= 262_144, "Owned Linux process marker inspection exceeded its byte bound.");
+            const entry = Buffer.from(`${markerKey}=${marker}\0`);
+            // Compare only the inherited marker. No original environment values enter state, errors, logs or receipts.
+            if (environment.subarray(0, entry.length).equals(entry) || environment.includes(Buffer.from(`\0${markerKey}=${marker}\0`))) owned.set(identity.pid, identity);
+          } catch (error) {
+            if (!["ENOENT", "ESRCH", "EACCES", "EPERM"].includes(String((error as NodeJS.ErrnoException).code))) throw new Error("Owned Linux marker discovery failed.");
+          }
+        }
+        for (let changed = true; changed;) {
+          changed = false;
+          for (const identity of current.values()) if (!owned.has(identity.pid) && owned.has(identity.ppid)) { owned.set(identity.pid, identity); changed = true; }
+        }
+        for (const identity of owned.values()) observed.set(identity.pid, identity);
+        return [...owned.values()].filter(live);
+      };
+      const send = (identity: Identity, requested: NodeJS.Signals) => {
+        const current = readIdentity(identity.pid);
+        if (!current || !live(current) || current.start !== identity.start) return;
+        assert.notEqual(identity.pid, process.pid, "Owned cleanup cannot signal its owner.");
+        try {
+          assert.equal(lstatSync(`/proc/${identity.pid}`).uid, process.getuid!(), "Owned Linux process changed its user identity before signaling.");
+          process.kill(identity.pid, requested);
+        } catch (error) { if (!["ESRCH", "ENOENT"].includes(String((error as NodeJS.ErrnoException).code))) throw new Error("Owned Linux process signal failed."); }
+      };
+      let linuxCleanup: Promise<Cleanup> | undefined;
+      const cleanupLinux = (): Promise<Cleanup> => linuxCleanup ??= (async () => {
+        let remaining = snapshot(), forcedTermination = false;
+        const residualProcessesAfterExit = child.exitCode !== null || child.signalCode !== null ? remaining.length : 0;
+        if (remaining.length) {
+          for (const identity of remaining) send(identity, "SIGTERM");
+          const deadline = performance.now() + 1_500;
+          while ((remaining = snapshot()).length && performance.now() < deadline) await new Promise<void>(done => setTimeout(done, 25));
+        }
+        if (remaining.length) {
+          forcedTermination = true;
+          const freezeDeadline = performance.now() + 3_000;
+          for (;;) {
+            for (const identity of remaining) send(identity, "SIGSTOP");
+            await new Promise<void>(done => setTimeout(done, 25));
+            remaining = snapshot();
+            if (remaining.every(identity => identity.state === "T" || identity.state === "t")) break;
+            assert.ok(performance.now() < freezeDeadline, "Owned Linux process tree could not be frozen.");
+          }
+          // Frozen parents cannot create a new detached descendant between discovery and the final identity-checked signal.
+          for (const identity of remaining.sort((a, b) => Number(a.pid === rootIdentity!.pid) - Number(b.pid === rootIdentity!.pid))) send(identity, "SIGKILL");
+          const deadline = performance.now() + 5_000;
+          while ((remaining = snapshot()).length && performance.now() < deadline) await new Promise<void>(done => setTimeout(done, 25));
+        }
+        assert.equal(remaining.length, 0, "Owned Linux process tree is still live.");
+        return { status: "PASS" as const, platform: process.platform, method: "linux-marker-and-process-identity", processTreeVerified: true,
+          forcedTermination, observedProcesses: observed.size, liveProcesses: 0, residualProcessesAfterExit };
+      })();
+      Object.defineProperty(child, "verificationLinuxCleanup", { value: cleanupLinux });
+      } catch (error) {
+        // Keep admission/error listeners active even when procfs changes after the preflight. Unknown ownership is never a PASS.
+        const failure = new Error("Owned Linux process cleanup identity could not be established.", { cause: error });
+        Object.defineProperty(child, "verificationLinuxCleanup", { value: () => Promise.reject(failure) });
+      }
+    }
+    const abort = (reason: "timeout" | "cancelled" | "output_limit") => {
+      if (failed) return;
+      failed = true; failureReason = reason;
+      cleanupPromise = stopChild(child, context.cleanEnvironment(), reason);
+      // The close handler retains the original failure and writes the final cleanup/evidence result before settling.
+      void cleanupPromise.catch(error => { void settle(child.exitCode, error).catch(reject); });
+    };
+    const abortSignal = () => abort("cancelled");
+    signal.addEventListener("abort", abortSignal, { once: true });
+    gate57Timing?.beginDeadline();
+    const timeout = setTimeout(() => abort("timeout"), limitMs);
+    child.stdout.on("data", value => { const chunk = String(value); stdout += chunk; gate57Timing?.observe("stdout", chunk); if (stdout.length > 8_000_000) abort("output_limit"); });
+    child.stderr.on("data", value => { const chunk = String(value); stderr += chunk; gate57Timing?.observe("stderr", chunk); if (stderr.length > 8_000_000) abort("output_limit"); });
+    child.once("error", (error: NodeJS.ErrnoException) => {
+      clearTimeout(timeout); signal.removeEventListener("abort", abortSignal);
+      const code = typeof error.code === "string" && /^[A-Z0-9_]+$/u.test(error.code) ? error.code : null;
+      failureReason ??= "process_failure"; processFailure = new Error(`Public ${name} process failed.`, { cause: { code } });
+    });
+    let settling = false;
+    const settle = async (code: number | null, knownCleanupFailure?: unknown) => {
+      if (settling) return; settling = true;
+      clearTimeout(timeout); signal.removeEventListener("abort", abortSignal);
+      let cleanup: Cleanup | undefined, cleanupFailure: unknown = knownCleanupFailure;
+      try { cleanup = await (cleanupPromise ?? stopChild(child, context.cleanEnvironment())); children.delete(child); }
+      catch (error) { cleanupFailure = error; }
+      let nativeJobIdentity: WindowsJobIdentity | null = null, nativeJobReceipt: WindowsJobReceipt | null = null;
+      try { nativeJobIdentity = windows?.readIdentity() ?? null; nativeJobReceipt = windows?.readReceipt() ?? null; }
+      catch (error) { cleanupFailure ??= error; }
+      if (windows && nativeJobReceipt && nativeJobReceipt.reason !== "completed") {
+        failed = true;
+        failureReason ??= nativeJobReceipt.reason === "timeout" ? "timeout"
+          : ["cancelled", "owner_lost", "owner_shutdown"].includes(nativeJobReceipt.reason) ? "cancelled"
+          : nativeJobReceipt.reason === "output_limit" ? "output_limit" : "process_failure";
+      }
+      const rootCode = windows ? nativeJobReceipt?.rootExitCode ?? null : code;
+      const rootSignal = windows ? null : child.signalCode;
+      const identity = windows ? { pid: nativeJobIdentity?.rootPid ?? null, ppid: nativeJobIdentity?.rootPpid ?? child.pid ?? process.pid,
+        spawnedAtUtc: nativeJobIdentity?.rootCreationTimeUtc ?? spawnedAtUtc } : { pid: child.pid ?? null, ppid: process.pid, spawnedAtUtc };
+      const nativeProof = windows ? { nativeJobIdentity, nativeJobReceipt, nativeCapability: windows.native, helperIdentity: { pid: child.pid ?? null, ppid: process.pid },
+        helperExit: { code, signal: child.signalCode } } : {};
+      let cleanOutput: string | null = null, cleanErrors: string | null = null, evidenceFailure: unknown;
+      try {
+        cleanOutput = context.sanitize(stdout.replaceAll(marker, "[REDACTED_CHILD_OWNERSHIP]"));
+        cleanErrors = context.sanitize(stderr.replaceAll(marker, "[REDACTED_CHILD_OWNERSHIP]"));
+        writeFileSync(stdoutPath, cleanOutput, { mode: 0o600, flag: "wx" });
+        writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
+      } catch (error) { evidenceFailure = error; }
+      let timingEvidence: ReturnType<NonNullable<typeof gate57Timing>["finish"]> | undefined;
+      try { timingEvidence = gate57Timing?.finish({ code: rootCode, reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput,
+        stderr: cleanErrors, cleanup, nativeJobIdentity, nativeJobReceipt }); }
+      catch (error) {
+        if (evidenceFailure === undefined) evidenceFailure = error;
+        else if (evidenceFailure instanceof Error && Object.isExtensible(evidenceFailure) && !Object.hasOwn(evidenceFailure, "timingEvidenceFailure"))
+          Object.defineProperty(evidenceFailure, "timingEvidenceFailure", { value: error });
+        if (cleanupFailure instanceof Error && Object.isExtensible(cleanupFailure) && !Object.hasOwn(cleanupFailure, "timingEvidenceFailure"))
+          Object.defineProperty(cleanupFailure, "timingEvidenceFailure", { value: error });
+      }
+      // Keep bounded cleanup facts even when the original native/FS Error has no cause.
+      // The exact Error remains private on the rejection; never project its message/stack.
+      const cleanupError = cleanupFailure instanceof Error ? cleanupFailure : undefined;
+      const cleanupCause = cleanupError && Object.getOwnPropertyDescriptor(cleanupError, "cause")?.value;
+      const cleanupData = (value: unknown, key: string): unknown => value !== null && typeof value === "object"
+        ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined;
+      const cleanupCode = cleanupData(cleanupError, "code") ?? cleanupData(cleanupCause, "code");
+      const cleanupExit = cleanupData(cleanupCause, "exitCode");
+      const childResult = { code: rootCode ?? null, signal: rootSignal,
+        identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), durationMs: performance.now() - started,
+        reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
+        cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
+          forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
+        cleanupFailure: cleanupError ? {
+          stage: "owned-child-cleanup", name: cleanupError instanceof assert.AssertionError ? "AssertionError"
+            : cleanupError instanceof TypeError ? "TypeError" : cleanupError instanceof SyntaxError ? "SyntaxError"
+              : cleanupError instanceof RangeError ? "RangeError" : "Error",
+          code: typeof cleanupCode === "string" && /^[A-Z0-9_]{1,64}$/u.test(cleanupCode) ? cleanupCode : null,
+          exitCode: typeof cleanupExit === "number" && Number.isFinite(cleanupExit) ? cleanupExit : null,
+          nativeReceipt: windows ? nativeJobReceipt ? "present" : "unavailable" : "not-applicable",
+        } : null,
+        evidence: { stdout: `public-${name}.stdout.log`, stderr: `public-${name}.stderr.log`, sanitized: cleanOutput !== null && cleanErrors !== null } };
+      const error = failed ? new Error(`Public ${name} was aborted or exceeded its bound.`, { cause: cleanupFailure ?? evidenceFailure })
+        : processFailure ?? (cleanupFailure ? new Error(`Public ${name} cleanup failed.`, { cause: cleanupFailure }) : evidenceFailure);
+      if (error) { if (error instanceof Error) Object.defineProperty(error, "childResult", { value: childResult, enumerable: true }); reject(error); }
+      else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: rootCode ?? -1, rawExit: { code: rootCode, signal: rootSignal },
+        identity: childResult.identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
+    };
+    child.once("close", code => { void settle(code).catch(reject); });
+  });
+}
+
+/** Owner capability prerequisite only; it never replaces the actual caller-context process probe. */
+export function ownedProcessCleanupQualification() {
+  const rootExitQualified = process.platform === "linux" || (process.platform === "win32" && windowsOwnedProcessCapability().status === "PASS");
+  return { status: rootExitQualified ? "PASS" as const : "BLOCKED" as const,
+    missingProof: rootExitQualified ? null : process.platform === "win32"
+      ? "windows_native_job_launch_unavailable" : "unsupported_process_cleanup_platform",
+    fullEProcessCleanupQualified: rootExitQualified };
+}
+
+/** Qualify this execution context with a real, disposable owned tree before Docker allocation. */
+export async function verifyOwnedProcessReadiness(options: {
+  sourceDirectory: string;
+  context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
+  signal: AbortSignal;
+}) {
+  const started = performance.now(), { context, signal, sourceDirectory } = options;
+  signal.throwIfAborted();
+  assert.ok(process.platform === "win32" || process.platform === "linux", "Owned process readiness is unqualified on this platform.");
+  const controller = new AbortController(), children = new Set<ChildProcess>();
+  const cancel = () => controller.abort(signal.reason);
+  signal.addEventListener("abort", cancel, { once: true });
+  // Both identities are reported by their actual child processes. No foreign process is selected or signaled.
+  const expiresAt = Date.now() + 12_000;
+  const leaf = `setTimeout(()=>process.exit(0),Math.max(1,${expiresAt}-Date.now()));process.stdout.write(JSON.stringify({pid:process.pid,ppid:process.ppid})+'\\n');setInterval(()=>{},1000);`;
+  const root = `setTimeout(()=>process.exit(0),Math.max(1,${expiresAt}-Date.now()));const {spawn}=require('node:child_process');const leaf=spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{env:process.env,detached:process.platform==='linux',windowsHide:true,stdio:['ignore','pipe','pipe']});leaf.stdout.once('data',data=>process.stdout.write(JSON.stringify({root:{pid:process.pid,ppid:process.ppid},leaf:JSON.parse(String(data))})+'\\n'));setInterval(()=>{},1000);`;
+  const knownPids = new Set<number>();
+  const alive = (pid: number) => {
+    if (process.platform === "linux") {
+      try { const raw = readFileSync(`/proc/${pid}/stat`, "utf8"); return !["Z", "X", "x"].includes(raw.slice(raw.lastIndexOf(")") + 2).split(" ")[0]!); }
+      catch (error) { if (["ENOENT", "ESRCH"].includes(String((error as NodeJS.ErrnoException).code))) return false; throw error; }
+    }
+    try { process.kill(pid, 0); return true; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+      if ((error as NodeJS.ErrnoException).code === "EPERM") return true; throw error; }
+  };
+  const pending = runOwnedVerificationChild({ sourceDirectory, context, children, signal: controller.signal }, ["-e", root], context.cleanEnvironment(), "process-readiness", 10_000);
+  const outcome = pending.then(value => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
+  try {
+    const child = [...children][0]; assert.ok(child?.stdout, "Owned process readiness did not start its child.");
+    if (child.pid) knownPids.add(child.pid);
+    const identities = await new Promise<{ root: { pid: number; ppid: number }; leaf: { pid: number; ppid: number } }>((done, reject) => {
+      let output = "";
+      const finish = (error?: Error) => {
+        clearTimeout(timer); child.stdout!.off("data", data); child.off("close", closed);
+        controller.signal.removeEventListener("abort", aborted); if (error) reject(error);
+      };
+      const data = (value: Buffer) => {
+        output += String(value);
+        if (output.length > 4_096) return finish(new Error("Owned process readiness identity output exceeded its bound."));
+        if (!output.includes("\n")) return;
+        try { const row = JSON.parse(output.split("\n")[0]!); finish(); done(row); }
+        catch { finish(new Error("Owned process readiness identity output is invalid.")); }
+      };
+      const closed = () => finish(new Error("Owned process readiness exited before its tree was observed."));
+      const aborted = () => finish(new Error("Owned process readiness was cancelled before observation."));
+      const timer = setTimeout(() => finish(new Error("Owned process readiness observation exceeded its bound.")), 8_000);
+      child.stdout!.on("data", data); child.once("close", closed); controller.signal.addEventListener("abort", aborted, { once: true });
+      if (controller.signal.aborted) aborted();
+    });
+    const nativeIdentity = (child as ChildProcess & { verificationWindowsIdentity?: () => WindowsJobIdentity | null }).verificationWindowsIdentity?.();
+    assert.equal(identities.root.pid, nativeIdentity?.rootPid ?? child.pid); assert.equal(identities.root.ppid, nativeIdentity?.rootPpid ?? process.pid);
+    assert.ok(Number.isSafeInteger(identities.leaf.pid) && identities.leaf.pid > 1 && identities.leaf.pid !== identities.root.pid);
+    assert.equal(identities.leaf.ppid, identities.root.pid);
+    knownPids.add(identities.leaf.pid);
+    signal.throwIfAborted(); controller.abort(new Error("Controlled owned process readiness cancellation."));
+    const result = await outcome;
+    assert.ok(result.error instanceof Error, "Owned process readiness must observe cancellation, not a passing command.");
+    const retained = (result.error as Error & { childResult?: { code: number | null; signal: NodeJS.Signals | null; reason: string;
+      cleanup: Awaited<ReturnType<typeof stopChild>> } }).childResult;
+    assert.ok(retained && retained.reason === "cancelled" && retained.cleanup.status === "PASS" && retained.cleanup.processTreeVerified,
+      "Owned process readiness did not prove live-tree termination in this execution context.");
+    for (const pid of knownPids) assert.equal(alive(pid), false, "Owned process readiness left a known owned process live.");
+    assert.equal(children.size, 0, "Owned process readiness retained an undrained child registration.");
+    const cleanupQualification = ownedProcessCleanupQualification();
+    const readinessReceipt = { status: "PASS" as const, platform: process.platform, scope: "self-owned-live-tree-cancellation" as const,
+      durationMs: performance.now() - started, rootIdentity: identities.root, descendantIdentity: identities.leaf,
+      rawExit: { code: retained.code, signal: retained.signal }, cleanup: retained.cleanup,
+      cleanupQualification: { ...cleanupQualification, liveRootTreeProved: true,
+        rootExitTreeSupported: cleanupQualification.fullEProcessCleanupQualified },
+      limitations: process.platform === "win32" ? ["Task-private native Job contains cooperative CreateProcess descendants; broker/service-created processes are outside this qualification."]
+        : ["Detached descendants that clear the inherited ownership marker remain outside qualification."] };
+    receipt(context, "process-readiness.json", readinessReceipt); return readinessReceipt;
+  } catch (error) {
+    if (!controller.signal.aborted) controller.abort(new Error("Owned process readiness failure cleanup."));
+    const finished = await outcome;
+    // This diagnostic tree has its own finite expiry. A denied tree-kill remains BLOCKED;
+    // wait for the known identities to disappear without selecting any foreign PID for termination.
+    const fallbackDeadline = performance.now() + 14_000;
+    while ([...knownPids].some(alive) && performance.now() < fallbackDeadline) await new Promise<void>(done => setTimeout(done, 50));
+    const knownOwnedProcessesAbsent = [...knownPids].every(pid => !alive(pid));
+    const retained = finished.error instanceof Error ? (finished.error as Error & { childResult?: {
+      code: number | null; signal: NodeJS.Signals | null; identity: unknown; reason: unknown; cleanup: unknown; cleanupFailure: unknown; evidence: unknown;
+    } }).childResult : undefined;
+    const startupFailure = !retained && finished.error instanceof Error ? finished.error : undefined;
+    // A failure before registration has no childResult. Retain that original
+    // error without letting the secondary "no child" observation erase it.
+    if (error instanceof Error && startupFailure && error !== startupFailure) {
+      if (error.cause === undefined) Object.defineProperty(error, "cause", { value: startupFailure });
+      else Object.defineProperty(error, "startupFailure", { value: startupFailure });
+    }
+    if (!existsSync(ownedPath(context, "process-readiness.json"))) receipt(context, "process-readiness.json", {
+      status: "BLOCKED", platform: process.platform, scope: "self-owned-live-tree-cancellation", durationMs: performance.now() - started,
+      rawExit: retained ? { code: retained.code, signal: retained.signal } : null, identity: retained?.identity ?? null,
+      reason: retained?.reason ?? "readiness_unproved", cleanup: retained?.cleanup ?? null, evidence: retained?.evidence ?? null,
+      cleanupFailure: retained?.cleanupFailure ?? null,
+      startupFailure: startupFailure ? { name: ["Error", "ReferenceError", "TypeError", "AssertionError"].includes(startupFailure.name) ? startupFailure.name : "Error",
+        code: "code" in startupFailure && typeof startupFailure.code === "string" && /^[A-Z0-9_]{1,64}$/u.test(startupFailure.code) ? startupFailure.code : null } : null,
+      finiteSelfExpiryMs: 12_000, knownOwnedProcessesAbsent, knownIdentities: knownPids.size,
+    });
+    if (error instanceof Error && retained) Object.defineProperty(error, "childResult", { value: retained, enumerable: true });
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (!controller.signal.aborted) controller.abort(new Error("Owned process readiness final cleanup."));
+    await outcome;
+  }
+}
+
+export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: (phase?: "archive-preservation") => Promise<void>) {
+  assert.ok(request.admissionQualification, "Public execution requires fresh live source qualification before dependency staging or Build; conservative Full Gate fallback remains required.");
+  const preallocationAdmission = localVerificationAdmissionInvocations.get(request.admissionQualification);
+  assert.ok(preallocationAdmission, "Public execution requires this owner's live source qualification; serialized or old receipts cannot authorize it.");
+  assert.equal(request.admissionQualification.status, "PASS");
+  assert.equal(digest(JSON.stringify(request.admissionQualification)), preallocationAdmission.sha256, "Admission receipt was altered after qualification.");
+  const operationalBudget = request.admissionQualification.operationalBudget;
+  localVerificationOperationalDeadlineMs(1, operationalBudget);
+  if (operationalBudget !== undefined) {
+    assert.equal(request.selection, "admin-adoption", "Temporary PR #229 budget requires the complete Public/Admin release path.");
+    assert.equal(request.adoptionScope, undefined); assert.equal(request.adoptionCohort, undefined);
+    assert.equal(request.adoptionJourneySelection, undefined); assert.equal(request.adminMeasurement, undefined);
+  }
+  assert.equal(digest(JSON.stringify(preallocationAdmission.sourceFloor)), preallocationAdmission.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
+  if (request.localVerification && request.finalQualityGate === true)
+    assert.ok(request.admissionQualification,
+      "Final Quality source admission requires this owner's preallocation live qualification before an active database control connection.");
+  if (request.finalQualityGate && !ownedProcessCleanupQualification().fullEProcessCleanupQualified) {
+    const failure = new Error("Final quality requires qualified owned descendant cleanup after root exit.");
+    Object.defineProperty(failure, "code", { value: "FINAL_QUALITY_PROCESS_CLEANUP_UNQUALIFIED" });
+    throw failure;
+  }
   await context.assertOwned();
   const localImpact = request.localVerification;
   if (localImpact !== undefined) assert.ok(localImpact && typeof localImpact === "object", "Invalid local verification impact record.");
@@ -2103,6 +5738,30 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const children = new Set<ChildProcess>();
   let appPort: number | null = null;
   let appFailed = false;
+  type NativeApplication = { child: ChildProcess; name: string; windows: ReturnType<typeof spawnWindowsOwnedProcess>;
+    stopping: boolean; closed: Promise<void>; failure?: unknown; logFailure?: unknown; stop?: Promise<void> };
+  const nativeApplications = new Map<ChildProcess, NativeApplication>();
+  const stopNativeApplication = (state: NativeApplication) => state.stop ??= (async () => {
+    // Mark intent before requesting closure, but the original native reason still decides whether the root exited unexpectedly.
+    state.stopping = true;
+    let cleanupFailure: unknown;
+    try {
+      const cleanup = await stopChild(state.child, context.cleanEnvironment());
+      await state.closed;
+      const identity = state.windows.readIdentity(), terminal = state.windows.readReceipt();
+      assert.ok(identity && terminal, "Owned application native identity and terminal evidence are required.");
+      assert.equal(terminal.reason, "owner_shutdown", "Owned application exited before its intentional shutdown.");
+      receipt(context, `public-${state.name}-server-lifecycle.json`, { status: "PASS", intentionalStop: true,
+        nativeJobIdentity: identity, nativeJobReceipt: terminal, helperExit: { code: state.child.exitCode, signal: state.child.signalCode }, cleanup });
+    } catch (error) { cleanupFailure = error; }
+    const failure = state.failure ?? state.logFailure ?? cleanupFailure;
+    if (failure !== undefined) {
+      if (failure instanceof Error && cleanupFailure !== undefined && failure !== cleanupFailure && Object.isExtensible(failure)
+        && !Object.hasOwn(failure, "applicationCleanupFailure")) Object.defineProperty(failure, "applicationCleanupFailure", { value: cleanupFailure });
+      throw failure;
+    }
+  })();
+  let publicFailed = false, publicFailure: unknown;
   const reports: Array<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
@@ -2123,29 +5782,316 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (/^next\.config\./u.test(name)) assert.ok(["next.config.ts", imageConfig.file].includes(name), "Unexpected Next config precedence.");
     }
   };
-  const runChild = (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) => new Promise<{ code: number; stdout: string; stderr: string }>((done, reject) => {
-    signal.throwIfAborted();
-    const child = spawn(process.execPath, args, { cwd: sourceDirectory, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    children.add(child); let stdout = "", stderr = "", failed = false;
-    const abort = () => {
-      if (failed) return;
-      failed = true;
-      void stopChild(child, context.cleanEnvironment()).catch(() => reject(new Error(`Public ${name} cleanup failed.`)));
+  let nativeArchiveBinding: Readonly<{ headSha: string; sourceSha256: string; sourceManifestSha256: string;
+    runtimeSha256: string; projectLockSha256: string; installedLockSha256: string }> | undefined;
+  const closedVerificationChildren: Array<{ name: string; args: string[]; commandSha256: string;
+    binding: typeof nativeArchiveBinding; result: unknown }> = [];
+  const closedNativeArchiveCandidate = (args: readonly string[], result: unknown) => {
+    if (result === null || typeof result !== "object") return false;
+    const value = result as { stderr?: unknown; code?: unknown };
+    return typeof value.stderr === "string" && value.stderr.includes('"ownedNativeEvidenceDirectory"')
+      || process.platform === "win32" && value.code === 0 && (args.length === 3 && args[1] === "run" && args[2] === "verify:admin-runtime"
+        || args.length === 2 && args[0] === "--experimental-strip-types" && args[1] === join(sourceDirectory, "scripts/verify-isolated-supabase.mts"));
+  };
+  const runChild = async (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) => {
+    const command = [...args], binding = nativeArchiveBinding;
+    try {
+      const result = await runOwnedVerificationChild({ sourceDirectory, context, children, signal }, args, env, name, limitMs);
+      if (closedNativeArchiveCandidate(command, result))
+        closedVerificationChildren.push({ name, args: command, commandSha256: digest(JSON.stringify(command)), binding, result });
+      return result;
+    } catch (error) {
+      const result: unknown = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "childResult")?.value : undefined;
+      if (closedNativeArchiveCandidate(command, result))
+        closedVerificationChildren.push({ name, args: command, commandSha256: digest(JSON.stringify(command)), binding, result });
+      throw error;
+    }
+  };
+  const preserveClosedNativeArchives = async () => {
+    // Settle the existing pulse before synchronous archive/source reads. Cleanup
+    // must preserve evidence after cancellation; the lifecycle still owns and
+    // propagates heartbeat failure after this preservation-only boundary.
+    await drainControlPulse("archive-preservation");
+    const archives: Array<Record<string, unknown>> = [], failures: Array<{ stage: string; code: string | null }> = [];
+    let firstFailure: unknown, stage = "closed_child_declaration", bindingChecked = false;
+    const record = (value: unknown): Record<string, unknown> => {
+      assert.ok(value !== null && typeof value === "object" && !Array.isArray(value)); return value as Record<string, unknown>;
     };
-    signal.addEventListener("abort", abort, { once: true });
-    const timeout = setTimeout(abort, limitMs);
-    child.stdout.on("data", value => { stdout += String(value); if (stdout.length > 8_000_000) abort(); });
-    child.stderr.on("data", value => { stderr += String(value); if (stderr.length > 8_000_000) abort(); });
-    child.once("error", () => { clearTimeout(timeout); signal.removeEventListener("abort", abort); reject(new Error(`Public ${name} process failed.`)); });
-    child.once("close", code => {
-      clearTimeout(timeout); signal.removeEventListener("abort", abort); children.delete(child);
-      const cleanOutput = context.sanitize(stdout), cleanErrors = context.sanitize(stderr);
-      writeFileSync(ownedPath(context, `public-${name}.stdout.log`), cleanOutput, { mode: 0o600 });
-      writeFileSync(ownedPath(context, `public-${name}.stderr.log`), cleanErrors, { mode: 0o600 });
-      if (failed) reject(new Error(`Public ${name} was aborted or exceeded its bound.`));
-      else done({ code: code ?? -1, stdout: cleanOutput, stderr: cleanErrors });
-    });
-  });
+    const failure = (error: unknown) => {
+      if (!failures.length) firstFailure = error;
+      const code: unknown = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "code")?.value : undefined;
+      failures.push({ stage, code: typeof code === "string" && /^[A-Z0-9_]+$/u.test(code) ? code : null });
+    };
+    const checkedPath = (file: string, root: string, directory: boolean) => {
+      assert.ok(file === root || file.startsWith(root + sep), "Native evidence escaped its owned physical root.");
+      const stat = lstatSync(file);
+      assert.equal(stat.isSymbolicLink(), false, "Native evidence cannot traverse a link.");
+      assert.equal(directory ? stat.isDirectory() : stat.isFile(), true, "Native evidence requires ordinary files and directories.");
+      assert.equal(realpathSync(file), file, "Native evidence cannot traverse an indirect physical path.");
+      if (!directory) assert.equal(stat.nlink, 1, "Native evidence cannot contain a hard-linked file.");
+      return stat;
+    };
+    const tree = (root: string) => {
+      const directories: string[] = [], files: Array<{ file: string; sha256: string; bytes: number }> = [];
+      const visit = (at: string) => {
+        checkedPath(at, root, true);
+        for (const name of readdirSync(at).sort()) {
+          assert.ok(name && !/[\\/:]/u.test(name) && name !== "." && name !== "..", "Invalid Native evidence member.");
+          const file = join(at, name), stat = lstatSync(file), relative = file.slice(root.length + 1).replaceAll("\\", "/");
+          if (stat.isDirectory()) { directories.push(relative); visit(file); }
+          else { checkedPath(file, root, false); const bytes = readFileSync(file); files.push({ file: relative, sha256: digest(bytes), bytes: bytes.length }); }
+        }
+      };
+      visit(root); return { directories: directories.sort(), files: files.sort((a, b) => a.file.localeCompare(b.file)) };
+    };
+    const declared = new Set<string>();
+    let adminRuntimeProducesArchive: boolean | undefined;
+    for (const child of closedVerificationChildren) {
+      try {
+        stage = "closed_child_declaration";
+        const result = record(child.result), stderr = result.stderr;
+        const lines = typeof stderr === "string" ? stderr.split(/\r?\n/u) : [];
+        const declarations = lines.map((line, index) => ({ line, index: index + 1 }))
+          .filter(row => row.line.includes('"ownedNativeEvidenceDirectory"'));
+        // A failed wrapper may have stopped before the producer. Only an actual successful,
+        // registered Gate57 command establishes that its Windows producer must have run.
+        if (!declarations.length && result.code === 0 && process.platform === "win32") {
+          let producerExecuted = child.args.length === 2 && child.args[0] === "--experimental-strip-types"
+            && child.args[1] === join(sourceDirectory, "scripts/verify-isolated-supabase.mts");
+          if (child.args.length === 3 && child.args[1] === "run" && child.args[2] === "verify:admin-runtime") {
+            if (adminRuntimeProducesArchive === undefined) {
+              const scripts = record(JSON.parse(readFileSync(join(sourceDirectory, "package.json"), "utf8"))).scripts;
+              adminRuntimeProducesArchive = registeredVerificationNodeEntries(record(scripts) as Record<string, string>, "verify:admin-runtime")
+                .includes("scripts/verify-isolated-supabase.mts");
+            }
+            producerExecuted = adminRuntimeProducesArchive;
+          }
+          assert.equal(producerExecuted, false, "A completed Native archive producer omitted its declaration.");
+        }
+        if (!declarations.length) continue;
+        stage = "closed_child_binding";
+        assert.ok(nativeArchiveBinding && child.binding === nativeArchiveBinding, "Native archives require this invocation's private child binding.");
+        assert.equal(child.commandSha256, digest(JSON.stringify(child.args)));
+        assert.equal(typeof result.stdout, "string"); assert.equal(typeof stderr, "string");
+        const stdoutFile = ownedPath(context, `public-${child.name}.stdout.log`), stderrFile = ownedPath(context, `public-${child.name}.stderr.log`);
+        for (const file of [stdoutFile, stderrFile]) checkedPath(file, realpathSync(context.runDirectory), false);
+        assert.equal(digest(readFileSync(stdoutFile)), digest(result.stdout as string));
+        assert.equal(digest(readFileSync(stderrFile)), digest(stderr as string));
+        const cleanup = record(result.cleanup);
+        assert.equal(cleanup.status, "PASS"); assert.equal(cleanup.processTreeVerified, true); assert.equal(cleanup.liveProcesses, 0);
+        const native = result.nativeJobReceipt, identity = result.nativeJobIdentity;
+        if (process.platform === "win32") {
+          const terminal = record(native), initial = record(identity), nativeCleanup = record(terminal.cleanup);
+          assert.equal(terminal.status, "PASS"); assert.equal(terminal.jobToken, initial.jobToken); assert.equal(terminal.rootPid, initial.rootPid);
+          assert.equal(terminal.rootExitCode, result.code); assert.equal(terminal.rootCreationTimeFileTime, initial.rootCreationTimeFileTime);
+          assert.equal(record(result.identity).pid, initial.rootPid); assert.equal(initial.ownerJobAssignedBeforeResume, true);
+          assert.equal(nativeCleanup.status, "PASS"); assert.equal(nativeCleanup.processTreeVerified, true); assert.equal(nativeCleanup.activeProcessesAfterCleanup, 0);
+          for (const [suffix, value] of [["native-identity", identity], ["native-result", native]] as const) {
+            const file = ownedPath(context, `public-${child.name}.${suffix}.json`); checkedPath(file, realpathSync(context.runDirectory), false);
+            assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), value, "Native closed-child receipt changed after settlement.");
+          }
+        }
+        stage = "source_runtime_binding";
+        if (!bindingChecked) {
+          assert.equal(digest(readFileSync(ownedPath(context, "public-source-manifest.json"))), nativeArchiveBinding.sourceManifestSha256);
+          assert.equal(nativeArchiveBinding.sourceSha256, digest(JSON.stringify(manifest)));
+          assert.equal(nativeArchiveBinding.headSha, request.admissionQualification!.finalHead);
+          assert.equal(nativeArchiveBinding.sourceSha256, request.admissionQualification!.sourceSha256);
+          assert.equal(nativeArchiveBinding.runtimeSha256, digest(JSON.stringify(request.admissionQualification!.runtime)));
+          assert.equal(digest(readFileSync(join(ROOT, "package-lock.json"))), nativeArchiveBinding.projectLockSha256);
+          assert.equal(digest(readFileSync(join(ROOT, "node_modules/.package-lock.json"))), nativeArchiveBinding.installedLockSha256);
+          assertLocalVerificationAdmissionQualification(request.admissionQualification!, { baselineHead: request.admissionQualification!.baselineHead,
+            finalHead: request.admissionQualification!.finalHead, sourceSha256: request.admissionQualification!.sourceSha256 });
+          verifySource(); bindingChecked = true;
+        }
+        for (const declaration of declarations) {
+          const archive: Record<string, unknown> = { status: "BLOCKED", qualificationGranted: false, nativePassClaimed: false, gatePassClaimed: false,
+            child: { name: child.name, commandSha256: child.commandSha256, code: result.code, reason: result.reason ?? "completed",
+              identity: result.identity, nativeJobIdentity: identity ?? null, nativeJobReceipt: native ?? null },
+            declarationStream: { file: stderrFile, sha256: digest(stderr as string), line: declaration.index }, sourceBinding: nativeArchiveBinding };
+          archives.push(archive);
+          try {
+            stage = "declared_archive_path";
+            const value = record(JSON.parse(declaration.line));
+            assert.deepEqual(Object.keys(value).sort(), ["ownedNativeEvidenceDirectory", "retainedFiles"]);
+            assert.equal(typeof value.ownedNativeEvidenceDirectory, "string");
+            const originalRoot = value.ownedNativeEvidenceDirectory as string, temporary = join(sourceDirectory, ".tmp-qa");
+            assert.equal(dirname(originalRoot), temporary); checkedPath(temporary, sourceDirectory, true);
+            const name = originalRoot.slice(temporary.length + 1);
+            assert.match(name, /^owned-process-controls-[a-zA-Z0-9_-]+$/u);
+            assert.equal(declared.has(originalRoot), false, "Duplicate Native archive declaration."); declared.add(originalRoot);
+            assert.ok(Number.isSafeInteger(value.retainedFiles) && (value.retainedFiles as number) >= 0);
+            archive.originalRoot = originalRoot; checkedPath(originalRoot, temporary, true);
+            stage = "raw_archive_copy";
+            const before = tree(originalRoot), destination = ownedPath(context, "native-archives-preserved");
+            if (!existsSync(destination)) mkdirSync(destination);
+            checkedPath(destination, realpathSync(context.runDirectory), true);
+            const preservedRoot = join(destination, name); assert.equal(existsSync(preservedRoot), false, "Preserve any earlier Native archive copy.");
+            mkdirSync(preservedRoot); archive.preservedRoot = preservedRoot; archive.before = before;
+            for (const directory of before.directories) mkdirSync(join(preservedRoot, directory), { recursive: true });
+            for (const row of before.files) {
+              const original = join(originalRoot, row.file); checkedPath(original, originalRoot, false);
+              const bytes = readFileSync(original); assert.equal(digest(bytes), row.sha256); assert.equal(bytes.length, row.bytes);
+              writeFileSync(join(preservedRoot, row.file), bytes, { flag: "wx", mode: 0o600 });
+            }
+            const after = tree(originalRoot), copied = tree(preservedRoot); archive.after = after; archive.copied = copied;
+            assert.deepEqual(after, before, "Native archive changed while preserving its bytes.");
+            assert.deepEqual(copied, before, "Native archive copy lost raw bytes or directory membership.");
+            archive.rawBytesUnmodified = true; archive.completeTreeAndEmptyDirectories = true;
+            archive.fileMappings = before.files.map(row => ({ originalPath: join(originalRoot, row.file), preservedPath: join(preservedRoot, row.file), bytes: row.bytes, sha256: row.sha256 }));
+            archive.snapshotSha256 = digest(JSON.stringify(before));
+            stage = "archive_index_membership";
+            const indexFile = join(preservedRoot, "evidence-index.json"), index = record(JSON.parse(readFileSync(indexFile, "utf8")));
+            assert.equal(index.schema, 1); assert.equal(index.originalNativeEvidenceRetained, true); assert.ok(Array.isArray(index.files));
+            assert.ok(Array.isArray(index.finalCleanup) && index.finalCleanup.every(value => value === "fulfilled"));
+            const indexed = (index.files as unknown[]).map(value => {
+              const row = record(value); assert.deepEqual(Object.keys(row).sort(), ["bytes", "file", "sha256"]);
+              assert.equal(typeof row.file, "string"); assert.ok(!isAbsolute(row.file as string) && !/[\\:]/u.test(row.file as string));
+              assert.ok(!(row.file as string).split("/").some(part => !part || part === "." || part === ".."));
+              assert.match(String(row.sha256), /^[a-f0-9]{64}$/u); assert.ok(Number.isSafeInteger(row.bytes) && (row.bytes as number) >= 0);
+              return { file: row.file as string, sha256: row.sha256 as string, bytes: row.bytes as number };
+            }).sort((a, b) => a.file.localeCompare(b.file));
+            assert.equal(new Set(indexed.map(row => row.file)).size, indexed.length); assert.equal(indexed.length, value.retainedFiles);
+            assert.deepEqual(before.files.filter(row => row.file !== "evidence-index.json"), indexed, "Native archive index differs from exact raw file membership.");
+            archive.index = { originalPath: join(originalRoot, "evidence-index.json"), preservedPath: indexFile, sha256: digest(readFileSync(indexFile)) };
+            archive.status = "PASS_PRESERVATION_ONLY";
+          } catch (error) { archive.failureStage = stage; failure(error); }
+        }
+      } catch (error) { failure(error); }
+    }
+    if (!archives.length && !failures.length) return;
+    receipt(context, "public-native-evidence-preservation.json", { schema: 1, status: failures.length ? "BLOCKED" : "PASS_PRESERVATION_ONLY",
+      sourceBinding: nativeArchiveBinding ?? null, archives, failures, qualificationGranted: false, nativePassClaimed: false, gatePassClaimed: false, liveAdmissionGranted: false });
+    if (failures.length) throw firstFailure;
+  };
+  const stageInstalledDependencies = async () => {
+    const started = performance.now(), deadlineMs = 600_000;
+    const sourceRoot = join(ROOT, "node_modules"), targetRoot = join(sourceDirectory, "node_modules");
+    const entries: Array<{ file: string; kind: "directory" | "file"; mode: number; bytes?: number; sha256?: string }> = [];
+    const closeFailures: Array<{ name: string; code: string | null }> = [];
+    let filesCopied = 0, bytesCopied = 0;
+    const checkpoint = () => {
+      signal.throwIfAborted();
+      assert.ok(performance.now() - started < deadlineMs, "Owned dependency staging exceeded its preparation deadline.");
+    };
+    const step = async <T,>(operation: () => Promise<T>) => {
+      checkpoint(); await drainControlPulse(); checkpoint();
+      const value = await operation(); checkpoint(); return value;
+    };
+    const identity = (stat: Stats) => ({ dev: stat.dev, ino: stat.ino, mode: stat.mode,
+      size: stat.size, nlink: stat.nlink, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs });
+    const checkedStat = async (file: string, boundary: string, directory: boolean) => {
+      assert.ok(file === boundary || file.startsWith(boundary + sep), "Owned dependency path escaped its physical root.");
+      const stat = await step(() => asyncFs.lstat(file));
+      assert.equal(stat.isSymbolicLink(), false, "Owned dependencies cannot contain a symlink or junction.");
+      assert.equal(directory ? stat.isDirectory() : stat.isFile(), true, "Owned dependencies require ordinary directories and files.");
+      if (!directory) assert.equal(stat.nlink, 1, "Owned dependencies cannot contain a hard-linked file.");
+      assert.equal(await step(() => asyncFs.realpath(file)), file, "Owned dependencies cannot traverse an indirect physical path.");
+      return stat;
+    };
+    try {
+      assert.equal(await step(() => asyncFs.realpath(ROOT)), ROOT);
+      assert.equal(await step(() => asyncFs.realpath(sourceDirectory)), sourceDirectory);
+      assert.ok(sourceDirectory.startsWith(await step(() => asyncFs.realpath(context.runDirectory)) + sep));
+      const lockRow = manifest.find(row => row.file === "package-lock.json"); assert.ok(lockRow, "Owned dependencies require the frozen project lock.");
+      const before = localVerificationAdmissionRuntimeIdentity([]);
+      assert.equal(before.projectLockSha256, lockRow.sha256, "Installed dependencies do not match the frozen project lock.");
+      assert.equal(digest(await step(() => asyncFs.readFile(join(sourceDirectory, "package-lock.json")))), lockRow.sha256);
+      await checkedStat(sourceRoot, sourceRoot, true);
+      await step(() => asyncFs.mkdir(targetRoot));
+      const walk = async (relative: string): Promise<void> => {
+        const source = relative ? join(sourceRoot, relative) : sourceRoot, target = relative ? join(targetRoot, relative) : targetRoot;
+        const initial = await checkedStat(source, sourceRoot, true);
+        await checkedStat(target, targetRoot, true);
+        const names = (await step(() => asyncFs.readdir(source))).sort();
+        assert.ok(entries.length + names.length + 1 <= 200_000, "Owned dependency inventory exceeded its finite entry bound.");
+        entries.push({ file: relative.replaceAll("\\", "/"), kind: "directory", mode: initial.mode & 0o777 });
+        for (const name of names) {
+          assert.ok(entries.length + 1 <= 200_000, "Owned dependency inventory exceeded its finite entry bound.");
+          assert.ok(name !== "." && name !== ".." && !/[\\/]/u.test(name));
+          const file = relative ? join(relative, name) : name, inputPath = join(sourceRoot, file), outputPath = join(targetRoot, file);
+          const stat = await step(() => asyncFs.lstat(inputPath));
+          assert.equal(stat.isSymbolicLink(), false, "Owned dependencies cannot contain a symlink or junction.");
+          if (stat.isDirectory()) { await step(() => asyncFs.mkdir(outputPath)); await walk(file); continue; }
+          const original = await checkedStat(inputPath, sourceRoot, false);
+          assert.ok(original.size <= 512 * 1024 * 1024 && bytesCopied + original.size <= 4 * 1024 * 1024 * 1024,
+            "Owned dependency bytes exceeded their finite preparation bound.");
+          let input: Awaited<ReturnType<typeof asyncFs.open>> | undefined, output: Awaited<ReturnType<typeof asyncFs.open>> | undefined, failure: unknown, failed = false;
+          try {
+            await step(async () => { input = await asyncFs.open(inputPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)); });
+            assert.deepEqual(identity(await step(() => input!.stat())), identity(original), "Owned dependency source identity changed before reading.");
+            const bytes = await step(() => input!.readFile()), sha256 = digest(bytes);
+            assert.equal(bytes.length, original.size);
+            await step(async () => { output = await asyncFs.open(outputPath,
+              fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0), 0o600); });
+            await step(() => output!.writeFile(bytes));
+            await step(() => output!.chmod(original.mode & 0o777));
+            const copied = await checkedStat(outputPath, targetRoot, false);
+            assert.deepEqual(identity(await step(() => output!.stat())), identity(copied), "Owned dependency destination identity changed during copying.");
+            assert.equal(copied.mode & 0o777, original.mode & 0o777, "Owned dependency file mode changed during copying.");
+            assert.equal(copied.size, original.size);
+            assert.equal(digest(await step(() => asyncFs.readFile(outputPath))), sha256, "Owned dependency destination bytes changed during copying.");
+            assert.deepEqual(identity(await checkedStat(inputPath, sourceRoot, false)), identity(original), "Owned dependency source identity changed during copying.");
+            assert.equal(digest(await step(() => asyncFs.readFile(inputPath))), sha256, "Owned dependency source bytes changed during copying.");
+            assert.deepEqual(identity(await step(() => input!.stat())), identity(original), "Owned dependency source handle changed during copying.");
+            entries.push({ file: file.replaceAll("\\", "/"), kind: "file", mode: original.mode & 0o777, bytes: bytes.length, sha256 });
+            filesCopied++; bytesCopied += bytes.length;
+          } catch (error) { failed = true; failure = error; throw error; }
+          finally {
+            // Handle closure must settle even after cancellation; only then may the outer workspace cleanup begin.
+            const closed = await Promise.allSettled([...(output ? [output.close()] : []), ...(input ? [input.close()] : [])]);
+            const rejected = closed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+            for (const result of rejected) closeFailures.push({ name: result.reason instanceof Error ? result.reason.name : "Error",
+              code: result.reason && typeof result.reason === "object" && "code" in result.reason && typeof result.reason.code === "string"
+                && /^[A-Z0-9_]{1,64}$/u.test(result.reason.code) ? result.reason.code : null });
+            if (failed && rejected.length && failure instanceof Error && Object.isExtensible(failure)
+              && !Object.hasOwn(failure, "dependencyStagingCloseFailures")) {
+              try { Object.defineProperty(failure, "dependencyStagingCloseFailures", { value: rejected.map(result => result.reason) }); }
+              catch { /* preserve the original staging failure even when secondary annotation is unavailable */ }
+            }
+            if (!failed && rejected.length) throw rejected[0]!.reason;
+          }
+        }
+        assert.deepEqual((await step(() => asyncFs.readdir(source))).sort(), names, "Owned dependency membership changed during copying.");
+        assert.deepEqual(identity(await checkedStat(source, sourceRoot, true)), identity(initial), "Owned dependency directory changed during copying.");
+        await step(() => asyncFs.chmod(target, initial.mode & 0o777));
+      };
+      await walk("");
+      const membership = new Map<string, string[]>();
+      for (const entry of entries) {
+        if (entry.kind === "directory") membership.set(entry.file, []);
+        if (entry.file) {
+          const slash = entry.file.lastIndexOf("/"), parent = slash === -1 ? "" : entry.file.slice(0, slash);
+          membership.get(parent)!.push(entry.file.slice(slash + 1));
+        }
+      }
+      for (const boundary of [sourceRoot, targetRoot]) for (const entry of entries) {
+        const file = entry.file ? join(boundary, entry.file) : boundary;
+        const stat = await checkedStat(file, boundary, entry.kind === "directory");
+        assert.equal(stat.mode & 0o777, entry.mode, "Owned dependency mode changed after copying.");
+        if (entry.kind === "directory") assert.deepEqual((await step(() => asyncFs.readdir(file))).sort(), membership.get(entry.file)!.sort(),
+          "Owned dependency membership changed after copying.");
+        else {
+          assert.equal(stat.size, entry.bytes);
+          assert.equal(digest(await step(() => asyncFs.readFile(file))), entry.sha256, "Owned dependency bytes changed after copying.");
+        }
+      }
+      assert.deepEqual(localVerificationAdmissionRuntimeIdentity([]), before, "Installed dependency locks or runtime changed during copying.");
+      assert.equal(digest(await step(() => asyncFs.readFile(join(targetRoot, ".package-lock.json")))), before.installedLockSha256);
+      assert.equal(digest(await step(() => asyncFs.readFile(join(sourceDirectory, "package-lock.json")))), before.projectLockSha256);
+      await step(() => context.assertOwned());
+      receipt(context, "public-installed-dependencies.json", { status: "PASS", method: "physical-same-installed-tree", sourceRoot, targetRoot,
+        deadlineMs, durationMs: performance.now() - started, filesCopied, bytesCopied, manifestSha256: digest(JSON.stringify(entries)), manifest: entries,
+        installedIdentity: before, sourceAndDestinationBytesVerified: true, noLinksOrHardlinks: true, networkUsed: false, reinstallPerformed: false });
+      checkpoint();
+    } catch (error) {
+      try { receipt(context, "public-installed-dependencies-failure.json", { status: "BLOCKED", method: "physical-same-installed-tree", deadlineMs,
+        durationMs: performance.now() - started, filesCopied, bytesCopied, partialManifestSha256: digest(JSON.stringify(entries)), closeFailures,
+        failure: { name: error instanceof Error ? error.name : "Error", code: error && typeof error === "object" && "code" in error
+          && typeof error.code === "string" && /^[A-Z0-9_]{1,64}$/u.test(error.code) ? error.code : null } }); } catch { /* preserve the original staging failure */ }
+      throw error;
+    }
+  };
   try {
     for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(sourcePath(row.file)), { flag: "wx" }); }
     await context.assertOwned();
@@ -2172,7 +6118,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         sha256: digest(fixtureSource), isolatedOnly: true, deployed: false, templateId: 900003 });
     }
     writeFileSync(join(sourceDirectory, imageConfig.file), imageConfigSource, { flag: "wx", mode: 0o600 });
-    symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
+    if (process.platform === "win32") await stageInstalledDependencies();
+    else symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
     const headSha = await gitHead(context);
     const collectorSha256 = manifest.find(row => row.file === "scripts/lib/isolated-public-verification.mts")?.sha256;
     assert.match(collectorSha256 ?? "", /^[a-f0-9]{64}$/u, "Snapshot omits its own verification collector.");
@@ -2186,6 +6133,11 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       byteSource: frozenManifest ? "reviewed-frozen-directory" : "working-tree", additionalSourceFiles: request.additionalSourceFiles,
       fixtureContentSha256: readiness.fixtureContentSha256, collectorSha256,
       manifest, sourceSha256: digest(JSON.stringify(manifest)), privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), generatedLocalCredentialsOnly: true });
+    const archiveRuntime = request.admissionQualification!.runtime as ReturnType<typeof localVerificationAdmissionRuntimeIdentity>;
+    nativeArchiveBinding = Object.freeze({ headSha, sourceSha256: digest(JSON.stringify(manifest)),
+      sourceManifestSha256: digest(readFileSync(ownedPath(context, "public-source-manifest.json"))),
+      runtimeSha256: digest(JSON.stringify(archiveRuntime)), projectLockSha256: archiveRuntime.projectLockSha256,
+      installedLockSha256: archiveRuntime.installedLockSha256 });
     let qualityScripts: string[] = [];
     let qualityEnvironment = context.cleanEnvironment();
     let npmCli: string | undefined;
@@ -2219,11 +6171,39 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
       if (localPlan?.mode === "bounded") { await drainControlPulse(); verifySource(); assert.equal(localInputs!.finalHead, headSha); activeLocalVerifications.add(originalContext); }
     }
-    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 }));
+    const qualityPrefix = qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: localVerificationOperationalDeadlineMs(script === "verify:admin-runtime" ? 2_220_000 : localVerificationQualityPrefixDeadlineMs(), operationalBudget) }));
+    const liveAdmission = request.admissionQualification ? assertLocalVerificationAdmissionQualification(request.admissionQualification,
+      { baselineHead: request.admissionQualification.baselineHead, finalHead: headSha, sourceSha256: digest(JSON.stringify(manifest)) }) : undefined;
+    if (qualityPrefix.length) assert.deepEqual(qualityScripts.slice(0, 2), ["lint", "typecheck"], "Canonical quality must start with ESLint then TypeScript.");
+    const sourceFloor = await runLocalVerificationSourceFloor({ sourceDirectory, context, signal,
+      operationalBudget,
+      sources: new Map(manifest.map(row => [row.file, readFileSync(join(sourceDirectory, row.file))] as const)),
+      changedFiles: liveAdmission?.sourceDiscovery.changes.map(change => change.file) ?? localInputs?.changes.map(change => change.file) ?? [],
+      verifySource, drainControlPulse, governance: [],
+      governanceQualified: Boolean(liveAdmission),
+      ...(qualityPrefix.length ? { canonical: { npmCli: npmCli!, environment: qualityEnvironment,
+        childNames: [qualityPrefix[0]!.name, qualityPrefix[1]!.name] as const,
+        onStart: (name: string) => context.record("public-gate-start", { gate: name }) } } : {}) });
+    receipt(context, "ordered-public-prerequisites.json", { sourceSha256: digest(JSON.stringify(manifest)),
+      sourceFloorContextSha256: sourceFloor.contextSha256, governance: liveAdmission!.sourceFloor.checks
+        .filter(check => check.stage === "governance").map(check => ({ step: check.step, code: check.result.code })),
+      governanceContextSha256: liveAdmission!.sourceFloor.contextSha256, governanceExecutionContext: "original-live-admission-source",
+      governanceClaimedAsCopiedContextExecution: false, canonicalCopiedContextLeavesPreserved: true });
+    // These two canonical npm leaves already executed above in this exact copy,
+    // environment and lifecycle. Keep all named gates/receipts, never run them twice.
+    for (const [index, check] of sourceFloor.checks.slice(0, qualityPrefix.length ? 2 : 0).entries()) {
+      const gate = qualityPrefix[index]!, result = check.result;
+      const report = { script: gate.qualityScript, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
+      qualityReports.push(report); receipt(context, `${gate.name}.json`, report);
+      context.record("public-gate-pass", { gate: gate.name });
+    }
+    const pendingQualityPrefix = qualityPrefix.slice(qualityPrefix.length ? 2 : 0);
     const executionGates = heroCompatibility && request.finalQualityGate
-      ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...qualityPrefix, ...GATES]
-      : [...qualityPrefix, ...gates];
-    for (const gate of executionGates) {
+      ? [{ ...GATES[0], name: "hero-compatibility-build" }, heroGate, ...pendingQualityPrefix, ...GATES]
+      : [...pendingQualityPrefix, ...gates];
+    for (const originalGate of executionGates) {
+      const gate = "qualityScript" in originalGate ? originalGate : { ...originalGate,
+        limitMs: localVerificationOperationalDeadlineMs(originalGate.limitMs, operationalBudget) };
       await drainControlPulse(); verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
       let gateApp: ChildProcess | undefined;
@@ -2244,24 +6224,54 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         const coreFault = gate.name === "admin-adoption" && request.adoptionScope === "core-closure";
         const coreControl = coreFault ? ownedPath(context, "admin-core-cache-control.json") : null;
         if (coreControl) writeFileSync(coreControl, JSON.stringify({ schemaVersion: 1, mode: "off" }), { flag: "wx", mode: 0o600 });
-        const app = spawn(process.execPath, [...(coreFault ? ["--require", join(sourceDirectory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []), ...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
-          { cwd: sourceDirectory, env: measurement ? {...childEnvironment,
+        const appArgs = [...(coreFault ? ["--require", join(sourceDirectory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []), ...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)];
+        const appEnvironment = measurement ? {...childEnvironment,
             QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl"),
-            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : coreControl ? { ...childEnvironment, QA_ADMIN_CORE_CACHE_CONTROL: coreControl } : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : coreControl ? { ...childEnvironment, QA_ADMIN_CORE_CACHE_CONTROL: coreControl } : childEnvironment;
+        const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args: appArgs, cwd: sourceDirectory, env: appEnvironment,
+          identityPath: ownedPath(context, `public-${gate.name}-server.native-identity.json`), receiptPath: ownedPath(context, `public-${gate.name}-server.native-result.json`),
+          limitMs: 120_000 + gate.limitMs + 20_000 }) : undefined;
+        const app = process.platform === "win32" ? windows!.child : spawn(process.execPath, appArgs,
+          { cwd: sourceDirectory, env: appEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
         gateApp = app;
         children.add(app); let appOutput = "";
+        let nativeApplication: NativeApplication | undefined;
+        let appClosed: (() => void) | undefined;
+        if (windows) {
+          const closed = new Promise<void>(done => { appClosed = done; });
+          nativeApplication = { child: app, name: gate.name, windows, stopping: false, closed };
+          nativeApplications.set(app, nativeApplication);
+        }
+        const finishAppLog = () => {
+          if (!appClosed && nativeApplication) return;
+          try { writeFileSync(ownedPath(context, adoption ? `public-${gate.name}-server.log` : "public-server.log"), context.sanitize(appOutput), { mode: 0o600 }); }
+          catch (error) { if (!nativeApplication) throw error; nativeApplication.logFailure ??= error; }
+          finally { appClosed?.(); appClosed = undefined; }
+        };
         const captureAppOutput = (value: Buffer) => {
           if (appFailed) return;
           appOutput += String(value);
-          if (appOutput.length > 8_000_000) { appFailed = true; void stopChild(app, context.cleanEnvironment()).catch(() => undefined); }
+          if (appOutput.length > 8_000_000) {
+            appFailed = true;
+            if (nativeApplication) nativeApplication.failure ??= new Error("Owned application output exceeded its bound.");
+            void (nativeApplication ? stopNativeApplication(nativeApplication) : stopChild(app, context.cleanEnvironment())).catch(() => undefined);
+          }
         };
         app.stdout!.on("data", captureAppOutput); app.stderr!.on("data", captureAppOutput);
-        app.once("error", () => { appFailed = true; });
-        app.once("close", () => { children.delete(app); writeFileSync(ownedPath(context, adoption ? `public-${gate.name}-server.log` : "public-server.log"), context.sanitize(appOutput), { mode: 0o600 }); });
+        app.once("error", error => { appFailed = true; if (nativeApplication) { nativeApplication.failure ??= error; if (!app.pid) finishAppLog(); } });
+        app.once("close", () => {
+          children.delete(app);
+          if (nativeApplication && !nativeApplication.stopping) {
+            appFailed = true;
+            nativeApplication.failure ??= new Error("Owned application exited before its intentional shutdown.");
+          }
+          finishAppLog();
+        });
         const origin = `http://127.0.0.1:${appPort}`; let ready = false;
         const deadline = Date.now() + 120_000;
         while (!ready && Date.now() < deadline) {
-          signal.throwIfAborted(); assert.equal(appFailed, false, "Owned application process failed.");
+          signal.throwIfAborted(); if (nativeApplication?.failure !== undefined) throw nativeApplication.failure;
+          assert.equal(appFailed, false, "Owned application process failed.");
           assert.equal(app.exitCode, null, "Owned application exited before readiness.");
           try { const result = await fetch(`${origin}/admin/login`, { redirect: "error", signal: AbortSignal.timeout(3_000) }); ready = result.status === 200; await result.body?.cancel(); } catch { /* bounded startup polling only */ }
           if (!ready) await new Promise(done => setTimeout(done, 500));
@@ -2280,9 +6290,15 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
           QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)) };
       }
       context.record("public-gate-start", { gate: gate.name });
-      const args = "qualityScript" in gate ? [npmCli!, "run", gate.qualityScript] : "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
+      const args: string[] = "qualityScript" in gate ? [npmCli!, "run", gate.qualityScript] : "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
-      const result = await runChild(args, env, gate.name, gate.limitMs);
+      const result: Awaited<ReturnType<typeof runChild>> = await runChild(args, env, gate.name, gate.limitMs).catch(error => {
+        const first = gateApp ? nativeApplications.get(gateApp)?.failure : undefined;
+        if (first === undefined) throw error;
+        if (first instanceof Error && Object.isExtensible(first) && !Object.hasOwn(first, "applicationDriverFailure"))
+          Object.defineProperty(first, "applicationDriverFailure", { value: error });
+        throw first;
+      });
       if ("qualityScript" in gate) {
         const report = { script: gate.qualityScript, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
         qualityReports.push(report); receipt(context, `${gate.name}.json`, report);
@@ -2297,14 +6313,16 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         });
         assert.fail("Admin measurement driver failed; the owned fixture must be recreated before any further job. No repair child was launched.");
       }
+      if (gateApp && nativeApplications.get(gateApp)?.failure !== undefined) throw nativeApplications.get(gateApp)!.failure;
       assert.equal(appFailed, false, "Owned application process failed during Public verification.");
       const report = { name: gate.name, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
       reports.push(report); receipt(context, `public-${gate.name}.json`, report);
       assert.equal(result.code, 0, `Required Public gate failed: ${gate.name}`);
       if (gate.name === "public-e2e") assert.equal(/(?:^|\n)\s*[1-9][0-9]*\s+(?:skipped|flaky)\b/iu.test(result.stdout), false, "Public E2E skipped/flaky coverage cannot pass.");
       if (gate.name === "normal-build" || gate.name === "hero-compatibility-build") buildIdSha256 = digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID")));
+      if (gateApp && nativeApplications.has(gateApp)) await stopNativeApplication(nativeApplications.get(gateApp)!);
       context.record("public-gate-pass", { gate: gate.name });
-      if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
+      if (gateApp && !nativeApplications.has(gateApp)) await stopChild(gateApp, context.cleanEnvironment());
       if (heroCompatibility && request.finalQualityGate && gate.name === "hero-compatibility") {
         // The targeted preview must not become part of canonical final-HEAD coverage.
         const fixtureDirectory = join(sourceDirectory, "src/app/qa-isolated-hero-compatibility");
@@ -2339,13 +6357,17 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     if (!frozenManifest) assert.deepEqual(await gitSourceInventory(context, request), files, "Git source membership changed during the source snapshot gates.");
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
     else completed.add(originalContext);
-  } finally {
+  } catch (error) { publicFailed = true; publicFailure = error; throw error; }
+  finally {
+    try {
     activeLocalVerifications.delete(originalContext);
-    const [workerCleanup, childCleanup] = await Promise.all([
+    const [workerCleanup, childCleanup, applicationCleanup] = await Promise.all([
       Promise.allSettled(retainedAdmission ? [retainedAdmission.close()] : []),
-      Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment()))),
+      Promise.allSettled([...children].filter(child => !nativeApplications.has(child)).map(child => stopChild(child, context.cleanEnvironment()))),
+      Promise.allSettled([...nativeApplications.values()].map(stopNativeApplication)),
     ]);
     assert.ok(childCleanup.every(result => result.status === "fulfilled"), "An owned Public process could not be stopped.");
+    for (const settled of applicationCleanup) if (settled.status === "rejected") throw settled.reason;
     if (appPort !== null) {
       const releasedPort = appPort;
       await new Promise<void>((done, reject) => { const probe = net.createServer(); probe.once("error", reject);
@@ -2353,11 +6375,20 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     }
     assert.equal(realpathSync(sourceDirectory), sourceDirectory);
     assert.ok(sourceDirectory.startsWith(realpathSync(context.runDirectory) + sep));
+    let preservationFailed = false, preservationFailure: unknown;
+    try { await preserveClosedNativeArchives(); } catch (error) { preservationFailed = true; preservationFailure = error; }
     rmSync(sourceDirectory, { recursive: true, force: false });
     receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false,
       ...(retainedAdmission ? { retainedEvidenceWorkerStopped: retainedAdmission.workerStopped } : {}) });
     if (retainedAdmission) assert.equal(retainedAdmission.workerStopped, true, "Retained evidence worker must stop before cleanup completes.");
     for (const settled of workerCleanup) if (settled.status === "rejected") throw settled.reason;
+    if (preservationFailed) throw preservationFailure;
+    } catch (cleanupFailure) {
+      if (!publicFailed) throw cleanupFailure;
+      if (publicFailure instanceof Error && Object.isExtensible(publicFailure) && !Object.hasOwn(publicFailure, "publicCleanupFailure"))
+        Object.defineProperty(publicFailure, "publicCleanupFailure", { value: cleanupFailure });
+      try { context.record("public-cleanup-failure", { originalFailurePreserved: true, cleanupFailed: true }); } catch { /* preserve the original failure */ }
+    }
   }
   const result = { status: "pass", gates: reports, buildIdSha256, isolatedImageConfigurationSha256: imageConfig.sha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
   if (localPlan?.mode === "bounded") {

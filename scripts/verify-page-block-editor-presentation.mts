@@ -9,6 +9,7 @@ import { createJiti } from "jiti";
 import ts from "typescript";
 import { Children, Fragment, createElement, isValidElement, useCallback, useState, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { verifyAdminFormSectionContract, type AdminFormSectionObservation } from "./fixtures/admin-form-section-contract.mts";
 import { getModuleEditorHeaderMetadata, getModuleEditorSectionMetadata, resolveModuleEditorCompositionApplicability, SLOT_MODULE_SLUG_METADATA, MODULE_KIND_METADATA, MODULE_EDITOR_TAB_LABELS } from "../src/lib/page-composition/module-registry-metadata.ts";
 import { collectExecutableSourceGraph, graphUsesExecutableBinding } from "./lib/typescript-executable-graph.mts";
 
@@ -72,6 +73,7 @@ if (process.argv.includes("--section-header-defaults")) {
 if (process.argv.includes("--panel-composition")) {
   await verifyBlockPanelComposition();
   console.log(`Block Panel composition passed (${passed} affected source/SSR checks; Live and Owner review remain separate).`);
+  await new Promise<void>((done, reject) => process.stdout.write("", error => error ? reject(error) : done()));
   process.exit(0);
 }
 if (process.argv.includes("--featured-switch-composition")) {
@@ -577,36 +579,16 @@ async function verifyBlockPanelComposition() {
   };
   const rejects = (probe: () => unknown) => { try { probe(); return false; } catch { return true; } };
   const native = createElement("input", { name: "preserved", defaultValue: "original", required: true, disabled: true, onChange: () => undefined });
-  const explicitHeader = createElement("header", { "data-original-header": "" }, "Original header");
   const formSource = read("src/components/admin/ui/AdminForm.tsx");
-  const verifyForm = (source: string) => {
-    const Section = compile(source, ["AdminFormSection"], { React: { createElement, Fragment }, AdminCard: card.default, AdminModuleSectionHeader: headers.AdminModuleSectionHeader, adminFormHintClassName: styles.adminFormHintClassName }).AdminFormSection as typeof form.AdminFormSection;
-    for (const header of [undefined, explicitHeader]) {
-      const props = { id: "original-id", title: "Original title", description: "Original description", actions: createElement("button", { type: "button" }, "Original action"), header, className: "original-composition", children: native };
-      const panel = renderToStaticMarkup(createElement(Section, props));
-      assert.ok(panel.includes(styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME));
-      for (const presentation of [undefined, "default", "panel"] as const) assert.equal(renderToStaticMarkup(createElement(Section, { ...props, presentation, surface: "panel" })), panel);
-      const neutral = Section({ ...props, surface: "neutral" });
-      assert.ok(isValidElement<{ id: string; className: string; children: ReactNode[] }>(neutral));
-      assert.equal(neutral.type, "section"); assert.equal(neutral.props.id, props.id);
-      assert.equal(neutral.props.className, "min-w-0 original-composition");
-      assert.equal(neutral.props.children[1], native, "Neutral composition preserves exact callback-bearing native content");
-      const html = renderToStaticMarkup(neutral);
-      assert.ok(html.includes('data-admin-form-section-surface="neutral"') && html.includes('name="preserved"') && html.includes('value="original"') && html.includes('required=""') && html.includes('disabled=""'));
-      if (header) assert.equal(neutral.props.children[0], header);
-      else {
-        for (const text of ["Original title", "Original description", "Original action"]) assert.ok(html.includes(text));
-        assert.ok(!html.includes("-mx-3"), "Neutral implicit header uses the canonical standalone geometry");
-      }
-    }
-  };
-  verifyForm(formSource);
-  for (const [from, to] of [
-    ['surface = "panel"', 'surface = "neutral"'],
-    ['data-admin-form-section-surface="neutral"', 'data-lost-neutral=""'],
-    ['className={`min-w-0 ${className}`.trim()}', 'className={`min-w-0 p-3 border bg-black ${className}`.trim()}'],
-    ["{sectionHeader}", "{null}"], ["{children}", "{null}"],
-  ]) { const mutant = formSource.replaceAll(from, to); assert.notEqual(mutant, formSource); assert.ok(rejects(() => verifyForm(mutant)), "Neutral section negatives reject default changes, repeated visual chrome and lost headers/native content"); }
+  const observationEnabled = process.env.VENESIA_QA_ASSERTION_RELOCATION_RECEIPT === "1", nonce = process.env.VENESIA_QA_ASSERTION_RELOCATION_NONCE;
+  if (observationEnabled && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(nonce ?? "")) throw new Error("Current owner nonce is required for Section assertion observations");
+  const observations: AdminFormSectionObservation[] = [];
+  const loadSection = (source: string) => compile(source, ["AdminFormSection"], { React: { createElement, Fragment }, AdminCard: card.default, AdminModuleSectionHeader: headers.AdminModuleSectionHeader, adminFormHintClassName: styles.adminFormHintClassName }).AdminFormSection as typeof form.AdminFormSection;
+  verifyAdminFormSectionContract(formSource, {
+    loadSection,
+    premiumSurfaceClassName: styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME,
+    observe: observationEnabled ? event => { observations.push(event); } : undefined,
+  });
   check("Section surface port preserves omitted/default/legacy Panel identity and neutral semantics, original header/native children; structural negatives reject regressions", true);
 
   const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
@@ -689,6 +671,21 @@ async function verifyBlockPanelComposition() {
     !hasAlignedFieldAndSwitchSlots(gridSource.replace("[data-admin-form-switch-surface=embedded]:not([data-admin-form-switch-layout=inline])]:contents", "[data-lost-embedded]]:contents")) &&
     !hasAlignedFieldAndSwitchSlots(gridSource.replace("[data-admin-form-switch-surface]]:row-start-2", "[data-lost-switch]]:row-start-2")) &&
     !hasAlignedFieldAndSwitchSlots(gridSource.replace(":not([data-admin-form-switch-layout=inline])]:contents", "]:contents")));
+  if (observationEnabled) {
+    const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+    const consumer = "scripts/verify-page-block-editor-presentation.mts", subjectFile = "src/components/admin/ui/AdminForm.tsx", calleeFile = "scripts/fixtures/admin-form-section-contract.mts";
+    const runtimeFunction = (value: (...args: never[]) => unknown) => ({ runtimeSource: value.toString(), runtimeSha256: sha256(value.toString()) });
+    console.log(JSON.stringify({ kind: "assertion-relocation-observations", schema: 1, nonce, consumer, scope: "verifyBlockPanelComposition", subjectFile, calleeFile,
+      events: observations.filter(event => event.kind === "assertion"), loaders: observations.filter(event => event.kind === "loader"),
+      vectors: observations.filter(event => event.kind === "vector"), mutants: observations.filter(event => event.kind === "mutant"),
+      sourceBindings: { consumerRawSha256: sha256(readFileSync(resolve(ROOT, consumer))), calleeRawSha256: sha256(readFileSync(resolve(ROOT, calleeFile))),
+        subjectRawSha256: sha256(readFileSync(resolve(ROOT, subjectFile))), subjectReadSha256: sha256(formSource), subjectReadMode: "normalizeVerificationText",
+        canonicalSourcePath: resolve(ROOT, subjectFile), callee: { export: "verifyAdminFormSectionContract", ...runtimeFunction(verifyAdminFormSectionContract) },
+        loaderCallback: runtimeFunction(loadSection), compiler: { binding: "compile", ...runtimeFunction(compile) },
+        dependencyBindings: { AdminCard: runtimeFunction(card.default), AdminModuleSectionHeader: runtimeFunction(headers.AdminModuleSectionHeader),
+          adminFormHintClassName: runtimeFunction(styles.adminFormHintClassName), premiumSurfaceClassName: styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME,
+          createElement: runtimeFunction(createElement), transpileModule: runtimeFunction(ts.transpileModule) } } }));
+  }
 }
 
 function hasBlockEditorPresentation(source: string) {

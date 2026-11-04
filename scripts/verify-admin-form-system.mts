@@ -8,6 +8,7 @@ import { createJiti } from "jiti";
 import * as ts from "typescript";
 import { Children, Fragment, createElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { verifyAdminFormSectionContract, type AdminFormSectionObservation } from "./fixtures/admin-form-section-contract.mts";
 
 import {
   ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT,
@@ -129,6 +130,7 @@ if (process.argv.includes("--field-row-composition")) {
   await verifyProjectFieldRowComposition();
   check("shared Section metadata and native fields survive panel and neutral composition", await verifyUnifiedFormFields());
   console.log(`Project field-row composition verification passed (${passed} affected checks; source/SSR only).`);
+  await new Promise<void>((done, reject) => process.stdout.write("", error => error ? reject(error) : done()));
   process.exit(0);
 }
 
@@ -344,25 +346,18 @@ async function verifyUnifiedFormLayout() {
 
 async function verifyUnifiedFormFields() {
   const dependencies = await unifiedPresentationDependencies(), source = read("src/components/admin/ui/AdminForm.tsx");
+  const observationEnabled = process.env.VENESIA_QA_ASSERTION_RELOCATION_RECEIPT === "1", nonce = process.env.VENESIA_QA_ASSERTION_RELOCATION_NONCE;
+  if (observationEnabled && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(nonce ?? "")) throw new Error("Current owner nonce is required for Section assertion observations");
+  const observations: AdminFormSectionObservation[] = [];
+  const loadSection = (candidate: string) => loadUnifiedFormOwners(candidate, dependencies).AdminFormSection;
+  verifyAdminFormSectionContract(source, {
+    loadSection,
+    premiumSurfaceClassName: dependencies.styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME,
+    observe: observationEnabled ? event => { observations.push(event); } : undefined,
+  });
   const verify = (candidate: string) => {
-    const { AdminFormSection: Section, AdminFormField: Field } = loadUnifiedFormOwners(candidate, dependencies);
+    const { AdminFormField: Field } = loadUnifiedFormOwners(candidate, dependencies);
     const child = createElement("input", { name: "native", defaultValue: "same", required: true, disabled: true });
-    const header = createElement("div", { "data-explicit-header": "" }, "Explicit header");
-    for (const explicit of [undefined, header]) {
-      const props = { id: "original-section", title: "Original title", eyebrow: "Original eyebrow", description: "Original description", actions: createElement("button", { type: "button" }, "Original action"), header: explicit, children: child };
-      const markup = renderToStaticMarkup(Section(props));
-      assert.ok(markup.includes(dependencies.styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME));
-      assert.equal((markup.match(/name="native"/gu) ?? []).length, 1);
-      if (explicit) { assert.ok(markup.includes("Explicit header")); assert.equal(markup.includes("Original title"), false); }
-      else for (const text of ["Original title", "Original eyebrow", "Original description", "Original action"]) assert.ok(markup.includes(text), text);
-      for (const presentation of ["default", "panel"] as const) assert.equal(renderToStaticMarkup(Section({ ...props, presentation })), markup);
-      const neutral = renderToStaticMarkup(Section({ ...props, surface: "neutral" }));
-      assert.ok(neutral.includes('data-admin-form-section-surface="neutral"'));
-      assert.equal(neutral.includes(dependencies.styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME), false);
-      assert.equal((neutral.match(/name="native"/gu) ?? []).length, 1);
-      if (explicit) assert.ok(neutral.includes("Explicit header"));
-      else for (const text of ["Original title", "Original eyebrow", "Original description", "Original action"]) assert.ok(neutral.includes(text));
-    }
     for (const required of [false, true]) for (const hint of [undefined, "Original hint"]) for (const error of [undefined, "Original error"]) for (const labelClassName of [undefined, "original-label-port"]) {
       const props = { label: "Original label", required, hint, error, children: child, labelClassName };
       const normal = Field(props), markup = renderToStaticMarkup(normal);
@@ -378,8 +373,23 @@ async function verifyUnifiedFormFields() {
     }
   };
   verify(source);
-  for (const [from, to] of [["{sectionHeader}", "{null}"], ['data-admin-form-field-control="" className="min-w-0">{children}', 'data-admin-form-field-control="" className="min-w-0">{null}'], ['data-admin-form-field-control=""', 'data-lost-control=""'], ['className="text-red-400"', 'className="text-white"'], ['role="alert"', 'role="status"'], ['from "./AdminCard"', 'from "./ParallelCard"'], ["labelClassName ??", "undefined ??"]]) {
+  for (const [from, to] of [['data-admin-form-field-control="" className="min-w-0">{children}', 'data-admin-form-field-control="" className="min-w-0">{null}'], ['data-admin-form-field-control=""', 'data-lost-control=""'], ['className="text-red-400"', 'className="text-white"'], ['role="alert"', 'role="status"'], ['from "./AdminCard"', 'from "./ParallelCard"'], ["labelClassName ??", "undefined ??"]]) {
     const mutant = source.replaceAll(from, to); assert.notEqual(mutant, source); assert.throws(() => verify(mutant));
+  }
+  if (observationEnabled) {
+    const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+    const consumer = "scripts/verify-admin-form-system.mts", subjectFile = "src/components/admin/ui/AdminForm.tsx", calleeFile = "scripts/fixtures/admin-form-section-contract.mts";
+    const runtimeFunction = (value: (...args: never[]) => unknown) => ({ runtimeSource: value.toString(), runtimeSha256: sha256(value.toString()) });
+    console.log(JSON.stringify({ kind: "assertion-relocation-observations", schema: 1, nonce, consumer, scope: "verifyUnifiedFormFields", subjectFile, calleeFile,
+      events: observations.filter(event => event.kind === "assertion"), loaders: observations.filter(event => event.kind === "loader"),
+      vectors: observations.filter(event => event.kind === "vector"), mutants: observations.filter(event => event.kind === "mutant"),
+      sourceBindings: { consumerRawSha256: sha256(readFileSync(absolutePath(consumer))), calleeRawSha256: sha256(readFileSync(absolutePath(calleeFile))),
+        subjectRawSha256: sha256(readFileSync(absolutePath(subjectFile))), subjectReadSha256: sha256(source), subjectReadMode: "raw-utf8",
+        canonicalSourcePath: absolutePath(subjectFile), callee: { export: "verifyAdminFormSectionContract", ...runtimeFunction(verifyAdminFormSectionContract) },
+        loaderCallback: runtimeFunction(loadSection), compiler: { binding: "loadUnifiedFormOwners", ...runtimeFunction(loadUnifiedFormOwners) },
+        dependencyBindings: { AdminCard: runtimeFunction(dependencies.card.default), AdminModuleSectionHeader: runtimeFunction(dependencies.headers.AdminModuleSectionHeader),
+          adminFormLabelClassName: runtimeFunction(dependencies.styles.adminFormLabelClassName), adminFormHintClassName: runtimeFunction(dependencies.styles.adminFormHintClassName),
+          premiumSurfaceClassName: dependencies.styles.ADMIN_CARD_PREMIUM_SURFACE_CLASS_NAME, createElement: runtimeFunction(createElement), transpileModule: runtimeFunction(ts.transpileModule), formStackClassName: "space-y-5" } } }));
   }
   return true;
 }

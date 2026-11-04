@@ -110,6 +110,57 @@ function validateTempPath(tempPath: string) {
   return resolvedTempPath;
 }
 
+type GuardedNavigationCleanupResult = {
+  resource: "browser" | "server" | "temp";
+  status: "PASS" | "FAIL";
+  error?: unknown;
+};
+
+async function settleGuardedNavigationCleanup(resources: readonly {
+  resource: GuardedNavigationCleanupResult["resource"];
+  close: () => Promise<void>;
+}[]): Promise<GuardedNavigationCleanupResult[]> {
+  const results: GuardedNavigationCleanupResult[] = [];
+  for (const resource of resources) {
+    try {
+      await resource.close();
+      results.push({ resource: resource.resource, status: "PASS" });
+    } catch (error) {
+      results.push({ resource: resource.resource, status: "FAIL", error });
+    }
+  }
+  return results;
+}
+
+type SaveCacheDeniedRequest = {
+  method: string;
+  origin: string | null;
+  resourceType: string;
+};
+
+async function installSaveCacheNetworkFence(
+  page: Page,
+  harnessUrl: string,
+  denied: SaveCacheDeniedRequest[],
+) {
+  const ownedOrigin = new URL(harnessUrl).origin;
+  // Registered after the controlled API route: allowed requests fall through
+  // to that existing stub, while a matching foreign URL cannot bypass the fence.
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    let target: URL | null = null;
+    try { target = new URL(request.url()); } catch { /* Malformed requests fail closed. */ }
+    // Blob URLs inherit their creator's origin; foreign or opaque blob origins
+    // receive the same rejection as other foreign requests.
+    if (target && (target.origin === ownedOrigin || target.protocol === "data:")) {
+      await route.fallback();
+      return;
+    }
+    denied.push({ method: request.method(), origin: target?.origin ?? null, resourceType: request.resourceType() });
+    await route.abort("blockedbyclient");
+  });
+}
+
 const entrySource = String.raw`
 import * as React from "react";
 import { createRoot } from "react-dom/client";
@@ -162,6 +213,39 @@ qa.router = {
 };
 
 window.__ADMIN_FORM_GUARDED_NAV_QA__ = qa;
+
+// Only the explicitly bounded save-cache fixture enables this passive ring.
+// It records lengths/booleans/enums, never field contents, URLs or state objects.
+function createSaveCacheDiagnosticTimeline(now = () => performance.now(), mode = "deep") {
+  if (mode !== "light" && mode !== "deep") throw new Error("UNQUALIFIED_DIAGNOSTIC_MODE");
+  const started = now(), slots = [];
+  let sequence = 0, dropped = 0, cursor = 0;
+  const kinds = new Set(["input", "dom_value_observed", "state_update_requested", "state_render_observed",
+    "controlled_action", "controlled_source_write", "query_invalidation", "controlled_api_read", "controlled_readback", "contract_divergence", "assertion_failure"]);
+  return {
+    mode,
+    record(kind, facts = {}) {
+      if (!kinds.has(kind)) return;
+      const row = { sequence: ++sequence, elapsedMs: Math.max(0, now() - started), kind };
+      if (mode === "deep") {
+        for (const key of ["valueLength", "actionCalls", "reads", "assertionOrdinal"]) {
+          if (Number.isSafeInteger(facts[key]) && facts[key] >= 0) row[key] = Math.min(facts[key], 1000000);
+        }
+        for (const key of ["trusted", "pending", "dirty"]) if (typeof facts[key] === "boolean") row[key] = facts[key];
+        if (["idle", "success", "warning", "error", "throw", "no-confirmation"].includes(facts.status)) row.status = facts.status;
+      } else if (kind === "assertion_failure" && Number.isSafeInteger(facts.assertionOrdinal) && facts.assertionOrdinal >= 0) {
+        row.assertionOrdinal = Math.min(facts.assertionOrdinal, 1000000);
+      }
+      slots[cursor] = row;
+      cursor = (cursor + 1) % 128;
+      if (sequence > 128) dropped += 1;
+    },
+    snapshot() {
+      const events = sequence > 128 ? slots.slice(cursor).concat(slots.slice(0, cursor)) : slots;
+      return { events: events.map(row => ({ ...row })), totalObserved: sequence, dropped, limit: 128, mode };
+    },
+  };
+}
 
 function RuntimeProbe() {
   const runtime = useAdminFormRuntime();
@@ -612,6 +696,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
     const invalidate = queryClient.invalidateQueries.bind(queryClient);
     queryClient.invalidateQueries = async (filters, options) => {
       qa.saveCache.invalidations.push(filters);
+      qa.saveCacheDiagnostic?.record("query_invalidation");
       if (cacheFailure) throw new Error("ISOLATED_CLIENT_INVALIDATION_FAILURE");
       return invalidate(filters, options);
     };
@@ -620,6 +705,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
   const action = async (previous, formData) => {
     qa.actionCalls += 1;
     const requestedOutcome = qa.saveCache.nextOutcome ?? outcome;
+    qa.saveCacheDiagnostic?.record("controlled_action", { status: requestedOutcome, actionCalls: qa.actionCalls });
     if (requestedOutcome === "throw") throw new Error("ISOLATED_UNCONFIRMED_WRITE");
     if (requestedOutcome === "no-confirmation") return { ...previous, status: "idle" };
     if (requestedOutcome === "error") return {
@@ -627,6 +713,7 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
       title: "Write failed", message: "The source did not confirm the write.",
     };
     qa.saveCache.sourceTitle = String(formData.get("title"));
+    qa.saveCacheDiagnostic?.record("controlled_source_write", { valueLength: qa.saveCache.sourceTitle.length });
     return {
       status: requestedOutcome === "warning" ? "warning" : "success",
       mode, revision: previous.revision + 1, entityId: 42, savedRevision: "saved-42",
@@ -642,9 +729,14 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
     onClose: () => setView("list"),
   }, ({ state, pending, requestClose, isDirty }) => {
     qa.saveCache.formState = state;
+    // Render observation is explicitly not React commit proof.
+    qa.saveCacheDiagnostic?.record("state_render_observed", { status: state.status, pending, dirty: isDirty });
     return React.createElement(React.Fragment, null,
       React.createElement("input", { id: "qa-save-cache-title", name: "title",
-        ...(controlled ? { value: controlledTitle, onChange: (event) => setControlledTitle(event.target.value) }
+        ...(controlled ? { value: controlledTitle, onChange: (event) => {
+          qa.saveCacheDiagnostic?.record("state_update_requested", { valueLength: event.target.value.length });
+          setControlledTitle(event.target.value);
+        } }
           : { defaultValue: "Before save" }) }),
       React.createElement("button", { id: "qa-save-cache-submit", type: "submit", disabled: pending }, "Save"),
       React.createElement("button", { id: "qa-save-cache-return", type: "button", onClick: requestClose }, "Return"),
@@ -654,13 +746,31 @@ function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit
   });
 }
 qa.mountSaveCache = (options = {}) => {
+  qa.saveCacheDiagnosticDispose?.();
+  qa.saveCacheDiagnostic = options.diagnostics === true ? createSaveCacheDiagnosticTimeline(undefined, options.diagnosticMode === "deep" ? "deep" : "light") : null;
+  if (qa.saveCacheDiagnostic) {
+    const observe = (event) => {
+      const field = event.target;
+      if (!(field instanceof HTMLInputElement) || field.id !== "qa-save-cache-title" || field.form?.id !== "qa-save-cache-form") return;
+      qa.saveCacheDiagnostic.record("input", { trusted: event.isTrusted, valueLength: field.value.length });
+      qa.saveCacheDiagnostic.record("dom_value_observed", { valueLength: field.value.length });
+    };
+    document.addEventListener("input", observe);
+    document.addEventListener("change", observe);
+    qa.saveCacheDiagnosticDispose = () => {
+      document.removeEventListener("input", observe);
+      document.removeEventListener("change", observe);
+    };
+  } else qa.saveCacheDiagnosticDispose = null;
   qa.actionCalls = 0;
   qa.routerEvents.length = 0;
   qa.saveCache = { sourceTitle: "Before save", reads: 0, invalidations: [], client: null, formState: null };
   root.render(React.createElement(AdminEntityListQueryProvider, null,
     React.createElement(AdminFeedbackProvider, null, React.createElement(SaveCacheFlow, options))));
 };
-qa.saveCacheSnapshot = () => ({
+qa.saveCacheSnapshot = () => {
+  qa.saveCacheDiagnostic?.record("controlled_readback", { reads: qa.saveCache.reads, actionCalls: qa.actionCalls });
+  return ({
   sourceTitle: qa.saveCache.sourceTitle,
   reads: qa.saveCache.reads,
   actionCalls: qa.actionCalls,
@@ -671,7 +781,8 @@ qa.saveCacheSnapshot = () => ({
     const state = qa.saveCache.client.getQueryState(adminEntityListQueryKeys.query(entity, saveCacheQuery));
     return [entity, { invalidated: state?.isInvalidated ?? false, title: state?.data?.rows[0]?.title }];
   })),
-});
+  });
+};
 qa.mount = (options) => {
   qa.routerEvents.length = 0;
   qa.actionCalls = 0;
@@ -1377,13 +1488,49 @@ async function runReportFreshnessCases(browser: Browser, harnessUrl: string, roo
   }
 }
 
+// Serialized by the existing page.evaluate port only after a proven mismatch or
+// failure. A render observation is not a commit or a causal-owner diagnosis.
+function snapshotSaveCacheDiagnostic({ assertionFailure, assertionOrdinal, contractDivergence, dirty }: {
+  assertionFailure: boolean; assertionOrdinal: number; contractDivergence?: boolean; dirty?: boolean;
+}) {
+  const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__?: {
+    saveCacheDiagnostic?: { record(kind: string, facts: { assertionOrdinal?: number; dirty?: boolean }): void; snapshot(): unknown };
+  } }).__ADMIN_FORM_GUARDED_NAV_QA__?.saveCacheDiagnostic;
+  if (contractDivergence) diagnostic?.record("contract_divergence", { dirty });
+  if (assertionFailure) diagnostic?.record("assertion_failure", { assertionOrdinal });
+  return diagnostic?.snapshot() ?? null;
+}
+
 const rootDir = process.cwd();
 const saveCacheOnly = process.argv.includes("--save-cache-only");
+const saveCacheDiagnosticMode = process.argv.includes("--save-cache-diagnostics=deep") ? "deep" : "light";
+const saveCacheDiagnosticRequested = process.argv.slice(2).some(argument => argument.startsWith("--save-cache-diagnostics"));
 const reportFreshnessOnly = process.argv.includes("--report-freshness-only");
 const returnPathOnly = process.argv.includes("--return-path-only");
+if (saveCacheDiagnosticRequested) assert.ok(saveCacheOnly && saveCacheDiagnosticMode === "deep",
+  "Diagnostic arguments require the exact reviewed bounded deep mode before resource creation.");
+if (saveCacheOnly) assert.deepEqual(process.argv.slice(2), saveCacheDiagnosticMode === "deep"
+  ? ["--save-cache-only", "--save-cache-diagnostics=deep"] : ["--save-cache-only"],
+  "The bounded save-cache family accepts its exact normal flag or explicit reviewed deep diagnostics.");
+else assert.equal(saveCacheDiagnosticMode, "light", "Deep diagnostics require the bounded save-cache family.");
+const fixtureStarted = performance.now();
+const fixtureTimings = { preparationMs: 0, executionMs: 0, cleanupMs: 0, diagnosticCollectionMs: 0 };
+let executionStarted: number | null = null;
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
 let server: Server | null = null;
+let primaryFailed = false;
+let saveCacheScenariosStarted = 0;
+let saveCacheScenariosCompleted = 0;
+const saveCacheDeniedRequests: SaveCacheDeniedRequest[] = [];
+let saveCacheDiagnosticPage: Page | null = null;
+const saveCacheDiagnosticSummaries: Array<{ totalObserved: number; dropped: number; kinds: string[] }> = [];
+let saveCacheFailureTimeline: unknown = null;
+let saveCacheDiagnosticCaptureFailed = false;
+let saveCacheObservedAssertionFailure = false;
+let saveCacheFirstDivergence: { boundary: "dirty_state_dom"; scenarioIndex: number; controlled: boolean; outcome: string;
+  expected: "true"; observed: "false" | "missing" | "unexpected"; observedAfterAssertions: number; elapsedMs: number } | null = null;
+let saveCacheOriginalFailure: { name: string; code: "ERR_ASSERTION" | null; assertionOrdinal: number | null; observedElapsedMs: number } | null = null;
 
 try {
   const webpackWarnings = await compileHarness(rootDir, tempDir);
@@ -1396,6 +1543,8 @@ try {
   const destinationUrl = `${harnessServer.baseUrl}/destination`;
   const browserIssues: BrowserIssue[] = [];
   browser = await chromium.launch({ headless: true });
+  fixtureTimings.preparationMs = performance.now() - fixtureStarted;
+  executionStarted = performance.now();
   if (reportFreshnessOnly) await runReportFreshnessCases(browser, harnessUrl, rootDir, browserIssues);
   if (!saveCacheOnly && !reportFreshnessOnly) {
     for (const listPath of ["/admin/content/categories", "/admin/content/series", "/admin/projects/residential", "/admin/projects/commercial"]) {
@@ -1439,7 +1588,13 @@ try {
     { outcome: "success", expected: "success", secondFailure: "error", controlled: true },
     { outcome: "success", expected: "success", secondFailure: "throw", controlled: true },
   ]) {
-    const page = await browser.newPage();
+    if (saveCacheOnly) saveCacheScenariosStarted += 1;
+    const page = await browser.newPage(saveCacheOnly ? { serviceWorkers: "block" } : undefined);
+    if (saveCacheOnly) {
+      saveCacheDiagnosticPage = page;
+      page.setDefaultTimeout(30_000);
+      page.setDefaultNavigationTimeout(30_000);
+    }
     observeBrowserIssues(page, browserIssues);
     await page.route("**/api/admin/entity-lists/topics?**", async (route) => {
       const title = await page.evaluate(() => {
@@ -1447,6 +1602,8 @@ try {
           saveCache: { reads: number; sourceTitle: string };
         } }).__ADMIN_FORM_GUARDED_NAV_QA__;
         qa.saveCache.reads += 1;
+        (qa as unknown as { saveCacheDiagnostic?: { record(kind: string, facts: { reads: number }): void } })
+          .saveCacheDiagnostic?.record("controlled_api_read", { reads: qa.saveCache.reads });
         return qa.saveCache.sourceTitle;
       });
       await route.fulfill({ contentType: "application/json", body: JSON.stringify({
@@ -1455,11 +1612,12 @@ try {
         meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
       }) });
     });
+    if (saveCacheOnly) await installSaveCacheNetworkFence(page, harnessUrl, saveCacheDeniedRequests);
     await page.goto(harnessUrl);
     await page.evaluate((options) => {
       (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { mountSaveCache(value: unknown): void } })
         .__ADMIN_FORM_GUARDED_NAV_QA__.mountSaveCache(options);
-    }, scenario);
+    }, { ...scenario, diagnostics: saveCacheOnly, diagnosticMode: saveCacheDiagnosticMode });
     await page.locator("#qa-save-cache-list").waitFor();
     await page.locator("#qa-save-cache-edit").click();
     await page.locator("#qa-save-cache-title").fill("Saved at source");
@@ -1551,9 +1709,37 @@ try {
         JSON.stringify(afterSecond.invalidations) === JSON.stringify(beforeSecond.invalidations) &&
         JSON.stringify(afterSecond.cache) === JSON.stringify(beforeSecond.cache) && afterSecond.routerEvents.length === 0);
       check(`${secondLabel}: submitted input survives`, submittedValue === "Second unsaved edit");
-      if (dirty !== "true") secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
+      if (dirty !== "true") {
+        secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
+        if (saveCacheOnly && saveCacheFirstDivergence === null) {
+          saveCacheFirstDivergence = { boundary: "dirty_state_dom", scenarioIndex: saveCacheScenariosStarted,
+            controlled: scenario.controlled === true, outcome: scenario.secondFailure,
+            expected: "true", observed: dirty === "false" ? "false" : dirty === null ? "missing" : "unexpected",
+            observedAfterAssertions: passed, elapsedMs: performance.now() - fixtureStarted };
+          const diagnosticCollectionStarted = performance.now();
+          try {
+            saveCacheFailureTimeline = await page.evaluate(snapshotSaveCacheDiagnostic,
+              { assertionFailure: false, assertionOrdinal: passed + 1, contractDivergence: true,
+                ...(dirty === "false" ? { dirty: false } : {}) });
+          } catch { saveCacheDiagnosticCaptureFailed = true; }
+          finally { fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted; }
+        }
+      }
+    }
+    if (saveCacheOnly && saveCacheDiagnosticMode === "deep") {
+      const diagnosticCollectionStarted = performance.now();
+      const summary = await page.evaluate(() => {
+        const diagnostic = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: {
+          saveCacheDiagnostic?: { snapshot(): { totalObserved: number; dropped: number; events: Array<{ kind: string }> } };
+        } }).__ADMIN_FORM_GUARDED_NAV_QA__.saveCacheDiagnostic?.snapshot();
+        return { totalObserved: diagnostic?.totalObserved ?? 0, dropped: diagnostic?.dropped ?? 0,
+          kinds: [...new Set(diagnostic?.events.map(event => event.kind) ?? [])] };
+      });
+      saveCacheDiagnosticSummaries.push(summary);
+      fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted;
     }
     await closePage(page);
+    if (saveCacheOnly) { saveCacheScenariosCompleted += 1; saveCacheDiagnosticPage = null; }
   }
   if (!reportFreshnessOnly && !returnPathOnly) check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
     secondSaveFailures.length === 0);
@@ -2587,10 +2773,89 @@ try {
     }`,
     browserIssues.length === 0,
   );
+  if (saveCacheOnly) {
+    check("bounded save-cache fixture denies foreign requests", saveCacheDeniedRequests.length === 0);
+    check("all thirteen bounded save-cache scenarios completed", saveCacheScenariosStarted === 13 && saveCacheScenariosCompleted === 13);
+  }
+} catch (error) {
+  primaryFailed = true;
+  saveCacheObservedAssertionFailure = error instanceof assert.AssertionError;
+  const observedElapsedMs = performance.now() - fixtureStarted;
+  try {
+    saveCacheOriginalFailure = { name: error instanceof Error && ["AssertionError", "TimeoutError", "Error"].includes(error.name) ? error.name : "UNKNOWN",
+      code: saveCacheObservedAssertionFailure ? "ERR_ASSERTION" : null, assertionOrdinal: saveCacheObservedAssertionFailure ? passed + 1 : null, observedElapsedMs };
+  } catch {
+    saveCacheOriginalFailure = { name: "UNKNOWN", code: saveCacheObservedAssertionFailure ? "ERR_ASSERTION" : null,
+      assertionOrdinal: saveCacheObservedAssertionFailure ? passed + 1 : null, observedElapsedMs };
+  }
+  if (saveCacheOnly && saveCacheFirstDivergence === null && saveCacheDiagnosticPage && !saveCacheDiagnosticPage.isClosed()) {
+    const diagnosticCollectionStarted = performance.now();
+    try {
+      saveCacheFailureTimeline = await saveCacheDiagnosticPage.evaluate(snapshotSaveCacheDiagnostic,
+        { assertionFailure: saveCacheObservedAssertionFailure, assertionOrdinal: passed + 1 });
+    } catch { saveCacheDiagnosticCaptureFailed = true; }
+    finally { fixtureTimings.diagnosticCollectionMs += performance.now() - diagnosticCollectionStarted; }
+  }
+  throw error;
 } finally {
-  if (browser) await browser.close();
-  if (server) await stopServer(server);
-  await rm(validateTempPath(tempDir), { recursive: true, force: true });
+  const cleanupStarted = performance.now();
+  if (executionStarted !== null) fixtureTimings.executionMs = cleanupStarted - executionStarted;
+  else fixtureTimings.preparationMs = cleanupStarted - fixtureStarted;
+  const cleanup = await settleGuardedNavigationCleanup([
+    { resource: "browser", close: async () => { if (browser) await browser.close(); } },
+    { resource: "server", close: async () => { if (server) await stopServer(server); } },
+    { resource: "temp", close: async () => { await rm(validateTempPath(tempDir), { recursive: true, force: true }); } },
+  ]);
+  fixtureTimings.cleanupMs = performance.now() - cleanupStarted;
+  const cleanupFailures = cleanup.filter((result) => result.status === "FAIL");
+  if (saveCacheOnly) {
+    console.log(JSON.stringify({
+      family: "admin-form-save-cache",
+      proofLevel: "shared_owner_controlled_browser_behavior",
+      status: primaryFailed || cleanupFailures.length > 0 ? "FAIL" : "PASS",
+      scenariosStarted: saveCacheScenariosStarted,
+      scenariosCompleted: saveCacheScenariosCompleted,
+      assertions: passed,
+      timings: fixtureTimings,
+      browserExecuted: browser !== null,
+      databaseExecuted: false,
+      nativePersistenceVerified: false,
+      businessConsumerAdoptionVerified: false,
+      deniedForeignRequests: saveCacheDeniedRequests,
+      diagnostics: {
+        owner: "src/components/admin/ui/AdminFormRuntime.tsx",
+        capability: "form_runtime", scope: "controlled_save_cache_fixture_only",
+        consumer: "scripts/qa-admin-form-guarded-navigation.mts#SaveCacheFlow",
+        contract: "Failed second save preserves submitted input and dirty state; confirmed save invalidates declared entity caches",
+        status: primaryFailed ? saveCacheFailureTimeline ? "CAPTURED" : "UNAVAILABLE" : "NOT_REQUIRED",
+        failureClassification: saveCacheObservedAssertionFailure ? "Assertion Failure; Product/QA cause UNKNOWN" : "UNKNOWN",
+        firstProvenDivergence: saveCacheFirstDivergence ?? (saveCacheObservedAssertionFailure ? { boundary: "assertion_failure", assertionOrdinal: passed + 1 } : "UNKNOWN"),
+        originalFailure: saveCacheOriginalFailure,
+        originalExit: { value: null, owner: "canonical_parent_process_receipt", status: "NOT_YET_OBSERVED_BY_FIXTURE" },
+        environment: { node: process.version, v8: process.versions.v8, platform: process.platform, architecture: process.arch,
+          browser: "chromium_headless", database: "NOT_EXECUTED", transport: "owned_loopback_fixture_and_route_stubs_only" },
+        evidenceConfidence: saveCacheFirstDivergence ? "observed_dom_contract_boundary_only" : saveCacheObservedAssertionFailure ? "observed_assertion_boundary_only" : "insufficient_causal_evidence",
+        missingEvidence: ["React commit not observed", "Native database persistence not executed", "Causal owner of divergence UNKNOWN",
+          "Original process exit requires the parent terminal receipt",
+          ...(primaryFailed && !saveCacheFailureTimeline ? ["Bounded Browser timeline unavailable"] : []),
+          ...(saveCacheDiagnosticMode === "light" ? ["Deep pre-failure metadata was not recorded in light mode"] : [])],
+        timeline: saveCacheFailureTimeline, captureFailed: saveCacheDiagnosticCaptureFailed,
+        completedScenarioSummaries: saveCacheDiagnosticSummaries, maxEventsPerScenario: 128,
+        mode: saveCacheDiagnosticMode,
+        successSummaries: saveCacheDiagnosticMode === "deep" ? "COLLECTED" : "DEFERRED_UNTIL_FAILURE",
+        preFailureEvidence: saveCacheDiagnosticMode === "deep" ? "bounded_metadata" : "bounded_event_order_and_elapsed_only",
+        fieldContentsRecorded: false, productionDataRecorded: false, schedulingAdded: false,
+      },
+      cleanup: cleanup.map(({ resource, status }) => ({ resource, status,
+        created: resource === "browser" ? browser !== null : resource === "server" ? server !== null : true })),
+    }));
+  }
+  if (cleanupFailures.length > 0) {
+    console.error("Guarded-navigation fixture cleanup failed: " + cleanupFailures.map((result) => result.resource).join(", "));
+    // Preserve the original assertion/startup failure; cleanup failures still
+    // fail an otherwise successful run and never permit the final PASS line.
+    if (!primaryFailed) throw new AggregateError(cleanupFailures.map((result) => result.error), "Guarded-navigation fixture cleanup failed.");
+  }
 }
 
 console.log(
