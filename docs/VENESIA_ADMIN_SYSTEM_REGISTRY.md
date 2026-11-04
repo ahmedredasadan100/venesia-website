@@ -3763,3 +3763,87 @@ Evidence: [final report](../.tmp-qa/pr229-global-budget-release-20261104-01/fina
 [final environment](../.tmp-qa/pr229-global-budget-release-20261104-01/environment-final.json),
 [sleep restoration](../.tmp-qa/pr229-global-budget-release-20261104-01/global-budget-awake-01.finally.json),
 and [documentation evidence equivalence](../.tmp-qa/pr229-global-budget-release-20261104-01/documentation-evidence-equivalence.json).
+
+### 27.54 PR #229 CI runtime package source consistency — 4 November 2026
+
+**Previous → current / authority:** HEAD `4a4fc1b1` passed fresh Pre-Push and
+was pushed; Preview became READY on that SHA. Quality Gate run `41765453647`
+finished with seven specialized jobs PASS and the required primary job FAIL
+at `Inspect QA change impact and protection consistency`, before the canonical
+PR-safe gate. Its preserved artifact reports `BLOCKED_SOURCE_CONSISTENCY` and
+`Runtime package contains an unqualified link`, with zero checks, Browser,
+database calls and network requests in that source-inspection receipt. Ready,
+Merge and Production stopped. The Owner then authorized bounded diagnosis,
+a proved correction and affected verification, followed by the guarded release.
+
+**Proved cause and owner:** an unchanged copy of
+`localVerificationInstalledRuntimePackages` in the existing Public Verification
+owner reproduces the rejection on Linux after `npm ci` with the same lockfile
+and npm `10.9.9`. The rejected symbolic link is
+`node_modules/sharp/node_modules/.bin/semver` → `../semver/bin/semver.js`.
+The installed `semver@7.8.5` manifest and lock entry both declare that exact
+command/target. npm generates this binary link on Linux and regular command
+shims on Windows; the old Admission walker rejected both qualified and
+unqualified symbolic links without distinguishing them. This is not an
+Artifact, Product assertion, timeout or PostgreSQL connection failure.
+The original GitHub filesystem is unavailable: the bounded reproduction used
+Node `22.23.3`/Alpine versus CI `22.23.4`/Ubuntu. Its raw diagnostic wrapper
+exit1 is retained because Node appended assertion detail to the expected
+error message; the exact owner rejection and link identity were recorded
+before that wrapper comparison, without a diagnostic retry.
+
+**Review correction:** all six Owner reviews remain **PENDING**, with zero
+formal approvals and zero formal deferrals. The previous release-task inference
+that acceptance of local test results approved those reviews is superseded by
+the Owner's explicit clarification. Historical receipts remain unchanged;
+Gate39's six-family technical proof remains supporting evidence only. Neither
+Full E, CI nor Preview grants Owner Visual Approval. Ready/Merge require a
+proper formal disposition; no exception or deferral is inferred.
+
+**Correction and preserved boundaries:** the same Admission package reader now
+qualifies only a direct relative npm link beneath a physical nested
+`node_modules/.bin`. Its actual manifest name/version/bin and both existing
+locks must agree; target, ancestors and metadata must be physical, and the
+target must be a regular file inside its declared package. Link identity and
+target bytes participate in the existing fingerprint. New metadata reads are
+cached per invocation and charged to the unchanged96MiB/10000-file ceilings.
+Arbitrary, external, absolute, missing, chained, cyclic, directory and
+undeclared links remain rejected. Dependency-only traversal, the separate
+source-guard walker, lifecycle, child execution, Heartbeat, Cancellation,
+Cleanup and every gate schedule are unchanged. Existing extracted-function
+adapters supply the added native read primitive; no new owner or runner exists.
+
+**Affected proof:** the current infrastructure guard passed227 controls,
+including34 new positive/fingerprint, invalid-target, metadata and budget
+controls. A physical Linux fixture using npm-generated links passed10 cases.
+All35 actual Windows Admission package summaries are identical before/after
+the correction and match the prior Pre-Push receipt. The first targeted run
+stopped after118 controls because the outer canonical-factory fixture omitted
+`readlinkSync`; the exact retained error hash proved that missing test port.
+Adding its existing forbidden-operation binding corrected that fixture, and
+the corrected run passed in48.613s with native Cleanup PASS/zero residuals.
+The initial failure remains separate evidence. Independent bounded architecture
+review passes all8 axes with zero blocking issues.
+Affected ESLint and strict project TypeScript both pass; no assertion, rejection
+case or mandatory gate was removed or relaxed.
+
+**Evidence validity:** QA Section3.4 permits retained unaffected Full E75/75
+plus the affected current proof for this bounded read-only qualification
+correction. The combined risk remains E; the previous Full E keeps tested SHA
+`015b518b` and is not relabeled as execution on the corrected HEAD. Only the
+installed-package reader changes in the execution owner; its other52 function
+bodies remain identical. Fresh frozen-source Admission, source-floor and
+Automatic Preflight, plus current-HEAD CI/Preview remain mandatory. Any newly
+proved execution or unbounded impact would require reclassification. Product,
+Auth/RLS, Schema, migrations, Treasury and Production remain outside this
+correction. `globalClosed=false` and all six Owner reviews remain Pending.
+
+Evidence: [bounded RCA](../.tmp-qa/pr229-ci-source-recovery-20261104-01/root-cause.json),
+[raw Linux reproduction](../.tmp-qa/pr229-ci-source-recovery-20261104-01/linux-link-reproduction.json),
+[targeted controls](../.tmp-qa/pr229-ci-source-recovery-20261104-01/targeted-native-corrected/result.json),
+[physical Linux proof](../.tmp-qa/pr229-ci-source-recovery-20261104-01/native-bin-link-result.json),
+[Windows identity equivalence](../.tmp-qa/pr229-ci-source-recovery-20261104-01/windows-package-identity-equivalence.json),
+[bounded architecture review](../.tmp-qa/pr229-ci-source-recovery-20261104-01/architecture-review.json),
+[evidence eligibility](../.tmp-qa/pr229-ci-source-recovery-20261104-01/impact-evidence-eligibility.json),
+[review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json),
+and [original CI failure](../.tmp-qa/pr229-final-release-20261104-01/ci-terminal.json).

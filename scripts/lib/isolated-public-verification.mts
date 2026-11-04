@@ -4,7 +4,7 @@ import { validateCoreJourneySelection } from "../fixtures/admin-core-domain-form
 import assert from "node:assert/strict";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { constants as fsConstants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, type Stats } from "node:fs";
+import { constants as fsConstants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync, type Stats } from "node:fs";
 import * as asyncFs from "node:fs/promises";
 import * as nodeModule from "node:module";
 import net from "node:net";
@@ -1672,6 +1672,7 @@ export function deriveLocalVerificationSourceCoherence(scripts: Readonly<Record<
 export function localVerificationInstalledRuntimePackages(packageNames: Iterable<string>, includeInstalledOptionalAndPeers = false) {
   const packages: Array<{ root: string; files: number; bytes: number; sha256: string }> = [];
   const seen = new Set<string>(), queue = [...packageNames].map(name => ({ name, from: join(ROOT, "package.json"), optional: false }));
+  const binMetadata = new Map<string, Record<string, unknown>>();
   let totalBytes = 0, totalFiles = 0;
   while (queue.length) {
     const request = queue.shift()!;
@@ -1702,9 +1703,60 @@ export function localVerificationInstalledRuntimePackages(packageNames: Iterable
     const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { name: string; dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>; peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> };
     assert.equal(manifest.name, request.name);
-    const files: Array<{ file: string; sha256: string }> = []; let bytes = 0;
+    const files: Array<{ file: string; sha256: string; linkTarget?: string; target?: string }> = []; let bytes = 0;
     const walk = (at: string) => { for (const name of readdirSync(at).sort()) {
-      const file = join(at, name), stat = lstatSync(file); assert.equal(stat.isSymbolicLink(), false, "Runtime package contains an unqualified link.");
+      const file = join(at, name), stat = lstatSync(file);
+      if (stat.isSymbolicLink() && includeInstalledOptionalAndPeers) {
+        // npm creates these POSIX command links for nested dependencies. Admit
+        // only the exact lock-bound bin mapping, never arbitrary internal links.
+        const modules = dirname(at);
+        assert.ok(at === join(modules, ".bin") && modules === join(dirname(modules), "node_modules")
+          && modules.startsWith(directory + sep), "Runtime package contains an unqualified link.");
+        const linkTarget = readlinkSync(file);
+        const parsed = /^\.\.\/((?:@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+)\/([a-zA-Z0-9._/-]+)$/u.exec(linkTarget);
+        assert.ok(parsed && [...parsed[1].split("/"), ...parsed[2].split("/")].every(part => part && part !== "." && part !== "..")
+          && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(name), "Runtime bin link requires a direct relative package target.");
+        const packageDirectory = join(modules, parsed[1]), target = join(packageDirectory, parsed[2]);
+        const physical = (value: string, regularFile: boolean) => {
+          for (let current = value; current !== ROOT; current = dirname(current)) {
+            assert.ok(current.startsWith(ROOT + sep), "Runtime bin path escaped the installed project.");
+            const currentStat = lstatSync(current);
+            assert.ok(!currentStat.isSymbolicLink() && realpathSync(current) === current
+              && (current === value && regularFile ? currentStat.isFile() : currentStat.isDirectory()), "Runtime bin target or ancestor has an unqualified link or type.");
+          }
+        };
+        physical(at, false); physical(target, true);
+        const manifestFile = join(packageDirectory, "package.json"), installedFile = join(ROOT, "node_modules/.package-lock.json"), lockedFile = join(ROOT, "package-lock.json");
+        const metadata = (metadataFile: string) => {
+          physical(metadataFile, true);
+          const cached = binMetadata.get(metadataFile); if (cached) return cached;
+          const content = readFileSync(metadataFile); totalBytes += content.length; totalFiles++;
+          assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+          const value = JSON.parse(content.toString("utf8")) as Record<string, unknown>;
+          assert.ok(value && typeof value === "object" && !Array.isArray(value), "Runtime bin metadata must be an object.");
+          binMetadata.set(metadataFile, value); return value;
+        };
+        const actual = metadata(manifestFile) as { name?: string; version?: string; bin?: Record<string, unknown> };
+        const packagePath = packageDirectory.slice(ROOT.length + 1).replaceAll("\\", "/");
+        const installed = (metadata(installedFile).packages as Record<string, Record<string, unknown>> | undefined)?.[packagePath];
+        const locked = (metadata(lockedFile).packages as Record<string, Record<string, unknown>> | undefined)?.[packagePath];
+        assert.ok(installed && locked && installed.link !== true && locked.link !== true, "Runtime bin package lacks an installed lock identity.");
+        for (const field of ["version", "resolved", "integrity", "link", "bin"]) assert.deepEqual(installed[field], locked[field], "Runtime bin installed and project locks differ.");
+        assert.equal(actual.name, parsed[1], "Runtime bin package name differs from its path.");
+        assert.ok(typeof actual.version === "string" && actual.version === installed.version, "Runtime bin package version differs from its lock.");
+        assert.ok(actual.bin && typeof actual.bin === "object" && !Array.isArray(actual.bin)
+          && Object.hasOwn(actual.bin, name) && actual.bin[name] === parsed[2]
+          && Object.values(actual.bin).filter(value => value === parsed[2]).length === 1, "Runtime bin command lacks a unique declared mapping.");
+        assert.deepEqual(actual.bin, installed.bin, "Runtime bin manifest differs from its locked mapping.");
+        assert.equal(realpathSync(file), target, "Runtime bin link resolves outside its declared target.");
+        const content = readFileSync(target), size = content.length + Buffer.byteLength(linkTarget);
+        bytes += size; totalBytes += size; totalFiles++;
+        assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");
+        files.push({ file: file.slice(directory.length + 1).replaceAll("\\", "/"), sha256: digest(content), linkTarget,
+          target: target.slice(ROOT.length + 1).replaceAll("\\", "/") });
+        continue;
+      }
+      assert.equal(stat.isSymbolicLink(), false, "Runtime package contains an unqualified link.");
       if (stat.isDirectory()) walk(file);
       else { assert.ok(stat.isFile()); const content = readFileSync(file); bytes += content.length; totalBytes += content.length; totalFiles++;
         assert.ok(totalBytes <= 96 * 1024 * 1024 && totalFiles <= 10_000, "Runtime dependency closure exceeded its bounded read budget.");

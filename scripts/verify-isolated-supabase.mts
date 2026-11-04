@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { constants as fsConstants, unlinkSync } from "node:fs";
 import * as asyncFs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7286,7 +7286,7 @@ async function verifyAdmissionQualificationControls() {
   };
   const compile = (text: string) => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const memoryRoot = path.join(root, ".tmp-qa", "controlled-admission-no-files");
-  const memory = (files: Map<string, Buffer>, links = new Set<string>()) => {
+  const memory = (files: Map<string, Buffer>, links = new Set<string>(), linkTargets = new Map<string, string>()) => {
     const directories = new Set<string>();
     let indexedSize = -1;
     const refresh = () => { if (indexedSize === files.size) return; indexedSize = files.size;
@@ -7300,14 +7300,16 @@ async function verifyAdmissionQualificationControls() {
         return [...new Set([...files.keys(), ...directories].filter(file => file.startsWith(prefix)).map(file => file.slice(prefix.length).split(path.sep)[0]!))]; },
       stat(file: string) { refresh(); if (!files.has(file) && !directories.has(file)) throw missing(file);
         return { isFile: () => files.has(file), isDirectory: () => directories.has(file), isSymbolicLink: () => links.has(file) }; },
-      real(file: string) { return links.has(file) ? path.join(memoryRoot, "outside", path.basename(file)) : file; },
+      real(file: string) { return linkTargets.has(file) ? path.resolve(path.dirname(file), linkTargets.get(file)!)
+        : links.has(file) ? path.join(memoryRoot, "outside", path.basename(file)) : file; },
+      readlink(file: string) { const value = linkTargets.get(file); if (value === undefined) throw missing(file); return value; },
       mkdir(directory: string) { directories.add(directory); },
     };
   };
   type RuntimeApi = Pick<typeof import("./lib/isolated-public-verification.mts"), "localVerificationInstalledRuntimePackages" | "localVerificationAdmissionRuntimeIdentity">;
   const runtimeCode = compile(declaration("localVerificationInstalledRuntimePackages") + "\n" + declaration("localVerificationAdmissionRuntimeIdentity"));
   const runtimeFixture = () => {
-    const files = new Map<string, Buffer>(), links = new Set<string>(), fs = memory(files, links), directory = path.join(memoryRoot, "node_modules");
+    const files = new Map<string, Buffer>(), links = new Set<string>(), linkTargets = new Map<string, string>(), fs = memory(files, links, linkTargets), directory = path.join(memoryRoot, "node_modules");
     const put = (file: string, value: unknown) => files.set(file, Buffer.from(typeof value === "string" ? value : JSON.stringify(value)));
     const manifests: Record<string, object> = { typescript: {}, pkg: { dependencies: { dep: "1" }, optionalDependencies: { "@img/addon": "1", absent: "1" },
       peerDependencies: { peer: "1", optionalPeer: "1" }, peerDependenciesMeta: { optionalPeer: { optional: true } } }, dep: {}, peer: {}, "@img/addon": { exports: { "./native": "./addon.node" } } };
@@ -7324,11 +7326,11 @@ async function verifyAdmissionQualificationControls() {
       if (name === "@img/addon") throw Object.assign(Error("Root export is restricted"), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
       const entry = path.join(directory, name, "index.js"); if (!files.has(entry)) throw Object.assign(Error("Missing optional controlled package"), { code: "MODULE_NOT_FOUND" }); return entry;
     }, { paths: () => [directory] });
-    const api = new Function("assert", "ROOT", "join", "dirname", "sep", "nodeModule", "existsSync", "readFileSync", "readdirSync", "lstatSync", "realpathSync", "digest", "process",
+    const api = new Function("assert", "ROOT", "join", "dirname", "sep", "nodeModule", "existsSync", "readFileSync", "readdirSync", "lstatSync", "readlinkSync", "realpathSync", "digest", "process",
       runtimeCode + ";return {localVerificationInstalledRuntimePackages,localVerificationAdmissionRuntimeIdentity};")(
-      assert, memoryRoot, path.join, path.dirname, path.sep, { createRequire: () => ({ resolve: resolver }) }, fs.exists, fs.read, fs.list, fs.stat, fs.real, sha256,
+      assert, memoryRoot, path.join, path.dirname, path.sep, { createRequire: () => ({ resolve: resolver }) }, fs.exists, fs.read, fs.list, fs.stat, fs.readlink, fs.real, sha256,
       { version: "controlled-node-version", versions: { v8: "controlled-v8", modules: "controlled-abi" }, platform: "win32", arch: "x64", execPath: executable, execArgv: ["--experimental-strip-types"] }) as RuntimeApi;
-    return { api, files, links, installed, directory, executable, put, fs, outside: () => { outside = true; } };
+    return { api, files, links, linkTargets, installed, directory, executable, put, fs, outside: () => { outside = true; } };
   };
   const verifyRuntime = (api: RuntimeApi) => {
     const original = api.localVerificationInstalledRuntimePackages(["pkg"]);
@@ -7370,6 +7372,81 @@ async function verifyAdmissionQualificationControls() {
     assert.throws(() => mismatch.api.localVerificationAdmissionRuntimeIdentity(["pkg"]), /differs from the current package lock/u);
     const version = runtimeFixture(); version.put(path.join(version.directory, "pkg", "package.json"), { name: "pkg", version: "9.0.0" });
     assert.throws(() => version.api.localVerificationAdmissionRuntimeIdentity(["pkg"]), /version differs from the installed lock/u);
+  });
+  const runtimeBinFixture = () => {
+    const fixture = runtimeFixture(), modules = path.join(fixture.directory, "pkg", "node_modules");
+    const packageDirectory = path.join(modules, "semver"), target = path.join(packageDirectory, "bin", "semver.js");
+    const link = path.join(modules, ".bin", "semver"), linkTarget = "../semver/bin/semver.js";
+    const manifestFile = path.join(packageDirectory, "package.json"), packageKey = "node_modules/pkg/node_modules/semver";
+    const manifest = { name: "semver", version: "7.8.5", bin: { semver: "bin/semver.js" } };
+    fixture.put(manifestFile, manifest); fixture.put(target, "controlled semver bin bytes");
+    fixture.put(link, ""); fixture.links.add(link); fixture.linkTargets.set(link, linkTarget);
+    fixture.installed[packageKey] = { version: "7.8.5", resolved: "https://registry.invalid/semver", integrity: "controlled-semver-integrity", bin: manifest.bin };
+    const syncLocks = () => { fixture.put(path.join(fixture.directory, ".package-lock.json"), { packages: fixture.installed });
+      fixture.put(path.join(memoryRoot, "package-lock.json"), { packages: fixture.installed }); };
+    syncLocks();
+    return { ...fixture, modules, packageDirectory, target, link, linkTarget, manifestFile, packageKey, manifest, syncLocks };
+  };
+  check("actual Admission alone qualifies the exact lock-bound npm nested semver bin link and charges target bytes", () => {
+    const fixture = runtimeBinFixture();
+    assert.throws(() => fixture.api.localVerificationInstalledRuntimePackages(["pkg"]), /unqualified link/u);
+    const identity = fixture.api.localVerificationAdmissionRuntimeIdentity(["pkg", "typescript"]);
+    const bound = identity.packages.find(row => row.root === "node_modules/pkg")!;
+    const entries = [...fixture.files].filter(([file]) => file.startsWith(path.join(fixture.directory, "pkg") + path.sep));
+    assert.equal(bound.files, entries.length);
+    assert.equal(bound.bytes, entries.reduce((sum, [, bytes]) => sum + bytes.length, 0)
+      + fixture.files.get(fixture.target)!.length + Buffer.byteLength(fixture.linkTarget));
+    fixture.put(fixture.target, "changed semver command bytes");
+    assert.notDeepEqual(fixture.api.localVerificationAdmissionRuntimeIdentity(["pkg", "typescript"]).packages, identity.packages);
+  });
+  check("actual Admission npm bin identity changes when the uniquely declared command link changes", () => {
+    const fixture = runtimeBinFixture(), before = fixture.api.localVerificationInstalledRuntimePackages(["pkg"], true);
+    const renamed = path.join(fixture.modules, ".bin", "semver-command");
+    fixture.files.delete(fixture.link); fixture.links.delete(fixture.link); fixture.linkTargets.delete(fixture.link);
+    fixture.put(renamed, ""); fixture.links.add(renamed); fixture.linkTargets.set(renamed, fixture.linkTarget);
+    fixture.put(fixture.manifestFile, { ...fixture.manifest, bin: { "semver-command": "bin/semver.js" } });
+    fixture.installed[fixture.packageKey].bin = { "semver-command": "bin/semver.js" }; fixture.syncLocks();
+    assert.notDeepEqual(fixture.api.localVerificationInstalledRuntimePackages(["pkg"], true), before);
+  });
+  for (const target of ["/outside/semver.js", "../../semver/bin/semver.js", "../semver/../escape.js", "../semver/bin/./semver.js",
+    "../semver//bin/semver.js", "..\\semver\\bin\\semver.js", "../semver/bin/%2e%2e/semver.js"]) {
+    check("actual Admission rejects noncanonical npm bin target " + target, () => {
+      const fixture = runtimeBinFixture(); fixture.linkTargets.set(fixture.link, target);
+      assert.throws(() => fixture.api.localVerificationInstalledRuntimePackages(["pkg"], true), /Runtime bin/u);
+    });
+  }
+  const binMutations: Array<[string, (fixture: ReturnType<typeof runtimeBinFixture>) => void]> = [
+    ["ordinary package link", fixture => { const file = path.join(fixture.directory, "pkg", "linked.js"); fixture.put(file, ""); fixture.links.add(file); fixture.linkTargets.set(file, fixture.linkTarget); }],
+    ["linked nested modules ancestor", fixture => fixture.links.add(fixture.modules)],
+    ["linked bin directory", fixture => fixture.links.add(path.dirname(fixture.link))],
+    ["linked target package", fixture => fixture.links.add(fixture.packageDirectory)],
+    ["linked target ancestor", fixture => fixture.links.add(path.dirname(fixture.target))],
+    ["chained or cyclic target", fixture => { fixture.links.add(fixture.target); fixture.linkTargets.set(fixture.target, "../../.bin/semver"); }],
+    ["linked target manifest", fixture => fixture.links.add(fixture.manifestFile)],
+    ["linked installed lock", fixture => fixture.links.add(path.join(fixture.directory, ".package-lock.json"))],
+    ["linked project lock", fixture => fixture.links.add(path.join(memoryRoot, "package-lock.json"))],
+    ["missing target", fixture => fixture.files.delete(fixture.target)],
+    ["directory target", fixture => { fixture.files.delete(fixture.target); fixture.put(path.join(fixture.target, "child.js"), "directory"); }],
+    ["wrong package name", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, name: "other" })],
+    ["wrong package version", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, version: "9.0.0" })],
+    ["missing bin mapping", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, bin: undefined })],
+    ["wrong command name", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, bin: { other: "bin/semver.js" } })],
+    ["wrong declared target", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, bin: { semver: "other.js" } })],
+    ["ambiguous command mapping", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, bin: { ...fixture.manifest.bin, other: "bin/semver.js" } })],
+    ["unsupported string bin", fixture => fixture.put(fixture.manifestFile, { ...fixture.manifest, bin: "bin/semver.js" })],
+    ["missing installed package", fixture => { delete fixture.installed[fixture.packageKey]; fixture.syncLocks(); }],
+    ["linked lock package", fixture => { fixture.installed[fixture.packageKey].link = true; fixture.syncLocks(); }],
+    ["mismatched project bin", fixture => { const locked = structuredClone(fixture.installed); locked[fixture.packageKey].bin = { semver: "other.js" }; fixture.put(path.join(memoryRoot, "package-lock.json"), { packages: locked }); }],
+    ["mismatched installed bin", fixture => { fixture.installed[fixture.packageKey].bin = { other: "bin/semver.js" }; fixture.syncLocks(); }],
+    ["mismatched package integrity", fixture => { const locked = structuredClone(fixture.installed); locked[fixture.packageKey].integrity = "different"; fixture.put(path.join(memoryRoot, "package-lock.json"), { packages: locked }); }],
+  ];
+  for (const [name, mutate] of binMutations) check("actual Admission npm bin rejects " + name, () => {
+    const fixture = runtimeBinFixture(); mutate(fixture);
+    assert.throws(() => fixture.api.localVerificationInstalledRuntimePackages(["pkg"], true), /unqualified link|Runtime bin|Missing controlled file/u);
+  });
+  for (const file of ["target", "metadata"] as const) check("actual Admission npm bin bounds " + file + " reads", () => {
+    const fixture = runtimeBinFixture(); fixture.files.set(file === "target" ? fixture.target : path.join(fixture.directory, ".package-lock.json"), { length: 96 * 1024 * 1024 + 1 } as Buffer);
+    assert.throws(() => fixture.api.localVerificationInstalledRuntimePackages(["pkg"], true), /bounded read budget/u);
   });
   type Qualification = import("./lib/isolated-public-verification.mts").LocalVerificationAdmissionQualification;
   type Binding = { baselineHead: string; finalHead: string; sourceSha256: string };
@@ -7935,7 +8012,7 @@ async function verifyQualifiedSelectionControls() {
     const capability = Object.freeze({ status: "PASS", probe: "actual_factory_capability_binding" }), native = Object.freeze({ probe: "actual_factory_launch_binding_no_process" });
     const input = Object.freeze({ args: [], controlledNoAllocationProbe: true });
     const bindings = { assert, root, code, ts, path, createHash, fileURLToPath, sha256: forbidden, execFileSync: forbidden, selectSourceInventory: forbidden, sourceIncluded: forbidden,
-      existsSync: forbidden, lstatSync: forbidden, realpathSync: forbidden, readFileSync: forbidden, collectExecutableSourceGraph: forbidden,
+      existsSync: forbidden, lstatSync: forbidden, readlinkSync: forbidden, realpathSync: forbidden, readFileSync: forbidden, collectExecutableSourceGraph: forbidden,
       spawn: forbidden, mkdtempSync: forbidden, mkdirSync: forbidden, writeFileSync: forbidden, rmSync: forbidden, readdirSync: forbidden,
       createRequire: forbidden, isBuiltin: forbidden,
       windowsOwnedProcessCapability: () => { capabilityCalls++; return capability; },
@@ -8509,9 +8586,9 @@ async function changeImpactOnly() {
       assert.ok(found, "Missing canonical source impact declaration: " + name); return found.getText(parsed).replace(/^export /u, "");
     });
     const code = ts.transpileModule(adminAdoptionControlSource(parsed) + "\n" + declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    const api = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph",
+    const api = new Function("assert", "execFileSync", "ROOT", "digest", "selectSourceInventory", "sourceIncluded", "existsSync", "lstatSync", "readlinkSync", "realpathSync", "readFileSync", "resolve", "dirname", "isAbsolute", "ts", "collectExecutableSourceGraph",
       "spawn", "mkdtempSync", "mkdirSync", "writeFileSync", "rmSync", "readdirSync", "join", "sep", "nodeModule", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess", "fileURLToPath", "createHash", code + ";return {inspectLocalVerificationChangeImpact,executeLocalVerificationTargets,qualifyLocalVerificationAdmission};")(
-      assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph,
+      assert, execFileSync, root, sha256, selectSourceInventory, sourceIncluded, existsSync, lstatSync, readlinkSync, realpathSync, readFileSync, path.resolve, path.dirname, path.isAbsolute, ts, collectExecutableSourceGraph,
       spawn, mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, path.join, path.sep, { createRequire, isBuiltin }, windowsOwnedProcessCapability, spawnWindowsOwnedProcess, fileURLToPath, createHash) as
       Pick<typeof import("./lib/isolated-public-verification.mts"), "inspectLocalVerificationChangeImpact" | "executeLocalVerificationTargets" | "qualifyLocalVerificationAdmission">;
     if (executeMode) {
