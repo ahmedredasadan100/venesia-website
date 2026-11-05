@@ -4395,3 +4395,60 @@ post-cleanup Pre-Push, exact-HEAD remote gates and authorized release actions
 remain outstanding. Six Owner reviews remain Pending, authenticated Admin Smoke
 is unperformed, and `globalClosed=false`; this power amendment grants no review
 deferral, Ready/Merge approval or technical/security waiver.
+
+### 27.61 PR #230 scoped Owner review deferral — 5 November 2026
+
+**Previous → current / authority:** the current explicit Project Owner decision
+accepts the residual risk of the six unperformed human reviews and formally
+defers their release-blocking consequence for PR #230 only. This is a new
+PR #230 decision; Section 27.56's PR #229 exception remains historical and is
+not transferred. Section 27.60's statement that the power amendment grants no
+review deferral remains true. The current decision alone changes the six
+reviews' release disposition; their actual review status remains unchanged.
+
+Constitution Sections 2.2 and 32.4 require this material exception to be recorded
+in the existing canonical owner. It conflicts narrowly with QA Section 10's
+default requirement for Owner Local Visual Approval before Ready. The explicit
+Owner decision permits that consequence to be deferred for this release,
+without changing the standing policy, executable contracts or approval rules
+for any other gate or future PR. This entry records the accepted disposition;
+it does not establish that a human visual or functional review took place.
+
+| Review | Actual review status | Release disposition | Follow-up owner |
+| --- | --- | --- | --- |
+| Article | Pending / not performed | Formally deferred for PR #230 | Ahmed |
+| News | Pending / not performed | Formally deferred for PR #230 | Ahmed |
+| Press | Pending / not performed | Formally deferred for PR #230 | Ahmed |
+| Site Update | Pending / not performed | Formally deferred for PR #230 | Ahmed |
+| Video | Pending / not performed | Formally deferred for PR #230 | Ahmed |
+| Gallery | Pending / not performed | Formally deferred for PR #230 | Ahmed |
+
+Actual approvals remain **0**; current PR #230 formal deferrals are **6**.
+Ahmed owns the actual review follow-up after this release. Each review still
+requires reviewer and time, reviewed source and environment, exact Create/Edit
+routes, Desktop/Mobile/RTL observations, and the applicable functional,
+save-failure and persistence/readback evidence in the existing
+[six-review package](../.tmp-qa/pr229-ci-source-recovery-20261104-01/review-package.json).
+That package retains its historical source and execution identity; it supplies
+the outstanding review requirements, not current review approval. Video retains
+provider/playback review; Gallery retains item Alt, caption and item operations.
+Automated and fixture PASS cannot close these reviews. Their follow-up remains
+an open obligation and does not authorize a new development phase.
+
+The decision applies to source `da6871b08079239352904aaf5842c9e86c074369`
+and its verified documentation-only successor containing this amendment.
+The final successor SHA, decision evidence and release results must be bound
+in PR #230's external release evidence under QA Section 8. This deferral expires
+with PR #230's release decision or Owner withdrawal and grants no future waiver.
+The source and evidence must be qualified for that final SHA; this entry grants
+no live Admission authority or reuse of an incomplete gate execution.
+
+Admission, the required complete Full E plan, Pre-Push, exact-HEAD CI/Preview,
+Branch Protection and required GitHub reviews, separate Ready/Merge authority,
+expected-head Standard Merge, Post-Merge CI, Production readiness, permitted
+Smoke and cleanup remain mandatory. No technical, security or Product assertion
+is waived. Authenticated Admin Smoke remains unperformed until actual authorized
+execution and cannot be marked PASS by this decision. The image-delivery HTTP
+402 incident remains subject to its own required recovery evidence and release
+gate; this review deferral neither resolves it nor waives it. Historical failures,
+stopped attempts and review statuses remain preserved. `globalClosed=false`.
