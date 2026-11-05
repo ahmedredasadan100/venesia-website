@@ -4200,3 +4200,53 @@ CI before the authorized release actions. No current release PASS is inferred
 from historical receipts. Six deferred Owner reviews remain Pending with zero
 actual approvals; authenticated Admin Smoke remains unperformed without a
 trusted session. No deferral is relabeled PASS. `globalClosed=false`.
+
+**Gate7 diagnostic visibility follow-on:** the successor `bd980139` passed
+fresh Admission and initial Preflight, but its complete Full E attempt stopped
+at `verify:admin-core-closure` after six passing gates. The first positive
+submitted-draft control failed at `dispatch`. The original failure, 10-resource
+cleanup and unchanged protected/source evidence are preserved in
+`.tmp-qa/qa-scope-restoration-20261105-01/`. One subsequently authorized targeted
+diagnostic invocation passed 80 checks without reproducing the error; it is
+not Gate7 or Full E proof. Its separate preload-only Windows path failure and
+corrective classification remain in `.tmp-qa/qa-gate7-diagnosis-20261105-01/`.
+The cause of the original dispatch failure remains unknown; no Product
+regression or timeout cause has been established.
+
+The proven visibility gap belongs to
+`scripts/fixtures/admin-core-form-draft-restoration.mjs`: click/event rejections
+were swallowed and the outer catch retained only the phase. The approved
+correction records fixed phase, safe technical error classification and request
+counts, including late rejections after the existing settlement boundary.
+Cleanup failure retains precedence and a sanitized earlier failure summary.
+Raw messages, stack/cause, private controls, request payloads and locator logs
+are excluded. The original assertions, 500ms/25-second limits, request matcher,
+route behavior, successful receipt and all Full E75 gates remain unchanged.
+
+Direct consumers are `admin-core-form-permission-context.mjs::restoreDraft`
+and the existing draft-restoration verifier. The six form, domain-form,
+operational-form, settings, project-create and navigation-settings journey
+modules use that context through the current adoption driver, which persists
+failure messages. The isolated readback/navigation joins and same-file
+read/discard/reopen/presentation exports retain their successful contracts.
+No Product code, manifest, route owner or workflow is changed. Synthetic
+failure/privacy controls belong to the existing verifier; its `ci:check` and
+Gate7 command registration are unchanged.
+
+Current evidence is retained under
+`.tmp-qa/qa-gate7-visibility-20261105-01/`. The targeted invocation passed both
+syntax checks, ESLint, TypeScript, executable governance, infrastructure guards
+and all 87 draft-restoration controls (the original 80 plus seven additive
+diagnostic controls). The draft verifier took 55.157s, including the unchanged
+25-second synthetic click-rejection wait. Its six native processes exited with
+zero remaining, no forced termination, and unchanged source; the complete
+targeted invocation took 100.671s. These results establish diagnostic visibility
+and privacy on the controlled loopback fixture, not Gate7 or Full E success.
+Source Architecture Review found zero blockers across the eight required axes.
+The committed successor still requires fresh Admission and a complete new
+Full E attempt; no successful prefix from the failed attempt is reused.
+Earlier native/lifecycle/scope controls can support only explicitly unchanged
+inputs and boundaries; changed closure qualification is not borrowed. The
+17.291s to 19.642s, 18-to-14-process sample remains historical, with no new speed
+claim or measurement rerun. Six Owner reviews remain Pending, Admin Smoke is
+unperformed, and `globalClosed=false` until their own requirements are met.

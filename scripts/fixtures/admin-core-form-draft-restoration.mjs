@@ -125,9 +125,25 @@ export async function observeCoreAcceptedDraftDiscard({page,origin,nativeCheckpo
  }catch{throw Error('Accepted draft discard proof failed at '+phase+'. No discard coverage granted. Diagnostic: '+JSON.stringify({...diagnostic,...describeDiscardReopenRequests(diagnostic.requests)}));}
 }
 
+/** Failure metadata is allowlisted; raw errors, private controls and locator logs never escape. */
+function describeCoreDraftFailure(error){
+ try{
+  const rawName=error?.name,rawCode=error?.code,rawMessage=error?.message;
+  const name=['Error','TypeError','SyntaxError','TimeoutError','AssertionError'].includes(rawName)?rawName:'UnknownError';
+  const environmentCodes=['EACCES','EPERM','ENOENT','ECONNREFUSED','ECONNRESET','EPIPE','ETIMEDOUT'];
+  const code=[...environmentCodes,'ERR_ASSERTION'].includes(rawCode)?rawCode:null;
+  const message=typeof rawMessage==='string'?rawMessage:'';
+  const reason=environmentCodes.includes(code)?'environment-code':message.includes('Target page, context or browser has been closed')?'browser-closed':message==='No exact submitted Action reached the owned interceptor.'?'interceptor-deadline':name==='TimeoutError'?'timeout':name==='AssertionError'||code==='ERR_ASSERTION'?'assertion':message.includes('expect(')?'expectation-failed':'operation-error';
+  const signals=[];
+  for(const[text,label]of [['element is not stable','element-not-stable'],['element is not visible','element-not-visible'],['element is not enabled','element-not-enabled'],['intercepts pointer events','pointer-intercepted'],['waiting for scheduled navigations','navigation-wait'],['click action done','click-action-completed']])if(message.includes(text))signals.push(label);
+  return Object.freeze({name,code,reason,signals:Object.freeze(signals)});
+ }catch{return Object.freeze({name:'UnknownError',code:null,reason:'unreadable-error',signals:Object.freeze([])});}
+}
+
 /** One known pre-delivery rejection, native no-write and submitted-draft proof; never SQL rollback. */
 export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,requiredCases,nativeCheckpoint,registerPageRoute,mapping,form,submit,assertDraft,cancelDirty,dirtyNavigation,dirtyNavigationLimit,observePending,discardDirty}){
  let phase='input-validation',release,removeRoute,timer,requestFailure,clicking;let attempted=false,aborted=0,matching=0,observed=0,routeFailure;
+ let failure,primaryFailure,cleanupFailure,clickFailure,requestEventFailure,routeRejection,failurePhase,failureRequests;
  let snapshot=null;const requests=[];
  const inputKeys=['caseId','journeyId','formConsumer','surface'];
  try{
@@ -157,12 +173,12 @@ export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,r
   phase='route-registration';removeRoute=await registerPageRoute(page,'**/*',async route=>{
    const request=route.request();if(!isAction(request)){await route.fallback();return;}
    matching++;held();await gate;
-   try{assert.match(request.headers()['next-action'],/^[a-f0-9]{40,64}$/u);await route.abort('failed');aborted++;}catch{routeFailure=true;throw Error('Submitted-draft controlled route did not abort.');}
+   try{assert.match(request.headers()['next-action'],/^[a-f0-9]{40,64}$/u);await route.abort('failed');aborted++;}catch(error){routeFailure=true;routeRejection=describeCoreDraftFailure(error);throw Error('Submitted-draft controlled route did not abort.');}
   });
   page.on('request',listener);
   try{
-   requestFailure=page.waitForEvent('requestfailed',{predicate:request=>requests.includes(request)&&isAction(request),timeout:25_000});void requestFailure.catch(()=>{});
-   phase='dispatch';attempted=true;clicking=submit.click();void clicking.catch(()=>{});
+   requestFailure=page.waitForEvent('requestfailed',{predicate:request=>requests.includes(request)&&isAction(request),timeout:25_000});void requestFailure.catch(error=>{requestEventFailure=describeCoreDraftFailure(error);});
+   phase='dispatch';attempted=true;clicking=submit.click();void clicking.catch(error=>{clickFailure=describeCoreDraftFailure(error);});
    await Promise.race([seen,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('No exact submitted Action reached the owned interceptor.')),25_000);})]);
    phase='pending';await expect(form).toHaveAttribute('aria-busy','true');await expect(form.locator('fieldset[data-admin-form-fields]')).toHaveJSProperty('disabled',true);await expect(submit).toBeDisabled();assert.equal(matching,1);assert.equal(observed,1);
    if(observePending)await observePending();
@@ -175,11 +191,20 @@ export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,r
    phase='discard-shared-observation';const acceptedDiscard=discardDirty?await observeCoreAcceptedDraftDiscard({page,origin,nativeCheckpoint,form,submit,assertDraft,discardDirty,priorNative:after}):undefined;
    return{status:'submitted-draft-restored-known-no-write',...mapping,receiptId:randomUUID(),candidateRequiredCase:cells[0].key,sourceSha256,ownedRunId:before.ownedRunId,routePathname:url.pathname,nativeBefore:before.id,nativeAfter:after.id,nativeCorrelationId:correlationId,actionRequests:observed,interceptedActions:matching,abortedActions:aborted,matchingActionForwarded:false,actualRequestFailed:true,nativePublicStateUnchanged:true,adminAuditIncluded:true,submittedControlsRestored:true,dirtyStateRetained:true,dirtyNavigation,dirtyNavigationVerified:Boolean(cancelDirty),...(dirtyNavigationLimit?{dirtyNavigationLimit}:{}),...(acceptedDiscard?{acceptedDiscard}:{}),fileBoundary:snapshot.nonemptyFileControls?'File metadata retained; binary upload/Storage restoration is not claimed.':'No authored FileList restoration claim.',secretsOrDraftArtifactsWritten:false,automaticCoverage:[],globalClosed:false,proofBoundary:'Exactly one actual Action aborted before forwarding, full owned public state including audit unchanged, and submitted Form draft retained. No SQL transaction rollback, unknown-commit recovery or later retry success is inferred.'};
   }finally{page.off('request',listener);}
- }catch{throw Error('Submitted-draft restoration proof failed at '+phase+'. No restoration coverage granted.');}
+ }catch(error){failurePhase=phase;primaryFailure=describeCoreDraftFailure(error);failureRequests=Object.freeze({matching,observed,aborted});failure=Error('Submitted-draft restoration proof failed at '+phase+'. No restoration coverage granted.');throw failure;}
  finally{
   clearTimeout(timer);release?.();
-  try{if(removeRoute)await removeRoute();}catch{throw Error('Submitted-draft route cleanup failed. No restoration coverage granted.');}
-  finally{if(attempted)await Promise.allSettled([requestFailure,clicking].filter(Boolean));snapshot=null;requests.length=0;}
+  try{if(removeRoute)await removeRoute();}catch(error){cleanupFailure=describeCoreDraftFailure(error);failure=Error('Submitted-draft route cleanup failed. No restoration coverage granted.');throw failure;}
+  finally{
+   if(attempted)await Promise.allSettled([requestFailure,clicking].filter(Boolean));snapshot=null;requests.length=0;
+   if(failure){
+    // Preserve cleanup-error precedence and wait boundaries; attach only after existing promises settle.
+    const environment=[primaryFailure,clickFailure,requestEventFailure,routeRejection].some(value=>value?.reason==='environment-code'||value?.reason==='browser-closed');
+    const category=environment?'environment':failurePhase==='dispatch'&&clickFailure?'click':['restored-draft','dirty-cancellation'].includes(failurePhase)?'draft-restoration':'verification';
+    const diagnostic=Object.freeze({schema:1,phase:failurePhase??phase,category,cause:primaryFailure??null,click:clickFailure??null,requestFailure:requestEventFailure??null,route:routeRejection??null,cleanup:cleanupFailure??null,requestsAtFailure:failureRequests??null,requestsAfterCleanup:Object.freeze({matching,observed,aborted}),rawErrorRetained:false});
+    failure.diagnostic=diagnostic;failure.message+=' Diagnostic: '+JSON.stringify(diagnostic);
+   }
+  }
  }
 }
 

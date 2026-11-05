@@ -398,6 +398,28 @@ owner or assertion. Preserve the failed Admission and its source binding;
 fresh live qualification is required for the corrected source. The continuation
 evidence is under `.tmp-qa/pr229-timeout-ownership-release-20261103-02/`.
 
+The 5 November QA scope-restoration release on `bd980139` passed fresh
+Admission and initial Preflight, then stopped after six Full E gates. Gate7's
+submitted-draft control failed at `dispatch`; its original catch discarded the
+cause. The separately authorized, observation-only targeted invocation passed
+80 checks and did not reproduce that failure. Preserve both outcomes under
+`.tmp-qa/qa-scope-restoration-20261105-01/` and
+`.tmp-qa/qa-gate7-diagnosis-20261105-01/`; neither is a completed Gate7 or Full E
+release proof, and the historical dispatch root cause remains unknown.
+
+The subsequent authorized correction adds bounded failure visibility at the
+existing draft-restoration fixture and its verifier. Diagnostics retain only
+allowlisted error classifications, fixed phases and request counts. They must
+not export raw error messages, stacks, causes, locator logs, requests or private
+draft values. Preserve the original assertions, successful receipt shape,
+500ms controlled-page timeout, 25-second interception/event waits and cleanup
+precedence. Capture rejection metadata without replacing the promises or
+changing their race; attach the final diagnostic after the existing settlement
+and cleanup. Synthetic click, environment, draft-loss and cleanup failures
+qualify this visibility only. The successor still requires fresh Admission and
+one complete Full E75 invocation; partial attempts cannot be combined, resumed
+or relabeled PASS. This correction changes no acceptance or budget policy.
+
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
 rule grants no additional Product, Architecture, Auth, Permission, Database,
