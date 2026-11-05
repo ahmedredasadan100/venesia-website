@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
+import { createElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
@@ -218,6 +220,119 @@ function executeArticleDisplayProjection(create: string, edit: string, shared: s
     savedEdit: controls(display(propsFromActualConsumer(edit, "edit", hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), null, "article")))),
     recoveredEdit: controls(display(propsFromActualConsumer(edit, "edit", hydrate(Object.fromEntries(nativeFields.map(field => [field, false])), Object.fromEntries(nativeFields.map(field => [field, ["on"]])), "article")))),
   };
+}
+
+/** Render the real Article/standard Hero chain; only data and unrelated surfaces are ports. */
+async function renderArticleTitleStates(pageSource: string) {
+  const nativeRequire = createRequire(import.meta.url);
+  const pageFile = "src/app/(site)/topics/[slug]/page.tsx";
+  const realFiles = new Set([
+    pageFile,
+    "src/components/InternalPageLayout.tsx",
+    "src/components/sections/DynamicHeroSection.tsx",
+    "src/components/content/RichTextContent.tsx",
+    "src/lib/topics/load-public-topics.ts",
+    "src/lib/page-sections.ts",
+    "src/lib/hero/hero-content-controls.ts",
+    "src/lib/hero/responsive-media.ts",
+    "src/lib/hero/use-hero-media-viewport.ts",
+    "src/hooks/use-prefers-reduced-motion.ts",
+    "src/lib/rich-text/html-utils.ts",
+    "src/lib/rich-text/article-heading-semantics.ts",
+    "src/lib/page-blocks/page-composition-utils.ts",
+    "src/lib/content/public-content-path.ts",
+    "src/lib/admin/links/static-routes.ts",
+  ]);
+  const title = "Article semantic title";
+  let showTitle = true, showIntro = true, detailReads = 0, networkAttempts = 0;
+  const emptySurface = { __esModule: true, default: () => null };
+  const forbidden = () => { throw new Error("Unexpected surface in bounded Article title fixture"); };
+  const ports: Record<string, unknown> = {
+    "src/lib/content/public-content-read/owner": {
+      loadPublicContentDetail: async (contentType: string, slug: string) => {
+        assert.equal(contentType, "article");
+        assert.equal(slug, "article-semantic-title");
+        detailReads++;
+        return {
+          id: 1, slug, title, excerpt: "Article excerpt", content: "# Stored body heading\n\nArticle body.",
+          image: "", metadataImage: "", imageAlt: "", ogImage: "", ogImageAlt: "", category: "", categorySlug: "",
+          series: "", seriesSlug: "", date: "", publishedAt: "2026-01-01T00:00:00Z", readingTime: "",
+          isFeatured: false, isPopular: false, seoTitle: "", seoDescription: "", seoKeywords: [], canonicalUrl: "",
+          robotsIndex: null, robotsFollow: null, faq: [], showFaqOnPage: false, showFaqTitleOnPage: false,
+          display: { title: showTitle, image: false, excerpt: true, date: false, category: false, series: false, introCard: showIntro },
+        };
+      },
+      loadPublicContentCollection: forbidden,
+    },
+    "src/lib/page-blocks/load-page-composition": { loadPageCompositionBySlug: async () => ({ slots: { sidebar: [] } }) },
+    "src/lib/seo/generate-public-metadata": { loadResolvedGlobalSeo: async () => ({}), generatePublicMetadata: forbidden },
+    "src/lib/seo/build-jsonld": { buildPageJsonLd: () => ({}) },
+    "src/config/seo/seo-rules": { NO_INDEX_ROBOTS: {} },
+    "src/components/page-composition/PageSlotLayout": { PageSlotContent: ({ entries }: { entries: unknown[] }) => { assert.equal(entries.length, 0); return null; } },
+    "src/components/topics/TopicCard": { __esModule: true, default: forbidden },
+    "src/components/content/TopicViewTracker": emptySurface,
+    "src/components/seo/JsonLd": emptySurface,
+    "src/components/modules/BreadcrumbModuleSection": emptySurface,
+    "src/components/public/PublicMediaImage": { PublicArtDirectedMediaImage: forbidden },
+    "src/hooks/use-swipe-slider": { useSwipeSlider: forbidden },
+    "src/hooks/use-press-feedback": { usePressFeedback: forbidden },
+  };
+  const cache = new Map<string, { exports: Record<string, unknown> }>();
+  const loadSource = (file: string): Record<string, unknown> => {
+    const cached = cache.get(file);
+    if (cached) return cached.exports;
+    assert.ok(realFiles.has(file), "Article title fixture only loads explicitly selected real owners: " + file);
+    const sourceModule = { exports: {} as Record<string, unknown> };
+    cache.set(file, sourceModule);
+    const requireSource = (specifier: string): unknown => {
+      if (["react", "react/jsx-runtime"].includes(specifier)) return nativeRequire(specifier);
+      if (specifier === "server-only") return {};
+      if (specifier === "next/navigation") return { notFound: forbidden };
+      if (specifier === "next/link") return { __esModule: true, default: ({ children, href }: { children?: ReactNode; href: string }) => createElement("a", { href }, children) };
+      if (specifier === "next/image") return { __esModule: true, default: forbidden };
+      assert.ok(specifier.startsWith("."), "Network and unlisted package imports are forbidden: " + specifier);
+      const target = relative(root, resolve(root, dirname(file), specifier)).replaceAll("\\", "/");
+      if (Object.hasOwn(ports, target)) return ports[target];
+      const selected = [target, `${target}.ts`, `${target}.tsx`].find(candidate => realFiles.has(candidate));
+      assert.ok(selected, "Unlisted dependency is forbidden in Article title render: " + target);
+      return loadSource(selected);
+    };
+    const source = file === pageFile ? pageSource : readFileSync(resolve(root, file), "utf8");
+    const compiled = ts.transpileModule(source, { fileName: file, compilerOptions: {
+      module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
+    } });
+    new Function("require", "module", "exports", compiled.outputText)(requireSource, sourceModule, sourceModule.exports);
+    return sourceModule.exports;
+  };
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (() => { networkAttempts++; throw new Error("Network is forbidden in Article title render"); }) as typeof fetch;
+  try {
+    const page = loadSource(pageFile).default as (props: { params: Promise<{ slug: string }> }) => Promise<ReactNode>;
+    const states = [];
+    for (showTitle of [true, false]) for (showIntro of [true, false]) {
+      const html = renderToStaticMarkup(await page({ params: Promise.resolve({ slug: "article-semantic-title" }) }));
+      states.push({ showTitle, showIntro, html });
+    }
+    assert.equal(detailReads, 4, "Every title state executes the real public Topic adapter with one in-memory read");
+    assert.equal(networkAttempts, 0, "Article title renders never attempt network access");
+    for (const owner of [pageFile, "src/components/InternalPageLayout.tsx", "src/components/sections/DynamicHeroSection.tsx", "src/components/content/RichTextContent.tsx", "src/lib/topics/load-public-topics.ts"]) {
+      assert.ok(cache.has(owner), "Article title render retains real owner: " + owner);
+    }
+    return states;
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+}
+
+function assertArticleTitleState(state: { showTitle: boolean; showIntro: boolean; html: string }) {
+  const label = `Article title=${state.showTitle} intro=${state.showIntro}`;
+  const headings = [...state.html.matchAll(/<h1\b([^>]*)>([\s\S]*?)<\/h1>/gu)];
+  assert.equal(headings.length, 1, label + " has exactly one page-level H1");
+  assert.equal(headings[0]![2], "Article semantic title", label + " preserves the title text");
+  const screenReaderOnly = /\bclass="[^"]*\bsr-only\b[^"]*"/u.test(headings[0]![1]!);
+  assert.equal(screenReaderOnly, !state.showTitle, label + " preserves the visible Hero title setting");
+  assert.ok(!/\baria-hidden(?:=|\s|$)/u.test(headings[0]![1]!), label + " keeps the semantic title accessible");
+  assert.ok(state.html.includes('<h2 data-article-heading-level="1">Stored body heading</h2>'), label + " keeps stored Article headings demoted");
 }
 
 const fields = [
@@ -615,6 +730,34 @@ check(
     topicDetail.includes("value={topic.content}") &&
     topicDetail.includes('className="article-rich-text"'),
 );
+
+for (const state of await renderArticleTitleStates(topicDetail)) {
+  assertArticleTitleState(state);
+  check(`real Article/standard Hero title=${state.showTitle} intro=${state.showIntro} keeps one semantic H1 and the requested visible title`, true);
+}
+
+const topicDetailTree = ts.createSourceFile("TopicDetailsPage.tsx", topicDetail, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const topicDetailsOwner = topicDetailTree.statements.find((node): node is ts.FunctionDeclaration =>
+  ts.isFunctionDeclaration(node) && node.name?.text === "TopicDetailsPage");
+const titleConditions: ts.ConditionalExpression[] = [];
+function findArticleTitleConditions(node: ts.Node) {
+  if (ts.isConditionalExpression(node) && node.whenTrue.getText(topicDetailTree).includes('<h1 className="sr-only">')) titleConditions.push(node);
+  ts.forEachChild(node, findArticleTitleConditions);
+}
+assert.ok(topicDetailsOwner?.body, "Semantic title negative controls use the real TopicDetailsPage owner");
+findArticleTitleConditions(topicDetailsOwner.body);
+assert.equal(titleConditions.length, 1, "Article page has one conditional semantic title fallback for bounded negative controls");
+const titleCondition = titleConditions[0]!.condition;
+for (const [label, condition] of [["missing fallback", "false"], ["unconditional fallback", "true"], ["inverted fallback", "topic.showTitleOnPage"]]) {
+  const mutated = topicDetail.slice(0, titleCondition.getStart(topicDetailTree)) + condition + topicDetail.slice(titleCondition.end);
+  assert.notEqual(mutated, topicDetail, "Article title negative changes the actual owner: " + label);
+  const parsed = ts.createSourceFile("ArticleTitleNegative.tsx", mutated, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  assert.equal((parsed as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length, 0, "Article title negative is valid TSX: " + label);
+  await assert.rejects(async () => {
+    for (const state of await renderArticleTitleStates(mutated)) assertArticleTitleState(state);
+  }, /Article title=(?:true|false) intro=(?:true|false) has exactly one page-level H1/u, "Real Article render rejects " + label);
+  check("real Article/standard Hero render rejects " + label, true);
+}
 
 console.log(
   `verify:topic-display-controls-navigation passed (${passed} assertions)`,

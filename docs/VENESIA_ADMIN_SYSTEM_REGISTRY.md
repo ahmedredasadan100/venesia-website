@@ -4250,3 +4250,80 @@ inputs and boundaries; changed closure qualification is not borrowed. The
 17.291s to 19.642s, 18-to-14-process sample remains historical, with no new speed
 claim or measurement rerun. Six Owner reviews remain Pending, Admin Smoke is
 unperformed, and `globalClosed=false` until their own requirements are met.
+
+### 27.59 PR #230 Public E2E Article heading recovery — 5 November 2026
+
+**Reality and evidence boundary:** `c0aad910` completed the subsequent Windows
+Full E with 75/75 gates, actual Ubuntu qualification and cleanup. GitHub run
+`41998017826`, attempt 1, then passed seven of eight jobs. Job `127145911278`
+failed Public E2E: six cases expected one detail-page H1 and received zero.
+The workflow checked out PR merge `2d10b97c`; its tree equals `c0aad910`.
+The original log, two uploaded artifacts, failure, and release STOP remain
+preserved in `.tmp-qa/qa-release-resume-c0aad910-20261105-01/`.
+Playwright traces, screenshots, video and error-context paths occur in that
+log but their files were not uploaded. No original per-case DOM or selected
+href can be recovered from those two artifacts. No CI retry or Full E rerun
+was performed for this investigation.
+
+**Root cause and owner:** the existing Article consumer
+`src/app/(site)/topics/[slug]/page.tsx` forwarded `showTitleOnPage=false`
+to the standard Hero, which correctly hid the visible title, but omitted
+the semantic fallback already used by `MediaDetailPage`. This violates the
+existing one-H1 contract in `CURRENT_PROJECT_STATE.md`; it is a Product
+composition defect, with a missing hidden-title state in isolated QA coverage.
+The Product files and public tests were unchanged between main `2a40e0ba`
+and `c0aad910`; this is not a newly introduced QA optimization behavior.
+
+The reconstructed failing route is
+`/topics/venesia-land-ownership-beit-al-watan` (Topic 1580). Read-only hosted
+evidence shows a published, non-deleted Article with `show_title_on_page=false`,
+updated at 03:50:50 UTC before CI. Historical requests during the failing
+CI window read that slug successfully (HTTP 200). Current readback using the
+CI listing filters/order selects it first; two inert HTTP reads confirm
+Listing H1=1, that first link, then Detail HTTP 200/H1=0 on the same Product
+source. These independent observations establish the defect, but are not
+recovered traces proving the href separately for all six cases. The unrelated
+stream-closed log message is not established as its cause.
+
+CI used configured hosted data; its loopback app URL did not isolate the DB.
+Successful Full E used the owned isolated fixture with visible Article title,
+absent Topics CMS state and fallback listing. Its genuine 11/11 Public E2E
+success therefore did not exercise this hidden-title state. Listing, public
+publication filters, Page Composition sidebar, read owner, adapter, standard
+Hero and Markdown heading-demotion contracts remain unchanged.
+
+**Correction and protection:** only the Article consumer gains the existing
+conditional `<h1 className="sr-only">` pattern when its visible title is false.
+No shared renderer, Admin controls, storage, migration, permission, Product
+contract, runner, registry or workflow is added or changed. The existing
+`verify:topic-display-controls-navigation` guard now renders the actual Topic
+adapter, Article page, layout, standard Hero and rich-text owner with bounded
+in-memory data. Four title/intro states require exactly one accessible H1,
+the requested visible/hidden title and demoted body headings. Three mutations
+reject missing, unconditional and inverted fallback behavior specifically by
+the H1-count assertion. All 43 previous named assertions remain; 50 pass.
+The original Public E2E assertions and retry/timeout settings are unchanged.
+
+**Verification and remaining gates:** ordered syntax, ESLint, TypeScript,
+executable governance, infrastructure and route-contract checks passed before
+the expected RED (`title=false`, zero H1). After the three-line Product fix,
+affected page syntax/lint, project TypeScript, route contract and the complete
+existing Topic display guard passed. Unchanged guard syntax/lint and canonical
+boundary checks were retained with source binding and the exact three-line
+delta proof; successful unrelated checks were not repeated. All 13 owned
+child executions reported verified cleanup and zero live processes. The
+deterministic SSR checks establish semantic behavior, not live browser visual
+approval. The visible-title control is preserved; no shared UI is modified.
+
+The bounded eight-axis Source Architecture Review is PASS, zero blockers:
+existing Article ownership, unchanged runtime and read adapter, existing
+heading capability and boolean input contract, restored H1 output contract,
+the complete Article/Media distinction, and unchanged hosted source of truth.
+Current evidence and the original RED are retained under
+`.tmp-qa/qa-public-e2e-rca-20261105-01/`. This targeted correction does not qualify
+the successor source for release. PR #230 remains Draft at the remote
+`c0aad910`; Push, final-source release qualification and required exact-HEAD CI,
+Ready, Merge, Production and Smoke remain outstanding. Six Owner reviews are
+still Pending, authenticated Admin Smoke is unperformed, and
+`globalClosed=false`. The historical performance measurement is unchanged;
+there was no performance remeasurement, hosted data write or deployment.
