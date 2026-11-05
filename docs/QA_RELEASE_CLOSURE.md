@@ -791,6 +791,48 @@ private-ancestor membership. Unknown ancestry remains unqualified.
 Native waits on Windows8+ exclude low-power time, so native and UTC bounds and
 the scoped awake-window evidence must remain explicit; no future Sleep or
 long-run transport guarantee follows ([Microsoft wait semantics](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)).
+
+**Operating-window power policy — Owner amendment, 5 November 2026:** battery
+operation is authorized. `AC Offline` describes the current power source and
+requires an observation/warning; it is not, by itself, failed readiness, failed
+QA or a release Stop Condition. An AC transition alone must not cancel an
+otherwise qualified invocation. This retains the battery permission already
+recorded in Registry Section 27.36 and supersedes contrary task-local AC-only
+startup, preparation and preallocation checks. It changes no Product contract.
+
+Use the existing task-local native operating-condition helper as the single
+power interpretation owner, with the existing preparation and release caller
+consuming its qualified observations. Keep source type separate from safety:
+known OS-reported critical depletion prevents new allocation or requests managed
+cancellation of an active invocation, including when AC is reported Online.
+A known Low-only state is a warning, not a newly invented percentage cutoff.
+Distinguish an unknown/invalid primary power status or failed power API from
+critical depletion: the former is unqualified telemetry and cannot establish
+safe readiness; record its actual cause and use the same managed stop path.
+Handle the OS unknown sentinel before interpreting flag bits. A valid explicit
+no-system-battery status is not missing telemetry or a critical battery.
+Unavailable discharge-rate/capacity estimates remain unknown; they do not prove
+exhaustion, runtime capacity or battery endurance. No universal numeric battery
+threshold, forecast or guarantee is introduced.
+
+The native helper observes and owns only its temporary execution-state request;
+it does not acquire, terminate or manage QA children. The existing caller owns
+readiness rejection and `AbortController` cancellation, preserving the original
+reason, bounded child cleanup and raw terminal evidence. Do not introduce a
+second power runtime or duplicate safety predicates in each consumer. Required
+resource, connection, heartbeat, lease, deadline, cancellation and cleanup checks
+remain unchanged; battery permission cannot waive any of them.
+
+Keep current Sleep/hibernate observations and the bounded awake window. Acquire
+the existing temporary thread-scoped idle-prevention state, retain its actual
+previous state and restore it on the same native thread in `finally`. Do not
+alter permanent power-plan settings or suppress OS critical-battery safety
+actions. Power transitions, unavailable observations, acquisition/restoration
+and managed cancellation need distinct evidence; missing evidence is not PASS.
+Prior AC-only stopped attempts remain immutable historical results. Any changed
+operating-condition helper/caller requires affected positive/negative controls
+and current source-bound release qualification before a resumed invocation.
+
 The original root exit is distinct from the helper/capability outcome. Normal
 and abnormal root exit, cancellation, timeout, detached descendants, owner loss
 and unrelated-process preservation need actual scoped controls.

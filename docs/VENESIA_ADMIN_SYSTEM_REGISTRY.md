@@ -4327,3 +4327,71 @@ Ready, Merge, Production and Smoke remain outstanding. Six Owner reviews are
 still Pending, authenticated Admin Smoke is unperformed, and
 `globalClosed=false`. The historical performance measurement is unchanged;
 there was no performance remeasurement, hosted data write or deployment.
+
+### 27.60 PR #230 operating-window power policy amendment — 5 November 2026
+
+**Previous → current / authority:** the prepared release for `025b48f2` stopped
+before Admission when its fresh 11:14:30–11:14:42 UTC observation reported
+`AC Offline`. Admission, Full E and Push did not execute in that attempt. Its
+prepared callers, original observations, stopped status and cleanup records
+remain preserved under `.tmp-qa/pr230-final-release-025b48f2-20261105-01/`.
+The Owner now explicitly authorizes battery operation and makes AC Offline a
+power-source warning rather than an independent Stop Condition. Section 27.36
+already recorded that permission; the stricter task-local AC-only assumptions
+were not a canonical Product or release requirement. Constitution Section 2.2
+permits this explicit current decision, now recorded in the existing QA
+operating-window contract. No further Product approval or parallel policy owner
+is introduced by this bounded amendment.
+
+**Existing owners and affected consumers:** the task-local
+`IndependentPublicAdminOperatingCondition.cs` owns native power observations,
+their safety interpretation and its temporary thread-scoped awake state.
+`prepare-runtime-inputs.mjs` consumes current readiness and binds its evidence;
+`run-final-release.mts` consumes the same interpretation for preallocation and
+managed cancellation through its existing controller. Existing environment and
+native-power capture scripts remain evidence producers. Successor derivatives
+and affected controls belong under
+`.tmp-qa/pr230-power-policy-amendment-20261105-01/`; stopped-attempt files are not
+rewritten. The canonical isolated verification, process, connection and fixture
+owners, Product source, data, permissions, CI and deployment workflows retain
+their existing responsibilities.
+
+**Preserved capability and safety:** known healthy battery operation and AC
+transitions may continue with warnings. Known Low-only status does not create a
+new numeric cutoff. A valid OS critical-depletion indication blocks allocation
+or requests managed cancellation, independently of AC source. Unknown or failed
+primary power telemetry is an unqualified observation, not a fabricated critical
+battery or safe PASS; a valid no-system-battery status is a separate normal case.
+The unknown flag sentinel must be distinguished before testing individual bits.
+Missing discharge-rate/capacity estimates remain unknown, with no endurance or
+future-awake claim. Interpretation stays in the existing native helper; the
+existing caller retains process control and original-error/cleanup precedence.
+No new runtime, watchdog policy, percentage threshold or automatic retry is
+authorized. Resource, connection, heartbeat, lease, deadline, cancellation and
+cleanup obligations remain mandatory. The existing bounded temporary awake
+request retains its actual previous state and restores it on the same native
+thread; permanent Sleep/hibernate or OS critical-battery policies are unchanged.
+
+**Impact, proof and release status:** the combined release scope remains E.
+Operating-condition execution changes require affected positive/negative proof
+for AC, battery, transitions, critical and unknown/no-battery cases, cancellation
+and state restoration; source checks alone do not prove runtime cleanup. These
+controls passed in the bounded current invocation: 21 actual-owner decision
+cases, five source-transition cases, 24 actual-caller consumer/cancellation
+controls, and a real temporary awake-state acquisition/restoration on native
+thread 100636. The API returned `0x80000000`, restored on the same thread with
+exit 0. The caller controls include loss of observation continuity, missing
+ownership, stale/terminal observations and evidence-write failure; their bounded
+asynchronous fixture proves caller timer/listener cleanup, not live QA child
+cleanup. Seven unchanged source blocks preserve native `finally`, window/cadence,
+Public/native evidence preservation, stdin cancellation, live Admission/plan,
+complete 75-gate lifecycle/Pre-Push and approved budget values. See the
+[bounded power evidence](../.tmp-qa/pr230-power-policy-amendment-20261105-01/power-policy-verification.json).
+Successor source qualification and release execution remain **Pending**.
+Earlier targeted Article/QA results remain historical evidence with their own
+source and scope; no previous failure or stopped attempt is relabeled PASS.
+Fresh qualified Admission, the selected complete Full E plan, same-live
+post-cleanup Pre-Push, exact-HEAD remote gates and authorized release actions
+remain outstanding. Six Owner reviews remain Pending, authenticated Admin Smoke
+is unperformed, and `globalClosed=false`; this power amendment grants no review
+deferral, Ready/Merge approval or technical/security waiver.
