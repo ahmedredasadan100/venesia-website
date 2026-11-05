@@ -4452,3 +4452,71 @@ execution and cannot be marked PASS by this decision. The image-delivery HTTP
 402 incident remains subject to its own required recovery evidence and release
 gate; this review deferral neither resolves it nor waives it. Historical failures,
 stopped attempts and review statuses remain preserved. `globalClosed=false`.
+
+### 27.62 PR #230 power-monitor diagnostic visibility recovery — 5 November 2026
+
+**Previous → current / authority:** the Owner explicitly authorizes bounded
+diagnostic recovery at the existing power monitor, targeted failure controls,
+and then conditional release continuation. On `11354cec`, fresh Admission and
+automatic Preflight passed; Full E completed 56 of 75 gates, including Gate 7,
+before `POWER_MONITOR_UNQUALIFIED` canceled active Gate 57
+(`verify:admin-runtime`). The original attempt, failure, logs and successful
+resource/power restoration remain unchanged under
+`.tmp-qa/pr230-release-resume-20261105-03/`. That incomplete result is not a
+completed Full E and cannot be combined with another invocation.
+
+**Root cause and existing owners:** the proven defect is loss of diagnostic
+detail in `requestPowerSafetyCancellation`: its catch discarded exceptions
+from `readCurrentPowerObservation` and retained only a generic marker. The
+historical initiating read, parse or assertion failure remains **UNKNOWN**.
+All 203 persisted native samples were SAFE and AC Online; they do not prove
+a timing race, actual unsafe power, or a Product defect. The existing task-local
+`run-final-release.mts` remains the reader/cancellation owner. Its successor
+derivative and actual-function controls are under
+`.tmp-qa/pr230-release-resume-20261105-04/`. Native interpretation and temporary
+awake-state ownership remain in the byte-identical
+`IndependentPublicAdminOperatingCondition.cs`; no parallel owner is introduced.
+
+**Bounded correction and preserved capabilities:** failure-only diagnostics now
+retain an allowlisted stage, classification, exception type/code, known assertion
+identifier and finite numeric observation context. They exclude raw messages,
+stacks, causes, paths and log contents. Failed diagnostic formatting or evidence
+writing cannot replace the initiating exception or suppress cancellation.
+AC source transitions, native critical depletion, native telemetry failure,
+observation-file read/parse failure and internal monitor failure remain distinct.
+AC Offline alone does not cancel. The eight existing assertions, entry-time
+clock capture, I/O order, 120-second freshness/continuity bounds, native decision
+interpretation, first cancellation, heartbeat, lease, timers, budgets and
+cleanup remain unchanged. The suspected concurrent-read timing race is not
+changed or claimed as the historical cause.
+
+**Actual targeted proof:** one bounded invocation passed 56/56 controls: all
+24 previous controls plus 32 diagnostic controls. One added control compared
+25 old/current reader cases for accepted results, rejected exceptions and I/O
+order. The original assertion predicates and unrelated caller blocks retain
+exact inverse-delta proof; native policy source is unchanged. These controls
+ran on tracked HEAD `11354cec` with caller SHA
+`8165d5f1fc930de92545d1aea19355d182c778f6e6f5ea9b4e86bf15e6d4b2a4`.
+They prove diagnostic behavior and bounded fixture cleanup, not a fresh Full E,
+live native QA cleanup, or resolution of the historical initiating failure.
+
+**Evidence validity and release boundary:** this Registry-only tracked successor
+records the exact task-local correction; it adds no Product or CI implementation.
+The changed caller requires fresh affected qualification, while unchanged
+native, H1, Ubuntu and connection evidence may be retained only with explicit
+input/runtime equivalence and their original execution identities. Combined
+scope remains E: fresh live Admission, automatic Preflight, one complete Full E
+75 invocation and same-live post-cleanup Pre-Push remain required. Exact-HEAD
+CI/Preview, Branch Protection, expected-head Standard Merge, Post-Merge CI,
+Production readiness and permitted Smoke are separate mandatory gates.
+Section 27.61's six PR #230-only deferrals remain **Pending / zero approvals**,
+with Ahmed owning follow-up and the same expiry. This bounded diagnostic
+successor grants no new waiver and no Admin Smoke PASS. The separate image
+incident, WebP study and future Product changes remain outside this correction.
+Release outcomes belong in the existing external evidence; `globalClosed=false`.
+
+Evidence: [root cause](../.tmp-qa/pr230-release-resume-20261105-04/power-monitor-root-cause.json),
+[targeted qualification](../.tmp-qa/pr230-release-resume-20261105-04/power-monitor-diagnostic-qualification.json),
+[actual controls](../.tmp-qa/pr230-release-resume-20261105-04/power-caller-controls.json),
+[exact source delta](../.tmp-qa/pr230-release-resume-20261105-04/power-monitor-source-delta-review.json),
+and [preserved prior evidence](../.tmp-qa/pr230-release-resume-20261105-04/prior-evidence-preservation.json).
