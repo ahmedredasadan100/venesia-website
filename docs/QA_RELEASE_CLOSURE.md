@@ -305,14 +305,20 @@ automatic retry follows a real functional/security failure, and this authority
 does not authorize Product changes, Push, Ready, Merge or Production.
 
 The existing `pr229-20261103-double-operational` selector is a compatibility
-identifier for this standing allowance. It applies to every otherwise valid
-Public request scope; it does not require an old PR commit or a complete Admin
-release selection. Ordinary scope validation and private live Admission remain
-mandatory. The helper's omitted-selector baseline mode is unchanged: operational
-callers select the standing allowance explicitly and retain original/effective
-values. This is not an environment-wide timer override. Same-source receipt
+identifier for this standing allowance. The Owner's scope-restoration decision
+of 5 November 2026 withdraws the unqualified request-scope expansion in
+`cd52a98d`: when the selector is present, the original execution owner requires
+`selection="admin-adoption"` and undefined `adoptionScope`, `adoptionCohort`,
+`adoptionJourneySelection` and `adminMeasurement`. The five original predicates
+and their acceptance/rejection semantics are restored at that owner. They are
+runtime request restrictions, not duplicate tests or relocated assertions.
+Ordinary scope validation and private live Admission remain mandatory. The
+standing original x2 calculation, technical maxima and omitted-selector baseline
+mode are unchanged; no historical PR ancestry is required by the standing
+allowance. This is not an environment-wide timer override. Same-source receipt
 reuse also requires the same effective leaf deadline; baseline-mode receipts
-cannot satisfy a standing-budget invocation or vice versa.
+cannot satisfy a standing-budget invocation or vice versa. Independent bounded
+command deduplication does not depend on broadening this request boundary.
 
 For the current PR #229 continuation, the whole live-connection qualification
 uses420000→840000ms and its Native wrapper480000→960000ms, retaining120000ms

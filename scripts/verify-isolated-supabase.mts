@@ -7774,16 +7774,34 @@ async function verifyAdmissionQualificationControls() {
     privateFloor.checks[0].result.code = priorCode;
     await assert.rejects(invoke({ admissionQualification: qualified }), error => error === stop); assert.equal(ownershipReads, 1);
   });
-  await control("standing budgets admit bounded Public and scoped Admin requests while preserving every normal request guard", async () => {
+  await control("restored operational scope preserves all five original predicates and rejects each excluded request before ownership", async () => {
     const executor = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification");
     assert.ok(executor?.body);
+    const scopeBlocks = executor.body.statements.filter((node): node is ts.IfStatement => ts.isIfStatement(node)
+      && node.expression.getText(tree) === "operationalBudget !== undefined");
+    assert.equal(scopeBlocks.length, 1, "The explicit budget must retain its one original request-scope boundary.");
+    const scopeBlock = scopeBlocks[0]; assert.ok(ts.isBlock(scopeBlock.thenStatement)); assert.equal(scopeBlock.elseStatement, undefined);
+    const originalPredicates = [
+      'assert.equal(request.selection, "admin-adoption", "Temporary PR #229 budget requires the complete Public/Admin release path.");',
+      "assert.equal(request.adoptionScope, undefined);", "assert.equal(request.adoptionCohort, undefined);",
+      "assert.equal(request.adoptionJourneySelection, undefined);", "assert.equal(request.adminMeasurement, undefined);",
+    ];
+    assert.deepEqual(scopeBlock.thenStatement.statements.map(node => node.getText(tree)), originalPredicates,
+      "Restoration must retain the original five operators, operands, ordering and selection diagnostic.");
+    const ownershipBoundary = executor.body.statements.findIndex(node => ts.isExpressionStatement(node)
+      && node.getText(tree) === "await context.assertOwned();");
+    assert.ok(executor.body.statements.indexOf(scopeBlock) < ownershipBoundary);
     const boundary = executor.body.statements.findIndex(node => ts.isVariableStatement(node)
       && node.declarationList.declarations.some(row => row.name.getText(tree) === "originalContext"));
     assert.ok(boundary > 0);
     const prefix = executor.body.statements.slice(0, boundary).map(node => node.getText(tree)).join("\n");
-    const validRequests: Partial<InputRequest>[] = [{}, { selection: "build-contracts" }, { selection: "hero-compatibility" },
-      { selection: "media-upload-limit" }, { selection: "admin-interactions" }, { selection: "admin-adoption", finalQualityGate: true },
-      { selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms" }];
+    const measurement: NonNullable<InputRequest["adminMeasurement"]> = { phase: "before", frozenSourceManifest: "controlled-source.json", controlDirectory: "controlled-directory" };
+    const ordinaryValidRequests: Partial<InputRequest>[] = [{}, { selection: "build-contracts" }, { selection: "hero-compatibility" },
+      { selection: "media-upload-limit" }, { selection: "admin-interactions" }, { selection: "admin-interactions", adminMeasurement: measurement },
+      { selection: "admin-adoption" }, { selection: "admin-adoption", finalQualityGate: true },
+      { selection: "admin-adoption", adoptionScope: "core-closure" },
+      { selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms" },
+      { selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms", adoptionJourneySelection: "text-topic-forms" }];
     const invalidRequests: Partial<InputRequest>[] = [
       { selection: "unknown" as InputRequest["selection"] },
       { selection: "build-contracts", adoptionScope: "core-closure" },
@@ -7794,26 +7812,71 @@ async function verifyAdmissionQualificationControls() {
       { selection: "build-contracts", adminMeasurement: {} as InputRequest["adminMeasurement"] },
       { selection: "hero-compatibility", finalQualityGate: true },
     ];
+    const scopeBoundaryRequests: Partial<InputRequest>[] = [
+      { selection: "build-contracts" },
+      { selection: "admin-adoption", adoptionScope: "core-closure" },
+      { selection: "admin-adoption", adoptionCohort: "domain-forms" },
+      { selection: "admin-adoption", adoptionJourneySelection: "text-topic-forms" },
+      { selection: "admin-adoption", adminMeasurement: measurement },
+    ];
     const ordinary = executorFixture(), ordinaryQualification = await qualify(ordinary.api);
     for (const operationalBudget of [undefined, "pr229-20261103-double-operational"] as const) {
       const fixture = executorFixture(), qualification = await fixture.api.qualifyLocalVerificationAdmission({ operationalBudget }, new AbortController().signal);
       fixture.api.assertQualified(qualification, fixture.binding());
       let ownershipReads = 0;
-      const context = { assertOwned: async () => { ownershipReads++; } };
-      const guard = new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", "context", "prepared", "adminCredentials", "gitHead",
+      let stopAtOwnership: Error | undefined;
+      const context = { assertOwned: async () => { ownershipReads++; if (stopAtOwnership) throw stopAtOwnership; } };
+      // This projects the actual request prefix with controlled authority/readiness ports.
+      // It proves request guards only, not live Admission, measurement execution or release eligibility.
+      const projectGuard = (candidate = prefix) => new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", "context", "prepared", "adminCredentials", "gitHead",
         compile(declaration("localVerificationOperationalDeadlineMs") + "\n" + adminAdoptionControlSource(tree)
-          + "\nreturn async function(request) { " + prefix + ";return {adoption,retainedQuality}; }")
+          + "\nreturn async function(request) { " + candidate + ";return {adoption,retainedQuality}; }")
       )(assert, sha256, fixture.api.privateInvocations, () => ({ fullEProcessCleanupQualified: true }), context,
         { get: () => ({}) }, { get: () => ({}) }, async () => qualification.finalHead) as (request: Partial<InputRequest>) => Promise<{ adoption: boolean; retainedQuality: boolean }>;
+      const guard = projectGuard();
       const invoke = (request: Partial<InputRequest>) => guard({ additionalSourceFiles: [], admissionQualification: qualification, ...request });
+      const validRequests: Partial<InputRequest>[] = operationalBudget === undefined ? ordinaryValidRequests
+        : [{ selection: "admin-adoption" }, { selection: "admin-adoption", finalQualityGate: true }];
       for (const request of validRequests) assert.deepEqual(await invoke(request), { adoption: request.selection === "admin-adoption", retainedQuality: false });
-      for (const request of invalidRequests) await assert.rejects(invoke(request), assert.AssertionError);
-      assert.equal(ownershipReads, validRequests.length + invalidRequests.length);
+      for (const request of invalidRequests) {
+        const before = ownershipReads; await assert.rejects(invoke(request), assert.AssertionError);
+        assert.equal(ownershipReads, before + (operationalBudget === undefined ? 1 : 0));
+      }
+      if (operationalBudget !== undefined) {
+        const excluded = [{}, ...ordinaryValidRequests.filter(request => request.selection !== "admin-adoption"
+          || request.adoptionScope !== undefined || request.adoptionCohort !== undefined || request.adoptionJourneySelection !== undefined), ...scopeBoundaryRequests];
+        for (const request of excluded) {
+          const before = ownershipReads; await assert.rejects(invoke(request), assert.AssertionError);
+          assert.equal(ownershipReads, before, "Excluded operational requests must stop before ownership or fixture access.");
+        }
+        stopAtOwnership = Error("controlled-restored-scope-boundary");
+        const scopeText = scopeBlock.getText(tree);
+        assert.equal(prefix.split(scopeText).length, 2, "The restored scope block must have one exact projection site.");
+        for (const [index, predicate] of originalPredicates.entries()) {
+          assert.equal(scopeText.split(predicate).length, 2, "Each original predicate must have one exact site in its scope block.");
+          const mutant = projectGuard(prefix.replace(scopeText, scopeText.replace(predicate, ""))), before = ownershipReads;
+          await assert.rejects(mutant({ additionalSourceFiles: [], admissionQualification: qualification, ...scopeBoundaryRequests[index] }),
+            error => error === stopAtOwnership);
+          assert.equal(ownershipReads, before + 1, "Removing any one original predicate must expose its independently rejected request.");
+        }
+        stopAtOwnership = undefined;
+      }
       const beforeMissingAuthority = ownershipReads;
-      await assert.rejects(invoke({ admissionQualification: undefined }), /fresh live source qualification/u);
-      await assert.rejects(invoke({ admissionQualification: JSON.parse(JSON.stringify(qualification)) as Qualification }), /live source qualification/u);
-      await assert.rejects(invoke({ admissionQualification: ordinaryQualification }), /live source qualification/u);
+      const authorizedRequest: Partial<InputRequest> = { selection: "admin-adoption" };
+      await assert.rejects(invoke({ ...authorizedRequest, admissionQualification: undefined }), /fresh live source qualification/u);
+      await assert.rejects(invoke({ ...authorizedRequest, admissionQualification: {} as Qualification }), /live source qualification/u);
+      await assert.rejects(invoke({ ...authorizedRequest, admissionQualification: JSON.parse(JSON.stringify(qualification)) as Qualification }), /live source qualification/u);
+      await assert.rejects(invoke({ ...authorizedRequest, admissionQualification: ordinaryQualification }), /live source qualification/u);
+      const originalSource = qualification.sourceSha256;
+      qualification.sourceSha256 = "f".repeat(64);
+      await assert.rejects(invoke(authorizedRequest), /altered after qualification/u);
+      qualification.sourceSha256 = originalSource;
+      const privateFloor = fixture.api.privateInvocation(qualification).sourceFloor, originalExit = privateFloor.checks[0].result.code;
+      privateFloor.checks[0].result.code = 99;
+      await assert.rejects(invoke(authorizedRequest), /Private ordered source floor was altered/u);
+      privateFloor.checks[0].result.code = originalExit;
       assert.equal(ownershipReads, beforeMissingAuthority, "A budget cannot borrow another invocation's source or baseline-budget authority.");
+      fixture.api.assertQualified(qualification, fixture.binding());
     }
   });
   await control("actual Admission executor retains missing corrupt stale nonzero and undrained-native failures without sealing", async () => {

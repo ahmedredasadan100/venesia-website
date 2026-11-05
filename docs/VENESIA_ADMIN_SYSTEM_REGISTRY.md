@@ -3989,6 +3989,11 @@ zero-deferral release status. `globalClosed=false`.
 
 ### 27.57 Post-PR #229 QA stabilization and bounded optimization — 5 November 2026
 
+This section retains the historical local-development record through
+`cd52a98d`. Its request-scope expansion and local-completion assessment are
+superseded by the failed release Admission and Owner-directed restoration in
+Section 27.58 below; its successful unaffected evidence is not erased.
+
 **Reality and scope:** current local `main`, cached `origin/main` and live GitHub
 `main` were independently resolved to `2a40e0ba080a24744babcda82e03babf5c3936dc`.
 The GitHub connector confirms PR #229 merged, and the live Production-domain
@@ -4106,3 +4111,92 @@ Article, News, Press, Site Update, Video and Gallery remain Pending / not
 performed, with zero approvals and the six historical scoped deferrals under
 Ahmed. Authenticated Admin Smoke remains Skipped for lack of a trusted session.
 `globalClosed=false`.
+
+### 27.58 QA request-scope restoration and release recovery — 5 November 2026
+
+**Reality / authority:** local `main`, `origin/main` and live GitHub `main`
+resolve to `2a40e0ba080a24744babcda82e03babf5c3936dc`. Work continues on
+`codex/qa-stabilization-optimization-20261105` from `cd52a98d`. The Owner now
+explicitly withdraws the unqualified scope expansion and authorizes restoration
+of the five original predicates, affected proof, one comparable performance
+sample, a successor commit and the guarded release sequence. Product behavior,
+data, permissions, migrations and Treasury remain outside scope.
+
+**Failure and cause:** fresh Admission on `cd52a98d` completed its seven owned
+source/control checks with cleanup PASS, but assertion qualification correctly
+blocked `runOwnedPublicVerification`: five old request predicates were absent.
+The existing validator had no equivalent predicate correspondence. A subsequent
+source-derived comparison proved different prefix outcomes for five request
+vectors and retained 19 negative controls; it did not execute live Admission,
+measurement, Product behavior or Full E. Those failures and diagnostics remain
+under `.tmp-qa/qa-stabilization-release-20261105-01/` and
+`.tmp-qa/qa-admission-recovery-20261105-01/`. No waiver or alternate validator was
+introduced. The five predicates originated in `f26844ed`, not in duplicate test
+execution; the restoration supersedes the broader policy in 27.57.
+
+**Owner / consumers / correction:** the unchanged owner is
+`scripts/lib/isolated-public-verification.mts::runOwnedPublicVerification`.
+When `operationalBudget` is present it again requires Admin adoption selection
+and undefined scope, cohort, journey selection and measurement. The original
+five assertion expressions and branch condition are restored verbatim. Local
+Admission, automatic Pre-Push, isolated Public/Admin execution and CI source
+qualification remain consumers of the existing contracts. Regression proof
+belongs to `verify-isolated-supabase.mts`; no acceptance waiver, parallel guard,
+runner, registry or Product consumer change is introduced.
+
+**Preserved capabilities:** bounded A/B literal nested-command deduplication
+remains in `planLocalVerification`; distinct arguments, unresolved commands,
+unique leaves, risk floors and the canonical Full E 75-gate schedule remain.
+Original-budget x2 is applied once at its existing external owners, with no
+change to readiness, heartbeat, lease, cancellation, cleanup or native maxima.
+The five request restrictions do not participate in bounded command planning
+or the measured source-only npm sample. Windows Native and Ubuntu CI identity
+owners, evidence validity and source/context/deadline reuse remain authoritative.
+
+**Fresh affected verification:** Windows passed both syntax checks, affected
+ESLint, project TypeScript, both canonical source guards, 236 current
+infrastructure controls and 620 risk/budget/lifecycle controls. The restored
+fixture checks all five exact original predicates, individual deletion
+witnesses, ordinary valid/invalid requests and private-authority tampering.
+A separate source-derived comparison passed five original/restored request
+vectors and 19 negative controls. Its scope is the request prefix, not live
+Admission or Product behavior. The comparison's inherited `existingFixture.control`
+label names the superseded control; current fixture source and the passing
+620-control log identify the restored control and are the current authority.
+
+The first risk-control attempt failed at an unchanged literal LF source check
+after Git checkout produced CRLF. The original failure is retained. Restoring
+only the owner's previously qualified LF representation preserved its Git diff
+and normalized syntax; no assertion changed. Only the affected failed profile
+and the not-yet-run equivalence comparison then executed. The seven successful
+stages were retained with the explicit representation-equivalence evidence.
+
+Ubuntu 24.04.4 independently passed the two canonical guards and 228 current
+infrastructure controls on Node 22.23.4/npm 10.9.9. Its exact Node binary,
+installed lock and reviewed GNU effect fingerprints matched; no fingerprint
+was renewed. Fresh `npm ci` took 139.770s inside the private container, with no
+host dependency change; network was detached before the checks. Windows and
+Linux process receipts report zero residual children. Identity-checked cleanup
+removed the task-owned container and confirmed no task-owned container remains.
+
+**Measured performance:** the original bounded sample remains historical:
+13.129s to 9.316s, 18 to 14 processes. The same fresh sample after restoration
+measured **17.291s to 19.642s**, 18 to 14 observed processes, with all three
+unique leaves preserved and four to three leaf invocations. The fresh time
+sample is 13.593% slower; it does not retain the previous approximately29%
+time improvement. The process/invocation reduction is preserved, and no overall
+QA speedup, causal timing diagnosis or CPU/peak-memory improvement is claimed.
+There was no measurement retry. Both phases used the same source/environment;
+the five restored request predicates do not execute in this npm sample.
+
+**Evidence / delivery state:** current raw results, original failure,
+line-ending correction, same-sample measurement, Ubuntu identities and scoped
+actor-reuse review are retained in
+`.tmp-qa/qa-scope-restoration-20261105-01/`. Source Architecture Review covers
+all eight required axes with zero source blockers; final source/doc binding and
+release gates remain separate. Combined scope remains E: the successor commit
+requires fresh live Admission/Pre-Push, complete Full E and exact-HEAD required
+CI before the authorized release actions. No current release PASS is inferred
+from historical receipts. Six deferred Owner reviews remain Pending with zero
+actual approvals; authenticated Admin Smoke remains unperformed without a
+trusted session. No deferral is relabeled PASS. `globalClosed=false`.

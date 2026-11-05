@@ -5587,6 +5587,11 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   assert.equal(digest(JSON.stringify(request.admissionQualification)), preallocationAdmission.sha256, "Admission receipt was altered after qualification.");
   const operationalBudget = request.admissionQualification.operationalBudget;
   localVerificationOperationalDeadlineMs(1, operationalBudget);
+  if (operationalBudget !== undefined) {
+    assert.equal(request.selection, "admin-adoption", "Temporary PR #229 budget requires the complete Public/Admin release path.");
+    assert.equal(request.adoptionScope, undefined); assert.equal(request.adoptionCohort, undefined);
+    assert.equal(request.adoptionJourneySelection, undefined); assert.equal(request.adminMeasurement, undefined);
+  }
   assert.equal(digest(JSON.stringify(preallocationAdmission.sourceFloor)), preallocationAdmission.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
   if (request.localVerification && request.finalQualityGate === true)
     assert.ok(request.admissionQualification,
