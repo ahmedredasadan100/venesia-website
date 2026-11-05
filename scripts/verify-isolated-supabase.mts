@@ -966,6 +966,7 @@ async function verifyOrderedLocalVerificationControls() {
     const value = fixture(), original = await value.run(); value.options.prior = original;
     value.options.operationalBudget = "pr229-20261103-double-operational"; value.launches.length = 0;
     const expanded = await value.run();
+    assert.equal(expanded.sourceSha256, original.sourceSha256); assert.equal(expanded.contextSha256, original.contextSha256);
     assert.deepEqual(value.launches.map(launch => launch.limitMs), [3_600_000, 3_600_000, 34_000]);
     assert.deepEqual(expanded.checks.map(check => check.limitMs), [3_600_000, 3_600_000, 34_000]);
     value.options.prior = expanded; value.launches.length = 0;
@@ -3567,6 +3568,44 @@ function verifyLocalRiskVerificationPlan() {
     value.actual.changes[0].file = value.impact.changes[0].file;
     const plan = run(value); assert.equal(plan.risk, "B"); assert.equal(plan.mode, "bounded");
     assert.ok(plan.prefix.includes("verify:dashboard-truth"));
+  });
+  check("bounded A and B execute a selected literal parent and its nested check once regardless of selection order", () => {
+    const parent = "verify:topic-save-bar", child = "verify:admin-form-system";
+    const expectedLeaves = api.localVerificationCommandSteps(scripts, parent); assert.ok(expectedLeaves);
+    for (const risk of ["A", "B"] as const) for (const checks of [[parent, child], [child, parent]]) {
+      const value = fixture(); Object.assign(value.impact.changes[0], { risk, checks,
+        ...(risk === "B" ? { adoption: { applicabilityEvidence: parent, sourceProofEvidence: child, consumerEvidence: parent } } : {}) });
+      const plan = run(value); assert.equal(plan.mode, "bounded"); assert.equal(plan.risk, risk);
+      assert.deepEqual(plan.prefix, ["lint", "typecheck", parent]);
+      assert.deepEqual(plan.redundantAdditionalChecks, [child]);
+      assert.deepEqual(plan.prefix.flatMap(name => api.localVerificationCommandSteps(scripts, name) ?? []), expectedLeaves,
+        "The same fresh nested npm invocation covers the removed standalone check with identical source and arguments.");
+      assert.deepEqual(plan.tail, ["normal-build", "product-surface-build", "platform-contracts", "public-e2e"]);
+    }
+  });
+  check("bounded consolidation retains the surviving recursive ancestor and every distinct argument boundary", () => {
+    const leaf = "node scripts/verify-admin-core-residual-search.mjs", parent = "verify:bounded-parent", middle = "verify:bounded-middle", child = "verify:bounded-child";
+    const commands = { ...scripts, [parent]: `npm run ${middle} && ${leaf} --mode=parent`, [middle]: `npm run ${child}`, [child]: leaf };
+    const value = fixture(); value.impact.changes[0].checks = [child, middle, parent];
+    const plan = run(value, commands); assert.equal(plan.mode, "bounded");
+    assert.deepEqual(plan.prefix, ["lint", "typecheck", parent]); assert.deepEqual(plan.redundantAdditionalChecks, [child, middle]);
+    assert.deepEqual(plan.prefix.flatMap(name => api.localVerificationCommandSteps(commands, name) ?? []), [leaf, `${leaf} --mode=parent`]);
+  });
+  check("bounded consolidation cannot treat identical leaf text under unrelated npm owners as equivalent invocation", () => {
+    const parent = "verify:bounded-parent", child = "verify:bounded-child", leaf = "node scripts/verify-admin-core-residual-search.mjs";
+    const commands = { ...scripts, [parent]: leaf, [child]: leaf };
+    const value = fixture(); value.impact.changes[0].checks = [parent, child];
+    const plan = run(value, commands); assert.deepEqual(plan.prefix, ["lint", "typecheck", parent, child]);
+    assert.deepEqual(plan.redundantAdditionalChecks, [], "Different npm lifecycle identities remain independent even when their Node text matches.");
+  });
+  check("bounded consolidation preserves unsupported wrapper arguments, environment, shell and cyclic boundaries", () => {
+    const parent = "verify:bounded-parent", child = "verify:bounded-child", leaf = "node scripts/verify-admin-core-residual-search.mjs";
+    for (const command of [`npm run ${child} -- --candidate`, `MODE=parent npm run ${child}`, `npm run ${child} || ${leaf}`, `npm run ${child}\n`, `npm run ${parent}`]) {
+      const commands = { ...scripts, [parent]: command, [child]: leaf };
+      const value = fixture(); value.impact.changes[0].checks = [parent, child];
+      const plan = run(value, commands); assert.deepEqual(plan.prefix, ["lint", "typecheck", parent, child]);
+      assert.deepEqual(plan.redundantAdditionalChecks, [], "An unproven execution context cannot remove a selected check.");
+    }
   });
   for (const risk of ["C", "D", "E"] as const) requiresFull("declared " + risk, value => { value.impact.changes[0].risk = risk; });
   requiresFull("unbounded impact", value => { value.impact.changes[0].bounded = false; });
@@ -7565,11 +7604,11 @@ async function verifyAdmissionQualificationControls() {
     assert.equal(Object.hasOwn(value, "operationalBudget"), false); assert.ok(fixture.launches.every(row => row.limitMs === 300_000));
     assert.throws(() => fixture.api.assertQualified(JSON.parse(JSON.stringify(value)) as Qualification, fixture.binding()), /live qualified execution/u);
   });
-  await control("actual Admission binds the exact temporary operational scope to fresh floor profiles ancestry and immutable live receipt", async () => {
+  await control("actual Admission binds the standing operational scope to fresh floor profiles and immutable live receipt", async () => {
     const fixture = executorFixture({ governance: "qualified" }), operationalBudget = "pr229-20261103-double-operational" as const;
     const value = await fixture.api.qualifyLocalVerificationAdmission({ baselineHead: "a".repeat(40), operationalBudget }, new AbortController().signal);
     assert.equal(value.status, "PASS"); assert.equal(value.operationalBudget, operationalBudget); fixture.api.assertQualified(value, fixture.binding());
-    assert.ok(fixture.gitCalls.some(args => JSON.stringify(args) === JSON.stringify(["merge-base", "--is-ancestor", "9edaf02f4cd476315d71b306d5f786f3d8d1efd0", "HEAD"])));
+    assert.ok(!fixture.gitCalls.some(args => args.includes("9edaf02f4cd476315d71b306d5f786f3d8d1efd0")), "Standing budgets must not require a historical PR ancestor.");
     assert.deepEqual(fixture.api.privateInvocation(value).sourceFloor.checks.map(row => row.limitMs), [3_600_000, 3_600_000, 360_000]);
     assert.deepEqual(fixture.launches.map(row => row.limitMs), [600_000, 600_000, 600_000]);
     delete value.operationalBudget; assert.throws(() => fixture.api.assertQualified(value, fixture.binding()), /altered after qualification/u);
@@ -7582,13 +7621,17 @@ async function verifyAdmissionQualificationControls() {
     const ordinary = executorFixture(), normal = await qualify(ordinary.api); normal.operationalBudget = operationalBudget;
     assert.throws(() => ordinary.api.assertQualified(normal, ordinary.binding()), /altered after qualification/u);
   });
-  await control("actual Admission rejects a foreign operational scope or ancestry before source discovery and child allocation", async () => {
+  await control("actual Admission rejects a foreign operational scope before source discovery and child allocation", async () => {
     const foreign = executorFixture();
-    await assert.rejects(foreign.api.qualifyLocalVerificationAdmission({ operationalBudget: "unapproved" as Qualification["operationalBudget"] }, new AbortController().signal), /Unknown temporary operational budget/u);
+    await assert.rejects(foreign.api.qualifyLocalVerificationAdmission({ operationalBudget: "unapproved" as Qualification["operationalBudget"] }, new AbortController().signal), /Unknown operational budget/u);
     assert.equal(foreign.inspections(), 0); assert.deepEqual(foreign.launches, []); assert.deepEqual(foreign.floorLaunches, []);
+  });
+  await control("actual standing budget qualification does not depend on the former PR ancestry condition", async () => {
     const ancestry = executorFixture({ budgetAncestorFailure: true });
-    await assert.rejects(ancestry.api.qualifyLocalVerificationAdmission({ operationalBudget: "pr229-20261103-double-operational" }, new AbortController().signal), /Controlled operational scope ancestor mismatch/u);
-    assert.equal(ancestry.inspections(), 0); assert.deepEqual(ancestry.launches, []); assert.deepEqual(ancestry.floorLaunches, []);
+    const value = await ancestry.api.qualifyLocalVerificationAdmission({ operationalBudget: "pr229-20261103-double-operational" }, new AbortController().signal);
+    assert.equal(value.status, "PASS"); ancestry.api.assertQualified(value, ancestry.binding());
+    assert.ok(ancestry.inspections() > 0); assert.equal(ancestry.launches.length, 3);
+    assert.ok(!ancestry.gitCalls.some(args => args.includes("9edaf02f4cd476315d71b306d5f786f3d8d1efd0")));
   });
   await control("actual Admission TypeScript failure prevents every heavy profile and preserves the source-floor exit", async () => {
     const fixture = executorFixture({ floorTypeScriptFailure: true }), value = await qualify(fixture.api);
@@ -7731,6 +7774,48 @@ async function verifyAdmissionQualificationControls() {
     privateFloor.checks[0].result.code = priorCode;
     await assert.rejects(invoke({ admissionQualification: qualified }), error => error === stop); assert.equal(ownershipReads, 1);
   });
+  await control("standing budgets admit bounded Public and scoped Admin requests while preserving every normal request guard", async () => {
+    const executor = tree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedPublicVerification");
+    assert.ok(executor?.body);
+    const boundary = executor.body.statements.findIndex(node => ts.isVariableStatement(node)
+      && node.declarationList.declarations.some(row => row.name.getText(tree) === "originalContext"));
+    assert.ok(boundary > 0);
+    const prefix = executor.body.statements.slice(0, boundary).map(node => node.getText(tree)).join("\n");
+    const validRequests: Partial<InputRequest>[] = [{}, { selection: "build-contracts" }, { selection: "hero-compatibility" },
+      { selection: "media-upload-limit" }, { selection: "admin-interactions" }, { selection: "admin-adoption", finalQualityGate: true },
+      { selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms" }];
+    const invalidRequests: Partial<InputRequest>[] = [
+      { selection: "unknown" as InputRequest["selection"] },
+      { selection: "build-contracts", adoptionScope: "core-closure" },
+      { selection: "admin-adoption", adoptionCohort: "domain-forms" },
+      { selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "unknown" as InputRequest["adoptionCohort"] },
+      { selection: "admin-adoption", adoptionJourneySelection: "unknown" as InputRequest["adoptionJourneySelection"] },
+      { selection: "build-contracts", finalQualityGate: true },
+      { selection: "build-contracts", adminMeasurement: {} as InputRequest["adminMeasurement"] },
+      { selection: "hero-compatibility", finalQualityGate: true },
+    ];
+    const ordinary = executorFixture(), ordinaryQualification = await qualify(ordinary.api);
+    for (const operationalBudget of [undefined, "pr229-20261103-double-operational"] as const) {
+      const fixture = executorFixture(), qualification = await fixture.api.qualifyLocalVerificationAdmission({ operationalBudget }, new AbortController().signal);
+      fixture.api.assertQualified(qualification, fixture.binding());
+      let ownershipReads = 0;
+      const context = { assertOwned: async () => { ownershipReads++; } };
+      const guard = new Function("assert", "digest", "localVerificationAdmissionInvocations", "ownedProcessCleanupQualification", "context", "prepared", "adminCredentials", "gitHead",
+        compile(declaration("localVerificationOperationalDeadlineMs") + "\n" + adminAdoptionControlSource(tree)
+          + "\nreturn async function(request) { " + prefix + ";return {adoption,retainedQuality}; }")
+      )(assert, sha256, fixture.api.privateInvocations, () => ({ fullEProcessCleanupQualified: true }), context,
+        { get: () => ({}) }, { get: () => ({}) }, async () => qualification.finalHead) as (request: Partial<InputRequest>) => Promise<{ adoption: boolean; retainedQuality: boolean }>;
+      const invoke = (request: Partial<InputRequest>) => guard({ additionalSourceFiles: [], admissionQualification: qualification, ...request });
+      for (const request of validRequests) assert.deepEqual(await invoke(request), { adoption: request.selection === "admin-adoption", retainedQuality: false });
+      for (const request of invalidRequests) await assert.rejects(invoke(request), assert.AssertionError);
+      assert.equal(ownershipReads, validRequests.length + invalidRequests.length);
+      const beforeMissingAuthority = ownershipReads;
+      await assert.rejects(invoke({ admissionQualification: undefined }), /fresh live source qualification/u);
+      await assert.rejects(invoke({ admissionQualification: JSON.parse(JSON.stringify(qualification)) as Qualification }), /live source qualification/u);
+      await assert.rejects(invoke({ admissionQualification: ordinaryQualification }), /live source qualification/u);
+      assert.equal(ownershipReads, beforeMissingAuthority, "A budget cannot borrow another invocation's source or baseline-budget authority.");
+    }
+  });
   await control("actual Admission executor retains missing corrupt stale nonzero and undrained-native failures without sealing", async () => {
     for (const options of [{ raw: "wrong-nonce" }, { raw: "missing-schema" }, { raw: "corrupt" }, { nonzero: true }, { nativeFailure: true }, { validatorFailure: true },
       { childFailure: true }, { childFailure: true, cleanupFailure: true }] as const) {
@@ -7788,7 +7873,7 @@ async function verifyAdoptionDeadlineControls() {
       assert.throws(() => requireActualBudget({ localVerificationQualityPrefixDeadlineMs: loadBudget(mutant) }), assert.AssertionError);
     }
   });
-  check("actual temporary operational budget doubles only its exact explicit scope and rejects invalid inputs or timer overflow", () => {
+  check("actual standing operational budget doubles only its exact explicit scope and rejects invalid inputs or timer overflow", () => {
     assert.equal(operationalApi.localVerificationOperationalDeadlineMs(1_800_000), 1_800_000);
     assert.equal(operationalApi.localVerificationOperationalDeadlineMs(1_800_000, approvedOperationalBudget), 3_600_000);
     for (const limit of [1, 17, 300_000, 900_000, requireActualBudget(budgetApi), 2_220_000, 1_073_741_823]) {

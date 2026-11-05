@@ -3986,3 +3986,123 @@ CI/Preview are required for its successor. Ready, Merge and Production remain
 unexecuted at this recording point. Previous receipts and historical Pending
 classifications remain intact; the new scoped disposition supersedes their
 zero-deferral release status. `globalClosed=false`.
+
+### 27.57 Post-PR #229 QA stabilization and bounded optimization — 5 November 2026
+
+**Reality and scope:** current local `main`, cached `origin/main` and live GitHub
+`main` were independently resolved to `2a40e0ba080a24744babcda82e03babf5c3936dc`.
+The GitHub connector confirms PR #229 merged, and the live Production-domain
+lookup resolves to READY deployment `dpl_7HqGFMwnxMk7e7skPs2hQiT1tEjE` on that
+merge SHA. This supersedes only the pre-release status recorded in 27.56.
+Development uses `codex/qa-stabilization-optimization-20261105` from that clean
+tracked baseline; `.tmp/`, `debug.log`, private inputs and existing resources
+are protected. Authority covers local QA correction, targeted proof and local
+commit only. No Product/Auth/RLS/schema/migration/Treasury or Production change,
+Push, PR, merge or new portable QA system belongs to this phase.
+
+**Existing owners and affected consumers:**
+
+| Boundary | Existing executable owner / source of truth | Consumers and preserved contract |
+| --- | --- | --- |
+| Risk and gate selection | `isolated-public-verification.mts`: `planLocalVerification`, `localVerificationCommandSteps`; Constitution 25.4 and QA 3.3.1 | Reviewed `PublicGateRequest.localVerification`, impact inspection, qualified execution and isolated Public verification; A/B bounded proof, C/D full floor and E conservative fallback remain. |
+| Admission and source protection | Same module: `qualifyLocalVerificationAdmission`, private live invocation binding, source-floor and source-impact readers | Local targeted/Pre-Push and CI adapters retain immutable source/input bindings, ordered failure, raw exit and cleanup; serialized JSON cannot grant live authority. |
+| Runtime identity and parity | Same module: installed runtime/package reader and source-guard effects; existing Infrastructure guard and `quality-gate.yml` | Independent Windows Native ownership and Ubuntu/GNU binary/lock/package/symlink proof; current paired fingerprints and exact primary CI Node remain enforced. |
+| External execution budgets | Same module: `localVerificationOperationalDeadlineMs`; existing caller constants and QA 3.2.2 | Source floor, Admission profiles and valid Public scopes retain baseline x2 once when explicitly selected; no generic behavioral timer change. |
+| Execution and cleanup | `runOwnedVerificationChild`, `windows-owned-process.mts/.cs`, Linux process-group/procfs adapter; isolated lifecycle/control owner | Hard deadline, cancellation, source receipts, Native/procfs cleanup, heartbeat and lease remain with existing owners. |
+| Regression protection | `verify-isolated-supabase.mts` existing risk, Admission, deadline and lifecycle fixtures; existing Governance/Infrastructure entries | New positive/negative/boundary controls belong to those fixtures. No extra runner, registry, workflow or gate was added. |
+
+**Previous → current / two proven causes:**
+
+1. The bounded planner selected both an npm parent and its literally nested
+   named child. The actual Form graph planned four leaf executions for two
+   unique leaves. Full mode already knew this containment. The same existing
+   logic now applies to bounded selection: four become two; all unique leaves,
+   named obligations, source-floor slots and Public tail remain. The omitted
+   standalone child remains in `redundantAdditionalChecks`. Different arguments,
+   environment/shell syntax, unrelated aliases and unresolved/cyclic commands
+   cannot justify removal. Full E retains its complete canonical schedule.
+2. The standing budget selector still demanded an old PR ancestor and an
+   unscoped complete Admin release. A source-derived probe proved it rejected
+   valid bounded Public scopes. Those two obsolete predicates are removed;
+   ordinary request validation, live Admission and timer ceilings remain.
+   Existing API baseline mode is unchanged; an operational invocation explicitly
+   selects the compatibility identifier to receive baseline x2. Baseline-budget
+   and standing-budget receipts are not interchangeable even with equal source
+   and context hashes. Each cause has one implementation correction.
+
+**Audit and retained cost evidence:** PR #229 Full E remains historical evidence
+from `015b518b`, not a new run or a PASS for the changed selector. Its 75 Native
+receipts total 3,572 observed processes with zero residual; complete elapsed time
+including cleanup was 2h03m30.692s. Largest gates were Admin Runtime
+39m47.552s, Content Editor Adoption 20m45.923s and Admin Core 9m52.805s.
+Database Reconciliation used 2,192 observed processes in 95.766s. Isolated
+preparation took 181.722s. These are measured hotspots, not authority for further
+optimization. Per-gate CPU seconds and peak RAM were not recorded; endpoint
+host samples cannot establish them.
+
+Necessary repeats remain: Windows versus Ubuntu, separate CI service jobs,
+Admission versus isolated source/environment, and required exact-HEAD CI.
+Same live source-floor checks already reuse matching source/context/deadline;
+the first two Full E prefix checks are accounted by that floor and are not
+executed again. Final PR CI spent 44s on primary `npm ci`, 211s on Admission/source
+protection and 1,989s on `ci:check`; all eight dependency installs totalled 440s
+of parallel runner work, not wall time. No cross-job dependency reuse or test
+removal is justified by equal names. Documentation-only and unaffected proof
+may be retained under QA 3.4; changed fixtures and their consumers require fresh
+proof. Six deferred reviews and authenticated Admin Smoke remain out of scope.
+
+**Fresh verification:** Windows passed the ordered Syntax (2), affected ESLint,
+strict project TypeScript, canonical Governance/Infrastructure (2), current
+Infrastructure (236 controls) and risk/budget/lifecycle (620 controls) checks.
+The eight stages took 236.192s and all owned Native cleanup receipts passed.
+The existing risk controls prove bounded A/B, B adoption obligations, C/D/E full
+selection, mixed/unknown fallback, dangerous low-risk-label rejection, unchanged
+Public tail and Full E gate accounting. New controls retain distinct argv and
+unproven invocation contexts; existing negative deadline, raw-failure,
+cancellation and cleanup cases remain passing. Empty temporary logs are not
+treated as a hang; hard deadlines remain independent of output cadence.
+
+Independent Ubuntu 24.04.4 qualification used a fresh `npm ci`, Node 22.23.4 and
+the same executable/installed-lock identities as the qualified CI context.
+Canonical guards passed 2/2 in 15.410s and the platform Infrastructure profile
+passed 228 controls in 18.789s. The 236/228 difference is platform-specific
+coverage, not skipped Product tests. Its known source-guard fingerprint pair
+remained unchanged. No Product suite was repeated on Ubuntu. The initial CRLF
+archive mismatch stopped before dependency/test execution; the private export
+was corrected once to exact LF and the original failure was preserved. Fresh
+dependency installation took 193.319s. All Linux owned children drained and the
+single task container was removed; Treasury stayed untouched.
+
+**Measured Before/After:** one source-bound Windows sample ran the actual
+`verify:topic-editor-basic-data` parent and its nested
+`verify:topic-display-controls-navigation` obligation through the existing
+process owner. Before: 13.129s, four Node leaf invocations, 18 observed processes.
+After: 9.316s, three leaf invocations, 14 observed processes. All three unique
+leaves, source/input/environment hashes and assertions were preserved; cleanup
+passed with zero remaining children. This is 3.813s / 29.04% less elapsed time
+in this one bounded sample, not a general QA or CI speedup guarantee. Unchanged
+lint/TypeScript/Public tail were excluded from the comparison. CPU and peak RAM
+were not comparably measured before/after. Ubuntu's separate check window used
+76.856 CPU-seconds; its 2.542GB lifetime cgroup peak includes dependency setup and
+filesystem cache and cannot establish a memory improvement.
+
+**Evidence reuse and delivery boundary:** affected checks were executed freshly;
+historical Full E is retained only for unchanged coverage and cost analysis.
+This QA execution delta is E; its batch release profile remains Full Local Gate
+under Constitution 25.4 and QA 3.3/3.4. No new Full E was run for benchmarking or
+claimed on this source. Targeted development proof supports the authorized
+local commit, not a completed batch release, fresh Admission/Pre-Push,
+exact-HEAD CI, Owner approval or new Production smoke. Those obligations remain
+for a separately authorized release, with evidence validity reviewed then.
+The canonical 75-gate release contract remains unchanged.
+
+Evidence: `.tmp-qa/qa-stabilization-20261105-01/`, including `risk/audit-map.json`,
+`risk/before.json`, `risk/after.json`, `budget/scope-restriction-probe.json` and
+`budget/historical-cost-audit.json`, `windows-targeted/result.json`,
+`parity/ubuntu-parity-summary.json`, `parity/ubuntu-container-cleanup.json` and
+`measured-bounded/comparison.json`. Historical PR #229 closure receipts remain
+under `.tmp-qa/pr229-owner-final-release-20261104-01/`. Actual Owner reviews for
+Article, News, Press, Site Update, Video and Gallery remain Pending / not
+performed, with zero approvals and the six historical scoped deferrals under
+Ahmed. Authenticated Admin Smoke remains Skipped for lack of a trusted session.
+`globalClosed=false`.

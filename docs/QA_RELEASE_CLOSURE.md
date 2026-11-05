@@ -304,6 +304,16 @@ existing source, Admission, Preflight, evidence and cleanup contracts. No
 automatic retry follows a real functional/security failure, and this authority
 does not authorize Product changes, Push, Ready, Merge or Production.
 
+The existing `pr229-20261103-double-operational` selector is a compatibility
+identifier for this standing allowance. It applies to every otherwise valid
+Public request scope; it does not require an old PR commit or a complete Admin
+release selection. Ordinary scope validation and private live Admission remain
+mandatory. The helper's omitted-selector baseline mode is unchanged: operational
+callers select the standing allowance explicitly and retain original/effective
+values. This is not an environment-wide timer override. Same-source receipt
+reuse also requires the same effective leaf deadline; baseline-mode receipts
+cannot satisfy a standing-budget invocation or vice versa.
+
 For the current PR #229 continuation, the whole live-connection qualification
 uses420000→840000ms and its Native wrapper480000→960000ms, retaining120000ms
 outside the inner limit. Windows host/ports snapshots retain20000→40000ms;
@@ -437,6 +447,17 @@ binding to a current command and executable graph; missing or conflicting edges
 expand verification or block the unsupported claim, never prove exclusion.
 The existing focused contract guard is
 `node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
+
+For a bounded A/B plan, the same selector removes an additional named check only
+when another selected command literally invokes that exact registered npm check
+and contains its complete ordered leaf argv chain. Both executions would use
+the same reviewed snapshot, inputs, environment and execution owner. Preserve
+the source-floor slots and the canonical Public tail. An alias with similar
+leaves, different argv, an unresolved/cyclic command, or a different environment
+is not equivalent evidence. Keep the omitted name in
+`redundantAdditionalChecks` so the reviewed obligation remains traceable to its
+executing parent. Full Local Gate keeps every canonical named gate; this bounded
+deduplication does not prune CI jobs or waive any release obligation.
 
 The same reader derives an ephemeral source-impact report from the exact current
 snapshot and baseline Git bytes. It consults the existing Collection/Form and

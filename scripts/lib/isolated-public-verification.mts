@@ -131,11 +131,11 @@ export function localVerificationQualityPrefixDeadlineMs(): number { return 1_80
 
 export type LocalVerificationOperationalBudget = "pr229-20261103-double-operational";
 /** Explicit outer execution allowance, calculated once from the approved original.
- * The legacy selector remains sealed into this PR's invocation. Never apply at the
+ * The legacy selector binds the standing budget rule to each live invocation. Never apply at the
  * generic process/timer owner or to behavioral readiness, heartbeat, cancellation,
  * preparation or cleanup contracts; whole qualification execution is an outer budget. */
 export function localVerificationOperationalDeadlineMs(limitMs: number, budget?: LocalVerificationOperationalBudget): number {
-  assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown temporary operational budget.");
+  assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown operational budget.");
   assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Operational deadline must be a finite timer-safe positive integer.");
   const result = limitMs * (budget === undefined ? 1 : 2);
   assert.ok(Number.isSafeInteger(result) && result <= 2_147_483_647, "Expanded operational deadline must be timer-safe.");
@@ -2160,7 +2160,8 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   }
   assert.ok(Object.hasOwn(scripts, "lint") && Object.hasOwn(scripts, "typecheck"));
   const mode = rank <= 1 && bounded ? "bounded" : "full";
-  const coveredChains = fullPrefix.map(check => localVerificationCommandSteps(scripts, check)).filter((chain): chain is string[] => Boolean(chain));
+  const coveringChecks = mode === "full" ? fullPrefix : [...selected];
+  const coveredChains = coveringChecks.map(check => localVerificationCommandSteps(scripts, check)).filter((chain): chain is string[] => Boolean(chain));
   const invokedChecks = new Set<string>();
   const collectInvocations = (name: string, active = new Set<string>()) => {
     if (active.has(name) || !localVerificationCommandSteps(scripts, name)) return;
@@ -2170,13 +2171,14 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
       if (nested) { invokedChecks.add(nested[1]); collectInvocations(nested[1], next); }
     }
   };
-  for (const check of fullPrefix) collectInvocations(check);
-  const redundantAdditionalChecks = mode === "full" ? [...selected].filter(check => {
-    if (fullPrefix.includes(check) || !invokedChecks.has(check)) return false;
+  for (const check of coveringChecks) collectInvocations(check);
+  const redundantAdditionalChecks = [...selected].filter(check => {
+    if (mode === "full" && fullPrefix.includes(check) || !invokedChecks.has(check)) return false;
     const additional = localVerificationCommandSteps(scripts, check);
     return Boolean(additional && coveredChains.some(chain => chain.some((_, index) => additional.every((step, offset) => chain[index + offset] === step))));
-  }) : [];
-  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...[...selected].filter(check => !redundantAdditionalChecks.includes(check))])];
+  });
+  const additionalChecks = [...selected].filter(check => !redundantAdditionalChecks.includes(check));
+  const prefix = mode === "bounded" ? additionalChecks : [...new Set([...fullPrefix, ...additionalChecks])];
   return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs,
     redundantAdditionalChecks,
     ...(actual.changeImpact ? { changeImpact: actual.changeImpact } : {}),
@@ -2322,7 +2324,6 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     if (process.env[key] !== undefined) environment[key] = process.env[key];
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: environment, windowsHide: true,
     timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
-  if (operationalBudget !== undefined) git("merge-base", "--is-ancestor", "9edaf02f4cd476315d71b306d5f786f3d8d1efd0", "HEAD");
   // Reuse immutable CI baseline selection. Its source-only DRIFT is diagnostic,
   // never permission to omit the fresh behavioral qualification below.
   const additional = [...(options.additionalSourceFiles ?? [])];
@@ -5586,11 +5587,6 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   assert.equal(digest(JSON.stringify(request.admissionQualification)), preallocationAdmission.sha256, "Admission receipt was altered after qualification.");
   const operationalBudget = request.admissionQualification.operationalBudget;
   localVerificationOperationalDeadlineMs(1, operationalBudget);
-  if (operationalBudget !== undefined) {
-    assert.equal(request.selection, "admin-adoption", "Temporary PR #229 budget requires the complete Public/Admin release path.");
-    assert.equal(request.adoptionScope, undefined); assert.equal(request.adoptionCohort, undefined);
-    assert.equal(request.adoptionJourneySelection, undefined); assert.equal(request.adminMeasurement, undefined);
-  }
   assert.equal(digest(JSON.stringify(preallocationAdmission.sourceFloor)), preallocationAdmission.sourceFloorSha256, "Private ordered source floor was altered after qualification.");
   if (request.localVerification && request.finalQualityGate === true)
     assert.ok(request.admissionQualification,
