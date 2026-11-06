@@ -4804,3 +4804,29 @@ fresh Ubuntu qualification, Admission, Preflight and full75 remain required.
 This entry grants no release PASS. Six human reviews remain Pending under the
 PR230-only deferral; Admin Smoke remains unperformed; historical Zone OOM stays
 closed Unresolved/notFixed and `globalClosed=false`.
+
+**Final four-contract outcome / independent release STOP:** implementation
+commit `3fe446f86836790e23cad10e13bcef46e5041408` freezes the qualified source.
+Its canonical discovery retains all four obligations and no QA-quality loss.
+The unchanged `assertLocalVerificationProtectionMaintenance` accepts all four
+reviewed assertion fingerprints; see07
+`reviewed-maintenance-and-coverage-diagnostic.json`. This is source-maintenance
+PASS4/4, not Admission or Full E PASS. The wider reviewed source-consistency
+check remains DRIFT because positive executable coverage is still required for
+the changed native C# input and `scripts/lib/owned-process-crash-probe.cjs`.
+
+The C# input already has a fresh live-Admission qualification route. The probe
+does not: the runtime loads its exact file through generated `NODE_OPTIONS
+--require`, outside the current static executable graph; Admission's bounded
+input protocol does not include this file and its admission-only profile excludes
+the actual crash-probe controls. The formal caller merges only graph coverage
+and the live `q.inputs.coverage`, so the separately successful705 development
+checks cannot authorize this input. No coverage row, import or PASS is fabricated.
+
+This independently reviewed verification-coverage gap requires an additional
+bounded Owner decision before changing input qualification or load recognition
+at the existing owners. No such correction was implemented. Ubuntu archive and
+source preparation are complete, but its actual guards, fresh connection,
+Admission, Preflight, Full E, Pre-Push and remote release steps did not start.
+The results-only documentary successor preserves the implementation evidence
+under QA Section3.4 and does not re-open the closed historical OOM investigation.
