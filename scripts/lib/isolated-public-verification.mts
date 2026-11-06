@@ -2333,7 +2333,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   // Exact Windows24 and GNU Linux22.23.4/fresh-install contexts share this order.
   // The historical Alpine/Windows-mounted dependency context is not inherited.
   const sourceGuards = [
-    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", "790abdafab8c3f07a7be31e533e5fba2237f121a65e54a367f33fe16758ed759"], marker: "Executable governance PASS" },
+    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["a5b6306bf504b2669a090dc0051899323cd94c2afdd186d7bcafda57edb6ea94", "e4abd9183e9b7109b40cd5f686e842f4b1a9510e4528b47729bcba6278c8cc8a"], marker: "Executable governance PASS" },
     { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: ["cf94c6af79418b32c7953a4e5f4e88a6463844d26b3f185ec270e627a3d15c46", "1dc7b9131ac32554129437c7709e60dbc1cb793b49e6eaf73782c71fd808eeec"], marker: "PASS verification infrastructure:" },
   ];
   const knownContexts = sourceGuards.map(guard => guard.sha256.indexOf(sourceGuardSha256[guard.entry])).filter(index => index >= 0);
@@ -2784,7 +2784,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     assertions = validateLocalVerificationAssertionRelocations({ baselineSources, currentSources, observations: [...assertionsRaw, inputRaw] });
     inputs = validateLocalVerificationInputObservations({ sources: currentSources, observations: inputRaw });
     assert.equal(assertions.status, "PASS", "Original predicates lack qualified source/execution correspondence.");
-    assert.equal(inputs.status, "PASS", "Four verification inputs lack qualified actual-consumer evidence.");
+    assert.equal(inputs.status, "PASS", "Verification inputs lack qualified actual-consumer evidence.");
     assertSnapshot();
   } catch (error) {
     failures.push(error instanceof Error ? error.message : "Admission qualification failed.");
@@ -3201,7 +3201,7 @@ export function registeredVerificationNodeEntries(scripts: Readonly<Record<strin
   }))];
 }
 
-/** Bounded four-input protocol only; orchestration owns nonce, outer cleanup and artifact byte verification. */
+/** Bounded input protocol; orchestration owns nonce, outer cleanup and artifact byte verification. */
 export function validateLocalVerificationInputObservations(input: {
   sources: ReadonlyMap<string, string | Buffer>; observations: unknown;
 }) {
@@ -3267,6 +3267,7 @@ export function validateLocalVerificationInputObservations(input: {
     const ownerName = ts.isFunctionDeclaration(at) ? at.name?.text : ts.isTryStatement(at) ? "$dispatch" : "$module";
     const knownIf = (condition: ts.Expression) => {
       if (ownerName === "verifyWindowsOwnedProcessContracts") return ['process.platform === "win32"', 'process.platform === "linux"'].some(value => key(condition) === key(expression(value)));
+      if (ownerName === "verifySharedChildControls") return key(condition) === key(expression('process.platform === "win32"'));
       if (ownerName === "nativeBuild") return key(condition) === key(expression("build"));
       if (ownerName !== "options") return false;
       if (nodes(condition).some(node => node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)) return false;
@@ -3470,7 +3471,8 @@ export function validateLocalVerificationInputObservations(input: {
       assert.deepEqual(result.rawExit, { code: exitCode, signal: null }); assert.deepEqual(row.rawExit, result.rawExit); assert.deepEqual(row.cleanup, result.cleanup);
       const cleanup = record(result.cleanup); assert.equal(cleanup.status, "PASS"); assert.equal(cleanup.liveProcesses, 0); assert.equal(cleanup.processTreeVerified, true);
       assert.equal(cleanup.platform, nativeAcceptancePlatform);
-      const prefix = control === "actual_owned_transport_leaf" ? "public-transport-contracts" : "public-cli-missing-output";
+      const prefix = control === "actual_owned_transport_leaf" ? "public-transport-contracts"
+        : control === "actual_owned_preload_input" ? "public-preload-input" : "public-cli-missing-output";
       for (const stream of ["stdout", "stderr"] as const) {
         assert.equal(typeof result[stream], "string");
         assert.equal(archived.get(prefix + "." + stream + ".log"), digest(result[stream] as string), "Owned raw stream differs from its archived bytes.");
@@ -3579,6 +3581,76 @@ export function validateLocalVerificationInputObservations(input: {
     assert.deepEqual(rejected.row.failure, { status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" });
     assert.ok(typeof rejected.result.stderr === "string"); assert.equal(rejected.row.stderrSha256, digest(rejected.result.stderr));
     assert.deepEqual(rejected.result.stderr.split(/\r?\n/u).filter(line => line.trim().startsWith("{")).map(line => JSON.parse(line)), [rejected.row.failure]);
+    stage = "owned_preload_actual_execution";
+    const preloadFile = "scripts/lib/owned-process-crash-probe.cjs";
+    bound(preloadFile, "$module");
+    if (nativeAcceptancePlatform === "win32") {
+      requireExpressions(shared, [
+        'api.run({ sourceDirectory: root, context, children, signal: new AbortController().signal, crashAttribution: { gateId: "admission-preload:" + preloadNonce, commands: [{ id: "admission-preload-leaf", entry: preloadLeaf }] } }, [preloadLeaf], { ...environment, VENESIA_QA_ADMISSION_NONCE: preloadNonce }, "preload-input", 10_000)',
+        'assert.deepEqual(JSON.parse(result.stdout), { nonce: preloadNonce, pid: result.nativeJobIdentity?.rootPid, entrySha256: sha256(preloadLeafSource) })',
+        'assert.equal(result.crashAttribution?.status, "COMPLETE_DIAGNOSTIC_ONLY")', 'assert.equal(readSource(preloadFile), preloadSource)',
+        'writeFileSync(preloadLeaf, preloadLeafSource, { flag: "wx", mode: 0o600 })',
+        'assert.equal(config.directory, path.join(directory, "public-preload-input-crash-nodes"))',
+        'assert.deepEqual(config.commands, [{ id: "admission-preload-leaf", entry: preloadLeaf, sha256: sha256(preloadLeafSource) }])',
+      ]);
+      const preload = owned("actual_owned_preload_input", preloadFile, 0), nonce = preload.row.nonce;
+      assert.equal(nonce, raw.nonce); assert.equal(preload.row.sourceSha256, digest(source(preloadFile))); assert.equal(preload.result.stderr, "");
+      const identity = record(preload.result.nativeJobIdentity), terminal = record(preload.result.nativeJobReceipt);
+      const rawFiles = new Map<string, string>();
+      for (const value of rows(preload.row.rawArtifacts)) {
+        const artifact = record(value); assert.ok(typeof artifact.file === "string" && typeof artifact.text === "string");
+        assert.ok(artifact.text.length <= 1_048_576); assert.equal(rawFiles.has(artifact.file), false);
+        assert.equal(artifact.sha256, digest(artifact.text)); assert.equal(archived.get(artifact.file), artifact.sha256); rawFiles.set(artifact.file, artifact.text);
+      }
+      assert.equal(rawFiles.size, 5);
+      const bytes = (file: string) => { const text = rawFiles.get(file); assert.ok(text !== undefined); return text; };
+      const config = record(JSON.parse(bytes("public-preload-input.crash-config.json")));
+      const gateId = "admission-preload:" + raw.nonce; assert.equal(config.schema, 1); assert.equal(config.gateId, gateId);
+      assert.equal(config.probeSha256, digest(source(preloadFile)));
+      const commands = rows(config.commands).map(value => record(value)); assert.equal(commands.length, 1);
+      const command = commands[0]!; assert.equal(command.id, "admission-preload-leaf"); assert.ok(typeof command.entry === "string");
+      const actualArtifact = record(preload.result.crashAttribution); assert.ok(typeof actualArtifact.file === "string");
+      const attributionPath = actualArtifact.file.replaceAll("\\", "/"), suffix = "public-preload-input.crash-attribution.json";
+      assert.ok(attributionPath.endsWith("/" + suffix)); const originalDirectory = attributionPath.slice(0, -suffix.length);
+      assert.match(originalDirectory, /^[a-zA-Z]:\/.*\/venisia-owned-child-controls-[a-zA-Z0-9_-]+\/$/u);
+      assert.equal(command.entry.replaceAll("\\", "/"), originalDirectory + "preload-input-leaf.cjs");
+      assert.ok(typeof config.directory === "string"); assert.equal(config.directory.replaceAll("\\", "/"), originalDirectory + "public-preload-input-crash-nodes");
+      assert.equal(command.sha256, digest(bytes("preload-input-leaf.cjs")));
+      assert.deepEqual(JSON.parse(String(preload.result.stdout)), { nonce, pid: identity.rootPid, entrySha256: command.sha256 });
+      const leafBindings = nodes(shared).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "preloadLeafSource");
+      assert.equal(leafBindings.length, 1); const leaf = leafBindings[0]!.initializer; assert.ok(leaf && ts.isStringLiteralLike(leaf));
+      assert.equal(bytes("preload-input-leaf.cjs"), leaf.text);
+      const parseRows = (text: string) => text.split(/\r?\n/u).filter(Boolean).map(line => record(JSON.parse(line)));
+      const nativeRows = parseRows(bytes("public-preload-input.crash-native.jsonl"));
+      const nodeFiles = [...rawFiles.keys()].filter(file => /^public-preload-input-crash-nodes\/\d+-[a-f0-9-]{36}\.node\.jsonl$/u.test(file)); assert.equal(nodeFiles.length, 1);
+      const nodeRows = parseRows(bytes(nodeFiles[0]!)); assert.ok(nodeRows.length >= 2 && nodeRows.length < 4096);
+      const start = nodeRows[0]!, end = nodeRows.at(-1)!;
+      assert.equal(nodeFiles[0], "public-preload-input-crash-nodes/" + start.pid + "-" + start.probeId + ".node.jsonl");
+      assert.equal(start.kind, "node_start"); assert.equal(end.kind, "node_exit"); assert.equal(end.exitCode, 0);
+      assert.equal(start.pid, identity.rootPid); assert.equal(start.commandId, command.id); assert.equal(start.entryKind, "allowlisted-entry");
+      for (const row of nodeRows) {
+        assert.equal(row.gateId, gateId); assert.equal(row.pid, start.pid); assert.equal(row.probeId, start.probeId);
+        assert.equal(row.commandId, command.id); assert.equal(row.entryKind, "allowlisted-entry");
+        assert.equal(row.node, runtime.node); assert.equal(row.v8, runtime.v8); assert.equal(row.mainIsolateOnly, true);
+      }
+      const diagnostic = record(terminal.diagnostic), cleanup = record(terminal.cleanup);
+      const qualified = qualifyOwnedCrashAttribution({ gateId, jobToken: String(identity.jobToken),
+        commands: [{ id: String(command.id), entry: command.entry, sha256: String(command.sha256) }], nativeRows, nodeRows,
+        totalProcesses: Number(cleanup.totalProcesses), nativeComplete: diagnostic.complete === true,
+        rootIdentity: { pid: Number(identity.rootPid), creationTimeFileTime: String(identity.rootCreationTimeFileTime) }, rootExitCode: 0 });
+      assert.equal(qualified.status, "COMPLETE_DIAGNOSTIC_ONLY");
+      const actual = record(JSON.parse(bytes("public-preload-input.crash-attribution.json")));
+      assert.deepEqual(actual, { ...qualified, sourceBindings: [{ id: command.id, sha256: command.sha256 }],
+        probeSha256: config.probeSha256, limitsUnchanged: true, argsUnchanged: true });
+      assert.equal(actualArtifact.status, qualified.status);
+      assert.equal(actualArtifact.sha256, digest(bytes("public-preload-input.crash-attribution.json")));
+      coverage.push({ file: preloadFile, check, entry, evidence: { kind: "qualified_input_control_observations", role: "actual_owned_node_preload",
+        control: "actual_owned_preload_input", nonce: raw.nonce, artifacts: [...artifacts.keys()] } });
+    } else {
+      const preload = proof("actual_owned_preload_input"); assert.equal(preload.status, "NOT_EXECUTED_PLATFORM_UNSUPPORTED");
+      assert.equal(preload.platform, "linux"); assert.equal(preload.nativeExecuted, false); assert.equal(preload.preloadExecuted, false);
+      assert.equal(preload.actualRootProcessesAllocated, 0); assert.equal(preload.actualResult, undefined); assert.equal(preload.rawArtifacts, undefined);
+    }
     for (const [file, role, control] of [[lockFile, "read_parse_validate_data", "actual_release_lock_input"], ["scripts/lib/windows-owned-process.cs", "compiled_native_owner", "windows_imported_type_and_source_contracts"],
       ["scripts/qa-isolated-supabase-transport.mjs", "owned_executable_leaf", "actual_owned_transport_leaf"], [cliFile, "actual_parser_dispatcher_and_rejection", "actual_cli_parser_dispatcher"]])
       coverage.push({ file: file!, check, entry, evidence: { kind: "qualified_input_control_observations",

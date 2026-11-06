@@ -4830,3 +4830,63 @@ source preparation are complete, but its actual guards, fresh connection,
 Admission, Preflight, Full E, Pre-Push and remote release steps did not start.
 The results-only documentary successor preserves the implementation evidence
 under QA Section3.4 and does not re-open the closed historical OOM investigation.
+
+### 27.66 PR #230 NODE_OPTIONS preload qualification — 6 November 2026
+
+**Previous → current / authority:** the Owner authorizes the bounded recovery
+of the executable-input gap recorded in Section27.65 on `cf075e8f`. The sealed07
+evidence, four established assertion relationships and705 development checks
+retain their actual identities. Current evidence belongs to
+`.tmp-qa/pr230-preload-qualification-release-20261106-08/`; none of those earlier
+results is relabelled as current Admission or Full E success.
+
+**Owners / affected chain:** the existing `collectExecutableSourceGraph` in
+`scripts/lib/typescript-executable-graph.mts` owns source reachability;
+`scripts/lib/isolated-public-verification.mts` owns live Admission input
+qualification; `scripts/verify-isolated-supabase.mts` owns their behavioral and
+rejection controls. The runtime consumer remains `runOwnedVerificationChild`:
+its generated `NODE_OPTIONS --require` passes the exact source-root preload to
+the owned Node process. There is no unused import, fixed filename coverage row,
+parallel graph, runner or registry. The graph's source-impact, coverage and
+canonical source-guard consumers require affected verification.
+
+**Acceptance / design boundary:** source discovery must establish a connected
+preload-path → environment → Node-child flow using actual lexical bindings.
+Unrelated, shadowed, substituted, external or unresolved paths cannot grant an
+edge. Reachability alone cannot qualify execution. The existing live Admission
+observation protocol must additionally bind the preload's current source bytes
+and actual controlled execution to its fresh invocation, raw evidence and
+successful owned cleanup. Windows-specific attribution is never claimed as a
+Linux execution. Original input proofs and all four source-protection
+obligations remain mandatory; malformed and unexecuted evidence must fail.
+
+**Verification / release status:** syntax, strict ESLint, TypeScript, executable
+governance, verification infrastructure, affected input controls and the current
+risk profile passed. The risk profile records740 actual controls. Input validation
+records43 rejection cases, including17 preload-specific cases, plus the existing
+platform acceptance/rejection controls. The actual Windows preload binds its
+current bytes, fresh nonce, consumer entry, Node/native identities, raw archive
+and terminal cleanup; original four input proofs remain mandatory. Graph controls
+cover renamed producers and the actual imported native forwarder without relying
+on the direct-Node fallback. All six owned check receipts preserve their original
+`cf075e8f` execution HEAD and source fingerprint, with zero remaining owned
+processes and successful private-temp/byte-preservation cleanup.
+
+Evidence resides in08 `controls-eslint-correction-01`, `controls-typecheck`,
+`controls-governance`, `controls-infrastructure`, `controls-inputs` and
+`controls-risk`. The original sandbox Git ownership preallocation failure and
+the actual ESLint failure remain preserved. The latter was corrected only by
+renaming the private `module` binding to `moduleImport`; no check was disabled.
+The corrected source passed the unchanged lint rule. Independent graph and
+input-evidence reviews found no additional concrete defect.
+
+Final-source canonical protection review, actual Ubuntu qualification, fresh
+Admission, automatic Preflight and all75 Full E gates remain pending. Changed
+canonical source-guard effect fingerprints have source-only reviewed candidates;
+historical execution is not inherited. This documentary outcome does not change
+the tested executable bytes or grant a release PASS. No resource limits,
+deadlines, concurrency, power safety, assertions or Product behavior change.
+AC Offline alone remains a warning. Historical Zone OOM stays closed
+**Unresolved / not Fixed** without further reproduction; WebP stays a preserved
+study. Six human reviews remain Pending under the PR230-only deferral, Admin
+Smoke remains unperformed, and `globalClosed=false`.

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
@@ -6212,6 +6212,41 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
       runtimeProofs.push({ control: "actual_cli_no_allocation_rejection", entry: "scripts/qa-isolated-supabase.mts", rawExit: result.rawExit,
         failure: failures[0], stderrSha256: sha256(result.stderr), cleanup: result.cleanup, actualResult: result, applicationOutputSupplied: false });
     });
+    await control("actual owned preload binds current source nonce process and terminal evidence", async () => {
+      if (process.platform === "win32") {
+        const preloadNonce = process.env.VENESIA_QA_ADMISSION_NONCE ?? randomUUID();
+        assert.match(preloadNonce, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
+        const preloadFile = "scripts/lib/owned-process-crash-probe.cjs", preloadSource = readSource(preloadFile);
+        const preloadLeafSource = 'const fs=require("node:fs"),crypto=require("node:crypto");setTimeout(()=>process.stdout.write(JSON.stringify({nonce:process.env.VENESIA_QA_ADMISSION_NONCE,pid:process.pid,entrySha256:crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex")})+"\\n"),150);\n';
+        const preloadLeaf = path.join(directory, "preload-input-leaf.cjs");
+        writeFileSync(preloadLeaf, preloadLeafSource, { flag: "wx", mode: 0o600 });
+        const result = await api.run({ sourceDirectory: root, context, children, signal: new AbortController().signal,
+          crashAttribution: { gateId: "admission-preload:" + preloadNonce, commands: [{ id: "admission-preload-leaf", entry: preloadLeaf }] } },
+        [preloadLeaf], { ...environment, VENESIA_QA_ADMISSION_NONCE: preloadNonce }, "preload-input", 10_000);
+        assert.equal(result.code, 0); assert.deepEqual(result.rawExit, { code: 0, signal: null }); assert.equal(result.stderr, "");
+        assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0); assert.equal(children.size, 0);
+        assert.deepEqual(JSON.parse(result.stdout), { nonce: preloadNonce, pid: result.nativeJobIdentity?.rootPid, entrySha256: sha256(preloadLeafSource) });
+        assert.equal(result.crashAttribution?.status, "COMPLETE_DIAGNOSTIC_ONLY"); assert.ok(result.crashAttribution);
+        const rawArtifacts: Array<{ file: string; text: string; sha256: string }> = [];
+        const retain = (file: string) => { const text = readFileSync(path.join(directory, file), "utf8");
+          rawArtifacts.push({ file, text, sha256: sha256(text) }); return text; };
+        retain("preload-input-leaf.cjs");
+        const config = JSON.parse(retain("public-preload-input.crash-config.json"));
+        assert.equal(config.directory, path.join(directory, "public-preload-input-crash-nodes"));
+        assert.deepEqual(config.commands, [{ id: "admission-preload-leaf", entry: preloadLeaf, sha256: sha256(preloadLeafSource) }]);
+        retain("public-preload-input.crash-native.jsonl");
+        const attributionText = retain("public-preload-input.crash-attribution.json");
+        assert.equal(sha256(attributionText), result.crashAttribution.sha256);
+        const nodeFiles = readdirSync(path.join(directory, "public-preload-input-crash-nodes")); assert.equal(nodeFiles.length, 1);
+        for (const file of nodeFiles) { assert.match(file, /^\d+-[a-f0-9-]{36}\.node\.jsonl$/u); retain("public-preload-input-crash-nodes/" + file); }
+        assert.equal(readSource(preloadFile), preloadSource);
+        runtimeProofs.push({ control: "actual_owned_preload_input", entry: preloadFile, sourceSha256: sha256(preloadSource), nonce: preloadNonce,
+          rawExit: result.rawExit, cleanup: result.cleanup, actualResult: result, rawArtifacts });
+      } else {
+        runtimeProofs.push({ control: "actual_owned_preload_input", status: "NOT_EXECUTED_PLATFORM_UNSUPPORTED", platform: process.platform,
+          nativeExecuted: false, preloadExecuted: false, actualRootProcessesAllocated: 0 });
+      }
+    });
     if (!options?.admissionOnly) {
     // Project the actual private observer with controlled file/clock ports; these fixtures grant no live authority.
     const childOwner = file.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node)
@@ -7312,8 +7347,9 @@ function verifyInputObservationValidationControls(raw: LocalVerificationInputObs
   const ownerFile = "scripts/lib/isolated-public-verification.mts", source = readSource(ownerFile);
   const tree = ts.createSourceFile(ownerFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const node = tree.statements.find((value): value is ts.FunctionDeclaration => ts.isFunctionDeclaration(value) && value.name?.text === "validateLocalVerificationInputObservations"); assert.ok(node?.body);
+  const attribution = tree.statements.find((value): value is ts.FunctionDeclaration => ts.isFunctionDeclaration(value) && value.name?.text === "qualifyOwnedCrashAttribution"); assert.ok(attribution?.body);
   const api: Pick<typeof import("./lib/isolated-public-verification.mts"), "validateLocalVerificationInputObservations"> = {
-    validateLocalVerificationInputObservations: new Function("assert", "ts", "digest", ts.transpileModule(node.getText(tree).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+    validateLocalVerificationInputObservations: new Function("assert", "ts", "digest", ts.transpileModule(attribution.getText(tree).replace(/^export /u, "") + "\n" + node.getText(tree).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
       + ";return validateLocalVerificationInputObservations;")(assert, ts, sha256),
   };
   const validationOutcomes: Array<{ context: string; status: string; failures: string[]; coverageFiles: string[] }> = [];
@@ -7325,7 +7361,9 @@ function verifyInputObservationValidationControls(raw: LocalVerificationInputObs
   const sources = new Map(raw.sources.map(row => [row.file, readSource(row.file)]));
   const actual = api.validateLocalVerificationInputObservations({ sources, observations: raw });
   validationOutcomes.push({ context: validationContext, status: actual.status, failures: actual.failures, coverageFiles: actual.coverage.map(row => row.file) });
-  assert.equal(actual.status, "PASS"); assert.equal(actual.coverage.length, 4);
+  assert.equal(actual.status, "PASS");
+  assert.equal(actual.coverage.filter(row => row.file !== "scripts/lib/owned-process-crash-probe.cjs").length, 4);
+  assert.equal(actual.coverage.length, process.platform === "win32" ? 5 : 4);
   const names: string[] = [];
   const reject = (name: string, mutate: (value: LocalVerificationInputObservations, files: Map<string, string>) => void) => {
     const value = structuredClone(raw), files = new Map(sources); mutate(value, files);
@@ -7419,12 +7457,63 @@ function verifyInputObservationValidationControls(raw: LocalVerificationInputObs
   reject("missing JSON negative artifact", value => { value.artifacts = value.artifacts.filter(row => !row.path.endsWith("release-lock-inputs/lock-2.json")); });
   reject("native cleanup zero cannot be replaced by PID absence", value => { const proof = (value.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "actual_owned_transport_leaf")!;
     const result = proof.actualResult as Record<string, unknown>, cleanup = result.cleanup as Record<string, unknown>; cleanup.processTreeVerified = false; });
+  if (process.platform === "win32") {
+    const preloadProof = (value: LocalVerificationInputObservations) => (value.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "actual_owned_preload_input")!;
+    const changeRaw = (value: LocalVerificationInputObservations, file: string, change: (text: string) => string) => {
+      const proof = preloadProof(value), records = proof.rawArtifacts as Array<{ file: string; text: string; sha256: string }>;
+      const artifact = records.find(row => row.file === file)!; assert.ok(artifact); artifact.text = change(artifact.text); artifact.sha256 = sha256(artifact.text);
+      const archive = (value.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "windows_native_evidence_archive")!;
+      const archived = (archive.files as Array<{ file: string; sha256: string }>).find(row => row.file === file)!; assert.ok(archived); archived.sha256 = artifact.sha256;
+      const recorded = value.artifacts.filter(row => row.path.endsWith("/" + file)); assert.equal(recorded.length, 1); recorded[0]!.sha256 = artifact.sha256;
+    };
+    const changeNode = (value: LocalVerificationInputObservations, mutate: (rows: Array<Record<string, unknown>>) => void) => {
+      const file = (preloadProof(value).rawArtifacts as Array<{ file: string }>).find(row => row.file.endsWith(".node.jsonl"))!.file;
+      changeRaw(value, file, text => { const rows = text.trim().split(/\r?\n/u).map(line => JSON.parse(line)); mutate(rows); return rows.map(row => JSON.stringify(row)).join("\n") + "\n"; });
+    };
+    reject("preload source hash without actual execution grants no fifth input", value => { delete preloadProof(value).actualResult; });
+    reject("preload proof cannot borrow a stale admission nonce", value => { preloadProof(value).nonce = randomUUID(); });
+    reject("preload proof cannot borrow another source hash", value => { preloadProof(value).sourceSha256 = "0".repeat(64); });
+    reject("preload raw bytes require their actual archived fingerprint", value => {
+      (preloadProof(value).rawArtifacts as Array<{ text: string }>)[0]!.text += " ";
+    });
+    reject("preload producer cannot be retained as an unexecuted source expression", (_value, files) => edit(files, verifier,
+      "const result = await api.run({ sourceDirectory: root, context, children, signal: new AbortController().signal,",
+      "const result = await (false ? api.run : (() => Promise.resolve({})))({ sourceDirectory: root, context, children, signal: new AbortController().signal,", "verifySharedChildControls"));
+    reject("preload stdout nonce assertion cannot become a tautology", (_value, files) => edit(files, verifier,
+      "assert.deepEqual(JSON.parse(result.stdout), { nonce: preloadNonce, pid: result.nativeJobIdentity?.rootPid, entrySha256: sha256(preloadLeafSource) })",
+      "assert.deepEqual(JSON.parse(result.stdout), JSON.parse(result.stdout))", "verifySharedChildControls"));
+    reject("preload config must bind the source bytes actually observed", value => changeRaw(value, "public-preload-input.crash-config.json", text => {
+      const config = JSON.parse(text); config.probeSha256 = "0".repeat(64); return JSON.stringify(config) + "\n";
+    }));
+    reject("preload config cannot substitute another consumer", value => changeRaw(value, "public-preload-input.crash-config.json", text => {
+      const config = JSON.parse(text); config.commands[0].id = "unrelated-consumer"; return JSON.stringify(config) + "\n";
+    }));
+    reject("preload config cannot substitute a foreign path with the same basename", value => changeRaw(value, "public-preload-input.crash-config.json", text => {
+      const config = JSON.parse(text); config.commands[0].entry = "C:\\foreign-owned-input\\preload-input-leaf.cjs"; return JSON.stringify(config) + "\n";
+    }));
+    reject("preload config cannot substitute a foreign Node evidence directory", value => changeRaw(value, "public-preload-input.crash-config.json", text => {
+      const config = JSON.parse(text); config.directory = "C:\\foreign-owned-input\\public-preload-input-crash-nodes"; return JSON.stringify(config) + "\n";
+    }));
+    reject("preload node start is required after artifact metadata renewal", value => changeNode(value, rows => { rows.shift(); }));
+    reject("preload node exit is required after artifact metadata renewal", value => changeNode(value, rows => { rows.pop(); }));
+    reject("preload process cannot borrow another native PID", value => changeNode(value, rows => { for (const row of rows) row.pid = Number(row.pid) + 1; }));
+    reject("preload node records cannot borrow another nonce gate", value => changeNode(value, rows => { for (const row of rows) row.gateId = "admission-preload:" + randomUUID(); }));
+    reject("preload native completeness is required after artifact metadata renewal", value => changeRaw(value, "public-preload-input.crash-native.jsonl", text =>
+      text.trim().split(/\r?\n/u).filter(line => JSON.parse(line).kind !== "diagnostic_terminal").join("\n") + "\n"));
+    reject("preload attribution summary cannot replace raw process evidence", value => changeRaw(value, "public-preload-input.crash-attribution.json", text => {
+      const evidence = JSON.parse(text); evidence.processRows = []; return JSON.stringify(evidence) + "\n";
+    }));
+    reject("preload controlled leaf bytes cannot drift behind the same nonce", value => changeRaw(value, "preload-input-leaf.cjs", text => text + "// changed\n"));
+  }
   const linux = structuredClone(raw), proofs = linux.observations.runtimeProofs as Array<Record<string, unknown>>;
   (linux.observations.runtime as Record<string, unknown>).platform = "linux";
   linux.observations.native = { status: "BLOCKED", missingProof: "windows_native_job_launch_unavailable" };
   const native = proofs.find(row => row.control === "windows_imported_type_and_source_contracts")!;
   native.nativeIntegrity = { status: "PASS", scope: "non_windows_platform_rejection_before_compiler_or_spawn", capabilityStatus: "BLOCKED", platform: "linux", nativeExecuted: false, compilerProcessesExecuted: 0, actualRootProcessesAllocated: 0 };
   const archive = proofs.find(row => row.control === "windows_native_evidence_archive" || row.control === "owned_child_evidence_archive")!; archive.control = "owned_child_evidence_archive";
+  const preloadIndex = proofs.findIndex(row => row.control === "actual_owned_preload_input"); assert.ok(preloadIndex >= 0);
+  proofs[preloadIndex] = { control: "actual_owned_preload_input", status: "NOT_EXECUTED_PLATFORM_UNSUPPORTED", platform: "linux",
+    nativeExecuted: false, preloadExecuted: false, actualRootProcessesAllocated: 0 };
   for (const proof of proofs.filter(row => row.control === "actual_owned_transport_leaf" || row.control === "actual_cli_no_allocation_rejection")) {
     const result = proof.actualResult as Record<string, unknown>, cleanup: Record<string, unknown> = { ...(result.cleanup as Record<string, unknown>), platform: "linux", method: "linux-marker-and-process-identity", processTreeVerified: true };
     delete cleanup.nativeJobReceipt; result.cleanup = cleanup; proof.cleanup = cleanup;
@@ -7432,9 +7521,13 @@ function verifyInputObservationValidationControls(raw: LocalVerificationInputObs
   }
   validationContext = "controlled_linux_platform_positive";
   const linuxResult = validate({ sources, observations: linux }); assert.equal(linuxResult.status, "PASS"); assert.equal(linuxResult.nativeExecuted, false);
+  assert.equal(linuxResult.coverage.length, 4); assert.equal(linuxResult.coverage.some(row => row.file === "scripts/lib/owned-process-crash-probe.cjs"), false);
   assert.equal(linuxResult.nativeAcceptanceStatus, "PLATFORM_REJECTION_AND_SOURCE_CONTRACT_ONLY");
   const forged = structuredClone(linux); (forged.observations.native as Record<string, unknown>).status = "PASS";
   validationContext = "controlled_linux_native_claim_rejected"; assert.equal(validate({ sources, observations: forged }).status, "BLOCKED");
+  const forgedPreload = structuredClone(linux);
+  (forgedPreload.observations.runtimeProofs as Array<Record<string, unknown>>).find(row => row.control === "actual_owned_preload_input")!.preloadExecuted = true;
+  validationContext = "controlled_linux_preload_claim_rejected"; assert.equal(validate({ sources, observations: forgedPreload }).status, "BLOCKED");
   const windowsWithoutNative = structuredClone(linux); (windowsWithoutNative.observations.runtime as Record<string, unknown>).platform = "win32";
   validationContext = "windows_without_actual_native_rejected"; assert.equal(validate({ sources, observations: windowsWithoutNative }).status, "BLOCKED");
   if (actual.nativeAcceptancePlatform === "win32") { assert.equal(actual.nativeExecuted, true); assert.equal(actual.nativeAcceptanceStatus, "ACTUAL_NATIVE_EXECUTION"); }
@@ -7469,6 +7562,7 @@ function verificationInputSourceObservations() {
   declaration("scripts/lib/isolated-public-verification.mts", ["localVerificationCommandSteps", "registeredVerificationNodeEntries", "localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "qualifyOwnedCrashAttribution", "runOwnedVerificationChild", "stopChild"]);
   declaration("scripts/qa-isolated-supabase.mts", ["options", "$dispatch"]);
   declaration("scripts/qa-isolated-supabase-transport.mjs", ["$module"]);
+  declaration("scripts/lib/owned-process-crash-probe.cjs", ["$module"]);
   const graph = collectExecutableSourceGraph({ root, entrySourceFiles: [...observed.keys()], symbolAware: false, nativeEagerImports: true });
   // The existing graph caches parsed modules; raw evidence must reread every
   // current dependency so its before/after check cannot reuse cached bytes.
@@ -8772,7 +8866,7 @@ async function verifyQualifiedSelectionControls() {
     const value = analysis(); value.changes = [{ ...value.changes[0]!, candidateChecks: ["qa:qualified-control", "verify:admin-query-save-failure-contracts"] }];
     assert.equal(qualify({ ...scripts, "qa:qualified-control": step + " && " + step }, value, fixtureHash).targets.length, 1);
   });
-  const sourceGuardHashes = { "scripts/verify-executable-governance.mts": "b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f" };
+  const sourceGuardHashes = { "scripts/verify-executable-governance.mts": "a5b6306bf504b2669a090dc0051899323cd94c2afdd186d7bcafda57edb6ea94" };
   const qualityAnalysis = () => {
     const value = analysis(); value.changes = [{ ...value.changes[0]!, file: "scripts/fixtures/phase06-vector.mts", owners: ["existing-fixture"],
       capabilities: [], consumers: [], contracts: [], candidateChecks: ["verify:executable-governance", "verify:verification-infrastructure"] }];
@@ -8866,7 +8960,7 @@ async function verifyQualifiedSelectionControls() {
     }
   });
   const linuxSourceGuardHashes = {
-    "scripts/verify-executable-governance.mts": "790abdafab8c3f07a7be31e533e5fba2237f121a65e54a367f33fe16758ed759",
+    "scripts/verify-executable-governance.mts": "e4abd9183e9b7109b40cd5f686e842f4b1a9510e4528b47729bcba6278c8cc8a",
     "scripts/verify-verification-infrastructure.mts": "1dc7b9131ac32554129437c7709e60dbc1cb793b49e6eaf73782c71fd808eeec",
   };
   const retiredAlpineSourceGuardHashes = {
@@ -8930,6 +9024,95 @@ async function verifyQualifiedSelectionControls() {
   }
   };
   verifyActualSourceGuardQualification({ qualifyLocalVerificationTargets: qualify });
+  const preloadGraphEntry = "scripts/fixtures/qualified-preload-owner.mts", preloadGraphFile = "scripts/fixtures/qualified-preload.cjs";
+  const preloadGraphSource = `import { spawn } from "node:child_process"; import { join } from "node:path";
+export function launch(ports: {sourceDirectory: string}, args: string[], env: Record<string,string>, enabled: boolean) {
+  const { sourceDirectory } = ports;
+  const crashProbe = (() => { if (!enabled) return undefined; const probe = join(sourceDirectory, "${preloadGraphFile}");
+    return { environment: { NODE_OPTIONS: '--require="' + probe.replaceAll("\\\\", "/") + '"' } }; })();
+  const invocationEnvironment = crashProbe ? { ...env, ...crashProbe.environment } : env;
+  const markerKey = "VENESIA_QA_OWNED_CHILD", marker = "fixture";
+  return spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker } });
+}`;
+  const preloadGraph = (source: string, file = preloadGraphFile, include = true) => collectExecutableSourceGraph({ root,
+    entrySourceFiles: [preloadGraphEntry], symbolAware: false,
+    sourceOverrides: new Map<string, string>([[preloadGraphEntry, source], ...(include ? [[file, 'globalThis.__unexecutedPreloadFixture = true;\n'] as [string, string]] : [])]) });
+  check("consumed immutable Node environment preload contributes the actual source edge without executing it", () => {
+    assert.equal(preloadGraph(preloadGraphSource).has(preloadGraphFile), true);
+    assert.equal((globalThis as Record<string, unknown>).__unexecutedPreloadFixture, undefined);
+  });
+  check("a renamed consumed preload is recognized by its producer and consumer relationship", () => {
+    const renamed = "scripts/fixtures/renamed-qualified-preload.cjs", graph = preloadGraph(preloadGraphSource.replace(preloadGraphFile, renamed), renamed);
+    assert.equal(graph.has(renamed), true); assert.equal(graph.has(preloadGraphFile), false);
+  });
+  for (const [name, before, after] of [
+    ["unused environment producer", "...invocationEnvironment, [markerKey]: marker", "...env, [markerKey]: marker"],
+    ["cut producer environment", "...env, ...crashProbe.environment", "...env, ...env"],
+    ["later NODE_OPTIONS override", "[markerKey]: marker", '[markerKey]: marker, NODE_OPTIONS: "--require=unrelated"'],
+    ["foreign same-name spawn", 'from "node:child_process"', 'from "node:util"'],
+    ["shadowed spawn", "enabled: boolean)", "enabled: boolean, spawn: (...args: unknown[]) => unknown)"],
+    ["foreign same-name join", 'from "node:path"', 'from "node:util"'],
+    ["shadowed join", "enabled: boolean)", "enabled: boolean, join: (...parts: string[]) => string)"],
+    ["shadowed process", "enabled: boolean)", "enabled: boolean, process: {execPath: string})"],
+    ["different cwd root", "cwd: sourceDirectory", "cwd: args"],
+    ["unbound constant source root", "const { sourceDirectory } = ports", 'const sourceDirectory = "/outside"'],
+    ["shadowed path root", "const probe = join", 'const sourceDirectory = "unrelated"; const probe = join'],
+    ["mutable producer", "const crashProbe", "let crashProbe"],
+    ["mutable environment alias", "const invocationEnvironment", "let invocationEnvironment"],
+    ["producer mutation", "const invocationEnvironment", 'crashProbe.environment.NODE_OPTIONS = "unrelated"; const invocationEnvironment'],
+    ["producer opaque escape", "const invocationEnvironment", "mutateUnknown(crashProbe); const invocationEnvironment"],
+    ["absolute preload path", preloadGraphFile, "/scripts/fixtures/qualified-preload.cjs"],
+    ["parent traversal preload path", preloadGraphFile, "scripts/../qualified-preload.cjs"],
+    ["dynamic preload suffix", '"' + preloadGraphFile + '"', "args[0]"],
+    ["unsupported Node option", "--require=", "--import="],
+    ["multiple Node options", "--require=", "--trace-warnings --require="],
+    ["dead spawn after return", "return spawn(", "return undefined; spawn("],
+    ["false short-circuit spawn", "return spawn(", "return false && spawn("],
+  ] as const) check("Node preload reachability rejects " + name, () => {
+    assert.equal(preloadGraphSource.split(before).length, 2); const changed = preloadGraphSource.replace(before, after);
+    assert.equal(preloadGraph(changed).has(preloadGraphFile), false);
+  });
+  check("a missing preload source snapshot cannot grant an executable edge", () => {
+    assert.equal(preloadGraph(preloadGraphSource, preloadGraphFile, false).has(preloadGraphFile), false);
+  });
+  const preloadOwnerFile = "scripts/lib/isolated-public-verification.mts", preloadNativeFile = "scripts/lib/windows-owned-process.mts",
+    actualPreloadFile = "scripts/lib/owned-process-crash-probe.cjs";
+  const preloadOwnerTree = ts.createSourceFile(preloadOwnerFile, readSource(preloadOwnerFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const preloadOwner = preloadOwnerTree.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "runOwnedVerificationChild"); assert.ok(preloadOwner);
+  const fallbackSpawns: ts.CallExpression[] = [];
+  const findFallback = (node: ts.Node) => { if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "spawn") fallbackSpawns.push(node); ts.forEachChild(node, findFallback); };
+  findFallback(preloadOwner); assert.equal(fallbackSpawns.length, 1);
+  const fallback = fallbackSpawns[0]!, start = preloadOwner.getStart(preloadOwnerTree), ownerText = preloadOwner.getText(preloadOwnerTree);
+  const preloadImports = preloadOwnerTree.statements.filter((node): node is ts.ImportDeclaration => ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
+    && ["node:child_process", "node:path", "./windows-owned-process.mts"].includes(node.moduleSpecifier.text)).map(node => node.getText(preloadOwnerTree)).join("\n");
+  const nativeOnlyOwner = preloadImports + "\n" + ownerText.slice(0, fallback.getStart(preloadOwnerTree) - start) + "undefined" + ownerText.slice(fallback.end - start);
+  const actualNativeSource = readSource(preloadNativeFile);
+  const nativePreloadGraph = (owner = nativeOnlyOwner, native = actualNativeSource, extra: Array<[string, string]> = []) => collectExecutableSourceGraph({ root,
+    entrySourceFiles: [preloadOwnerFile], symbolAware: false, sourceOverrides: new Map([[preloadOwnerFile, owner], [preloadNativeFile, native],
+      [actualPreloadFile, readSource(actualPreloadFile)], ...extra]) });
+  check("actual imported Windows owner forwards the preload when direct Node fallback is absent", () => {
+    assert.equal(nativePreloadGraph().has(actualPreloadFile), true);
+  });
+  for (const [name, before, after] of [
+    ["cut native environment", "env: { ...invocationEnvironment, [markerKey]: marker }", "env: { ...env, [markerKey]: marker }"],
+    ["cut native cwd", "cwd: sourceDirectory", "cwd: args[0]"],
+    ["unrelated native export", "{ spawnWindowsOwnedProcess,", "{ unrelatedNativeExport as spawnWindowsOwnedProcess,"],
+    ["mutated native environment", "const windows = process.platform", 'invocationEnvironment.NODE_OPTIONS = "unrelated"; const windows = process.platform'],
+    ["dead native call", "const windows = process.platform", "return; const windows = process.platform"],
+  ] as const) check("actual native preload edge rejects " + name, () => {
+    assert.equal(nativeOnlyOwner.split(before).length, 2); assert.equal(nativePreloadGraph(nativeOnlyOwner.replace(before, after)).has(actualPreloadFile), false);
+  });
+  check("same named export from a foreign native module cannot borrow the actual forwarding owner", () => {
+    const foreign = "scripts/lib/foreign-native-owner.mts", changed = nativeOnlyOwner.replace('"./windows-owned-process.mts"', '"./foreign-native-owner.mts"');
+    assert.notEqual(changed, nativeOnlyOwner);
+    assert.equal(nativePreloadGraph(changed, actualNativeSource, [[foreign, "export function spawnWindowsOwnedProcess(options: unknown) { return options; }"]]).has(actualPreloadFile), false);
+  });
+  for (const [name, before, after] of [["cwd", "cwd: options.cwd", 'cwd: "unrelated"'],
+    ["environment", "{ cwd: options.cwd, env: options.env,", "{ cwd: options.cwd, env: {},"]] as const)
+    check("native forwarding contract rejects changed " + name, () => {
+      assert.equal(actualNativeSource.split(before).length, 2);
+      assert.equal(nativePreloadGraph(nativeOnlyOwner, actualNativeSource.replace(before, after)).has(actualPreloadFile), false);
+    });
   check("complete native closure includes unused eager imports re-exports and transitive owners while preserving default graph behavior", () => {
     const entry = "scripts/phase06-effect-entry.mts", hidden = "scripts/fixtures/phase06-effect-unused.mts", side = "scripts/fixtures/phase06-effect-side.mts",
       nested = "scripts/fixtures/phase06-effect-nested.mts", forwarded = "scripts/fixtures/phase06-effect-export.mts";
