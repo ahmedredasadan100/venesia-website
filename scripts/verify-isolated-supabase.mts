@@ -3011,6 +3011,195 @@ function verifyLocalSourceImpactControls(api: Pick<typeof import("./lib/isolated
     const assertion = value.actual.changeImpact!.protections[0].assertionChanges.find(row => row.contracts.includes(contract + "#saveRecord"));
     assert.ok(assertion); maintain(value); assert.equal(plan(value).mode, "full");
   });
+  const helperRuntimeBefore = "export async function runOwned(value: string): Promise<{code:number}> { return {code:0}; } export async function otherOwned(value: string): Promise<{code:number}> { return {code:0}; }";
+  const helperRuntimeAfter = helperRuntimeBefore.replace("runOwned(value: string)", "runOwned(value: string, confirmed: boolean)");
+  const helperRuntimeGuard = 'import assert from "node:assert/strict"; async function exercise(){ const owner=await import("../' + contract + '"); '
+    + 'const launch=(value:string)=>{ const promise=owner.runOwned(value,true); const outcome=promise.then(result=>({result}),error=>({error})); return {outcome}; }; '
+    + 'const successfulResult=async(job:ReturnType<typeof launch>)=>{ const outcome=await job.outcome; if("error" in outcome)throw outcome.error; return outcome.result; }; '
+    + 'const retained=await successfulResult(launch("after")); const alias=retained; assert.equal(alias.code,0); }';
+  const helperRuntimeScenario = (nextGuard: string) => {
+    const baseline = new Map(originals);
+    baseline.set(contract, helperRuntimeBefore);
+    baseline.set("src/lib/admin/phase03/foreign-runtime.ts", helperRuntimeAfter);
+    baseline.set(entry, 'import assert from "node:assert/strict"; import {runOwned as actualRun} from "../' + contract
+      + '"; async function exercise(){ assert.equal((await actualRun("before")).code,0); }');
+    return scenario([[contract, helperRuntimeAfter], [entry, nextGuard]], baseline);
+  };
+  for (const [label, nextGuard] of [
+    ["dynamic owner and fulfilled result object", helperRuntimeGuard],
+    ["local job argument and returned result alias", helperRuntimeGuard.replace('const retained=await successfulResult(launch("after")); const alias=retained;',
+      'const job=launch("after"); const result=await successfulResult(job); const alias=result;')],
+    ["immutable named owner alias", helperRuntimeGuard.replace('const owner=await import("../' + contract + '");', 'const imported=await import("../' + contract + '"); const owner=imported;')],
+    ["finally preserves the fulfilled result", helperRuntimeGuard.replace("promise.then(result=>({result}),error=>({error}))", "promise.then(result=>({result}),error=>({error})).finally(()=>undefined)")],
+  ]) check("helper return correspondence binds " + label + " to the asserted runtime result", () => {
+    const value = helperRuntimeScenario(nextGuard);
+    const binding = value.actual.changeImpact!.protections.find(row => row.file === entry && row.check === checkName)?.assertionChanges
+      .find(row => row.references.includes(contract) && row.contracts.includes(contract + "#runOwned"));
+    assert.ok(binding, "The returned imported result, not merely the helper invocation, must reach the assertion.");
+    maintain(value); assert.doesNotThrow(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual));
+    assert.equal(plan(value).mode, "full");
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+  });
+  for (const [label, nextGuard, expectedReason = "real verification-source change"] of [
+    ["unrelated assertion", helperRuntimeGuard.replace("assert.equal(alias.code,0)", "assert.equal(1,1)")],
+    ["different owner export", helperRuntimeGuard.replace("owner.runOwned(value,true)", "owner.otherOwned(value)")],
+    ["foreign module with the same export name", helperRuntimeGuard.replace('const owner=await import("../' + contract + '");', 'const owner=await import("../src/lib/admin/phase03/foreign-runtime");'), "protection has no bound source relationship"],
+    ["closer foreign namespace substitution", helperRuntimeGuard.replace('const owner=await import("../' + contract + '");',
+      'const owner=await import("../' + contract + '"); const foreign=await import("../src/lib/admin/phase03/foreign-runtime");')
+      .replace("const promise=owner.runOwned(value,true);", "const owner=foreign; const promise=owner.runOwned(value,true);")],
+    ["replaced helper return", helperRuntimeGuard.replace("return outcome.result", "return {code:0}")],
+    ["disconnected promise result", helperRuntimeGuard.replace("promise.then(result=>({result}),error=>({error}))", "Promise.resolve({result:{code:0}})")],
+    ["replaced fulfillment payload", helperRuntimeGuard.replace("result=>({result})", "result=>({result:{code:0}})")],
+    ["closer unrelated result alias", helperRuntimeGuard.replace("const alias=retained", "const alias={code:0}")],
+    ["shadowed helper", helperRuntimeGuard.replace('const retained=await successfulResult(launch("after")); const alias=retained; assert.equal(alias.code,0);',
+      '{ const launch=()=>({outcome:Promise.resolve({result:{code:0}})}); const retained=await successfulResult(launch()); assert.equal(retained.code,0); }')],
+    ["reassigned mutable alias", helperRuntimeGuard.replace("const alias=retained", "let alias=retained; alias={code:0}")],
+    ["reassigned result property", helperRuntimeGuard.replace("const alias=retained; assert.equal(alias.code,0)", "const holder={result:retained}; holder.result={code:0}; assert.equal(holder.result.code,0)")],
+    ["mutation through a second alias before asserting the original", helperRuntimeGuard.replace("const alias=retained; assert.equal(alias.code,0)",
+      "const alias=retained; const secondAlias=alias; secondAlias.code=0; assert.equal(retained.code,0)")],
+    ["mutation through a casted alias before asserting the original", helperRuntimeGuard.replace("const alias=retained; assert.equal(alias.code,0)",
+      "const secondAlias=retained as typeof retained; secondAlias.code=0; assert.equal(retained.code,0)")],
+    ["result escapes inside an object literal", helperRuntimeGuard.replace("async function exercise()", "declare function mutateUnknown(value:unknown):void; async function exercise()")
+      .replace("const alias=retained;", "mutateUnknown({result:retained}); const alias=retained;")],
+    ["result escapes inside an array literal", helperRuntimeGuard.replace("async function exercise()", "declare function mutateUnknown(value:unknown):void; async function exercise()")
+      .replace("const alias=retained;", "mutateUnknown([retained]); const alias=retained;")],
+    ["result escapes through a later assignment", helperRuntimeGuard.replace("async function exercise()", "declare function mutateUnknown(value:unknown):void; async function exercise()")
+      .replace("const alias=retained; assert.equal(alias.code,0)", "let escaped:unknown; escaped=retained; mutateUnknown(escaped); assert.equal(retained.code,0)")],
+    ["unknown mutation before returning the helper result", helperRuntimeGuard.replace("async function exercise()", "declare function mutateUnknown(value:unknown):void; async function exercise()")
+      .replace("return outcome.result;", "mutateUnknown(outcome.result); return outcome.result;")],
+    ["local job argument escapes through the helper parameter", helperRuntimeGuard.replace("async function exercise()", "declare function mutateUnknown(value:unknown):void; async function exercise()")
+      .replace("const outcome=await job.outcome;", "mutateUnknown(job); const outcome=await job.outcome;")
+      .replace('const retained=await successfulResult(launch("after")); const alias=retained;', 'const job=launch("after"); const result=await successfulResult(job); const alias=result;')],
+    ["recursive helper without a returned owner result", helperRuntimeGuard.replace('const outcome=await job.outcome; if("error" in outcome)throw outcome.error; return outcome.result;', "return successfulResult(job);")],
+    ["deleted assertion", helperRuntimeGuard.replace("assert.equal(alias.code,0);", "console.log(alias.code);")],
+  ]) check("helper return correspondence rejects " + label + " without borrowing a called contract", () => {
+    const value = helperRuntimeScenario(nextGuard);
+    assert.ok(value.actual.changeImpact!.protections.every(protection => protection.assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#runOwned"))));
+    maintain(value); assert.throws(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual), new RegExp(expectedReason, "u"));
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "DRIFT"); assert.equal(result.behavioralPass, false);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#runOwned")?.protected, false);
+  });
+  check("helper return correspondence rejects an opaque receiver method that mutates the asserted result", () => {
+    const baseline = new Map(originals), before = helperRuntimeBefore.replaceAll("return {code:0};",
+      'const result={code:1,toString(){this.code=0;return "changed";}}; return result;');
+    baseline.set(contract, before);
+    baseline.set(entry, 'import assert from "node:assert/strict"; import {runOwned as actualRun} from "../' + contract
+      + '"; assert.equal((await actualRun("before")).code,1);');
+    const nextGuard = helperRuntimeGuard.replace("const alias=retained; assert.equal(alias.code,0)", "retained.toString(); assert.equal(retained.code,0)");
+    const value = scenario([[contract, before.replace("runOwned(value: string)", "runOwned(value: string, confirmed: boolean)")], [entry, nextGuard]], baseline);
+    assert.ok(value.actual.changeImpact!.protections.every(protection => protection.assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#runOwned"))));
+    maintain(value); assert.throws(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual), /real verification-source change/u);
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "DRIFT"); assert.equal(result.behavioralPass, false);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#runOwned")?.protected, false);
+  });
+  check("helper runtime correspondence cannot lend its binding to a different changed contract", () => {
+    const baseline = new Map(originals); baseline.set(contract, helperRuntimeBefore); baseline.set(entry, guardSource);
+    const next = helperRuntimeAfter.replace("otherOwned(value: string)", "otherOwned(value: string, reason: string)");
+    const value = scenario([[contract, next], [entry, helperRuntimeGuard]], baseline); maintain(value);
+    assert.throws(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual), /real verification-source change/u);
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#runOwned")?.protected, true);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#otherOwned")?.protected, false);
+    assert.equal(result.status, "DRIFT"); assert.equal(result.behavioralPass, false);
+  });
+  const inferredRuntimeBody = 'const readReceipt=():Receipt|null=>({code:0}); const child={readReceipt}; const native={sourceSha256:value}; return {child,readReceipt,native};';
+  const inferredRuntimeBefore = 'type Receipt={code:number}; export function spawnOwned(value:string){' + inferredRuntimeBody
+    + '} export function otherOwned(value:string){' + inferredRuntimeBody + '}';
+  const inferredRuntimeAfter = inferredRuntimeBefore.replace('spawnOwned(value:string)', 'spawnOwned(value:string,confirmed:boolean)');
+  const inferredRuntimeGuard = 'import assert from "node:assert/strict"; import {spawnOwned as nativeSpawn,otherOwned} from "../' + contract
+    + '"; function exercise(){ const launch=(value:string)=>{ const launched=nativeSpawn(value,true); return launched; }; '
+    + 'const launched=launch("after"); assert.equal(launched.child.readReceipt,launched.readReceipt); }';
+  const inferredRuntimeScenario = (nextGuard: string, receipt = true) => {
+    const baseline = new Map(originals); baseline.set(contract, inferredRuntimeBefore);
+    baseline.set("src/lib/admin/phase03/foreign-inferred-runtime.ts", inferredRuntimeAfter);
+    baseline.set(entry, 'import assert from "node:assert/strict"; import {spawnOwned as nativeSpawn} from "../' + contract
+      + '"; function exercise(){ ' + (receipt ? 'const launched=nativeSpawn("before"); assert.equal(launched.child.readReceipt,launched.readReceipt);'
+        : 'assert.equal(typeof nativeSpawn("before").native.sourceSha256,"string");') + ' }');
+    return scenario([[contract, inferredRuntimeAfter], [entry, nextGuard]], baseline);
+  };
+  for (const [label, nextGuard, receipt] of [
+    ["inferred object member through the retained launch result", inferredRuntimeGuard.replace('assert.equal(launched.child.readReceipt,launched.readReceipt)',
+      'assert.equal(typeof launched.native.sourceSha256,"string")'), false],
+    ["inferred reader identity retained on the returned child and launch result", inferredRuntimeGuard, true],
+  ] as const) check("inferred return correspondence binds " + label + " to its exact imported export", () => {
+    const value = inferredRuntimeScenario(nextGuard, receipt);
+    const binding = value.actual.changeImpact!.protections.find(row => row.file === entry && row.check === checkName)?.assertionChanges
+      .find(row => row.references.includes(contract) && row.contracts.includes(contract + "#spawnOwned"));
+    assert.ok(binding, "The inferred return must retain the exact imported export identity through the local helper.");
+    maintain(value); assert.doesNotThrow(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual));
+    assert.equal(plan(value).mode, "full");
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#spawnOwned")?.protected, true);
+  });
+  for (const [label, nextGuard, expectedReason = "real verification-source change"] of [
+    ["another export with the same inferred shape", inferredRuntimeGuard.replace("nativeSpawn(value,true)", "otherOwned(value)")],
+    ["a foreign same-named export", inferredRuntimeGuard.replace('../' + contract + '"', '../src/lib/admin/phase03/foreign-inferred-runtime"'), "protection has no bound source relationship"],
+    ["a substituted helper return with the same shape", inferredRuntimeGuard.replace("return launched;", 'const replacement=()=>({code:0}); return {child:{readReceipt:replacement},readReceipt:replacement,native:{sourceSha256:value}};')],
+    ["a mutated reader on the retained result", inferredRuntimeGuard.replace('const launched=launch("after");', 'const launched=launch("after"); const replacement=()=>({code:0}); launched.readReceipt=replacement; launched.child.readReceipt=replacement;')],
+    ["an opaque receiver escape before the assertion", inferredRuntimeGuard.replace('const launched=launch("after");', 'const launched=launch("after"); launched.toString();')],
+  ]) check("inferred return correspondence rejects " + label + " without borrowing the owner identity", () => {
+    const value = inferredRuntimeScenario(nextGuard);
+    assert.ok(value.actual.changeImpact!.protections.every(protection => protection.assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#spawnOwned"))));
+    maintain(value); assert.throws(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual), new RegExp(expectedReason, "u"));
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "DRIFT"); assert.equal(result.behavioralPass, false);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#spawnOwned")?.protected, false);
+  });
+  const intersectionRuntimeProducer = ' export function readDiagnostic(){return {complete:true as const,handlesClosed:true as const};}';
+  const intersectionBefore = 'export type BaseReceipt={id:string}; export type RecordContract=BaseReceipt & {value:string}; export type OtherContract=BaseReceipt & {diagnostic?:{complete:boolean;handlesClosed:boolean}};' + intersectionRuntimeProducer;
+  const intersectionAfter = intersectionBefore.replace("RecordContract=BaseReceipt & {value:string}", "RecordContract=BaseReceipt & {value:string;diagnostic?:{complete:boolean;handlesClosed:boolean}}");
+  const intersectionPrefix = 'import assert from "node:assert/strict"; import {readDiagnostic} from "../' + contract + '"; const diagnostic=readDiagnostic(); ';
+  const intersectionScenario = (body: string) => {
+    const baseline = new Map(originals); baseline.set(contract, intersectionBefore);
+    baseline.set("src/lib/admin/phase03/foreign-receipt.ts", intersectionAfter);
+    baseline.set(entry, intersectionPrefix + 'const read=(value:import("../' + contract + '").RecordContract)=>value.value; assert.equal(read({id:"a",value:"before"}),"before");');
+    return scenario([[contract, intersectionAfter], [entry, intersectionPrefix + body]], baseline);
+  };
+  for (const [label, body] of [
+    ["direct imported intersection", 'const receipt:import("../' + contract + '").RecordContract={id:"a",value:"after",diagnostic}; assert.equal(receipt.diagnostic?.complete,true); assert.equal(receipt.diagnostic?.handlesClosed,true);'],
+    ["local alias to the exact imported intersection", 'type NativeReceipt=import("../' + contract + '").RecordContract; const read=(receipt:NativeReceipt)=>receipt.diagnostic; assert.equal(read({id:"a",value:"after",diagnostic}),diagnostic);'],
+  ]) check("intersection member correspondence accepts " + label + " with the exact changed identity", () => {
+    const value = intersectionScenario(body); maintain(value);
+    assert.doesNotThrow(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual));
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#RecordContract")?.protected, true);
+  });
+  for (const [label, before, after, previousAssertion] of [
+    ["nested parenthesized literal components", 'export type BaseReceipt={id:string}; export type RecordContract=BaseReceipt & ({value:string});',
+      'export type BaseReceipt={id:string}; export type RecordContract=BaseReceipt & ({value:string}) & (({diagnostic?:{complete:boolean;handlesClosed:boolean}}));',
+      'assert.equal(receipt.value,"after");'],
+    ["changed first duplicate member component", 'export type BaseReceipt={id:string}; export type RecordContract=BaseReceipt & {value:string;diagnostic?:{complete:boolean}} & {diagnostic?:{handlesClosed:boolean}};',
+      'export type BaseReceipt={id:string}; export type RecordContract=BaseReceipt & {value:string;diagnostic?:{complete:true}} & {diagnostic?:{handlesClosed:boolean}};',
+      'assert.equal(typeof receipt.diagnostic?.complete,"boolean");'],
+  ]) check("intersection member correspondence preserves " + label + " without last-member shadowing", () => {
+    const baseline = new Map(originals), declaration = intersectionPrefix
+      + 'const receipt:import("../' + contract + '").RecordContract={id:"a",value:"after",diagnostic}; ';
+    baseline.set(contract, before + intersectionRuntimeProducer); baseline.set(entry, (before.includes("diagnostic") ? declaration : declaration.replace(',diagnostic};', '};')) + previousAssertion);
+    const value = scenario([[contract, after + intersectionRuntimeProducer], [entry, declaration + 'assert.equal(receipt.diagnostic?.complete,true);']], baseline);
+    maintain(value); assert.doesNotThrow(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual));
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "PASS_AUTOMATIC_SOURCE_PROTECTION"); assert.equal(result.behavioralPass, false);
+    assert.equal(result.fast.correspondence.find(row => row.contract === contract + "#RecordContract")?.protected, true);
+  });
+  for (const [label, body, expectedReason = "real verification-source change"] of [
+    ["structural lookalike", 'const receipt:{diagnostic:typeof diagnostic}={diagnostic}; assert.equal(receipt.diagnostic.complete,true);'],
+    ["foreign same-named contract", 'const receipt:import("../src/lib/admin/phase03/foreign-receipt").RecordContract={id:"a",value:"after",diagnostic}; assert.equal(receipt.diagnostic?.complete,true);'],
+    ["sibling intersection contract", 'const receipt:import("../' + contract + '").OtherContract={id:"a",diagnostic}; assert.equal(receipt.diagnostic?.complete,true);'],
+    ["unchanged inherited member", 'const receipt:import("../' + contract + '").RecordContract={id:"a",value:"after",diagnostic}; assert.equal(receipt.id,"a");'],
+    ["shadowed local type alias", 'type NativeReceipt=import("../' + contract + '").RecordContract; function inner(){type NativeReceipt={diagnostic:typeof diagnostic}; const receipt:NativeReceipt={diagnostic}; assert.equal(receipt.diagnostic.complete,true);}'],
+    ["cut typed member return", 'const read=(receipt:import("../' + contract + '").RecordContract)=>diagnostic; assert.equal(read({id:"a",value:"after",diagnostic}),diagnostic);'],
+  ]) check("intersection member correspondence rejects " + label + " as replacement protection", () => {
+    const value = intersectionScenario(body); maintain(value);
+    assert.ok(value.actual.changeImpact!.protections.every(protection => protection.assertionChanges.every(assertion => !assertion.contracts.includes(contract + "#RecordContract"))));
+    assert.throws(() => api.assertLocalVerificationProtectionMaintenance(value.impact, value.actual), new RegExp(expectedReason, "u"));
+    const result = api.deriveLocalVerificationSourceCoherence(scripts, { ...value.actual, sourceSha256: value.actual.changeImpact!.sourceSha256 });
+    assert.equal(result.status, "DRIFT"); assert.equal(result.behavioralPass, false);
+  });
   check("a changed data export binds only the asserted imported value and cannot borrow a sibling numeric assertion", () => {
     const baseline = new Map(originals), oldGuard = 'import assert from "node:assert/strict"; import {SAVE_LIMIT as actualLimit,OTHER_LIMIT} from "../' + contract + '"; assert.equal(actualLimit,1); assert.equal(OTHER_LIMIT,2);';
     baseline.set(contract, "export const SAVE_LIMIT=1; export const OTHER_LIMIT=2;"); baseline.set(entry, oldGuard);
@@ -5314,6 +5503,49 @@ function verifyWindowsOwnedProcessContracts() {
       }
     });
   }
+  const diagnosticIdentityPath = path.join(root, "controlled.identity.json"), diagnosticReceiptPath = path.join(root, "controlled.receipt.json");
+  const diagnosticPath = path.join(root, "controlled.diagnostic.jsonl"), diagnosticGate = "G:7_-".repeat(19) + "G";
+  const nativeDiagnosticValidation: { acceptedCases: string[]; rejectedCases: string[]; nativeProcessesAllocated: number } = { acceptedCases: [], rejectedCases: [], nativeProcessesAllocated: 0 };
+  const diagnosticCases: Array<{ name: string; options: { diagnosticPath?: string; diagnosticGate?: string }; accepted?: boolean; existing?: boolean; changedParent?: boolean }> = [
+    { name: "paired diagnostic options and maximum-length valid gate", options: { diagnosticPath, diagnosticGate }, accepted: true },
+    { name: "missing diagnostic gate", options: { diagnosticPath } },
+    { name: "missing diagnostic path", options: { diagnosticGate } },
+    { name: "unsafe diagnostic gate", options: { diagnosticPath, diagnosticGate: "../unsafe" } },
+    { name: "oversized diagnostic gate", options: { diagnosticPath, diagnosticGate: "G".repeat(97) } },
+    { name: "diagnostic path outside the evidence directory", options: { diagnosticPath: path.join(root, "different-parent", "controlled.diagnostic.jsonl"), diagnosticGate } },
+    { name: "diagnostic parent changed after initial evidence validation", options: { diagnosticPath, diagnosticGate }, changedParent: true },
+    { name: "existing diagnostic evidence", options: { diagnosticPath, diagnosticGate }, existing: true },
+    { name: "diagnostic path aliases identity evidence", options: { diagnosticPath: diagnosticIdentityPath, diagnosticGate } },
+    { name: "diagnostic path aliases terminal evidence", options: { diagnosticPath: diagnosticReceiptPath, diagnosticGate } },
+  ];
+  for (const fixture of diagnosticCases) check("actual native launch validates diagnostic options before process allocation: " + fixture.name, () => {
+    let builds = 0, launches = 0, parentReads = 0;
+    const boundary = Error("Controlled native diagnostic boundary; no process allocation");
+    const input = { args: ["-e", "0"], cwd: root, env: { NODE_ENV: "test" as const }, identityPath: diagnosticIdentityPath,
+      receiptPath: diagnosticReceiptPath, limitMs: 1_000, ...fixture.options };
+    const api: Pick<typeof import("./lib/windows-owned-process.mts"), "spawnWindowsOwnedProcess"> = {
+      spawnWindowsOwnedProcess: new Function("assert", "nativeBuild", "existsSync", "realpathSync", "dirname", "spawn", "process", nativeSpawnCode + ";return spawnWindowsOwnedProcess;")(
+        assert, () => { builds++; return { executable: "controlled-native-executable" }; },
+        (file: string) => fixture.existing === true && file === fixture.options.diagnosticPath,
+        (value: string) => { parentReads++; return fixture.changedParent && parentReads === 3 ? path.join(value, "controlled-link-target") : value; }, path.dirname,
+        (executable: string, args: string[]) => {
+          launches++; assert.equal(executable, "controlled-native-executable");
+          assert.deepEqual(args, ["--identity", input.identityPath, "--receipt", input.receiptPath, "--limit-ms", "1000", "--cleanup-ms", "10000",
+            "--diagnostic-path", diagnosticPath, "--diagnostic-gate", diagnosticGate, "--", process.execPath, ...input.args]);
+          throw boundary;
+        }, { execPath: process.execPath }) as typeof import("./lib/windows-owned-process.mts").spawnWindowsOwnedProcess,
+    };
+    if (fixture.accepted) {
+      assert.equal(diagnosticGate.length, 96);
+      assert.throws(() => api.spawnWindowsOwnedProcess(input), error => error === boundary);
+      assert.equal(builds, 1); assert.equal(launches, 1); assert.equal(parentReads, 3); nativeDiagnosticValidation.acceptedCases.push(fixture.name);
+    } else {
+      assert.throws(() => api.spawnWindowsOwnedProcess(input), error => error instanceof assert.AssertionError);
+      assert.equal(builds, 1); assert.equal(launches, 0);
+      if (fixture.changedParent) assert.equal(parentReads, 3);
+      nativeDiagnosticValidation.rejectedCases.push(fixture.name);
+    }
+  });
   const declaration = (name: string) => { const node = source.statements.find((node): node is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(node) && node.name.text === name); assert.ok(node); return node; };
   const receiptType = declaration("WindowsJobReceipt"); assert.ok(ts.isIntersectionTypeNode(receiptType.type));
   const receiptBody = receiptType.type.types.find(ts.isTypeLiteralNode); assert.ok(receiptBody);
@@ -5362,7 +5594,7 @@ function verifyWindowsOwnedProcessContracts() {
   }
   return { status: "PASS", scope: "imported_type_value_vectors_and_source_contracts_only", nativeRootProcessesAllocated: 0,
     identityMemberVectors: 3, receiptNumberAndNullVectors: 2, compilerNegativeVectorsDeclared: 3, compilerNegativeProof: "requires actual TypeScript check",
-    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity, nativeBuildPublication, nativeDeadlineValidation };
+    sourceContracts: ["rootExitCode nullable number", "exact permitted stop reasons"], nativeIntegrity, nativeBuildPublication, nativeDeadlineValidation, nativeDiagnosticValidation };
 }
 
 /** Independent retained PROCESS handles prove abrupt closure without retaining a JOB handle. */
@@ -7374,6 +7606,9 @@ async function verifyOwnedCrashAttributionControls() {
     assert.equal(value.status, reference.status); assert.equal(value.diagnosticOnly, true); assert.equal(value.releaseQualified, false);
     assert.equal(value.oomCauseInferred, false); assert.equal(value.memoryLeakInferred, false); assert.equal(value.limitsUnchanged, true); assert.equal(value.argsUnchanged, true);
     assert.equal(value.gateId, configuration.gateId); assert.equal(value.jobToken, result.nativeJobIdentity?.jobToken);
+    assert.ok(result.nativeJobReceipt);
+    const nativeReceipt: import("./lib/windows-owned-process.mts").WindowsJobReceipt = result.nativeJobReceipt;
+    assert.equal(nativeReceipt.diagnostic?.complete, true); assert.equal(nativeReceipt.diagnostic?.handlesClosed, true);
     const nativeRows = readLines(path.join(directory, `public-${name}.crash-native.jsonl`));
     const nodeDirectory = path.join(directory, `public-${name}-crash-nodes`);
     const nodeRows = readdirSync(nodeDirectory).flatMap(member => readLines(path.join(nodeDirectory, member)));

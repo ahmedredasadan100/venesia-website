@@ -1246,9 +1246,17 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
     for (const node of tree.statements) {
       if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
       if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
-        const members = ts.isInterfaceDeclaration(node) ? node.members : ts.isTypeLiteralNode(node.type) ? node.type.members : [];
-        kinds.set(node.name.text, { runtime: false, members: new Map(members.flatMap(member => member.name
-          ? [[name(member.name), member.getText(tree)] as const] : [])) });
+        // An intersection preserves its explicit member declarations; referenced bases
+        // remain opaque. Do not infer inherited/union/generic members from a name.
+        const literalMembers = (type: ts.TypeNode): readonly ts.TypeElement[] => ts.isParenthesizedTypeNode(type)
+          ? literalMembers(type.type) : ts.isTypeLiteralNode(type) ? type.members
+            : ts.isIntersectionTypeNode(type) ? type.types.flatMap(part => literalMembers(part)) : [];
+        const members = ts.isInterfaceDeclaration(node) ? node.members : literalMembers(node.type);
+        const byName = new Map<string, string[]>();
+        for (const member of members) if (member.name) {
+          const key = name(member.name); if (key) byName.set(key, [...(byName.get(key) ?? []), member.getText(tree)]);
+        }
+        kinds.set(node.name.text, { runtime: false, members: new Map([...byName].map(([key, declarations]) => [key, JSON.stringify(declarations)])) });
       } else if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) {
         if (node.name) kinds.set(node.name.text, { runtime: true, members: new Map() });
       } else if (ts.isVariableStatement(node)) for (const declaration of node.declarationList.declarations)
@@ -1272,25 +1280,64 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
         ...(previousKinds.get(key)?.members.keys() ?? []), ...(nextKinds.get(key)?.members.keys() ?? []),
       ]).filter(member => previousKinds.get(key)?.members.get(member) !== nextKinds.get(key)?.members.get(member))) : new Set<string>() };
   });
+  type InferredResultType = { checker: ts.TypeChecker; type: ts.Type; declaration: ts.Node };
+  const inferredOwners = new Map<string, { checker: ts.TypeChecker; tree: ts.SourceFile }>();
+  const inferredReturn = (file: string, symbol: string): InferredResultType | undefined => {
+    let context = inferredOwners.get(file);
+    if (!context) {
+      const source = text(current, file); if (source === undefined || inferredOwners.size >= 32) return undefined;
+      // Infer only this exact bound module. No filesystem reads, ambient package
+      // lookup, emit or project-wide type graph; unresolved dependencies stay opaque.
+      const virtualFile = "/bound-source/" + file, tree = parse(virtualFile, source);
+      const host: ts.CompilerHost = { getSourceFile: candidate => candidate === virtualFile ? tree : undefined,
+        getDefaultLibFileName: () => "", writeFile: () => undefined, getCurrentDirectory: () => "/bound-source",
+        getDirectories: () => [], fileExists: candidate => candidate === virtualFile,
+        readFile: candidate => candidate === virtualFile ? source : undefined, getCanonicalFileName: candidate => candidate,
+        useCaseSensitiveFileNames: () => true, getNewLine: () => "\n" };
+      const program = ts.createProgram([virtualFile], { noEmit: true, noLib: true, noResolve: true, types: [], strict: true,
+        target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }, host);
+      context = { checker: program.getTypeChecker(), tree }; inferredOwners.set(file, context);
+    }
+    const declarations = context.tree.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === symbol
+      && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword));
+    if (declarations.length !== 1 || !ts.isFunctionDeclaration(declarations[0]) || declarations[0].type) return undefined;
+    const owner = declarations[0], signature = context.checker.getSignatureFromDeclaration(owner);
+    if (!signature) return undefined;
+    const type = context.checker.getReturnTypeOfSignature(signature);
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never | ts.TypeFlags.TypeParameter)) return undefined;
+    return { ...context, type, declaration: owner };
+  };
   const assertionShapes = (file: string, source: string | undefined) => {
     const shapes = new Map<string, { references: string[]; contracts: string[] }>(); if (source === undefined) return shapes;
     const tree = parse(file, semanticSource(file, source));
     const bindings = new Map<string, ts.Node[]>(), imports = new Map<string, string>(), importedNames = new Map<string, string>();
+    const bindingDeclarations = new Map<ts.Node, ts.Node>();
     const bindingScopes = new Map<ts.Node, ts.Node>(), typedApiBindings = new Map<string, Array<{ target: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
     const typedValueBindings = new Map<string, Array<{ target: string; typeName: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
+    const localTypes = new Map<string, ts.Declaration[]>();
     let shadowedPick = false;
     const detectPick = (node: ts.Node) => {
       if ((ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)
         || ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node) || ts.isTypeParameterDeclaration(node) || ts.isImportSpecifier(node)
         || ts.isImportClause(node) || ts.isNamespaceImport(node) || ts.isImportEqualsDeclaration(node)) && node.name?.getText(tree) === "Pick") shadowedPick = true;
+      if ((ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node) || ts.isTypeParameterDeclaration(node)
+        || ts.isImportSpecifier(node) || ts.isImportClause(node) || ts.isNamespaceImport(node)) && node.name && ts.isIdentifier(node.name))
+        localTypes.set(node.name.text, [...(localTypes.get(node.name.text) ?? []), node]);
       ts.forEachChild(node, detectPick);
     };
     detectPick(tree);
     // Bind only the receiver's actual imported type, or an unshadowed built-in Pick of it.
     // A nested generic/object type does not type its outer receiver as the imported owner.
-    const receiverImport = (type: ts.TypeNode): { imported: ts.ImportTypeNode; members: ReadonlySet<string> | null } | undefined => {
+    const receiverImport = (type: ts.TypeNode, active = new Set<ts.Node>()): { imported: ts.ImportTypeNode; members: ReadonlySet<string> | null } | undefined => {
+      if (active.size >= 32 || active.has(type)) return undefined;
+      const next = new Set(active); next.add(type);
       while (ts.isParenthesizedTypeNode(type)) type = type.type;
       if (ts.isImportTypeNode(type)) return { imported: type, members: null };
+      if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && !type.typeArguments?.length) {
+        const declarations = nearest(type, localTypes.get(type.typeName.text) ?? [], declarationScope);
+        if (declarations.length === 1 && ts.isTypeAliasDeclaration(declarations[0]) && !declarations[0].typeParameters?.length)
+          return receiverImport(declarations[0].type, next);
+      }
       if (!shadowedPick && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === "Pick"
         && type.typeArguments?.length === 2 && ts.isImportTypeNode(type.typeArguments[0])) {
         const selector = type.typeArguments[1], keys = ts.isUnionTypeNode(selector) ? selector.types : [selector];
@@ -1317,6 +1364,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       return [];
     };
     const register = (key: string, node: ts.Node, declaration: ts.Node) => {
+      bindingDeclarations.set(node, declaration);
       bindingScopes.set(node, declarationScope(declaration)); bindings.set(key, [...(bindings.get(key) ?? []), node]);
     };
     const declarations = (node: ts.Node) => {
@@ -1347,7 +1395,281 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       ts.forEachChild(node, declarations);
     };
     declarations(tree);
-    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, testedTypeMembers: Set<string>, tested = true): string[] => {
+    // A helper calling an owner is not evidence that its returned value reaches
+    // the assertion. Trace only immutable, explicit result paths; unknown forms
+    // contribute no runtime contract. The bound is per assertion, not a runtime
+    // execution budget, and exhaustion is a refusal rather than partial credit.
+    type ResultFlow = { origin?: { file: string; symbol: string; type: ts.TypeNode | InferredResultType };
+      fields?: ReadonlyMap<string, ResultFlow>; promise?: ResultFlow; alternatives?: readonly ResultFlow[] };
+    type FlowArgument = ResultFlow | { expression: ts.Expression; environment: FlowEnvironment };
+    type FlowEnvironment = ReadonlyMap<ts.Node, FlowArgument>;
+    const nearestBinding = (identifier: ts.Identifier) => nearest(identifier, bindings.get(identifier.text) ?? [], binding => bindingScopes.get(binding)!);
+    const unwrap = (expression: ts.Expression): ts.Expression => ts.isParenthesizedExpression(expression) || ts.isAwaitExpression(expression)
+      || ts.isNonNullExpression(expression) ? unwrap(expression.expression) : expression;
+    const assignedBindings = new Set<ts.Node>();
+    const mutationRoot = (expression: ts.Expression): ts.Identifier | undefined => {
+      expression = unwrap(expression);
+      while (ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression)) expression = unwrap(expression.expression);
+      while (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) expression = unwrap(expression.expression);
+      return ts.isIdentifier(expression) ? expression : undefined;
+    };
+    const findMutations = (node: ts.Node) => {
+      const target = ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment ? node.left
+        : (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator) ? node.operand
+          : ts.isDeleteExpression(node) ? node.expression : undefined;
+      const identifier = target && mutationRoot(target); if (identifier) for (const binding of nearestBinding(identifier)) assignedBindings.add(binding);
+      if (target && ts.isBinaryExpression(node)) for (const binding of aliasSources(node.right)) assignedBindings.add(binding);
+      if (target && !identifier) {
+        const mark = (part: ts.Node) => { if (ts.isIdentifier(part)) for (const binding of nearestBinding(part)) assignedBindings.add(binding); ts.forEachChild(part, mark); };
+        mark(target);
+      }
+      ts.forEachChild(node, findMutations);
+    };
+    findMutations(tree);
+    const mutationEdges = new Map<ts.Node, Set<ts.Node>>();
+    const addMutationEdge = (from: ts.Node, to: ts.Node) => { const targets = mutationEdges.get(from) ?? new Set<ts.Node>(); targets.add(to); mutationEdges.set(from, targets); };
+    const rejectionGuard = (statement: ts.Statement): statement is ts.IfStatement & { expression: ts.BinaryExpression & { left: ts.StringLiteralLike; right: ts.Identifier } } =>
+      ts.isIfStatement(statement) && !statement.elseStatement && ts.isBinaryExpression(statement.expression)
+      && statement.expression.operatorToken.kind === ts.SyntaxKind.InKeyword && ts.isStringLiteralLike(statement.expression.left)
+      && ts.isIdentifier(statement.expression.right) && ts.isThrowStatement(statement.thenStatement);
+    const localHelper = (expression: ts.Expression) => {
+      if (!ts.isIdentifier(expression)) return undefined;
+      const candidates = nearestBinding(expression); if (candidates.length !== 1 || assignedBindings.has(candidates[0])) return undefined;
+      const binding = candidates[0], declaration = bindingDeclarations.get(binding);
+      const fn = ts.isArrowFunction(binding) || ts.isFunctionExpression(binding) ? binding : declaration && ts.isFunctionDeclaration(declaration) ? declaration : undefined;
+      const fixed = declaration && (ts.isFunctionDeclaration(declaration) || ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) && Boolean(declaration.parent.flags & ts.NodeFlags.Const));
+      if (!fn?.body || !fixed || fn.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.dotDotDotToken)) return undefined;
+      if (!ts.isBlock(fn.body)) return fn;
+      const terminal = fn.body.statements.at(-1);
+      return terminal && ts.isReturnStatement(terminal) && terminal.expression && fn.body.statements.slice(0, -1)
+        .every(statement => ts.isVariableStatement(statement) || ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) || rejectionGuard(statement)) ? fn : undefined;
+    };
+    const findEscapes = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && !/^(?:assert|check|expect)(?:\.|$)/u.test(node.expression.getText(tree))) {
+        // Appending to an exact local array stores a Promise/reference; it does
+        // not rewrite that argument. Opaque calls receiving a value may do so.
+        const receiver = ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "push" && ts.isIdentifier(node.expression.expression)
+          ? nearestBinding(node.expression.expression) : [];
+        const declaration = receiver.length === 1 ? bindingDeclarations.get(receiver[0]) : undefined;
+        const arrayAppend = receiver.length === 1 && ts.isArrayLiteralExpression(receiver[0]) && !assignedBindings.has(receiver[0])
+          && declaration && ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) && Boolean(declaration.parent.flags & ts.NodeFlags.Const);
+        const helper = localHelper(node.expression);
+        if (!arrayAppend) for (const [index, argument] of node.arguments.entries()) {
+          for (const binding of aliasSources(argument)) {
+            const parameter = helper?.parameters[index];
+            if (parameter) addMutationEdge(parameter.initializer ?? parameter, binding);
+            else assignedBindings.add(binding);
+          }
+        }
+      }
+      ts.forEachChild(node, findEscapes);
+    };
+    findEscapes(tree);
+    // Writes/opaque escapes through a second alias invalidate the original
+    // identity too. Only explicit aliases and object fields are propagated.
+    function aliasSources(node: ts.Node): ts.Node[] {
+      if (ts.isIdentifier(node)) return [...nearestBinding(node)];
+      if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)
+        || ts.isSatisfiesExpression(node) || ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) return aliasSources(node.expression);
+      if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) return aliasSources(node.expression);
+      if (ts.isArrayLiteralExpression(node)) return node.elements.flatMap(aliasSources);
+      if (ts.isObjectLiteralExpression(node)) return node.properties.flatMap(member => ts.isPropertyAssignment(member) ? aliasSources(member.initializer)
+        : ts.isShorthandPropertyAssignment(member) ? aliasSources(member.name) : ts.isSpreadAssignment(member) ? aliasSources(member.expression) : []);
+      return [];
+    }
+    for (const candidates of bindings.values()) for (const binding of candidates) for (const source of aliasSources(binding)) addMutationEdge(binding, source);
+    const propagateMutations = () => {
+      const pendingMutations = [...assignedBindings];
+      while (pendingMutations.length) for (const binding of mutationEdges.get(pendingMutations.pop()!) ?? []) if (!assignedBindings.has(binding)) {
+        assignedBindings.add(binding); pendingMutations.push(binding);
+      }
+    };
+    propagateMutations();
+    const immutable = (binding: ts.Node) => {
+      const declaration = bindingDeclarations.get(binding);
+      return !assignedBindings.has(binding) && Boolean(declaration && (ts.isParameter(declaration) || ts.isFunctionDeclaration(declaration)
+        || ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) && (declaration.parent.flags & ts.NodeFlags.Const)));
+    };
+    const moduleOf = (expression: ts.Expression, active = new Set<ts.Node>()): string | undefined => {
+      if (active.size >= 32) return undefined;
+      expression = unwrap(expression);
+      if (ts.isCallExpression(expression) && expression.expression.kind === ts.SyntaxKind.ImportKeyword && expression.arguments.length === 1 && ts.isStringLiteralLike(expression.arguments[0]))
+        return moduleTarget(expression.arguments[0].text);
+      if (!ts.isIdentifier(expression)) return undefined;
+      const candidates = nearestBinding(expression);
+      if (candidates.length !== 1 || !immutable(candidates[0]) || active.has(candidates[0]) || !ts.isExpression(candidates[0])) return undefined;
+      const next = new Set(active); next.add(candidates[0]); return moduleOf(candidates[0], next);
+    };
+    const importedCall = (expression: ts.Expression): { file: string; symbol: string } | undefined => {
+      if (ts.isIdentifier(expression) && nearestBinding(expression).length === 0) {
+        const target = imports.get(expression.text), symbol = importedNames.get(expression.text); if (target && symbol) return { file: target, symbol };
+      }
+      if (ts.isPropertyAccessExpression(expression)) { const target = moduleOf(expression.expression); if (target) return { file: target, symbol: expression.name.text }; }
+      return undefined;
+    };
+    const resultOwnerTrees = new Map<string, ts.SourceFile>();
+    const importedReturnType = (imported: { file: string; symbol: string }): { type: ts.TypeNode | InferredResultType; promise: boolean } | undefined => {
+      const source = text(current, imported.file); if (source === undefined) return undefined;
+      const owner = resultOwnerTrees.get(imported.file) ?? parse(imported.file, source); resultOwnerTrees.set(imported.file, owner);
+      const declarations = owner.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === imported.symbol
+        && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword));
+      if (declarations.length !== 1 || !ts.isFunctionDeclaration(declarations[0])) return undefined;
+      if (!declarations[0].type) { const type = inferredReturn(imported.file, imported.symbol); return type ? { type, promise: false } : undefined; }
+      const type = declarations[0].type;
+      if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === "Promise" && type.typeArguments?.length === 1) {
+        const shadowed = owner.statements.some(statement => (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name?.text === "Promise"
+          || ts.isImportDeclaration(statement) && (statement.importClause?.name?.text === "Promise" || statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
+            && statement.importClause.namedBindings.elements.some(element => element.name.text === "Promise")));
+        return shadowed ? undefined : { type: type.typeArguments[0], promise: true };
+      }
+      return { type, promise: false };
+    };
+    const provenPromise = (expression: ts.Expression, active = new Set<ts.Node>()): boolean => {
+      if (active.size >= 32 || active.has(expression)) return false;
+      const next = new Set(active); next.add(expression);
+      if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression)) return provenPromise(expression.expression, next);
+      if (ts.isIdentifier(expression)) {
+        const candidates = nearestBinding(expression);
+        return candidates.length === 1 && immutable(candidates[0]) && ts.isExpression(candidates[0]) && provenPromise(candidates[0], next);
+      }
+      if (!ts.isCallExpression(expression)) return false;
+      const imported = importedCall(expression.expression); if (imported) return importedReturnType(imported)?.promise === true;
+      return ts.isPropertyAccessExpression(expression.expression) && ["then", "finally"].includes(expression.expression.name.text)
+        && provenPromise(expression.expression.expression, next);
+    };
+    const inferredMember = (value: InferredResultType, key: string): InferredResultType | undefined => {
+      const type = value.checker.getNonNullableType(value.type);
+      if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never | ts.TypeFlags.TypeParameter)) return undefined;
+      const member = value.checker.getPropertyOfType(type, key), declarations = member?.getDeclarations();
+      if (!member || declarations?.length !== 1) return undefined;
+      const selected = value.checker.getTypeOfSymbolAtLocation(member, declarations[0]);
+      if (selected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never | ts.TypeFlags.TypeParameter)) return undefined;
+      return { ...value, type: selected, declaration: declarations[0] };
+    };
+    const findReceiverEscapes = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))) {
+        const receiver = node.expression.expression;
+        const method = ts.isPropertyAccessExpression(node.expression) ? node.expression.name.text : undefined;
+        const candidates = method === "push" && ts.isIdentifier(receiver) ? nearestBinding(receiver) : [];
+        const declaration = candidates.length === 1 ? bindingDeclarations.get(candidates[0]) : undefined;
+        const arrayAppend = candidates.length === 1 && ts.isArrayLiteralExpression(candidates[0]) && immutable(candidates[0])
+          && declaration && ts.isVariableDeclaration(declaration);
+        // A returned object can mutate itself even when its method has no
+        // arguments. Only actual module namespaces, proven Promise methods and
+        // the existing exact array append avoid opaque receiver invalidation.
+        if (!moduleOf(receiver) && !arrayAppend && !((method === "then" || method === "finally") && provenPromise(receiver)))
+          for (const binding of aliasSources(receiver)) assignedBindings.add(binding);
+      }
+      ts.forEachChild(node, findReceiverEscapes);
+    };
+    const traceResult = (argument: ts.Expression, closure: Set<string>): ResultFlow => {
+      let remaining = 256, exhausted = false;
+      const unknown: ResultFlow = {}, active = new Set<ts.Node>();
+      const enter = () => { if (--remaining < 0) exhausted = true; return !exhausted; };
+      const property = (value: ResultFlow, key: string): ResultFlow => {
+        if (!enter()) return unknown;
+        if (value.alternatives) return { alternatives: value.alternatives.map(item => property(item, key)) };
+        if (value.fields) return value.fields.get(key) ?? unknown;
+        if (value.origin) {
+          let type = value.origin.type;
+          if ("checker" in type) { const member = inferredMember(type, key); return member ? { origin: { ...value.origin, type: member } } : unknown; }
+          while (ts.isParenthesizedTypeNode(type)) type = type.type;
+          const members = ts.isTypeLiteralNode(type) ? type.members : undefined;
+          const candidates = members?.filter(member => member.name && name(member.name) === key);
+          if (candidates?.length === 1 && ts.isPropertySignature(candidates[0]) && candidates[0].type)
+            return { origin: { ...value.origin, type: candidates[0].type } };
+        }
+        return unknown;
+      };
+      const invoke = (fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression, args: readonly FlowArgument[], environment: FlowEnvironment): ResultFlow => {
+        if (!enter() || active.has(fn) || !fn.body || fn.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.dotDotDotToken)) return unknown;
+        active.add(fn);
+        try {
+          const next = new Map(environment);
+          for (let index = 0; index < fn.parameters.length; index++) {
+            const parameter = fn.parameters[index], binding = parameter.initializer ?? parameter;
+            next.set(binding, args[index] ?? (parameter.initializer ? { expression: parameter.initializer, environment } : unknown));
+          }
+          closure.add(fn.getText(tree));
+          const returned = (value: ResultFlow) => ts.getModifiers(fn)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+            ? { promise: value.promise ?? value } : value;
+          if (!ts.isBlock(fn.body)) return returned(flow(fn.body, next));
+          const statements = fn.body.statements, terminal = statements.at(-1);
+          if (!terminal || !ts.isReturnStatement(terminal) || !terminal.expression) return unknown;
+          for (const statement of statements.slice(0, -1)) {
+            if (ts.isVariableStatement(statement) || ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression)) continue;
+            // Exact rejection-arm narrowing for then(value=>({value}),error=>({error})).
+            // Arbitrary conditions/returns/loops cannot authorize a result path.
+            if (!rejectionGuard(statement)) return unknown;
+            const receiver = statement.expression.right, key = statement.expression.left.text, candidates = nearestBinding(receiver);
+            if (candidates.length !== 1 || !immutable(candidates[0])) return unknown;
+            const value = flow(receiver, next); if (!value.alternatives?.length || value.alternatives.some(item => !item.fields)) return unknown;
+            const kept = value.alternatives.filter(item => !item.fields!.has(key)); if (!kept.length) return unknown;
+            next.set(candidates[0], kept.length === 1 ? kept[0] : { alternatives: kept });
+          }
+          return returned(flow(terminal.expression, next));
+        } finally { active.delete(fn); }
+      };
+      const flow = (expression: ts.Expression, environment: FlowEnvironment): ResultFlow => {
+        if (!enter()) return unknown;
+        if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression) || ts.isAsExpression(expression)
+          || ts.isTypeAssertionExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isTypeOfExpression(expression)) return flow(expression.expression, environment);
+        if (ts.isAwaitExpression(expression)) { const value = flow(expression.expression, environment); return value.promise ?? value; }
+        if (ts.isIdentifier(expression)) {
+          const candidates = nearestBinding(expression); if (candidates.length !== 1 || !immutable(candidates[0]) || active.has(candidates[0])) return unknown;
+          const binding = candidates[0], supplied = environment.get(binding); active.add(binding);
+          try {
+            if (supplied) return "expression" in supplied ? flow(supplied.expression, supplied.environment) : supplied;
+            if (!ts.isExpression(binding)) return unknown;
+            closure.add(binding.getText(tree)); return flow(binding, environment);
+          } finally { active.delete(binding); }
+        }
+        if (ts.isObjectLiteralExpression(expression)) {
+          const fields = new Map<string, ResultFlow>();
+          for (const member of expression.properties) {
+            if (ts.isPropertyAssignment(member) && member.name && name(member.name) && !fields.has(name(member.name))) fields.set(name(member.name), flow(member.initializer, environment));
+            else if (ts.isShorthandPropertyAssignment(member) && !fields.has(member.name.text)) fields.set(member.name.text, flow(member.name, environment));
+            else return unknown;
+          }
+          return { fields };
+        }
+        if (ts.isPropertyAccessExpression(expression)) return property(flow(expression.expression, environment), expression.name.text);
+        if (!ts.isCallExpression(expression)) return unknown;
+        const imported = importedCall(expression.expression);
+        if (imported) {
+          const returned = importedReturnType(imported); if (!returned) return unknown;
+          closure.add(expression.getText(tree));
+          const value = { origin: { ...imported, type: returned.type } };
+          return returned.promise ? { promise: value } : value;
+        }
+        if (ts.isPropertyAccessExpression(expression.expression)) {
+          const receiver = flow(expression.expression.expression, environment), member = expression.expression.name.text;
+          if (!receiver.promise) return unknown;
+          if (member === "finally" && expression.arguments.length === 1 && (ts.isArrowFunction(expression.arguments[0]) || ts.isFunctionExpression(expression.arguments[0]))) return receiver;
+          if (member !== "then" || expression.arguments.length < 1 || expression.arguments.length > 2) return unknown;
+          const values: ResultFlow[] = [];
+          for (const [index, callback] of expression.arguments.entries()) {
+            if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return unknown;
+            const returned = invoke(callback, [index === 0 ? receiver.promise : unknown], environment); values.push(returned.promise ?? returned);
+          }
+          return { promise: values.length === 1 ? values[0] : { alternatives: values } };
+        }
+        if (!ts.isIdentifier(expression.expression)) return unknown;
+        const candidates = nearestBinding(expression.expression); if (candidates.length !== 1 || !immutable(candidates[0])) return unknown;
+        const binding = candidates[0], declaration = bindingDeclarations.get(binding);
+        const fn = ts.isArrowFunction(binding) || ts.isFunctionExpression(binding) ? binding : declaration && ts.isFunctionDeclaration(declaration) ? declaration : undefined;
+        return fn ? invoke(fn, expression.arguments.map(value => ({ expression: value, environment })), environment) : unknown;
+      };
+      const value = flow(argument, new Map()); return exhausted ? unknown : value;
+    };
+    findReceiverEscapes(tree);
+    propagateMutations();
+    const resultContracts = (argument: ts.Expression, closure: Set<string>): string[] => {
+      const origins = (value: ResultFlow): string[] => value.origin ? [value.origin.file + "#" + value.origin.symbol]
+        : value.alternatives?.length ? value.alternatives.map(origins).reduce((left, right) => left.filter(contract => right.includes(contract))) : [];
+      return origins(traceResult(argument, closure));
+    };
+    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, testedTypeMembers: Set<string>, tested = true, runtimeTested = tested): string[] => {
       const targets = sourcePaths(node);
       const visit = (part: ts.Node) => {
         if (tested && ts.isStringLiteralLike(part)) fragments.add(part.text.replace(/\s+/gu, ""));
@@ -1364,7 +1686,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             }
           }
         }
-        if (tested && ts.isCallExpression(part) && !/^(?:assert|check|expect)(?:\.|$)/u.test(part.expression.getText(tree))) {
+        if (runtimeTested && ts.isCallExpression(part) && !/^(?:assert|check|expect)(?:\.|$)/u.test(part.expression.getText(tree))) {
           if (ts.isIdentifier(part.expression)) {
             const shadowed = nearest(part, bindings.get(part.expression.text) ?? [], binding => bindingScopes.get(binding)!);
             const target = shadowed.length ? undefined : imports.get(part.expression.text), symbol = importedNames.get(part.expression.text);
@@ -1375,7 +1697,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             const typedTargets = new Set((local.length === 1 ? nearest(part, typed ?? [], binding => binding.scope)
               .filter(binding => binding.scope === bindingScopes.get(local[0]) && (!binding.members || binding.members.has(member))) : []).map(binding => binding.target));
             if (typedTargets.size === 1) for (const target of typedTargets) { targets.add(target); calls.add(target + "#" + part.expression.name.text); }
-            else if (!typed?.length) calls.add(part.expression.name.text);
+            else if (!typed?.length) { const target = moduleOf(receiver); if (target) { targets.add(target); calls.add(target + "#" + member); } }
           }
         }
         const propertyName = ts.isIdentifier(part) && (ts.isPropertyAccessExpression(part.parent) && part.parent.name === part
@@ -1385,10 +1707,11 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
           seen.add(part.text);
           const candidates = nearest(part, bindings.get(part.text) ?? [], binding => bindingScopes.get(binding)!);
           const imported = candidates.length ? undefined : imports.get(part.text); if (imported) targets.add(imported);
-          const importedName = importedNames.get(part.text); if (tested && imported && importedName) testedExports.add(imported + "#" + importedName);
+          const importedName = importedNames.get(part.text); if (runtimeTested && imported && importedName) testedExports.add(imported + "#" + importedName);
           if (candidates?.length === 1) {
             if (!ts.isBlock(candidates[0]) && !ts.isParameter(candidates[0])) closure.add(candidates[0].getText(tree));
-            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, testedTypeMembers, tested && !ts.isBlock(candidates[0]))) targets.add(target);
+            const helper = ts.isBlock(candidates[0]) || ts.isArrowFunction(candidates[0]) || ts.isFunctionExpression(candidates[0]);
+            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, testedTypeMembers, tested && !ts.isBlock(candidates[0]), runtimeTested && !helper && immutable(candidates[0]))) targets.add(target);
           }
         }
         ts.forEachChild(part, visit);
@@ -1403,6 +1726,11 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
         if (!argumentsUnderTest.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) || callee !== "check") {
           const closure = new Set<string>(), fragments = new Set<string>(), calls = new Set<string>(), testedExports = new Set<string>(), testedTypeMembers = new Set<string>();
           const references = unique(argumentsUnderTest.flatMap(argument => dependencyPaths(argument, new Set(), closure, fragments, calls, testedExports, testedTypeMembers)));
+          for (const argument of argumentsUnderTest) {
+            const resultClosure = new Set<string>(), contracts = resultContracts(argument, resultClosure);
+            for (const contract of contracts) { calls.add(contract); references.push(contract.slice(0, contract.lastIndexOf("#"))); }
+            if (contracts.length) for (const source of resultClosure) closure.add(source);
+          }
           const contracts = obligationShapes.filter(obligation => references.includes(obligation.file) && (obligation.valueExport && testedExports.has(obligation.contract)
             || testedTypeMembers.has(obligation.contract)
             || obligation.runtime && (calls.has(obligation.contract) || calls.has(obligation.key)) || [...fragments].some(fragment => {
@@ -1413,7 +1741,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             return previous.includes(expected) !== next.includes(expected)
               && !obligation.siblings.some(shape => compactShape(shape).includes(expected));
           }))).map(obligation => obligation.contract);
-          shapes.set(JSON.stringify([callee, argumentsUnderTest.map(argument => argument.getText(tree)), unique(closure)]), { references, contracts: unique(contracts) });
+          shapes.set(JSON.stringify([callee, argumentsUnderTest.map(argument => argument.getText(tree)), unique(closure)]), { references: unique(references), contracts: unique(contracts) });
         }
       }
       ts.forEachChild(node, visit);

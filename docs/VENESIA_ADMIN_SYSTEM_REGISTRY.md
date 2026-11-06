@@ -4642,3 +4642,165 @@ decision is how to qualify the actual diagnostic tests at their existing owners
 without expanding or weakening the source-protection contract. Historical
 Gate7 remains **Unresolved / not Fixed**, the six reviews remain Pending, and
 Admin Smoke remains unperformed. This outcome supersedes no sealed prior result.
+
+### 27.64 PR #230 source-protection recovery — 6 November 2026
+
+**Previous → current / authority:** the Owner authorizes a bounded correction
+from `78084c8c` for the two proven assertion-traceability gaps in Section27.63,
+followed by the existing release sequence when all mandatory gates qualify.
+The historical Gate7 OOM investigation remains closed **Unresolved / not Fixed**;
+no diagnostic reproduction or resource-policy change belongs to this recovery.
+
+**Existing owners and affected consumers:** source-impact discovery and
+`assertLocalVerificationProtectionMaintenance` remain in
+`scripts/lib/isolated-public-verification.mts`; the registered isolated-Supabase
+verifier owns affected analyzer and behavioral controls. Direct consumers are
+local Admission, automatic source-impact/CI selection and protection maintenance;
+their downstream consumers remain the existing verification and release plans.
+`WindowsJobReceipt` retains its actual native owner and production definition.
+No parallel analyzer, registry or runner is authorized.
+
+**Correction and protection boundary:** trace a real returned result through
+bounded local aliases/helpers into a behavioral assertion, preserving imported
+identity and rejecting disconnected values or another contract. Extract members
+of supported intersection components for change detection without treating
+structural resemblance as type identity. An explicit imported-type binding of
+an actual native receipt in its existing test is permitted; fabricated receipts,
+contract-name exceptions and narrative evidence cannot authorize protection.
+Unsupported flow or type shapes remain unqualified. The four existing exported
+contract obligations and the acceptance predicates of the maintenance guard
+remain mandatory.
+
+**Verification / release status:** positive and negative analyzer controls,
+TypeScript, affected ESLint, governance/infrastructure and affected lifecycle
+checks are required before source freeze. Their current outcomes and exact
+assertion bindings belong to
+`.tmp-qa/pr230-source-protection-release-20261106-06/`. Full E remains class E:
+fresh qualified source/environment, Admission, Preflight and all75 gates in one
+official invocation, followed by same-live Pre-Push and the authorized remote
+release gates. No targeted pass replaces Full E. The six formal human-review
+deferrals remain Pending; Admin Smoke remains unperformed. Power, deadlines,
+heap limits, concurrency, cancellation, leases, cleanup, Product, database and
+Storage behavior are unchanged. `globalClosed=false`.
+
+**Actual recovery outcome / mandatory STOP:** the working analyzer now discovers
+assertion correspondence for `runOwnedVerificationChild` and the explicit
+intersection members of `WindowsJobReceipt`. Canonical discovery on the final
+working code still reports four obligations, but only three have accepted
+assertion candidates: `spawnWindowsOwnedProcess` has none. Its existing native
+behavior assertions remain in place. The new bounded result tracer requires an
+explicit imported return annotation, while that existing owner returns an
+inferred record; automatic legacy helper-body runtime credit is no longer
+accepted. This is an analyzer correspondence regression, not proof of lost
+runtime coverage, and the recovery is **not qualified / not complete**.
+
+The verifier adds36 source controls without removing original assertions. The
+first affected-risk run stopped on a new fixture that relocated assertion
+ownership; exact read-only projection proved result binding and maintenance
+success followed by the correct assertion-preservation rejection. One bounded
+fixture correction preserved its original assertion owner. The next run stopped
+on a negative fixture expecting a later rejection reason; read-only projection
+proved the foreign/structural sources were correctly rejected before any
+protection could bind. Three exact rejection expectations were corrected. Both
+failures remain immutable. The prepared final corrected run was **not executed**
+after canonical discovery exposed the mandatory3/4 protection blocker.
+
+TypeScript and affected ESLint passed on their recorded earlier source only;
+they are not current final-source qualifications after subsequent analyzer/test
+changes. Current-source risk/lifecycle completion, final TypeScript/ESLint,
+governance/infrastructure, GNU and connection qualification remain unexecuted
+or incomplete. No Admission, Preflight, Full E, Pre-Push, Push, CI retry, Ready,
+Merge or Production action started. HEAD remains `78084c8c`; the three reviewed
+working files are preserved uncommitted. This paragraph does not qualify them.
+
+Both affected-risk failures ended with native Job cleanup PASS and zero live
+processes. The temporary awake helper exited normally and restored its actual
+previous state on the same native thread. Final environment capture preserves
+all4 original containers,5 networks,5 volumes and Treasury; QA ports are free.
+Detailed source/fixture findings, raw failures, preservation proofs and final
+report remain under the same06 evidence directory. Historical Gate7 OOM stays
+**Unresolved / not Fixed**, the six reviews stay Pending, and Admin Smoke stays
+unperformed. No further retry is authorized by this record.
+
+### 27.65 PR #230 inferred-return protection recovery — 6 November 2026
+
+**Previous → current / authority:** the Owner now authorizes the bounded
+correction of the3/4 regression recorded in Section27.64. Keep the three
+established relationships and all original assertions; infer the actual return
+of `spawnWindowsOwnedProcess` within the existing source-impact analyzer using
+TypeScript information. Its operational signature and behavior remain unchanged.
+The previous06 evidence stays sealed; current evidence belongs to
+`.tmp-qa/pr230-source-protection-release-20261106-07/`.
+
+**Owner / acceptance boundary:** `scripts/lib/isolated-public-verification.mts`
+retains discovery and maintenance ownership. The existing isolated verifier
+owns bounded positive and negative controls. Exact imported-export identity,
+actual result flow through the original helpers/aliases, and a related assertion
+are required; call presence, structural resemblance, substituted results and
+opaque escapes cannot grant correspondence. All four obligations and the current
+acceptance predicates remain mandatory. No parallel owner or signature workaround
+is introduced.
+
+**Verification / release status:** work is authorized but not yet qualified.
+Current-source assertions, affected controls, TypeScript, ESLint and governance
+must pass before final source freeze and fresh Windows/Ubuntu qualification.
+Admission, automatic Preflight and the full75 gates remain mandatory in one
+official invocation. Later release steps retain their actual local/remote
+conditions. Historical Gate7 remains closed **Unresolved / not Fixed** without
+further reproduction. The six reviews remain Pending under the existing deferral;
+Admin Smoke remains unperformed. Product, data, Storage, safety policy, resource
+limits and budgets are unchanged; `globalClosed=false`.
+
+**Bounded source finding:** the first07 canonical discovery still has3/4
+changed-assertion candidates. The original native return assertions are unchanged
+from the baseline; inferred identity alone cannot satisfy the existing changed
+maintenance requirement. Inspection found a genuine missing native boundary:
+the original deadline/argument projection does not exercise the added
+`diagnosticPath`/`diagnosticGate` pair, malformed or foreign evidence paths, or
+exact opt-in argument forwarding. The earlier explicit Owner authority permits
+these missing behavioral assertions at that existing test owner; no changed
+fingerprint is fabricated. The inference fix is limited to returned properties
+and function identity used by the original assertions. Reader execution is not
+needed and receives no new exemption from opaque-receiver rejection. Prior07
+discovery and static review remain preserved; current verification is pending.
+
+**First affected verification / classified correction:** syntax, strict ESLint,
+TypeScript, executable governance and verification infrastructure passed on
+their recorded07 source. Canonical discovery then found all four obligations
+with genuine changed-assertion candidates (135/4/23/2 unique fingerprints).
+These candidates do not substitute for behavioral qualification. The affected
+risk profile stopped at the first intersection fixture: its type-only import
+has no executable path to the synthetic owner, so the guard correctly rejects
+it before member/identity analysis. Exact read-only projection preserved1→2
+assertions and found zero protection rows; this differs from the two06 fixture
+causes. Cleanup passed with zero live owned processes.
+
+One bounded correction of this proven fixture cause supplies its asserted
+diagnostic data from an unchanged concrete runtime producer in the synthetic
+owner, matching the actual verifier's runtime dependency. No unused import,
+path marker or graph-policy change is permitted. Positive and negative identity
+assertions remain; affected rejection expectations must match the observed
+stage. Fresh affected qualification remains required for changed fixture bytes;
+the earlier passes and failure retain their original identities. Admission and
+Full E have not started.
+
+**Corrected-source verification:** the single bounded intersection-fixture
+correction passed syntax, strict ESLint, TypeScript, executable governance,
+verification infrastructure and the complete affected risk profile:705 checks.
+All five actual receipts under
+`.tmp-qa/pr230-source-protection-release-20261106-07/controls-*-correction-01/`
+record one attempt, no retry, successful owned cleanup, zero remaining children
+and removed private temporary configuration. The seven inferred-return controls,
+the existing helper/intersection negative controls and ten actual native
+diagnostic-boundary cases pass without changing the native signature or guard.
+
+The tested executable hashes are analyzer `17e896f2d76db60b105b6a6f8f98936d1066e40300457cde30737dc69769f332`
+and verifier `e8a52d405ce96881ebeeb48803f8946b1e9d3dd45a586e0c7660e9248ebcc9a6`.
+This results-only Registry successor does not change their test, dependency,
+configuration or runtime inputs; retain the receipts with their original HEAD
+and source identity under QA Section3.4, subject to the existing exact-input
+assembler. Final committed discovery and reviewed four-contract correspondence,
+fresh Ubuntu qualification, Admission, Preflight and full75 remain required.
+This entry grants no release PASS. Six human reviews remain Pending under the
+PR230-only deferral; Admin Smoke remains unperformed; historical Zone OOM stays
+closed Unresolved/notFixed and `globalClosed=false`.
