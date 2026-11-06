@@ -4880,12 +4880,35 @@ renaming the private `module` binding to `moduleImport`; no check was disabled.
 The corrected source passed the unchanged lint rule. Independent graph and
 input-evidence reviews found no additional concrete defect.
 
-Final-source canonical protection review, actual Ubuntu qualification, fresh
-Admission, automatic Preflight and all75 Full E gates remain pending. Changed
-canonical source-guard effect fingerprints have source-only reviewed candidates;
-historical execution is not inherited. This documentary outcome does not change
-the tested executable bytes or grant a release PASS. No resource limits,
-deadlines, concurrency, power safety, assertions or Product behavior change.
+**Final source / actual release stop:** implementation commit `69a3b27f` passed
+the current canonical protection review, with all four original obligations
+accepted through their assertion relationships. Both canonical Ubuntu guards
+then passed on pinned GNU Node22.23.4, and the five current connection-readiness
+cases passed. Ubuntu's private container and the connection resources were
+removed by their existing owners. These are actual current executions, not
+inherited historical PASS records.
+
+Fresh Admission ran once on `69a3b27f` and stopped at its ordered source floor:
+`eslint --max-warnings=0`, PID133928, exited134 with
+`Zone Allocation failed - process out of memory`. The native job receipt binds
+that PID to helper133288 and job `49efef60-afdf-4260-8ac6-9ea040458d27`;
+its cleanup proves zero active processes and zero retained owned handles.
+The native receipt's PASS denotes completed supervision/cleanup, not a passing
+ESLint result. Admission's dependent profiles, automatic Preflight and Full E
+did not start. A preceding host observation recorded98% system commit use;
+the initiating memory cause remains unproved. This evidence does not establish
+a leak, an unsuitable heap limit, or a need to change resource policy. No retry,
+additional reproduction, Push, Ready, Merge or Production action followed.
+
+The current failure's original bytes remain in
+`.tmp-qa/admission-qualification-u51SwW/`;08 contains the final release result,
+source/protected preservation, resource endpoint comparison and awake-helper
+restoration evidence. Original4 containers,5 networks,5 volumes and Treasury's
+selected metadata remained unchanged; QA ports were free. The awake helper
+restored its original execution state on its owning thread. The required next
+decision is a separately bounded investigation of this new Admission failure;
+it is not authority to reopen the historical Gate7 investigation. No resource
+limits, deadlines, concurrency, power safety, assertions or Product behavior change.
 AC Offline alone remains a warning. Historical Zone OOM stays closed
 **Unresolved / not Fixed** without further reproduction; WebP stays a preserved
 study. Six human reviews remain Pending under the PR230-only deferral, Admin
