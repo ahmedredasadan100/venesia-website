@@ -5025,11 +5025,86 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv, re
 }
 
 /** One owned Node-child lifecycle shared by Public gates and qualified targeted verification. */
+/** Diagnostic completeness only; no exit-code, resource or release policy. */
+export function qualifyOwnedCrashAttribution(input: {
+  gateId: string; jobToken: string; commands: readonly { id: string; entry: string; sha256: string }[];
+  nativeRows: Record<string, unknown>[]; nodeRows: Record<string, unknown>[]; totalProcesses: number | null; nativeComplete: boolean;
+  rootIdentity: { pid: number; creationTimeFileTime: string } | null; rootExitCode: number | null; readIssues?: string[];
+}) {
+  const issues = new Set<string>();
+  if (input.readIssues?.length) issues.add("DIAGNOSTIC_READ_INCOMPLETE");
+  const number = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+  const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const utc = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(value) && Number.isFinite(Date.parse(value)) ? value : null;
+  const identityKey = (row: Record<string, unknown>) => Number.isSafeInteger(row.pid) && Number(row.pid) > 0 && typeof row.creationTimeFileTime === "string"
+    && /^[1-9]\d{11,19}$/u.test(row.creationTimeFileTime) ? `${row.pid}:${row.creationTimeFileTime}` : null;
+  const nativeRows = input.nativeRows.filter(row => {
+    if (row.gateId !== input.gateId || row.jobToken !== input.jobToken) { issues.add("NATIVE_GATE_OR_JOB_MISMATCH"); return false; } return true;
+  });
+  const starts = nativeRows.filter(row => row.kind === "process_start"), exits = nativeRows.filter(row => row.kind === "process_exit");
+  const terminal = nativeRows.filter(row => row.kind === "diagnostic_terminal");
+  if (input.nativeComplete !== true || terminal.length !== 1 || terminal[0]!.complete !== true || terminal[0]!.handlesClosed !== true) issues.add("NATIVE_OBSERVER_INCOMPLETE");
+  if (input.totalProcesses === null || starts.length !== input.totalProcesses || exits.length !== starts.length) issues.add("NATIVE_PROCESS_COVERAGE_INCOMPLETE");
+  const startKeys = starts.map(identityKey);
+  if (startKeys.some(key => key === null) || new Set(startKeys).size !== startKeys.length || new Set(starts.map(row => row.pid)).size !== starts.length) issues.add("NATIVE_BIRTH_IDENTITY_INVALID");
+  const rootKey = input.rootIdentity ? `${input.rootIdentity.pid}:${input.rootIdentity.creationTimeFileTime}` : null;
+  const rootStarts = starts.filter(row => identityKey(row) === rootKey), rootExits = exits.filter(row => identityKey(row) === rootKey);
+  if (!rootKey || rootStarts.length !== 1 || rootExits.length !== 1 || input.rootExitCode === null || rootExits[0]!.exitCode !== input.rootExitCode) issues.add("NATIVE_ROOT_BINDING_INCOMPLETE");
+  const nodeStarts = input.nodeRows.filter(row => row.kind === "node_start");
+  const assigned = new Set<Record<string, unknown>>();
+  const processRows = starts.map(start => {
+    const key = identityKey(start), matching = exits.filter(row => identityKey(row) === key);
+    const end = matching.length === 1 ? matching[0]! : {};
+    const startedUtc = utc(start.startedUtc), endedUtc = utc(end.endedUtc);
+    if (start.ownership !== "exact-private-job" || matching.length !== 1 || !startedUtc || !endedUtc || Date.parse(endedUtc) < Date.parse(startedUtc)) issues.add("PROCESS_TERMINAL_IDENTITY_INCOMPLETE");
+    if (key && startedUtc && Number(BigInt(start.creationTimeFileTime as string) / BigInt(10_000) - BigInt(11_644_473_600_000)) !== Date.parse(startedUtc)) issues.add("NATIVE_CREATION_CLOCK_MISMATCH");
+    const matches = nodeStarts.filter(row => row.pid === start.pid && row.gateId === input.gateId && utc(row.utc)
+      && startedUtc && endedUtc && Date.parse(String(row.utc)) >= Date.parse(startedUtc) && Date.parse(String(row.utc)) <= Date.parse(endedUtc));
+    const node = matches.length === 1 ? matches[0]! : undefined;
+    if (matches.length > 1) issues.add("NODE_BIRTH_AMBIGUOUS");
+    const executableKind = ["node.exe", "cmd.exe", "chrome.exe", "chromium.exe", "conhost.exe", "powershell.exe", "pwsh.exe", "other"].includes(String(start.executableKind)) ? String(start.executableKind) : "other";
+    if (executableKind === "other") issues.add("NATIVE_EXECUTABLE_UNMAPPED");
+    if (executableKind === "node.exe" && !node) issues.add("NODE_COMMAND_MISSING");
+    if (node) { if (assigned.has(node)) issues.add("NODE_BIRTH_REUSED"); assigned.add(node); }
+    const command = node && input.commands.find(row => row.id === node.commandId);
+    const entryKind = node?.entryKind === "node-eval" ? "node-eval" : command ? "allowlisted-entry" : "unmapped-entry";
+    if (node && !command && entryKind !== "node-eval") issues.add("NODE_COMMAND_UNMAPPED");
+    const nodeSamples = node ? input.nodeRows.filter(row => row.probeId === node.probeId && row.pid === node.pid && row.gateId === input.gateId).map(row => {
+      const memory = object(row.memory), heap = object(row.heap), usage = object(row.usage);
+      return { kind: ["node_start", "node_memory", "node_exit"].includes(String(row.kind)) ? String(row.kind) : "unknown", utc: utc(row.utc),
+        sequence: number(row.sequence), heapUsedBytes: number(memory.heapUsed), heapTotalBytes: number(memory.heapTotal), rssBytes: number(memory.rss),
+        externalBytes: number(memory.external), heapLimitBytes: number(heap.heapSizeLimit), v8PeakMallocedBytes: number(heap.peakMallocedMemory),
+        peakRssKiB: number(usage.maxRssKiB), exitCode: number(row.exitCode) };
+    }) : [];
+    if (nodeSamples.some(row => !row.utc || row.sequence === null || row.heapLimitBytes === null
+      || !startedUtc || !endedUtc || Date.parse(row.utc) < Date.parse(startedUtc) || Date.parse(row.utc) > Date.parse(endedUtc))) issues.add("NODE_SAMPLE_MALFORMED");
+    if (nodeSamples.some((row, index) => row.sequence !== index + 1 || row.kind === "unknown"
+      || index === 0 && row.kind !== "node_start" || index > 0 && row.kind === "node_start"
+      || row.kind === "node_exit" && index !== nodeSamples.length - 1
+      || index > 0 && row.utc && nodeSamples[index - 1]!.utc && Date.parse(row.utc) < Date.parse(nodeSamples[index - 1]!.utc!))) issues.add("NODE_SAMPLE_SEQUENCE_INVALID");
+    if (nodeSamples.some(row => row.sequence !== null && row.sequence >= 4095)) issues.add("NODE_SAMPLE_CAP_REACHED");
+    const exitCode = number(end.exitCode);
+    if (exitCode === null) issues.add("PROCESS_EXIT_CODE_MISSING");
+    return { pid: number(start.pid), creationTimeFileTime: key ? start.creationTimeFileTime as string : null,
+      startedUtc, endedUtc, exitCode, reason: end.reason === "process-exit-observed" ? "process-exit-observed" : "unknown",
+      ownerTerminationRequested: end.ownerTerminationRequested === true,
+      executableKind, commandId: command?.id ?? null, entryKind, ppid: number(node?.ppid), nodeSamples,
+      javascriptExitObserved: nodeSamples.some(row => row.kind === "node_exit"), nativeExitObserved: matching.length === 1 };
+  });
+  if (nodeStarts.some(row => !assigned.has(row))) issues.add("NODE_NATIVE_IDENTITY_UNBOUND");
+  return { schema: 1, gateId: input.gateId, jobToken: input.jobToken,
+    status: issues.size ? "PARTIAL_DIAGNOSTIC_ONLY" as const : "COMPLETE_DIAGNOSTIC_ONLY" as const,
+    issues: [...issues].sort(), processRows, totalProcesses: input.totalProcesses,
+    nativeMemoryRecords: nativeRows.filter(row => row.kind === "memory").length,
+    diagnosticOnly: true, releaseQualified: false, oomCauseInferred: false, memoryLeakInferred: false };
+}
+
 export function runOwnedVerificationChild(ports: {
   sourceDirectory: string;
   context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
   children: Set<ChildProcess>;
   signal: AbortSignal;
+  crashAttribution?: { gateId: string; commands: readonly { id: string; entry: string }[] };
 }, args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number): Promise<{ code: number; stdout: string; stderr: string; durationMs: number;
   rawExit: { code: number | null; signal: NodeJS.Signals | null }; identity: { pid: number | null; ppid: number; spawnedAtUtc: string };
   cleanup: { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
@@ -5038,6 +5113,7 @@ export function runOwnedVerificationChild(ports: {
   nativeCapability?: { executable: string; executableSha256: string; sourceSha256: string; compilerSha256: string; provenance: string };
   helperExit?: { code: number | null; signal: NodeJS.Signals | null };
   helperIdentity?: { pid: number | null; ppid: number };
+  crashAttribution?: { file: string; sha256: string; status: "COMPLETE_DIAGNOSTIC_ONLY" | "PARTIAL_DIAGNOSTIC_ONLY" };
   timingEvidence?: { file: string; sha256: string; status: "COMPLETE_DIAGNOSTIC_ONLY" | "PARTIAL_DIAGNOSTIC_ONLY";
     overhead: { setupMs: number; observerMs: number; readParseMs: number; serializationMs: number; writeMs: number } } }> {
   const { sourceDirectory, context, children, signal } = ports;
@@ -5047,6 +5123,69 @@ export function runOwnedVerificationChild(ports: {
     assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Owned child deadline must be a finite timer-safe positive integer.");
     const stdoutPath = ownedPath(context, `public-${name}.stdout.log`), stderrPath = ownedPath(context, `public-${name}.stderr.log`);
     assert.equal(existsSync(stdoutPath) || existsSync(stderrPath), false, "Owned child evidence already exists; refuse duplicate execution.");
+    const crashProbe = (() => {
+      if (!ports.crashAttribution) return undefined;
+      assert.equal(process.platform, "win32", "Native crash attribution currently requires the Windows Job owner.");
+      assert.ok(/^[a-zA-Z0-9:_-]{1,96}$/u.test(ports.crashAttribution.gateId));
+      assert.ok(!env.NODE_OPTIONS && !env.VENESIA_QA_CRASH_CONFIG, "Diagnostic injection cannot replace existing Node options or config.");
+      assert.ok(ports.crashAttribution.commands.length > 0 && ports.crashAttribution.commands.length <= 256);
+      const commands = ports.crashAttribution.commands.map(row => {
+        assert.ok(/^[a-zA-Z0-9:_.\/-]{1,160}$/u.test(row.id) && isAbsolute(row.entry));
+        assert.ok(lstatSync(row.entry).isFile() && !lstatSync(row.entry).isSymbolicLink() && realpathSync(row.entry) === row.entry);
+        return { ...row, sha256: digest(readFileSync(row.entry)) };
+      });
+      assert.equal(new Set(commands.map(row => row.id)).size, commands.length);
+      assert.equal(new Set(commands.map(row => row.entry.toLowerCase())).size, commands.length);
+      const probe = join(sourceDirectory, "scripts/lib/owned-process-crash-probe.cjs");
+      assert.ok(lstatSync(probe).isFile() && !lstatSync(probe).isSymbolicLink() && realpathSync(probe) === probe);
+      const directory = ownedPath(context, `public-${name}-crash-nodes`);
+      assert.equal(existsSync(directory), false); mkdirSync(directory, { mode: 0o700 });
+      const configPath = ownedPath(context, `public-${name}.crash-config.json`);
+      const config = { schema: 1, gateId: ports.crashAttribution.gateId, directory, commands, probeSha256: digest(readFileSync(probe)) };
+      writeFileSync(configPath, JSON.stringify(config) + "\n", { mode: 0o600, flag: "wx" });
+      const nativePath = ownedPath(context, `public-${name}.crash-native.jsonl`);
+      return { gateId: config.gateId, nativePath,
+        environment: { NODE_OPTIONS: '--require="' + probe.replaceAll("\\", "/") + '"', VENESIA_QA_CRASH_CONFIG: configPath },
+        finish: (identity: WindowsJobIdentity | null, native: WindowsJobReceipt | null) => {
+          const readIssues = new Set<string>();
+          const readLines = (file: string): Record<string, unknown>[] => {
+            try {
+              const stat = lstatSync(file); assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.size <= 16_777_216);
+              const rows: Record<string, unknown>[] = [];
+              for (const line of readFileSync(file, "utf8").split(/\r?\n/u).filter(Boolean)) {
+                if (rows.length >= 32_768) { readIssues.add("DIAGNOSTIC_ROW_BOUND"); break; }
+                try { const value: unknown = JSON.parse(line); assert.ok(value && typeof value === "object" && !Array.isArray(value)); rows.push(value as Record<string, unknown>); }
+                catch { readIssues.add("INVALID_OR_TORN_JSONL_RECORD"); }
+              }
+              return rows;
+            } catch { readIssues.add("DIAGNOSTIC_FILE_UNAVAILABLE_OR_OUT_OF_BOUND"); return []; }
+          };
+          let nodeFiles: string[] = [];
+          try { nodeFiles = readdirSync(directory); } catch { readIssues.add("NODE_EVIDENCE_DIRECTORY_UNAVAILABLE"); }
+          if (nodeFiles.length > 1024) { readIssues.add("NODE_FILE_COUNT_BOUND"); nodeFiles = nodeFiles.slice(0, 1024); }
+          const nodeRows: Record<string, unknown>[] = [];
+          let bytes = 0;
+          for (const file of nodeFiles) {
+            if (!/^\d+-[a-f0-9-]{36}\.node\.jsonl$/u.test(file)) { readIssues.add("NODE_FILE_NAME_INVALID"); continue; }
+            try { bytes += lstatSync(join(directory, file)).size; } catch { readIssues.add("NODE_FILE_UNAVAILABLE"); continue; }
+            if (bytes > 33_554_432 || nodeRows.length >= 65_536) { readIssues.add("NODE_TOTAL_READ_BOUND"); break; }
+            nodeRows.push(...readLines(join(directory, file)));
+          }
+          assert.equal(digest(readFileSync(probe)), config.probeSha256, "Crash probe source changed during execution.");
+          for (const command of commands) assert.equal(digest(readFileSync(command.entry)), command.sha256);
+          const evidence = qualifyOwnedCrashAttribution({ gateId: config.gateId, jobToken: identity?.jobToken ?? "missing",
+            commands, nativeRows: existsSync(nativePath) ? readLines(nativePath) : [], nodeRows, totalProcesses: native?.cleanup.totalProcesses ?? null,
+            nativeComplete: native?.diagnostic?.complete === true, readIssues: [...readIssues],
+            rootIdentity: identity ? { pid: identity.rootPid, creationTimeFileTime: identity.rootCreationTimeFileTime } : null,
+            rootExitCode: native?.rootExitCode ?? null });
+          const file = ownedPath(context, `public-${name}.crash-attribution.json`);
+          const text = JSON.stringify({ ...evidence, sourceBindings: commands.map(row => ({ id: row.id, sha256: row.sha256 })),
+            probeSha256: config.probeSha256, limitsUnchanged: true, argsUnchanged: true }, null, 2) + "\n";
+          assert.equal(context.sanitize(text), text, "Crash attribution contains private content.");
+          writeFileSync(file, text, { mode: 0o600, flag: "wx" });
+          return { file, sha256: digest(text), status: evidence.status };
+        } };
+    })();
     const gate57Timing = (() => {
       // Unrelated owners/argv perform no additional filesystem or runtime work.
       if (args.length !== 3 || args[1] !== "run" || args[2] !== "verify:admin-runtime") return undefined;
@@ -5252,7 +5391,8 @@ export function runOwnedVerificationChild(ports: {
       return { environment: enabled ? { npm_config_timing: "true", npm_config_logs_dir: directory, npm_config_logs_max: "0" } : {}, observe, finish,
         beginDeadline: () => { ownerTimeoutReferenceMonotonicMs = performance.now(); } };
     })();
-    const invocationEnvironment = gate57Timing ? { ...env, ...gate57Timing.environment } : env;
+    const timingEnvironment = gate57Timing ? { ...env, ...gate57Timing.environment } : env;
+    const invocationEnvironment = crashProbe ? { ...timingEnvironment, ...crashProbe.environment } : timingEnvironment;
     if (process.platform === "linux") {
       assert.equal(typeof process.getuid, "function", "Owned Linux cleanup needs current-user process identity.");
       assert.ok(readFileSync("/proc/self/stat", "utf8").length > 0 && lstatSync("/proc").isDirectory(), "Owned Linux cleanup needs inspectable procfs.");
@@ -5262,7 +5402,8 @@ export function runOwnedVerificationChild(ports: {
     const markerKey = "VENESIA_QA_OWNED_CHILD", marker = globalThis.crypto.randomUUID();
     const spawnedAtUtc = new Date().toISOString();
     const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args, cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
-      identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs }) : undefined;
+      identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs,
+      ...(crashProbe ? { diagnosticPath: crashProbe.nativePath, diagnosticGate: crashProbe.gateId } : {}) }) : undefined;
     const child = windows?.child ?? spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
       detached: process.platform === "linux", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     children.add(child); let stdout = "", stderr = "", failed = false;
@@ -5420,6 +5561,13 @@ export function runOwnedVerificationChild(ports: {
         writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
       } catch (error) { evidenceFailure = error; }
       let timingEvidence: ReturnType<NonNullable<typeof gate57Timing>["finish"]> | undefined;
+      let crashAttribution: ReturnType<NonNullable<typeof crashProbe>["finish"]> | undefined;
+      let crashAttributionFailure: { stage: string; originalExitPreserved: true } | undefined;
+      try { crashAttribution = crashProbe?.finish(nativeJobIdentity, nativeJobReceipt); }
+      catch (error) {
+        crashAttributionFailure = { stage: "attribution_finalize", originalExitPreserved: true };
+        if (rootCode === 0 && !failed && !processFailure && !cleanupFailure) evidenceFailure ??= error;
+      }
       try { timingEvidence = gate57Timing?.finish({ code: rootCode, reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput,
         stderr: cleanErrors, cleanup, nativeJobIdentity, nativeJobReceipt }); }
       catch (error) {
@@ -5438,7 +5586,7 @@ export function runOwnedVerificationChild(ports: {
       const cleanupCode = cleanupData(cleanupError, "code") ?? cleanupData(cleanupCause, "code");
       const cleanupExit = cleanupData(cleanupCause, "exitCode");
       const childResult = { code: rootCode ?? null, signal: rootSignal,
-        identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), durationMs: performance.now() - started,
+        identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), ...(crashAttribution ? { crashAttribution } : {}), ...(crashAttributionFailure ? { crashAttributionFailure } : {}), durationMs: performance.now() - started,
         reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
         cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
           forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
@@ -5455,7 +5603,7 @@ export function runOwnedVerificationChild(ports: {
         : processFailure ?? (cleanupFailure ? new Error(`Public ${name} cleanup failed.`, { cause: cleanupFailure }) : evidenceFailure);
       if (error) { if (error instanceof Error) Object.defineProperty(error, "childResult", { value: childResult, enumerable: true }); reject(error); }
       else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: rootCode ?? -1, rawExit: { code: rootCode, signal: rootSignal },
-        identity: childResult.identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
+        identity: childResult.identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), ...(crashAttribution ? { crashAttribution } : {}), ...(crashAttributionFailure ? { crashAttributionFailure } : {}), stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
     };
     child.once("close", code => { void settle(code).catch(reject); });
   });

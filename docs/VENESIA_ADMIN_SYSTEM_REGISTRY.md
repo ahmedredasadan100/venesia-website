@@ -4520,3 +4520,101 @@ Evidence: [root cause](../.tmp-qa/pr230-release-resume-20261105-04/power-monitor
 [actual controls](../.tmp-qa/pr230-release-resume-20261105-04/power-caller-controls.json),
 [exact source delta](../.tmp-qa/pr230-release-resume-20261105-04/power-monitor-source-delta-review.json),
 and [preserved prior evidence](../.tmp-qa/pr230-release-resume-20261105-04/prior-evidence-preservation.json).
+
+### 27.63 PR #230 Gate7 crash attribution — 6 November 2026
+
+**Previous → current / authority:** on `b457d238`, Full E stopped after six
+passes with Gate7's aggregate `Fatal process out of memory: Zone`; 68 gates
+did not start. The retained logs identify neither the failing leaf PID nor the
+initiating allocation cause. A subsequent candidate-only 58/58 pass used
+different machine pressure and cannot resolve that failure. The Owner now
+authorizes bounded attribution instrumentation, synthetic failure controls and
+one affected Gate7 diagnostic only; no Full E, Push, Merge or Production.
+
+**Existing ownership and consumers:** `runOwnedVerificationChild` in
+`scripts/lib/isolated-public-verification.mts` owns the optional diagnostic port;
+`scripts/lib/windows-owned-process.mts` and its C# Job helper retain native
+process containment, identity, exit and cleanup ownership. The optional
+`owned-process-crash-probe.cjs` collects only main-isolate numeric Node/V8
+counters and allowlisted command identifiers. It launches no work and defines
+no resource policy. Direct consumers include Public gates, readiness and
+targeted verification; the current caller binds the unchanged 50-command
+Gate7 chain. Default-off execution and affected form save/cache controls remain
+part of the verification scope. The existing isolated-Supabase verifier owns
+synthetic attribution tests and its standing Windows child controls reach them;
+no new runner, registry or CI job is introduced.
+
+**Preserved protection / evidence limits:** native PID plus creation identity,
+safe retained query handles, Job process accounting and native terminal exit
+must reconcile before complete attribution can be claimed. Missing commands,
+births, terminal records, truncated files or incomplete observation remain
+partial. Native fatal exits remain observable without JavaScript exit hooks.
+Raw arguments, environment, stacks, dumps and application data are excluded.
+Process private memory, working set, machine commit and sampled JavaScript heap
+remain distinct; none alone proves a leak. Original exit/failure and exact-Job
+cleanup take precedence over diagnostic errors. Heap/resource limits,
+concurrency, deadlines, assertions, power policy and cancellation are unchanged.
+
+**Verification / current disposition:** TypeScript and affected ESLint passed.
+The existing local-risk profile passed 652 checks, including 32 new attribution
+controls. One real synthetic abort identified `controlled-leaf` PID134216 with
+native exit134 despite no JavaScript exit callback. The first control invocation
+retains its failed assumption that the Job contains only two Node processes;
+Windows also supplied an owned `conhost.exe`. One bounded test correction keeps
+every native member's identity/exit/cleanup checks and scopes Node-only samples
+to Node processes. The corrected full targeted profile passed; this does not
+relax native coverage. Executable Governance and Verification Infrastructure
+passed, as did all13 controlled browser form-save/cache scenarios. Every child
+group reports zero remaining processes. Actual source hashes, corrected and
+failed receipts are under `.tmp-qa/pr230-gate7-crash-attribution-20261106-01/`;
+the32 controls retain their own evidence under
+`.tmp-qa/owned-crash-controls-mcUFiK/`. The one authorized Gate7 diagnostic's
+outcome belongs in that task evidence. It cannot recreate preceding Full E
+gates or historical machine pressure and is not release qualification.
+Existing historical evidence and WebP study remain preserved.
+
+The single diagnostic subsequently completed the unchanged Gate7 chain with
+exit0 in556.809seconds. Candidate49 was PID123408 and exited0; no `Zone` fatal
+message recurred. Native accounting reports209 total processes, but only205
+start/exit identities were captured; short-process observation and command
+mapping gaps correctly keep attribution **PARTIAL**. The historical failing
+PID and initiating OOM cause remain **UNKNOWN**. No memory leak, heap-limit
+failure or machine-memory exhaustion is inferred. No second diagnostic or
+resource change is authorized by this outcome. All209 Job members were gone
+at cleanup, all205 diagnostic handles closed, and native awake state was
+restored. The task report and `attribution-analysis.json` retain the distinction
+between successful test execution, incomplete attribution and blocked release.
+
+**Release boundary:** this verification-execution delta is class E. Fresh
+Admission, Preflight and a complete Full E75 invocation on a qualified final
+source remain required for a future authorized release, followed by Pre-Push,
+exact-head CI/Preview and the existing merge/deployment/Smoke conditions.
+The six deferred human reviews remain Pending with zero approvals; Admin Smoke
+is unperformed, and the independent image incident retains its actual gate
+status. This investigation grants no release waiver. `globalClosed=false`.
+
+**Owner disposition update — 6 November 2026:** the Owner has now closed the
+historical investigation as **Unresolved / not Fixed**, with its intermittent
+failure unreproduced and its initiating PID/cause unproven. The sealed earlier
+STOP and partial-attribution records remain unchanged. No further historical
+investigation or reproduction is authorized now. Review retained the current
+default-off diagnostic delta: all five executable/test file hashes match the
+successful652-check profile and32 attribution controls, which demonstrated
+useful native fatal-exit evidence, preserved original failures and zero residual
+processes. The real diagnostic's205/209 observed process lifetimes and547 samples
+remain partial; read-issue rejection controls do not establish exhaustive
+filesystem-failure handling. No safety/resource policy or coverage changes are
+made by this disposition, and no standalone targeted rerun is required solely
+for this documentation and commit binding.
+
+The Owner separately authorizes the official release path from fresh source
+qualification, Admission and Preflight through one complete Full E75 invocation.
+The optional attribution port remains off in that official invocation; the
+standing owner tests retain their required controls. Class E, native/runtime
+qualification and all downstream release conditions remain mandatory. Diagnose
+any new failure from its actual evidence without automatically reopening the
+historical incident. The six PR #230 human reviews remain formally deferred and
+Pending, with zero approvals; Admin Smoke remains unperformed. New release
+evidence is separate under `.tmp-qa/pr230-release-resume-20261106-05/`, preserving
+all prior evidence and the WebP study. This records permission to attempt the
+gates, not their success, release readiness or global closure.

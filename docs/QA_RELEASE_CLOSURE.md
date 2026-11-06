@@ -420,6 +420,38 @@ qualify this visibility only. The successor still requires fresh Admission and
 one complete Full E75 invocation; partial attempts cannot be combined, resumed
 or relabeled PASS. This correction changes no acceptance or budget policy.
 
+For the authorized PR #230 Gate7 crash-attribution investigation, the optional
+diagnostic port remains at `runOwnedVerificationChild` and its Windows Job
+owner. Bind the gate, allowlisted source command, PID plus creation identity,
+native start/end and exit code; JavaScript exit hooks cannot prove a fatal
+process exit. Retain bounded process and machine memory counters separately
+from sampled Node/V8 heap counters. A sampled increase is not proof of a leak,
+and a native allocation failure is not automatically a JavaScript heap-limit
+failure. Never record raw argv, environment, heap contents or application data.
+Missing, torn, capped, unmapped or mismatched evidence remains partial; observer
+failure must not replace the original failure or relax cleanup. The opt-in
+observer changes no heap limit, concurrency, deadline, cancellation or assertion.
+Qualify it through the existing isolated-verification controls, including an
+actual bounded native abort, nonzero exit, cancellation and negative identity
+cases, before one authorized Gate7 diagnostic. This investigation does not
+authorize Full E or a release. Historical failed invocations remain separate;
+a successful diagnostic cannot retrospectively identify the historical PID or
+prove its initiating memory cause. Future release of this verification-execution
+change remains class E and requires fresh complete release gates.
+
+On 6 November 2026, the Owner closed the historical Gate7 investigation as
+**Unresolved / not Fixed**: the intermittent fatal failure did not recur in the
+one authorized diagnostic, and its initiating cause remains unproven. Preserve
+the failed and partial diagnostic evidence; do not reopen that investigation or
+repeat its reproduction without new authority. Retain the tested, default-off
+diagnostic port for its demonstrated bounded evidence value. The Owner separately
+authorizes a fresh official Full E from its first gate on the qualified committed
+source, with ordinary diagnostic settings and all75 gates required. A new failure
+must be classified from its own evidence. This disposition is not a safety,
+coverage, Admission, release or resource-policy waiver; the standalone Gate7
+pass cannot replace any official gate. Existing release authorizations and
+mandatory readiness, exact-head CI, review, merge and Smoke conditions apply.
+
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
 rule grants no additional Product, Architecture, Auth, Permission, Database,

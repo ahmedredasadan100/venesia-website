@@ -5774,7 +5774,7 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
   };
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const declarations = ["ownedPath", "receipt", "stopChild", "localVerificationCommandSteps", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"].map(name => {
+  const declarations = ["ownedPath", "receipt", "stopChild", "localVerificationCommandSteps", "qualifyOwnedCrashAttribution", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"].map(name => {
     const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
     assert.ok(declaration, "Missing shared owned-child lifecycle declaration: " + name); return declaration.getText(file).replace(/^export /u, "");
   });
@@ -6729,6 +6729,7 @@ async function verifySharedChildControls(options?: { admissionOnly?: boolean }) 
     });
     if (process.platform === "win32") {
       runtimeProofs.push({ control: "windows_native_independent_closure_acceptance", ...await verifyWindowsClosureAcceptanceControls() });
+      runtimeProofs.push({ control: "windows_native_crash_attribution", ...await verifyOwnedCrashAttributionControls() });
       const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; } };
       type NativeIdentity = import("./lib/windows-owned-process.mts").WindowsJobIdentity;
       type NativeReceipt = import("./lib/windows-owned-process.mts").WindowsJobReceipt;
@@ -7233,7 +7234,7 @@ function verificationInputSourceObservations() {
     "verifySharedChildControls", "verifyRegisteredNodeEntryControls", "verifyInputObservationValidationControls", "verifyAdoptionDeadlineControls", "admissionQualificationOnly"]);
   declaration("scripts/lib/isolated-supabase.mts", ["sourcePath", "requireThat", "readReleaseLock", "runIsolatedSupabase"]);
   declaration("scripts/lib/windows-owned-process.mts", ["nativeBuild", "windowsOwnedProcessCapability", "spawnWindowsOwnedProcess"]);
-  declaration("scripts/lib/isolated-public-verification.mts", ["localVerificationCommandSteps", "registeredVerificationNodeEntries", "localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "runOwnedVerificationChild", "stopChild"]);
+  declaration("scripts/lib/isolated-public-verification.mts", ["localVerificationCommandSteps", "registeredVerificationNodeEntries", "localVerificationQualityPrefixDeadlineMs", "localVerificationOperationalDeadlineMs", "qualifyOwnedCrashAttribution", "runOwnedVerificationChild", "stopChild"]);
   declaration("scripts/qa-isolated-supabase.mts", ["options", "$dispatch"]);
   declaration("scripts/qa-isolated-supabase-transport.mjs", ["$module"]);
   const graph = collectExecutableSourceGraph({ root, entrySourceFiles: [...observed.keys()], symbolAware: false, nativeEagerImports: true });
@@ -7242,7 +7243,7 @@ function verificationInputSourceObservations() {
   for (const file of graph.keys()) observed.set(file, readSource(file));
   const lockFile = "scripts/fixtures/isolated-supabase/stack.lock.json", lockSource = readSource(lockFile), lock = JSON.parse(lockSource) as StackLock;
   observed.set(lockFile, lockSource);
-  for (const file of ["scripts/lib/windows-owned-process.cs", lock.compose.path, lock.transport.path, "package.json", "package-lock.json", "tsconfig.json"])
+  for (const file of ["scripts/lib/windows-owned-process.cs", "scripts/lib/owned-process-crash-probe.cjs", lock.compose.path, lock.transport.path, "package.json", "package-lock.json", "tsconfig.json"])
     observed.set(file, readSource(file));
   return { sourceWitnesses: witnesses, sources: [...observed].map(([file, source]) => ({ file, sha256: sha256(source) })).sort((left, right) => left.file.localeCompare(right.file)) };
 }
@@ -7306,7 +7307,267 @@ async function admissionQualificationOnly() {
   console.log(JSON.stringify({ status: "PASS", rawObservations: raw }, null, 2));
 }
 
+/** Explicit diagnostics controls use only finite disposable Node jobs; no Product, Browser or DB transport. */
+async function verifyOwnedCrashAttributionControls() {
+  assert.equal(process.platform, "win32", "Actual crash-attribution controls require the existing Windows Job owner.");
+  const owner = await import("./lib/isolated-public-verification.mts");
+  type Result = Awaited<ReturnType<typeof owner.runOwnedVerificationChild>>;
+  type Configuration = NonNullable<Parameters<typeof owner.runOwnedVerificationChild>[0]["crashAttribution"]>;
+  const directory = realpathSync(mkdtempSync(path.join(root, ".tmp-qa", "owned-crash-controls-")));
+  const fixtures = path.join(directory, "fixtures"); mkdirSync(fixtures);
+  const entry = path.join(fixtures, "root.cjs"), leaf = path.join(fixtures, "leaf.cjs"), unrelatedEntry = path.join(fixtures, "unrelated.cjs");
+  writeFileSync(entry, "const {spawnSync}=require('node:child_process');const path=require('node:path');"
+    + "const child=spawnSync(process.execPath,[path.join(__dirname,'leaf.cjs'),process.argv[2],process.argv[3]],{env:process.env,stdio:'inherit',windowsHide:true});"
+    + "process.exit(child.status===null?73:child.status);\n", { flag: "wx", mode: 0o600 });
+  writeFileSync(leaf, "const mode=process.argv[2];if(mode==='hold'){process.stdout.write('crash-control-ready\\n');setTimeout(()=>process.exit(74),25000);}"
+    + "else setTimeout(()=>{if(mode==='abort')process.abort();else process.exit(mode==='nonzero'?7:0);},150);\n", { flag: "wx", mode: 0o600 });
+  writeFileSync(unrelatedEntry, "process.stdout.write('crash-control-ready\\n');setTimeout(()=>process.exit(75),25000);\n", { flag: "wx", mode: 0o600 });
+  const sourceBindings = ["scripts/lib/isolated-public-verification.mts", "scripts/lib/windows-owned-process.mts",
+    "scripts/lib/windows-owned-process.cs", "scripts/lib/owned-process-crash-probe.cjs", "scripts/verify-isolated-supabase.mts"]
+    .map(file => ({ file, sha256: sha256(readSource(file)) }));
+  const fixtureBindings = [entry, leaf, unrelatedEntry].map(file => ({ file, sha256: sha256(readFileSync(file)) }));
+  const privateArgument = "CONTROL_PRIVATE_ARG_MUST_NEVER_ENTER_ATTRIBUTION", privateEnvironment = "CONTROL_PRIVATE_ENV_MUST_NEVER_ENTER_ATTRIBUTION";
+  const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", QA_CRASH_PRIVATE_SENTINEL: privateEnvironment };
+  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "TEMP", "TMP", "ComSpec", "PATHEXT"]) if (process.env[key] !== undefined) environment[key] = process.env[key];
+  const sanitize = (value: string) => value.replaceAll(privateArgument, "[REDACTED_TEST_ARG]").replaceAll(privateEnvironment, "[REDACTED_TEST_ENV]");
+  const context = { runDirectory: directory, sanitize, cleanEnvironment: () => ({ ...environment }) }, children = new Set<ChildProcess>();
+  const active = new Set<AbortController>(), outcomes: Promise<unknown>[] = [], proofs: Array<Record<string, unknown>> = [];
+  const configuration: Configuration = { gateId: "controlled-gate7", commands: [{ id: "controlled-root", entry }, { id: "controlled-leaf", entry: leaf }] };
+  const launch = (name: string, mode: string, attribution: Configuration | null = configuration, customEnvironment: NodeJS.ProcessEnv = environment, sourceEntry = entry) => {
+    const controller = new AbortController(), before = new Set(children); active.add(controller);
+    const promise = owner.runOwnedVerificationChild({ sourceDirectory: root, context, children, signal: controller.signal,
+      ...(attribution ? { crashAttribution: attribution } : {}) }, [sourceEntry, mode, privateArgument], { ...customEnvironment }, name, 20_000);
+    const outcome = promise.then(result => ({ result }), (error: unknown) => ({ error })).finally(() => active.delete(controller)); outcomes.push(outcome);
+    return { controller, outcome, helper: [...children].find(child => !before.has(child)) };
+  };
+  const ready = async (job: ReturnType<typeof launch>) => {
+    const helper = job.helper; assert.ok(helper?.stdout);
+    await new Promise<void>((done, reject) => {
+      let carry = "";
+      const finish = (error?: Error) => { clearTimeout(timer); helper.stdout!.off("data", receive); helper.off("close", closed); helper.off("error", failed); if (error) reject(error); else done(); };
+      const receive = (bytes: Buffer) => { carry = (carry + String(bytes)).slice(-1_024); if (carry.includes("crash-control-ready\n")) finish(); };
+      const closed = () => finish(Error("Controlled crash fixture closed before readiness.")), failed = () => finish(Error("Controlled crash fixture failed before readiness."));
+      const timer = setTimeout(() => finish(Error("Controlled crash fixture readiness exceeded its existing finite bound.")), 8_000);
+      helper.stdout!.on("data", receive); helper.once("close", closed); helper.once("error", failed);
+    });
+  };
+  const successfulResult = async (job: ReturnType<typeof launch>) => {
+    const outcome = await job.outcome; if ("error" in outcome) throw outcome.error; return outcome.result;
+  };
+  const cancelledResult = async (job: ReturnType<typeof launch>) => {
+    job.controller.abort(Error("Controlled crash attribution cancellation"));
+    const outcome = await job.outcome; assert.ok("error" in outcome && outcome.error instanceof Error);
+    const error = outcome.error as Error & { childResult: Result & { reason: string } };
+    assert.equal(error.childResult.reason, "cancelled"); assert.equal(error.childResult.cleanup.status, "PASS");
+    assert.equal(error.childResult.cleanup.liveProcesses, 0); return error.childResult;
+  };
+  let activeControl = "setup";
+  const control = async (name: string, run: () => Promise<void> | void) => { activeControl = name; await run(); cases.push("owned crash attribution " + name); };
+  type Qualification = ReturnType<typeof owner.qualifyOwnedCrashAttribution>;
+  type QualificationInput = Parameters<typeof owner.qualifyOwnedCrashAttribution>[0];
+  const readLines = (file: string): Record<string, unknown>[] => readFileSync(file, "utf8").trim().split(/\r?\n/u).filter(Boolean).map(line => JSON.parse(line));
+  const readAttribution = (result: Result, name: string) => {
+    assert.ok(result.crashAttribution); const reference = result.crashAttribution;
+    const file = path.resolve(directory, reference.file); assert.equal(path.dirname(file), directory); assert.equal(realpathSync(file), file);
+    const bytes = readFileSync(file); assert.equal(sha256(bytes), reference.sha256);
+    const value = JSON.parse(bytes.toString()) as Qualification & { limitsUnchanged: boolean; argsUnchanged: boolean; sourceBindings: Array<{ id: string; sha256: string }> };
+    assert.equal(value.status, reference.status); assert.equal(value.diagnosticOnly, true); assert.equal(value.releaseQualified, false);
+    assert.equal(value.oomCauseInferred, false); assert.equal(value.memoryLeakInferred, false); assert.equal(value.limitsUnchanged, true); assert.equal(value.argsUnchanged, true);
+    assert.equal(value.gateId, configuration.gateId); assert.equal(value.jobToken, result.nativeJobIdentity?.jobToken);
+    const nativeRows = readLines(path.join(directory, `public-${name}.crash-native.jsonl`));
+    const nodeDirectory = path.join(directory, `public-${name}-crash-nodes`);
+    const nodeRows = readdirSync(nodeDirectory).flatMap(member => readLines(path.join(nodeDirectory, member)));
+    for (const text of [bytes.toString(), JSON.stringify(nativeRows), JSON.stringify(nodeRows)]) {
+      assert.equal(text.includes(privateArgument), false); assert.equal(text.includes(privateEnvironment), false);
+      for (const key of ["argv", "environment", "env", "stack", "commandLine"]) assert.equal(text.includes('"' + key + '"'), false);
+    }
+    const input: QualificationInput = { gateId: configuration.gateId, jobToken: value.jobToken,
+      commands: configuration.commands.map(command => ({ ...command, sha256: sha256(readFileSync(command.entry)) })),
+      nativeRows, nodeRows, totalProcesses: result.nativeJobReceipt?.cleanup.totalProcesses ?? null,
+      nativeComplete: result.nativeJobReceipt?.diagnostic?.complete === true && result.nativeJobReceipt.diagnostic.handlesClosed === true,
+      rootIdentity: result.nativeJobIdentity ? { pid: result.nativeJobIdentity.rootPid, creationTimeFileTime: result.nativeJobIdentity.rootCreationTimeFileTime } : null,
+      rootExitCode: result.nativeJobReceipt?.rootExitCode ?? null };
+    const qualified = owner.qualifyOwnedCrashAttribution(input);
+    for (const key of ["status", "issues", "processRows", "totalProcesses", "nativeMemoryRecords"] as const) assert.deepEqual(value[key], qualified[key]);
+    assert.equal(value.processRows.length, value.totalProcesses, "Every native Job member remains represented, including console helpers.");
+    for (const row of value.processRows) {
+      assert.equal(row.nativeExitObserved, true); assert.equal(row.reason, "process-exit-observed");
+      assert.ok(row.pid !== null && Number.isSafeInteger(row.pid) && row.pid > 0); assert.match(row.creationTimeFileTime!, /^[1-9]\d{11,19}$/u);
+      assert.ok(row.startedUtc && row.endedUtc && Date.parse(row.endedUtc) >= Date.parse(row.startedUtc));
+      assert.ok(row.exitCode !== null && Number.isFinite(row.exitCode));
+      if (row.executableKind !== "node.exe") {
+        assert.ok(["cmd.exe", "chrome.exe", "chromium.exe", "conhost.exe", "powershell.exe", "pwsh.exe"].includes(row.executableKind));
+        assert.equal(row.commandId, null); assert.equal(row.entryKind, "unmapped-entry"); assert.equal(row.ppid, null);
+        assert.deepEqual(row.nodeSamples, []); assert.equal(row.javascriptExitObserved, false);
+      }
+    }
+    assert.equal(result.cleanup.status, "PASS"); assert.equal(result.cleanup.liveProcesses, 0); assert.equal(result.nativeJobReceipt?.cleanup.activeProcessesAfterCleanup, 0);
+    return { reference, value, input };
+  };
+  let actualSuccess: ReturnType<typeof readAttribution> | undefined;
+  let primaryFailure: unknown;
+  try {
+    for (const [name, config, env] of [
+      ["unsafe gate identity", { ...configuration, gateId: "../unsafe-gate" }, environment],
+      ["unsafe command identity", { ...configuration, commands: [{ id: "unsafe command", entry }] }, environment],
+      ["relative command entry", { ...configuration, commands: [{ id: "controlled-root", entry: "root.cjs" }] }, environment],
+      ["missing command entry", { ...configuration, commands: [{ id: "controlled-root", entry: path.join(fixtures, "absent.cjs") }] }, environment],
+      ["directory command entry", { ...configuration, commands: [{ id: "controlled-root", entry: fixtures }] }, environment],
+      ["duplicate command identity", { ...configuration, commands: [{ id: "controlled-root", entry }, { id: "controlled-root", entry: leaf }] }, environment],
+      ["duplicate command entry", { ...configuration, commands: [{ id: "controlled-root", entry }, { id: "controlled-leaf", entry }] }, environment],
+      ["untrusted inherited NODE_OPTIONS", configuration, { ...environment, NODE_OPTIONS: "--require=" + privateArgument }],
+      ["untrusted inherited diagnostic config", configuration, { ...environment, VENESIA_QA_CRASH_CONFIG: privateEnvironment }],
+    ] as const) await control(name + " rejects before child or diagnostic allocation", async () => {
+      const before = readdirSync(directory).sort(), job = launch("rejected-" + proofs.length, "success", config, env);
+      const outcome = await job.outcome; assert.ok("error" in outcome && outcome.error instanceof Error);
+      assert.equal(job.helper, undefined); assert.equal(children.size, 0); assert.deepEqual(readdirSync(directory).sort(), before);
+      assert.equal(String(outcome.error).includes(privateArgument), false); assert.equal(JSON.stringify(outcome.error).includes(privateEnvironment), false);
+      proofs.push({ control: name, rejected: true, nativeChildAllocations: 0, diagnosticFilesAllocated: 0 });
+    });
+    await control("default child remains opt-out with no attribution artifacts", async () => {
+      const result = await successfulResult(launch("default-opt-out", "success", null));
+      assert.equal(result.code, 0); assert.equal(result.crashAttribution, undefined); assert.equal(result.cleanup.status, "PASS");
+      assert.equal(result.cleanup.liveProcesses, 0); assert.equal(children.size, 0);
+      assert.equal(readdirSync(directory).some(file => file.startsWith("public-default-opt-out") && file.includes("crash")), false);
+      proofs.push({ control: "default_opt_out", originalExitCode: result.code, nativeCleanup: result.cleanup, diagnosticAllocated: false });
+    });
+    await control("actual nested success maps two safe IDs and excludes an unrelated owned process", async () => {
+      const unrelated = launch("unrelated-sentinel", "hold", null, environment, unrelatedEntry);
+      try {
+        await ready(unrelated);
+        const identity = (unrelated.helper as ChildProcess & { verificationWindowsIdentity(): import("./lib/windows-owned-process.mts").WindowsJobIdentity | null }).verificationWindowsIdentity();
+        assert.ok(identity);
+        const result = await successfulResult(launch("nested-success", "success")); assert.equal(result.code, 0);
+        const proof = readAttribution(result, "nested-success"); actualSuccess = proof;
+        assert.equal(proof.value.status, "COMPLETE_DIAGNOSTIC_ONLY"); assert.deepEqual(proof.value.issues, []);
+        const nodeRows = proof.value.processRows.filter(row => row.executableKind === "node.exe");
+        assert.deepEqual(nodeRows.map(row => row.commandId).sort(), ["controlled-leaf", "controlled-root"]);
+        assert.equal(proof.value.processRows.some(row => row.pid === identity.rootPid), false);
+        assert.equal(proof.input.nativeRows.some(row => row.pid === identity.rootPid), false);
+        assert.equal(proof.input.nodeRows.some(row => row.pid === identity.rootPid), false);
+        assert.ok(proof.value.nativeMemoryRecords > 0);
+        for (const row of proof.value.processRows) {
+          assert.equal(row.exitCode, 0); assert.equal(row.nativeExitObserved, true);
+          assert.equal(row.ownerTerminationRequested, false); assert.match(row.creationTimeFileTime!, /^[1-9]\d{11,19}$/u);
+          assert.ok(row.startedUtc && row.endedUtc && Date.parse(row.endedUtc) >= Date.parse(row.startedUtc));
+        }
+        for (const row of nodeRows) {
+          assert.equal(row.javascriptExitObserved, true);
+          assert.ok(row.nodeSamples.some(sample => sample.heapUsedBytes !== null && sample.heapUsedBytes > 0 && sample.heapLimitBytes !== null && sample.heapLimitBytes > 0 && sample.rssBytes !== null && sample.rssBytes > 0));
+        }
+        const nativeMemory = proof.input.nativeRows.filter(row => row.kind === "memory");
+        assert.ok(nativeMemory.some(row => typeof row.system === "object" && row.system !== null && "commitTotalPages" in row.system && "commitLimitPages" in row.system));
+        proofs.push({ control: "nested_success_and_unrelated_exclusion", attribution: proof.reference, processIds: proof.value.processRows.map(row => row.pid),
+          unrelatedPid: identity.rootPid, unrelatedObserved: false, originalExitCode: result.code });
+      } finally { await cancelledResult(unrelated); }
+      assert.equal(children.size, 0);
+    });
+    for (const mode of ["nonzero", "abort"] as const) await control("actual nested " + mode + " keeps native failure attribution", async () => {
+      const result = await successfulResult(launch("nested-" + mode, mode));
+      if (mode === "nonzero") assert.equal(result.code, 7); else assert.notEqual(result.code, 0);
+      const proof = readAttribution(result, "nested-" + mode); assert.equal(proof.value.status, "COMPLETE_DIAGNOSTIC_ONLY");
+      assert.deepEqual(proof.value.issues, []); const nodeRows = proof.value.processRows.filter(row => row.executableKind === "node.exe");
+      assert.deepEqual(nodeRows.map(row => row.commandId).sort(), ["controlled-leaf", "controlled-root"]);
+      const row = nodeRows.find(row => row.commandId === "controlled-leaf"); assert.ok(row);
+      assert.equal(row.nativeExitObserved, true); assert.equal(row.javascriptExitObserved, mode !== "abort");
+      assert.notEqual(row.exitCode, 0); assert.equal(row.ownerTerminationRequested, false);
+      assert.equal(row.reason, "process-exit-observed"); assert.equal(children.size, 0);
+      proofs.push({ control: "nested_" + mode, attribution: proof.reference, originalRootExit: result.rawExit,
+        failingLeafExitCode: row.exitCode, javascriptExitObserved: row.javascriptExitObserved, nativeExitObserved: true, oomCauseInferred: false });
+    });
+    await control("actual cancellation retains original failure and exact native cleanup", async () => {
+      const job = launch("nested-cancelled", "hold"); await ready(job);
+      const result = await cancelledResult(job), proof = readAttribution(result, "nested-cancelled");
+      assert.equal(result.reason, "cancelled"); assert.equal(result.nativeJobReceipt?.reason, "cancelled");
+      assert.equal(proof.value.status, "COMPLETE_DIAGNOSTIC_ONLY"); assert.deepEqual(proof.value.issues, []);
+      const nodeRows = proof.value.processRows.filter(row => row.executableKind === "node.exe");
+      assert.deepEqual(nodeRows.map(row => row.commandId).sort(), ["controlled-leaf", "controlled-root"]);
+      assert.ok(nodeRows.every(row => row.nativeExitObserved && row.ownerTerminationRequested));
+      assert.equal(children.size, 0);
+      proofs.push({ control: "nested_cancelled", attribution: proof.reference, originalFailureReason: result.reason,
+        nativeCleanup: result.cleanup, diagnosticSuccessIsNotTestSuccess: true });
+    });
+    assert.ok(actualSuccess);
+    const qualifiedInput = actualSuccess.input;
+    const partial = (name: string, mutate: (input: QualificationInput) => void, requiredIssue?: string | string[]) => control(name + " cannot claim complete attribution", () => {
+      const input = structuredClone(qualifiedInput); mutate(input); const value = owner.qualifyOwnedCrashAttribution(input);
+      assert.equal(value.status, "PARTIAL_DIAGNOSTIC_ONLY"); assert.ok(value.issues.length > 0); assert.equal(value.releaseQualified, false);
+      if (requiredIssue) for (const issue of typeof requiredIssue === "string" ? [requiredIssue] : requiredIssue) assert.ok(value.issues.includes(issue));
+      proofs.push({ control: name, actualQualifierExecuted: true, status: value.status, issues: value.issues, operatingSystemAllocations: 0 });
+    });
+    await partial("missing exact native root", input => { input.rootIdentity = null; }, "NATIVE_ROOT_BINDING_INCOMPLETE");
+    await partial("replaced native root birth", input => { assert.ok(input.rootIdentity); input.rootIdentity.creationTimeFileTime = String(BigInt(input.rootIdentity.creationTimeFileTime) + BigInt(1)); }, "NATIVE_ROOT_BINDING_INCOMPLETE");
+    await partial("root exit code disagreement", input => { assert.ok(input.rootExitCode !== null); input.rootExitCode++; }, "NATIVE_ROOT_BINDING_INCOMPLETE");
+    await partial("missing native terminal", input => { input.nativeRows = input.nativeRows.filter(row => row.kind !== "diagnostic_terminal"); });
+    await partial("native stream close failure", input => { input.nativeComplete = false; });
+    await partial("missing process exit", input => { const index = input.nativeRows.findIndex(row => row.kind === "process_exit"); assert.ok(index >= 0); input.nativeRows.splice(index, 1); });
+    await partial("same PID with wrong native creation identity", input => { const row = input.nativeRows.find(row => row.kind === "process_exit"); assert.ok(row); row.creationTimeFileTime = String(BigInt(String(row.creationTimeFileTime)) + BigInt(1)); });
+    await partial("same Node birth reused by another native birth", input => {
+      const start = input.nativeRows.find(row => row.kind === "process_start"); assert.ok(start);
+      const end = input.nativeRows.find(row => row.kind === "process_exit" && row.pid === start.pid && row.creationTimeFileTime === start.creationTimeFileTime); assert.ok(end);
+      const creationTimeFileTime = String(BigInt(String(start.creationTimeFileTime)) + BigInt(10_000));
+      input.nativeRows.push({ ...start, creationTimeFileTime, startedUtc: new Date(Date.parse(String(start.startedUtc)) + 1).toISOString() }, { ...end, creationTimeFileTime });
+      assert.ok(input.totalProcesses !== null); input.totalProcesses++;
+    }, ["NATIVE_BIRTH_IDENTITY_INVALID", "NODE_BIRTH_REUSED"]);
+    await partial("ambiguous Node birth", input => { const row = input.nodeRows.find(row => row.kind === "node_start"); assert.ok(row); input.nodeRows.push({ ...row, probeId: "controlled-duplicate-birth" }); });
+    await partial("Node birth outside native process lifetime", input => { const row = input.nodeRows.find(row => row.kind === "node_start"); assert.ok(row); row.utc = "2000-01-01T00:00:00.000Z"; });
+    await partial("wrong private native job", input => { const row = input.nativeRows.find(row => row.kind === "process_start"); assert.ok(row); row.jobToken = "wrong-controlled-job"; });
+    await partial("wrong diagnostic gate", input => { const row = input.nodeRows.find(row => row.kind === "node_start"); assert.ok(row); row.gateId = "wrong-controlled-gate"; });
+    await partial("unmapped Node command", input => { const row = input.nodeRows.find(row => row.kind === "node_start"); assert.ok(row); row.commandId = "unmapped-controlled-command"; });
+    await partial("native process count discrepancy", input => { assert.ok(input.totalProcesses !== null); input.totalProcesses++; });
+    await partial("torn diagnostic read retains usable partial rows", input => { input.readIssues = ["INVALID_OR_TORN_JSONL_RECORD"]; }, "DIAGNOSTIC_READ_INCOMPLETE");
+    await partial("missing diagnostic file retains usable partial rows", input => { input.readIssues = ["DIAGNOSTIC_FILE_UNAVAILABLE"]; }, "DIAGNOSTIC_READ_INCOMPLETE");
+    await partial("Node sample cap cannot claim complete history", input => { const row = input.nodeRows.at(-1); assert.ok(row); row.sequence = 4095; }, "NODE_SAMPLE_CAP_REACHED");
+    await control("actual qualifier never projects hostile argv env errors or paths", () => {
+      const input = structuredClone(qualifiedInput);
+      for (const row of [...input.nativeRows, ...input.nodeRows]) Object.assign(row, { argv: [privateArgument], env: { secret: privateEnvironment },
+        environment: privateEnvironment, stack: privateArgument, commandLine: privateArgument, executablePath: privateEnvironment });
+      const value = owner.qualifyOwnedCrashAttribution(input), text = JSON.stringify(value);
+      assert.equal(value.status, "COMPLETE_DIAGNOSTIC_ONLY"); assert.equal(text.includes(privateArgument), false); assert.equal(text.includes(privateEnvironment), false);
+      assert.deepEqual(value.processRows, actualSuccess!.value.processRows);
+      proofs.push({ control: "allowlisted_projection_only", actualQualifierExecuted: true, privateArgvEnvironmentProjected: false, operatingSystemAllocations: 0 });
+    });
+  } catch (error) {
+    primaryFailure = error;
+    try { writeFileSync(path.join(directory, "controls-failure.json"), JSON.stringify({ schema: 1, status: "FAIL", control: activeControl,
+      errorName: error instanceof Error ? error.name : "NonError", message: error instanceof Error ? sanitize(error.message).slice(0, 512) : "Non-Error failure",
+      sourceBindings, fixtureBindings, completedProofs: proofs, originalFailurePreserved: true, automaticRetries: 0 }, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
+    catch (evidenceError) { if (error instanceof Error && Object.isExtensible(error)) Object.defineProperty(error, "crashControlEvidenceError", { value: evidenceError }); }
+  }
+  finally {
+    for (const controller of active) controller.abort(Error("Controlled crash-attribution final cleanup"));
+    await Promise.allSettled(outcomes);
+    const cleanup = { childrenRemaining: children.size, activeControllers: active.size, fixtureBytesPreserved: fixtureBindings.every(row => sha256(readFileSync(row.file)) === row.sha256),
+      sourceBytesPreserved: sourceBindings.every(row => sha256(readSource(row.file)) === row.sha256) };
+    try { writeFileSync(path.join(directory, "controls-finally.json"), JSON.stringify({ schema: 1, ...cleanup, primaryFailurePreserved: primaryFailure !== undefined,
+      status: children.size === 0 && active.size === 0 && cleanup.fixtureBytesPreserved && cleanup.sourceBytesPreserved ? "PASS" : "FAIL" }, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
+    catch (evidenceError) { if (primaryFailure === undefined) primaryFailure = evidenceError;
+      else if (primaryFailure instanceof Error && Object.isExtensible(primaryFailure)) Object.defineProperty(primaryFailure, "crashControlCleanupEvidenceError", { value: evidenceError }); }
+    if (primaryFailure === undefined) { assert.equal(cleanup.childrenRemaining, 0); assert.equal(cleanup.activeControllers, 0); assert.equal(cleanup.fixtureBytesPreserved, true); assert.equal(cleanup.sourceBytesPreserved, true); }
+  }
+  if (primaryFailure !== undefined) throw primaryFailure;
+  const record = { schema: 1, status: "PASS", directory, sourceBindings, fixtureBindings, proofs, childrenRemaining: children.size,
+    originalFinallyExecuted: true, databaseCalls: 0, externalNetworkRequests: 0, automaticRetries: 0, releaseEvidence: false };
+  writeFileSync(path.join(directory, "controls-result.json"), JSON.stringify(record, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  const files: Array<{ file: string; sha256: string }> = [];
+  const index = (at: string) => { for (const name of readdirSync(at).sort()) {
+    const file = path.join(at, name), stat = lstatSync(file); assert.equal(stat.isSymbolicLink(), false); assert.equal(realpathSync(file), file);
+    if (stat.isDirectory()) index(file); else { assert.equal(stat.isFile(), true); files.push({ file: path.relative(directory, file).replaceAll("\\", "/"), sha256: sha256(readFileSync(file)) }); }
+  } };
+  index(directory); const indexFile = path.join(directory, "evidence-index.json");
+  writeFileSync(indexFile, JSON.stringify({ schema: 1, status: "PASS", files, resourcesRemaining: children.size, releaseEvidence: false }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  return { ...record, files, evidenceIndex: { file: indexFile, sha256: sha256(readFileSync(indexFile)) } };
+}
+
 async function ownedChildControlsOnly() {
+  if (process.argv.includes("--crash-attribution-only")) {
+    assert.deepEqual(process.argv.slice(2), ["--owned-child-controls-only", "--crash-attribution-only"], "Crash-attribution controls accept only their explicit bounded selector.");
+    const proof = await verifyOwnedCrashAttributionControls();
+    console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, platform: process.platform,
+      proof, actualOwnedChildrenExecuted: true, browserExecuted: false, databaseCalls: 0,
+      dockerResourcesAllocated: 0, externalNetworkRequests: 0, releaseEvidence: false }, null, 2));
+    return;
+  }
   const runtimeProofs = await verifySharedChildControls();
   console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, platform: process.platform,
     runtimeProofs, actualOwnedChildrenExecuted: true, tempFixtureCleanupVerified: true, browserExecuted: false, databaseCalls: 0,
@@ -8002,7 +8263,7 @@ async function verifyAdoptionDeadlineControls() {
   const scopedDeadlines = project(["verify:consumer-capability-adoption", "verify:admin-runtime"], () => requireActualBudget(budgetApi), operationalDeadline, approvedOperationalBudget);
   const scopedAdoptionDeadlineMs = scopedDeadlines[0]!.limitMs, scopedAdminRuntimeDeadlineMs = scopedDeadlines[1]!.limitMs;
   type ControlledChild = EventEmitter & { stdout: EventEmitter; stderr: EventEmitter; pid: number; exitCode: number | null; signalCode: NodeJS.Signals | null };
-  const code = compile(["ownedPath", "runOwnedVerificationChild"].map(name => declaration(name).getText(file).replace(/^export /u, "")).join("\n"));
+  const code = compile(["ownedPath", "qualifyOwnedCrashAttribution", "runOwnedVerificationChild"].map(name => declaration(name).getText(file).replace(/^export /u, "")).join("\n"));
   const proofs: Array<Record<string, unknown>> = [];
   const fixture = (fault?: { cleanupFailure?: Error; receiptFailure?: Error; missingReceipt?: boolean }) => {
     const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), pid: 701,
@@ -8795,7 +9056,7 @@ async function changeImpactOnly() {
       "localVerificationAssertionRelocationRequired", "validateLocalVerificationAssertionRelocations", "validateLocalVerificationInputObservations", "localVerificationInstalledRuntimePackages", "localVerificationAdmissionRuntimeIdentity",
       "finalQualityScriptNames", "localVerificationSemanticSource", "localVerificationPresentationSource", "deriveLocalVerificationSourceImpact", "deriveLocalVerificationSourceCoherence", "resolveLocalVerificationCiBaseline", "localVerificationCiDiagnostic", "localVerificationSourceGuardEffects", "qualifyLocalVerificationTargets", "assertLocalVerificationProtectionMaintenance",
       "localVerificationCommandSteps", "planLocalVerification", "registeredVerificationNodeEntries", "localVerificationCoverage", "readLocalVerificationInputs", "inspectLocalVerificationChangeImpact", "safeSourcePath",
-      "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"];
+      "localVerificationFamilyReceipt", "localVerificationFailureClassification", "executeLocalVerificationTargets", "ownedPath", "receipt", "stopChild", "qualifyOwnedCrashAttribution", "runOwnedVerificationChild", "ownedProcessCleanupQualification", "verifyOwnedProcessReadiness"];
     const declarations = names.map(name => {
       const found = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name
         || ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(parsed) === name));
