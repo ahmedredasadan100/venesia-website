@@ -3,6 +3,7 @@ import {createServer}from'node:http';
 import{readFileSync,mkdtempSync,rmSync}from'node:fs';
 import{tmpdir}from'node:os';
 import{resolve}from'node:path';
+import{inspect}from'node:util';
 import{chromium}from'playwright/test';
 import{registerCorePageRoute,createCoreFormPermissionContext}from'./fixtures/admin-core-form-permission-context.mjs';
 import{verifyCoreFormDraftRestoration as verify,assertCoreFormDraftRestorationJoin as join}from'./fixtures/admin-core-form-draft-restoration.mjs';
@@ -79,5 +80,102 @@ try{
   await test('Actual context denies concurrent entry and active close without bypassing the original failed attempt',async()=>{const value=await input(),ctx=createCoreFormPermissionContext({page,origin,output:controlledOutput,sourceSha256,requiredCases:[cell]});let release,entered;const gate=new Promise(resolve=>release=resolve),seen=new Promise(resolve=>entered=resolve);const args={mapping,form:value.form,submit:value.submit,dirtyNavigation:'close',cancelDirty:value.cancelDirty,assertDraft:async()=>{entered();await gate;throw Error('Controlled terminal assertion');}};const work=ctx.restoreDraft(args);void work.catch(()=>{});try{await seen;await assert.rejects(ctx.restoreDraft(args),/one restoration attempt/);assert.throws(()=>ctx.close(),/active restoration/);}finally{release();await assert.rejects(work,/private-draft-capture/);ctx.close();}});
  }finally{rmSync(controlledOutput,{recursive:true,force:true});}
  const ownerSource=readFileSync('scripts/fixtures/admin-core-form-permission-context.mjs','utf8');assert.ok(ownerSource.includes('registerCorePageRoute'),'Controls must exercise the existing route registration owner.');
+  // Diagnostic controls observe rejected operations; they do not reproduce or repair the original Gate 7 failure.
+  const diagnosticCanary='Private_diagnostic_control_never_exported';
+  const diagnosticSummary=(error,canaries=[])=>{
+    assert.equal(error instanceof Error,true,'A rejected proof must retain its Error boundary.');
+    let serialized='',serializable=false;
+    try{serialized=[error.message,error.stack,JSON.stringify(error),inspect(error,{depth:null,showHidden:true,customInspect:false,getters:false})].join('\n');serializable=true;}catch{}
+    assert.equal(serializable,true,'Failure diagnostics must be safely inspectable.');
+    for(const value of [diagnosticCanary,'Private_control_value',...canaries])assert.equal(serialized.includes(value),false,'Private diagnostic data must remain absent.');
+    const value=error.diagnostic;
+    assert.equal(Boolean(value&&typeof value==='object'),true,'The failure must expose its safe diagnostic.');
+    const keys=['schema','phase','category','cause','click','requestFailure','route','cleanup','requestsAtFailure','requestsAfterCleanup','rawErrorRetained'];
+    assert.equal(JSON.stringify(Object.keys(value).sort())===JSON.stringify(keys.sort()),true,'The diagnostic schema must contain only declared safe fields.');
+    assert.equal(value.schema,1);assert.equal(value.rawErrorRetained,false);assert.equal(Object.isFrozen(value),true);assert.equal(Object.hasOwn(error,'cause'),false);
+    assert.equal(['input-validation','private-draft-capture','native-before','route-registration','dispatch','pending','actual-transport-failure','settled-error','restored-draft','dirty-cancellation','route-cleanup','native-after','discard-shared-observation'].includes(value.phase),true,'Diagnostic phase must be a controlled label.');
+    assert.equal(['environment','click','draft-restoration','verification'].includes(value.category),true,'Diagnostic category must be a controlled label.');
+    for(const key of ['cause','click','requestFailure','route','cleanup']){
+      const row=value[key];if(row===null)continue;
+      assert.equal(Boolean(row&&typeof row==='object'),true,'Error summaries must be plain diagnostic records.');
+      assert.equal(JSON.stringify(Object.keys(row).sort())===JSON.stringify(['name','code','reason','signals'].sort()),true,'Error summaries must contain no raw error fields.');
+      assert.equal(['Error','TypeError','SyntaxError','TimeoutError','AssertionError','UnknownError'].includes(row.name),true,'Error names must be allowlisted.');
+      assert.equal([null,'EACCES','EPERM','ENOENT','ECONNREFUSED','ECONNRESET','EPIPE','ETIMEDOUT','ERR_ASSERTION'].includes(row.code),true,'Error codes must be allowlisted.');
+      assert.equal(['environment-code','browser-closed','interceptor-deadline','timeout','assertion','expectation-failed','operation-error','unreadable-error'].includes(row.reason),true,'Error reasons must be allowlisted.');
+      assert.equal(Array.isArray(row.signals),true);assert.equal(Object.isFrozen(row),true);assert.equal(Object.isFrozen(row.signals),true);
+      assert.equal(row.signals.every(signal=>['element-not-stable','element-not-visible','element-not-enabled','pointer-intercepted','navigation-wait','click-action-completed'].includes(signal)),true,'Error signals must be allowlisted.');
+    }
+    for(const key of ['requestsAtFailure','requestsAfterCleanup']){
+      const row=value[key];if(row===null)continue;
+      assert.equal(Boolean(row&&typeof row==='object'),true);assert.equal(Object.isFrozen(row),true);
+      assert.equal(JSON.stringify(Object.keys(row).sort())===JSON.stringify(['matching','observed','aborted'].sort()),true,'Request diagnostics must contain counts only.');
+      assert.equal(Object.values(row).every(count=>Number.isSafeInteger(count)&&count>=0),true);
+    }
+    assert.equal(error.message.endsWith(' Diagnostic: '+JSON.stringify(value)),true,'Visible failure text must append the same safe diagnostic.');
+    return value;
+  };
+  const diagnosticRejection=async(work,canaries=[])=>{
+    let error,rejected=false;try{await work();}catch(value){error=value;rejected=true;}
+    assert.equal(rejected,true,'Diagnostic controls must reject, never grant restoration coverage.');
+    return{error,diagnostic:diagnosticSummary(error,canaries)};
+  };
+  const diagnosticRecord=(name,code,reason,signals=[])=>({name,code,reason,signals});
+  const zeroRequests={matching:0,observed:0,aborted:0};
+  await test('Successful restoration receipt remains free of failure diagnostic fields',async()=>{
+    assert.equal(Object.hasOwn(positive,'diagnostic'),false);assert.equal(Object.hasOwn(positive,'cause'),false);assert.equal(Object.hasOwn(positive,'cleanup'),false);
+    assert.equal(positive.status,'submitted-draft-restored-known-no-write');assert.equal(positive.globalClosed,false);assert.deepEqual(positive.automaticCoverage,[]);
+  });
+  await test('Synthetic click rejection retains the existing interceptor wait and exposes only safe rejection summaries',async()=>{
+    mode='pass';const args=await input(),posts=receivedPosts,listeners=page.listenerCount('request'),originalClick=args.submit.click,descriptor=Object.getOwnPropertyDescriptor(args.submit,'click');let clicks=0;
+    const rejected=Object.assign(Error(diagnosticCanary+' element is not stable'),{name:'TimeoutError',code:diagnosticCanary,cause:Error(diagnosticCanary),stack:diagnosticCanary});
+    try{
+      args.submit.click=async()=>{clicks++;throw rejected;};
+      const{error,diagnostic}=await diagnosticRejection(()=>verify(args));
+      assert.equal(error.message.startsWith('Submitted-draft restoration proof failed at dispatch. No restoration coverage granted.'),true);
+      assert.deepEqual(diagnostic,{schema:1,phase:'dispatch',category:'click',cause:diagnosticRecord('Error',null,'interceptor-deadline'),click:diagnosticRecord('TimeoutError',null,'timeout',['element-not-stable']),requestFailure:diagnosticRecord('TimeoutError',null,'timeout'),route:null,cleanup:null,requestsAtFailure:zeroRequests,requestsAfterCleanup:zeroRequests,rawErrorRetained:false});
+      assert.equal(clicks,1);assert.equal(receivedPosts,posts);assert.equal(nativeRows.length,1);assert.equal(page.listenerCount('request'),listeners);
+    }finally{if(descriptor)Object.defineProperty(args.submit,'click',descriptor);else delete args.submit.click;assert.equal(args.submit.click===originalClick,true);}
+  });
+  await test('Synthetic connection refusal is classified at native-before without submission or private error retention',async()=>{
+    mode='pass';const args=await input(),posts=receivedPosts;let reads=0;
+    const rejected=Object.assign(Error(diagnosticCanary),{code:'ECONNREFUSED',cause:Error(diagnosticCanary),stack:diagnosticCanary});
+    const{error,diagnostic}=await diagnosticRejection(()=>verify({...args,nativeCheckpoint:async()=>{reads++;throw rejected;}}));
+    assert.equal(error.message.startsWith('Submitted-draft restoration proof failed at native-before. No restoration coverage granted.'),true);
+    assert.deepEqual(diagnostic,{schema:1,phase:'native-before',category:'environment',cause:diagnosticRecord('Error','ECONNREFUSED','environment-code'),click:null,requestFailure:null,route:null,cleanup:null,requestsAtFailure:zeroRequests,requestsAfterCleanup:zeroRequests,rawErrorRetained:false});
+    assert.equal(reads,1);assert.equal(nativeRows.length,0);assert.equal(receivedPosts,posts);
+  });
+  await test('Actual controlled draft loss exposes its restoration assertion without promoting no-write coverage',async()=>{
+    mode='draft-loss';const args=await input(),posts=receivedPosts,listeners=page.listenerCount('request');
+    const{error,diagnostic}=await diagnosticRejection(()=>verify(args));
+    assert.equal(error.message.startsWith('Submitted-draft restoration proof failed at restored-draft. No restoration coverage granted.'),true);
+    assert.deepEqual(diagnostic,{schema:1,phase:'restored-draft',category:'draft-restoration',cause:diagnosticRecord('AssertionError','ERR_ASSERTION','assertion'),click:null,requestFailure:null,route:null,cleanup:null,requestsAtFailure:{matching:1,observed:1,aborted:1},requestsAfterCleanup:{matching:1,observed:1,aborted:1},rawErrorRetained:false});
+    assert.equal(receivedPosts,posts);assert.equal(nativeRows.length,1);assert.equal(page.listenerCount('request'),listeners);
+  });
+  await test('Cleanup failure keeps precedence while retaining a separate sanitized pending-proof failure',async()=>{
+    mode='pass';const args=await input(),posts=receivedPosts,listeners=page.listenerCount('request');let removals=0;
+    const registration=async(...values)=>{const remove=await registerCorePageRoute(...values);return async()=>{removals++;await remove();throw Object.assign(Error(diagnosticCanary),{stack:diagnosticCanary,cause:Error(diagnosticCanary)});};};
+    const{error,diagnostic}=await diagnosticRejection(()=>verify({...args,registerPageRoute:registration,observePending:async()=>{throw Object.assign(Error(diagnosticCanary),{stack:diagnosticCanary,cause:Error(diagnosticCanary)});}}));
+    assert.equal(error.message.startsWith('Submitted-draft route cleanup failed. No restoration coverage granted.'),true);
+    assert.deepEqual(diagnostic,{schema:1,phase:'pending',category:'verification',cause:diagnosticRecord('Error',null,'operation-error'),click:null,requestFailure:null,route:null,cleanup:diagnosticRecord('Error',null,'operation-error'),requestsAtFailure:{matching:1,observed:1,aborted:0},requestsAfterCleanup:{matching:1,observed:1,aborted:1},rawErrorRetained:false});
+    assert.equal(removals,1);assert.equal(receivedPosts,posts);assert.equal(nativeRows.length,1);assert.equal(page.listenerCount('request'),listeners);
+  });
+  await test('Unknown error name and code never leak canary message stack cause or private locator text',async()=>{
+    mode='pass';const args=await input(),posts=receivedPosts;let reads=0;
+    const rejected=Object.assign(Error(diagnosticCanary),{name:diagnosticCanary,code:diagnosticCanary,stack:diagnosticCanary,cause:{input:diagnosticCanary,url:'https://private.invalid/'+diagnosticCanary}});
+    const{diagnostic}=await diagnosticRejection(()=>verify({...args,nativeCheckpoint:async()=>{reads++;throw rejected;}}),['https://private.invalid/']);
+    assert.deepEqual(diagnostic,{schema:1,phase:'native-before',category:'verification',cause:diagnosticRecord('UnknownError',null,'operation-error'),click:null,requestFailure:null,route:null,cleanup:null,requestsAtFailure:zeroRequests,requestsAfterCleanup:zeroRequests,rawErrorRetained:false});
+    assert.equal(reads,1);assert.equal(nativeRows.length,0);assert.equal(receivedPosts,posts);
+  });
+  await test('Hostile error getters cannot replace the original failure or disclose their private rejection',async()=>{
+    for(const property of ['name','code','message']){
+      mode='pass';const args=await input(),posts=receivedPosts;let reads=0;
+      const rejected={name:'Error',code:'ECONNREFUSED',message:diagnosticCanary,stack:diagnosticCanary,cause:Error(diagnosticCanary)};
+      Object.defineProperty(rejected,property,{get(){throw Error(diagnosticCanary);}});
+      const{error,diagnostic}=await diagnosticRejection(()=>verify({...args,nativeCheckpoint:async()=>{reads++;throw rejected;}}));
+      assert.equal(error.message.startsWith('Submitted-draft restoration proof failed at native-before. No restoration coverage granted.'),true);
+      assert.deepEqual(diagnostic,{schema:1,phase:'native-before',category:'verification',cause:diagnosticRecord('UnknownError',null,'unreadable-error'),click:null,requestFailure:null,route:null,cleanup:null,requestsAtFailure:zeroRequests,requestsAfterCleanup:zeroRequests,rawErrorRetained:false});
+      assert.equal(reads,1);assert.equal(nativeRows.length,0);assert.equal(receivedPosts,posts);
+    }
+  });
  console.log(JSON.stringify({status:'pass',checks:checks.length,cases:checks,scope:'Actual helper + installed Playwright on a controlled loopback Form, exact server receipt count and fixed native fingerprint ports. No real Next/Admin/SQL/hosted proof; production journeys still required.'},null,2));
 }finally{await context.close();await browser.close();await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}

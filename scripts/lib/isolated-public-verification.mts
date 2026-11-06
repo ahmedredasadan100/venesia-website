@@ -131,11 +131,11 @@ export function localVerificationQualityPrefixDeadlineMs(): number { return 1_80
 
 export type LocalVerificationOperationalBudget = "pr229-20261103-double-operational";
 /** Explicit outer execution allowance, calculated once from the approved original.
- * The legacy selector remains sealed into this PR's invocation. Never apply at the
+ * The legacy selector binds the standing budget rule to each live invocation. Never apply at the
  * generic process/timer owner or to behavioral readiness, heartbeat, cancellation,
  * preparation or cleanup contracts; whole qualification execution is an outer budget. */
 export function localVerificationOperationalDeadlineMs(limitMs: number, budget?: LocalVerificationOperationalBudget): number {
-  assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown temporary operational budget.");
+  assert.ok(budget === undefined || budget === "pr229-20261103-double-operational", "Unknown operational budget.");
   assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Operational deadline must be a finite timer-safe positive integer.");
   const result = limitMs * (budget === undefined ? 1 : 2);
   assert.ok(Number.isSafeInteger(result) && result <= 2_147_483_647, "Expanded operational deadline must be timer-safe.");
@@ -1246,9 +1246,17 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
     for (const node of tree.statements) {
       if (!ts.canHaveModifiers(node) || !ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
       if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
-        const members = ts.isInterfaceDeclaration(node) ? node.members : ts.isTypeLiteralNode(node.type) ? node.type.members : [];
-        kinds.set(node.name.text, { runtime: false, members: new Map(members.flatMap(member => member.name
-          ? [[name(member.name), member.getText(tree)] as const] : [])) });
+        // An intersection preserves its explicit member declarations; referenced bases
+        // remain opaque. Do not infer inherited/union/generic members from a name.
+        const literalMembers = (type: ts.TypeNode): readonly ts.TypeElement[] => ts.isParenthesizedTypeNode(type)
+          ? literalMembers(type.type) : ts.isTypeLiteralNode(type) ? type.members
+            : ts.isIntersectionTypeNode(type) ? type.types.flatMap(part => literalMembers(part)) : [];
+        const members = ts.isInterfaceDeclaration(node) ? node.members : literalMembers(node.type);
+        const byName = new Map<string, string[]>();
+        for (const member of members) if (member.name) {
+          const key = name(member.name); if (key) byName.set(key, [...(byName.get(key) ?? []), member.getText(tree)]);
+        }
+        kinds.set(node.name.text, { runtime: false, members: new Map([...byName].map(([key, declarations]) => [key, JSON.stringify(declarations)])) });
       } else if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) {
         if (node.name) kinds.set(node.name.text, { runtime: true, members: new Map() });
       } else if (ts.isVariableStatement(node)) for (const declaration of node.declarationList.declarations)
@@ -1272,25 +1280,64 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
         ...(previousKinds.get(key)?.members.keys() ?? []), ...(nextKinds.get(key)?.members.keys() ?? []),
       ]).filter(member => previousKinds.get(key)?.members.get(member) !== nextKinds.get(key)?.members.get(member))) : new Set<string>() };
   });
+  type InferredResultType = { checker: ts.TypeChecker; type: ts.Type; declaration: ts.Node };
+  const inferredOwners = new Map<string, { checker: ts.TypeChecker; tree: ts.SourceFile }>();
+  const inferredReturn = (file: string, symbol: string): InferredResultType | undefined => {
+    let context = inferredOwners.get(file);
+    if (!context) {
+      const source = text(current, file); if (source === undefined || inferredOwners.size >= 32) return undefined;
+      // Infer only this exact bound module. No filesystem reads, ambient package
+      // lookup, emit or project-wide type graph; unresolved dependencies stay opaque.
+      const virtualFile = "/bound-source/" + file, tree = parse(virtualFile, source);
+      const host: ts.CompilerHost = { getSourceFile: candidate => candidate === virtualFile ? tree : undefined,
+        getDefaultLibFileName: () => "", writeFile: () => undefined, getCurrentDirectory: () => "/bound-source",
+        getDirectories: () => [], fileExists: candidate => candidate === virtualFile,
+        readFile: candidate => candidate === virtualFile ? source : undefined, getCanonicalFileName: candidate => candidate,
+        useCaseSensitiveFileNames: () => true, getNewLine: () => "\n" };
+      const program = ts.createProgram([virtualFile], { noEmit: true, noLib: true, noResolve: true, types: [], strict: true,
+        target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext }, host);
+      context = { checker: program.getTypeChecker(), tree }; inferredOwners.set(file, context);
+    }
+    const declarations = context.tree.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === symbol
+      && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword));
+    if (declarations.length !== 1 || !ts.isFunctionDeclaration(declarations[0]) || declarations[0].type) return undefined;
+    const owner = declarations[0], signature = context.checker.getSignatureFromDeclaration(owner);
+    if (!signature) return undefined;
+    const type = context.checker.getReturnTypeOfSignature(signature);
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never | ts.TypeFlags.TypeParameter)) return undefined;
+    return { ...context, type, declaration: owner };
+  };
   const assertionShapes = (file: string, source: string | undefined) => {
     const shapes = new Map<string, { references: string[]; contracts: string[] }>(); if (source === undefined) return shapes;
     const tree = parse(file, semanticSource(file, source));
     const bindings = new Map<string, ts.Node[]>(), imports = new Map<string, string>(), importedNames = new Map<string, string>();
+    const bindingDeclarations = new Map<ts.Node, ts.Node>();
     const bindingScopes = new Map<ts.Node, ts.Node>(), typedApiBindings = new Map<string, Array<{ target: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
     const typedValueBindings = new Map<string, Array<{ target: string; typeName: string; scope: ts.Node; members: ReadonlySet<string> | null }>>();
+    const localTypes = new Map<string, ts.Declaration[]>();
     let shadowedPick = false;
     const detectPick = (node: ts.Node) => {
       if ((ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node)
         || ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node) || ts.isTypeParameterDeclaration(node) || ts.isImportSpecifier(node)
         || ts.isImportClause(node) || ts.isNamespaceImport(node) || ts.isImportEqualsDeclaration(node)) && node.name?.getText(tree) === "Pick") shadowedPick = true;
+      if ((ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isClassDeclaration(node) || ts.isTypeParameterDeclaration(node)
+        || ts.isImportSpecifier(node) || ts.isImportClause(node) || ts.isNamespaceImport(node)) && node.name && ts.isIdentifier(node.name))
+        localTypes.set(node.name.text, [...(localTypes.get(node.name.text) ?? []), node]);
       ts.forEachChild(node, detectPick);
     };
     detectPick(tree);
     // Bind only the receiver's actual imported type, or an unshadowed built-in Pick of it.
     // A nested generic/object type does not type its outer receiver as the imported owner.
-    const receiverImport = (type: ts.TypeNode): { imported: ts.ImportTypeNode; members: ReadonlySet<string> | null } | undefined => {
+    const receiverImport = (type: ts.TypeNode, active = new Set<ts.Node>()): { imported: ts.ImportTypeNode; members: ReadonlySet<string> | null } | undefined => {
+      if (active.size >= 32 || active.has(type)) return undefined;
+      const next = new Set(active); next.add(type);
       while (ts.isParenthesizedTypeNode(type)) type = type.type;
       if (ts.isImportTypeNode(type)) return { imported: type, members: null };
+      if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && !type.typeArguments?.length) {
+        const declarations = nearest(type, localTypes.get(type.typeName.text) ?? [], declarationScope);
+        if (declarations.length === 1 && ts.isTypeAliasDeclaration(declarations[0]) && !declarations[0].typeParameters?.length)
+          return receiverImport(declarations[0].type, next);
+      }
       if (!shadowedPick && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === "Pick"
         && type.typeArguments?.length === 2 && ts.isImportTypeNode(type.typeArguments[0])) {
         const selector = type.typeArguments[1], keys = ts.isUnionTypeNode(selector) ? selector.types : [selector];
@@ -1317,6 +1364,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       return [];
     };
     const register = (key: string, node: ts.Node, declaration: ts.Node) => {
+      bindingDeclarations.set(node, declaration);
       bindingScopes.set(node, declarationScope(declaration)); bindings.set(key, [...(bindings.get(key) ?? []), node]);
     };
     const declarations = (node: ts.Node) => {
@@ -1347,7 +1395,281 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
       ts.forEachChild(node, declarations);
     };
     declarations(tree);
-    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, testedTypeMembers: Set<string>, tested = true): string[] => {
+    // A helper calling an owner is not evidence that its returned value reaches
+    // the assertion. Trace only immutable, explicit result paths; unknown forms
+    // contribute no runtime contract. The bound is per assertion, not a runtime
+    // execution budget, and exhaustion is a refusal rather than partial credit.
+    type ResultFlow = { origin?: { file: string; symbol: string; type: ts.TypeNode | InferredResultType };
+      fields?: ReadonlyMap<string, ResultFlow>; promise?: ResultFlow; alternatives?: readonly ResultFlow[] };
+    type FlowArgument = ResultFlow | { expression: ts.Expression; environment: FlowEnvironment };
+    type FlowEnvironment = ReadonlyMap<ts.Node, FlowArgument>;
+    const nearestBinding = (identifier: ts.Identifier) => nearest(identifier, bindings.get(identifier.text) ?? [], binding => bindingScopes.get(binding)!);
+    const unwrap = (expression: ts.Expression): ts.Expression => ts.isParenthesizedExpression(expression) || ts.isAwaitExpression(expression)
+      || ts.isNonNullExpression(expression) ? unwrap(expression.expression) : expression;
+    const assignedBindings = new Set<ts.Node>();
+    const mutationRoot = (expression: ts.Expression): ts.Identifier | undefined => {
+      expression = unwrap(expression);
+      while (ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression)) expression = unwrap(expression.expression);
+      while (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) expression = unwrap(expression.expression);
+      return ts.isIdentifier(expression) ? expression : undefined;
+    };
+    const findMutations = (node: ts.Node) => {
+      const target = ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment ? node.left
+        : (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator) ? node.operand
+          : ts.isDeleteExpression(node) ? node.expression : undefined;
+      const identifier = target && mutationRoot(target); if (identifier) for (const binding of nearestBinding(identifier)) assignedBindings.add(binding);
+      if (target && ts.isBinaryExpression(node)) for (const binding of aliasSources(node.right)) assignedBindings.add(binding);
+      if (target && !identifier) {
+        const mark = (part: ts.Node) => { if (ts.isIdentifier(part)) for (const binding of nearestBinding(part)) assignedBindings.add(binding); ts.forEachChild(part, mark); };
+        mark(target);
+      }
+      ts.forEachChild(node, findMutations);
+    };
+    findMutations(tree);
+    const mutationEdges = new Map<ts.Node, Set<ts.Node>>();
+    const addMutationEdge = (from: ts.Node, to: ts.Node) => { const targets = mutationEdges.get(from) ?? new Set<ts.Node>(); targets.add(to); mutationEdges.set(from, targets); };
+    const rejectionGuard = (statement: ts.Statement): statement is ts.IfStatement & { expression: ts.BinaryExpression & { left: ts.StringLiteralLike; right: ts.Identifier } } =>
+      ts.isIfStatement(statement) && !statement.elseStatement && ts.isBinaryExpression(statement.expression)
+      && statement.expression.operatorToken.kind === ts.SyntaxKind.InKeyword && ts.isStringLiteralLike(statement.expression.left)
+      && ts.isIdentifier(statement.expression.right) && ts.isThrowStatement(statement.thenStatement);
+    const localHelper = (expression: ts.Expression) => {
+      if (!ts.isIdentifier(expression)) return undefined;
+      const candidates = nearestBinding(expression); if (candidates.length !== 1 || assignedBindings.has(candidates[0])) return undefined;
+      const binding = candidates[0], declaration = bindingDeclarations.get(binding);
+      const fn = ts.isArrowFunction(binding) || ts.isFunctionExpression(binding) ? binding : declaration && ts.isFunctionDeclaration(declaration) ? declaration : undefined;
+      const fixed = declaration && (ts.isFunctionDeclaration(declaration) || ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) && Boolean(declaration.parent.flags & ts.NodeFlags.Const));
+      if (!fn?.body || !fixed || fn.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.dotDotDotToken)) return undefined;
+      if (!ts.isBlock(fn.body)) return fn;
+      const terminal = fn.body.statements.at(-1);
+      return terminal && ts.isReturnStatement(terminal) && terminal.expression && fn.body.statements.slice(0, -1)
+        .every(statement => ts.isVariableStatement(statement) || ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) || rejectionGuard(statement)) ? fn : undefined;
+    };
+    const findEscapes = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && !/^(?:assert|check|expect)(?:\.|$)/u.test(node.expression.getText(tree))) {
+        // Appending to an exact local array stores a Promise/reference; it does
+        // not rewrite that argument. Opaque calls receiving a value may do so.
+        const receiver = ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "push" && ts.isIdentifier(node.expression.expression)
+          ? nearestBinding(node.expression.expression) : [];
+        const declaration = receiver.length === 1 ? bindingDeclarations.get(receiver[0]) : undefined;
+        const arrayAppend = receiver.length === 1 && ts.isArrayLiteralExpression(receiver[0]) && !assignedBindings.has(receiver[0])
+          && declaration && ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) && Boolean(declaration.parent.flags & ts.NodeFlags.Const);
+        const helper = localHelper(node.expression);
+        if (!arrayAppend) for (const [index, argument] of node.arguments.entries()) {
+          for (const binding of aliasSources(argument)) {
+            const parameter = helper?.parameters[index];
+            if (parameter) addMutationEdge(parameter.initializer ?? parameter, binding);
+            else assignedBindings.add(binding);
+          }
+        }
+      }
+      ts.forEachChild(node, findEscapes);
+    };
+    findEscapes(tree);
+    // Writes/opaque escapes through a second alias invalidate the original
+    // identity too. Only explicit aliases and object fields are propagated.
+    function aliasSources(node: ts.Node): ts.Node[] {
+      if (ts.isIdentifier(node)) return [...nearestBinding(node)];
+      if (ts.isParenthesizedExpression(node) || ts.isNonNullExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)
+        || ts.isSatisfiesExpression(node) || ts.isSpreadElement(node) || ts.isSpreadAssignment(node)) return aliasSources(node.expression);
+      if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) return aliasSources(node.expression);
+      if (ts.isArrayLiteralExpression(node)) return node.elements.flatMap(aliasSources);
+      if (ts.isObjectLiteralExpression(node)) return node.properties.flatMap(member => ts.isPropertyAssignment(member) ? aliasSources(member.initializer)
+        : ts.isShorthandPropertyAssignment(member) ? aliasSources(member.name) : ts.isSpreadAssignment(member) ? aliasSources(member.expression) : []);
+      return [];
+    }
+    for (const candidates of bindings.values()) for (const binding of candidates) for (const source of aliasSources(binding)) addMutationEdge(binding, source);
+    const propagateMutations = () => {
+      const pendingMutations = [...assignedBindings];
+      while (pendingMutations.length) for (const binding of mutationEdges.get(pendingMutations.pop()!) ?? []) if (!assignedBindings.has(binding)) {
+        assignedBindings.add(binding); pendingMutations.push(binding);
+      }
+    };
+    propagateMutations();
+    const immutable = (binding: ts.Node) => {
+      const declaration = bindingDeclarations.get(binding);
+      return !assignedBindings.has(binding) && Boolean(declaration && (ts.isParameter(declaration) || ts.isFunctionDeclaration(declaration)
+        || ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) && (declaration.parent.flags & ts.NodeFlags.Const)));
+    };
+    const moduleOf = (expression: ts.Expression, active = new Set<ts.Node>()): string | undefined => {
+      if (active.size >= 32) return undefined;
+      expression = unwrap(expression);
+      if (ts.isCallExpression(expression) && expression.expression.kind === ts.SyntaxKind.ImportKeyword && expression.arguments.length === 1 && ts.isStringLiteralLike(expression.arguments[0]))
+        return moduleTarget(expression.arguments[0].text);
+      if (!ts.isIdentifier(expression)) return undefined;
+      const candidates = nearestBinding(expression);
+      if (candidates.length !== 1 || !immutable(candidates[0]) || active.has(candidates[0]) || !ts.isExpression(candidates[0])) return undefined;
+      const next = new Set(active); next.add(candidates[0]); return moduleOf(candidates[0], next);
+    };
+    const importedCall = (expression: ts.Expression): { file: string; symbol: string } | undefined => {
+      if (ts.isIdentifier(expression) && nearestBinding(expression).length === 0) {
+        const target = imports.get(expression.text), symbol = importedNames.get(expression.text); if (target && symbol) return { file: target, symbol };
+      }
+      if (ts.isPropertyAccessExpression(expression)) { const target = moduleOf(expression.expression); if (target) return { file: target, symbol: expression.name.text }; }
+      return undefined;
+    };
+    const resultOwnerTrees = new Map<string, ts.SourceFile>();
+    const importedReturnType = (imported: { file: string; symbol: string }): { type: ts.TypeNode | InferredResultType; promise: boolean } | undefined => {
+      const source = text(current, imported.file); if (source === undefined) return undefined;
+      const owner = resultOwnerTrees.get(imported.file) ?? parse(imported.file, source); resultOwnerTrees.set(imported.file, owner);
+      const declarations = owner.statements.filter(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === imported.symbol
+        && ts.getModifiers(statement)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword));
+      if (declarations.length !== 1 || !ts.isFunctionDeclaration(declarations[0])) return undefined;
+      if (!declarations[0].type) { const type = inferredReturn(imported.file, imported.symbol); return type ? { type, promise: false } : undefined; }
+      const type = declarations[0].type;
+      if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName) && type.typeName.text === "Promise" && type.typeArguments?.length === 1) {
+        const shadowed = owner.statements.some(statement => (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name?.text === "Promise"
+          || ts.isImportDeclaration(statement) && (statement.importClause?.name?.text === "Promise" || statement.importClause?.namedBindings && ts.isNamedImports(statement.importClause.namedBindings)
+            && statement.importClause.namedBindings.elements.some(element => element.name.text === "Promise")));
+        return shadowed ? undefined : { type: type.typeArguments[0], promise: true };
+      }
+      return { type, promise: false };
+    };
+    const provenPromise = (expression: ts.Expression, active = new Set<ts.Node>()): boolean => {
+      if (active.size >= 32 || active.has(expression)) return false;
+      const next = new Set(active); next.add(expression);
+      if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression)) return provenPromise(expression.expression, next);
+      if (ts.isIdentifier(expression)) {
+        const candidates = nearestBinding(expression);
+        return candidates.length === 1 && immutable(candidates[0]) && ts.isExpression(candidates[0]) && provenPromise(candidates[0], next);
+      }
+      if (!ts.isCallExpression(expression)) return false;
+      const imported = importedCall(expression.expression); if (imported) return importedReturnType(imported)?.promise === true;
+      return ts.isPropertyAccessExpression(expression.expression) && ["then", "finally"].includes(expression.expression.name.text)
+        && provenPromise(expression.expression.expression, next);
+    };
+    const inferredMember = (value: InferredResultType, key: string): InferredResultType | undefined => {
+      const type = value.checker.getNonNullableType(value.type);
+      if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never | ts.TypeFlags.TypeParameter)) return undefined;
+      const member = value.checker.getPropertyOfType(type, key), declarations = member?.getDeclarations();
+      if (!member || declarations?.length !== 1) return undefined;
+      const selected = value.checker.getTypeOfSymbolAtLocation(member, declarations[0]);
+      if (selected.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never | ts.TypeFlags.TypeParameter)) return undefined;
+      return { ...value, type: selected, declaration: declarations[0] };
+    };
+    const findReceiverEscapes = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && (ts.isPropertyAccessExpression(node.expression) || ts.isElementAccessExpression(node.expression))) {
+        const receiver = node.expression.expression;
+        const method = ts.isPropertyAccessExpression(node.expression) ? node.expression.name.text : undefined;
+        const candidates = method === "push" && ts.isIdentifier(receiver) ? nearestBinding(receiver) : [];
+        const declaration = candidates.length === 1 ? bindingDeclarations.get(candidates[0]) : undefined;
+        const arrayAppend = candidates.length === 1 && ts.isArrayLiteralExpression(candidates[0]) && immutable(candidates[0])
+          && declaration && ts.isVariableDeclaration(declaration);
+        // A returned object can mutate itself even when its method has no
+        // arguments. Only actual module namespaces, proven Promise methods and
+        // the existing exact array append avoid opaque receiver invalidation.
+        if (!moduleOf(receiver) && !arrayAppend && !((method === "then" || method === "finally") && provenPromise(receiver)))
+          for (const binding of aliasSources(receiver)) assignedBindings.add(binding);
+      }
+      ts.forEachChild(node, findReceiverEscapes);
+    };
+    const traceResult = (argument: ts.Expression, closure: Set<string>): ResultFlow => {
+      let remaining = 256, exhausted = false;
+      const unknown: ResultFlow = {}, active = new Set<ts.Node>();
+      const enter = () => { if (--remaining < 0) exhausted = true; return !exhausted; };
+      const property = (value: ResultFlow, key: string): ResultFlow => {
+        if (!enter()) return unknown;
+        if (value.alternatives) return { alternatives: value.alternatives.map(item => property(item, key)) };
+        if (value.fields) return value.fields.get(key) ?? unknown;
+        if (value.origin) {
+          let type = value.origin.type;
+          if ("checker" in type) { const member = inferredMember(type, key); return member ? { origin: { ...value.origin, type: member } } : unknown; }
+          while (ts.isParenthesizedTypeNode(type)) type = type.type;
+          const members = ts.isTypeLiteralNode(type) ? type.members : undefined;
+          const candidates = members?.filter(member => member.name && name(member.name) === key);
+          if (candidates?.length === 1 && ts.isPropertySignature(candidates[0]) && candidates[0].type)
+            return { origin: { ...value.origin, type: candidates[0].type } };
+        }
+        return unknown;
+      };
+      const invoke = (fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression, args: readonly FlowArgument[], environment: FlowEnvironment): ResultFlow => {
+        if (!enter() || active.has(fn) || !fn.body || fn.parameters.some(parameter => !ts.isIdentifier(parameter.name) || parameter.dotDotDotToken)) return unknown;
+        active.add(fn);
+        try {
+          const next = new Map(environment);
+          for (let index = 0; index < fn.parameters.length; index++) {
+            const parameter = fn.parameters[index], binding = parameter.initializer ?? parameter;
+            next.set(binding, args[index] ?? (parameter.initializer ? { expression: parameter.initializer, environment } : unknown));
+          }
+          closure.add(fn.getText(tree));
+          const returned = (value: ResultFlow) => ts.getModifiers(fn)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+            ? { promise: value.promise ?? value } : value;
+          if (!ts.isBlock(fn.body)) return returned(flow(fn.body, next));
+          const statements = fn.body.statements, terminal = statements.at(-1);
+          if (!terminal || !ts.isReturnStatement(terminal) || !terminal.expression) return unknown;
+          for (const statement of statements.slice(0, -1)) {
+            if (ts.isVariableStatement(statement) || ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression)) continue;
+            // Exact rejection-arm narrowing for then(value=>({value}),error=>({error})).
+            // Arbitrary conditions/returns/loops cannot authorize a result path.
+            if (!rejectionGuard(statement)) return unknown;
+            const receiver = statement.expression.right, key = statement.expression.left.text, candidates = nearestBinding(receiver);
+            if (candidates.length !== 1 || !immutable(candidates[0])) return unknown;
+            const value = flow(receiver, next); if (!value.alternatives?.length || value.alternatives.some(item => !item.fields)) return unknown;
+            const kept = value.alternatives.filter(item => !item.fields!.has(key)); if (!kept.length) return unknown;
+            next.set(candidates[0], kept.length === 1 ? kept[0] : { alternatives: kept });
+          }
+          return returned(flow(terminal.expression, next));
+        } finally { active.delete(fn); }
+      };
+      const flow = (expression: ts.Expression, environment: FlowEnvironment): ResultFlow => {
+        if (!enter()) return unknown;
+        if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression) || ts.isAsExpression(expression)
+          || ts.isTypeAssertionExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isTypeOfExpression(expression)) return flow(expression.expression, environment);
+        if (ts.isAwaitExpression(expression)) { const value = flow(expression.expression, environment); return value.promise ?? value; }
+        if (ts.isIdentifier(expression)) {
+          const candidates = nearestBinding(expression); if (candidates.length !== 1 || !immutable(candidates[0]) || active.has(candidates[0])) return unknown;
+          const binding = candidates[0], supplied = environment.get(binding); active.add(binding);
+          try {
+            if (supplied) return "expression" in supplied ? flow(supplied.expression, supplied.environment) : supplied;
+            if (!ts.isExpression(binding)) return unknown;
+            closure.add(binding.getText(tree)); return flow(binding, environment);
+          } finally { active.delete(binding); }
+        }
+        if (ts.isObjectLiteralExpression(expression)) {
+          const fields = new Map<string, ResultFlow>();
+          for (const member of expression.properties) {
+            if (ts.isPropertyAssignment(member) && member.name && name(member.name) && !fields.has(name(member.name))) fields.set(name(member.name), flow(member.initializer, environment));
+            else if (ts.isShorthandPropertyAssignment(member) && !fields.has(member.name.text)) fields.set(member.name.text, flow(member.name, environment));
+            else return unknown;
+          }
+          return { fields };
+        }
+        if (ts.isPropertyAccessExpression(expression)) return property(flow(expression.expression, environment), expression.name.text);
+        if (!ts.isCallExpression(expression)) return unknown;
+        const imported = importedCall(expression.expression);
+        if (imported) {
+          const returned = importedReturnType(imported); if (!returned) return unknown;
+          closure.add(expression.getText(tree));
+          const value = { origin: { ...imported, type: returned.type } };
+          return returned.promise ? { promise: value } : value;
+        }
+        if (ts.isPropertyAccessExpression(expression.expression)) {
+          const receiver = flow(expression.expression.expression, environment), member = expression.expression.name.text;
+          if (!receiver.promise) return unknown;
+          if (member === "finally" && expression.arguments.length === 1 && (ts.isArrowFunction(expression.arguments[0]) || ts.isFunctionExpression(expression.arguments[0]))) return receiver;
+          if (member !== "then" || expression.arguments.length < 1 || expression.arguments.length > 2) return unknown;
+          const values: ResultFlow[] = [];
+          for (const [index, callback] of expression.arguments.entries()) {
+            if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return unknown;
+            const returned = invoke(callback, [index === 0 ? receiver.promise : unknown], environment); values.push(returned.promise ?? returned);
+          }
+          return { promise: values.length === 1 ? values[0] : { alternatives: values } };
+        }
+        if (!ts.isIdentifier(expression.expression)) return unknown;
+        const candidates = nearestBinding(expression.expression); if (candidates.length !== 1 || !immutable(candidates[0])) return unknown;
+        const binding = candidates[0], declaration = bindingDeclarations.get(binding);
+        const fn = ts.isArrowFunction(binding) || ts.isFunctionExpression(binding) ? binding : declaration && ts.isFunctionDeclaration(declaration) ? declaration : undefined;
+        return fn ? invoke(fn, expression.arguments.map(value => ({ expression: value, environment })), environment) : unknown;
+      };
+      const value = flow(argument, new Map()); return exhausted ? unknown : value;
+    };
+    findReceiverEscapes(tree);
+    propagateMutations();
+    const resultContracts = (argument: ts.Expression, closure: Set<string>): string[] => {
+      const origins = (value: ResultFlow): string[] => value.origin ? [value.origin.file + "#" + value.origin.symbol]
+        : value.alternatives?.length ? value.alternatives.map(origins).reduce((left, right) => left.filter(contract => right.includes(contract))) : [];
+      return origins(traceResult(argument, closure));
+    };
+    const dependencyPaths = (node: ts.Node, seen: Set<string>, closure: Set<string>, fragments: Set<string>, calls: Set<string>, testedExports: Set<string>, testedTypeMembers: Set<string>, tested = true, runtimeTested = tested): string[] => {
       const targets = sourcePaths(node);
       const visit = (part: ts.Node) => {
         if (tested && ts.isStringLiteralLike(part)) fragments.add(part.text.replace(/\s+/gu, ""));
@@ -1364,7 +1686,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             }
           }
         }
-        if (tested && ts.isCallExpression(part) && !/^(?:assert|check|expect)(?:\.|$)/u.test(part.expression.getText(tree))) {
+        if (runtimeTested && ts.isCallExpression(part) && !/^(?:assert|check|expect)(?:\.|$)/u.test(part.expression.getText(tree))) {
           if (ts.isIdentifier(part.expression)) {
             const shadowed = nearest(part, bindings.get(part.expression.text) ?? [], binding => bindingScopes.get(binding)!);
             const target = shadowed.length ? undefined : imports.get(part.expression.text), symbol = importedNames.get(part.expression.text);
@@ -1375,7 +1697,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             const typedTargets = new Set((local.length === 1 ? nearest(part, typed ?? [], binding => binding.scope)
               .filter(binding => binding.scope === bindingScopes.get(local[0]) && (!binding.members || binding.members.has(member))) : []).map(binding => binding.target));
             if (typedTargets.size === 1) for (const target of typedTargets) { targets.add(target); calls.add(target + "#" + part.expression.name.text); }
-            else if (!typed?.length) calls.add(part.expression.name.text);
+            else if (!typed?.length) { const target = moduleOf(receiver); if (target) { targets.add(target); calls.add(target + "#" + member); } }
           }
         }
         const propertyName = ts.isIdentifier(part) && (ts.isPropertyAccessExpression(part.parent) && part.parent.name === part
@@ -1385,10 +1707,11 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
           seen.add(part.text);
           const candidates = nearest(part, bindings.get(part.text) ?? [], binding => bindingScopes.get(binding)!);
           const imported = candidates.length ? undefined : imports.get(part.text); if (imported) targets.add(imported);
-          const importedName = importedNames.get(part.text); if (tested && imported && importedName) testedExports.add(imported + "#" + importedName);
+          const importedName = importedNames.get(part.text); if (runtimeTested && imported && importedName) testedExports.add(imported + "#" + importedName);
           if (candidates?.length === 1) {
             if (!ts.isBlock(candidates[0]) && !ts.isParameter(candidates[0])) closure.add(candidates[0].getText(tree));
-            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, testedTypeMembers, tested && !ts.isBlock(candidates[0]))) targets.add(target);
+            const helper = ts.isBlock(candidates[0]) || ts.isArrowFunction(candidates[0]) || ts.isFunctionExpression(candidates[0]);
+            for (const target of dependencyPaths(candidates[0], seen, closure, fragments, calls, testedExports, testedTypeMembers, tested && !ts.isBlock(candidates[0]), runtimeTested && !helper && immutable(candidates[0]))) targets.add(target);
           }
         }
         ts.forEachChild(part, visit);
@@ -1403,6 +1726,11 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
         if (!argumentsUnderTest.some(argument => ts.isArrowFunction(argument) || ts.isFunctionExpression(argument)) || callee !== "check") {
           const closure = new Set<string>(), fragments = new Set<string>(), calls = new Set<string>(), testedExports = new Set<string>(), testedTypeMembers = new Set<string>();
           const references = unique(argumentsUnderTest.flatMap(argument => dependencyPaths(argument, new Set(), closure, fragments, calls, testedExports, testedTypeMembers)));
+          for (const argument of argumentsUnderTest) {
+            const resultClosure = new Set<string>(), contracts = resultContracts(argument, resultClosure);
+            for (const contract of contracts) { calls.add(contract); references.push(contract.slice(0, contract.lastIndexOf("#"))); }
+            if (contracts.length) for (const source of resultClosure) closure.add(source);
+          }
           const contracts = obligationShapes.filter(obligation => references.includes(obligation.file) && (obligation.valueExport && testedExports.has(obligation.contract)
             || testedTypeMembers.has(obligation.contract)
             || obligation.runtime && (calls.has(obligation.contract) || calls.has(obligation.key)) || [...fragments].some(fragment => {
@@ -1413,7 +1741,7 @@ export function deriveLocalVerificationSourceImpact(scripts: Readonly<Record<str
             return previous.includes(expected) !== next.includes(expected)
               && !obligation.siblings.some(shape => compactShape(shape).includes(expected));
           }))).map(obligation => obligation.contract);
-          shapes.set(JSON.stringify([callee, argumentsUnderTest.map(argument => argument.getText(tree)), unique(closure)]), { references, contracts: unique(contracts) });
+          shapes.set(JSON.stringify([callee, argumentsUnderTest.map(argument => argument.getText(tree)), unique(closure)]), { references: unique(references), contracts: unique(contracts) });
         }
       }
       ts.forEachChild(node, visit);
@@ -2005,7 +2333,7 @@ export function qualifyLocalVerificationTargets(scripts: Readonly<Record<string,
   // Exact Windows24 and GNU Linux22.23.4/fresh-install contexts share this order.
   // The historical Alpine/Windows-mounted dependency context is not inherited.
   const sourceGuards = [
-    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["b803957f15b95977eb4b3403ba1437b66dd6de2559115f4e1c2e243cebce434f", "790abdafab8c3f07a7be31e533e5fba2237f121a65e54a367f33fe16758ed759"], marker: "Executable governance PASS" },
+    { check: "verify:executable-governance", entry: "scripts/verify-executable-governance.mts", sha256: ["a5b6306bf504b2669a090dc0051899323cd94c2afdd186d7bcafda57edb6ea94", "e4abd9183e9b7109b40cd5f686e842f4b1a9510e4528b47729bcba6278c8cc8a"], marker: "Executable governance PASS" },
     { check: "verify:verification-infrastructure", entry: "scripts/verify-verification-infrastructure.mts", sha256: ["cf94c6af79418b32c7953a4e5f4e88a6463844d26b3f185ec270e627a3d15c46", "1dc7b9131ac32554129437c7709e60dbc1cb793b49e6eaf73782c71fd808eeec"], marker: "PASS verification infrastructure:" },
   ];
   const knownContexts = sourceGuards.map(guard => guard.sha256.indexOf(sourceGuardSha256[guard.entry])).filter(index => index >= 0);
@@ -2160,7 +2488,8 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
   }
   assert.ok(Object.hasOwn(scripts, "lint") && Object.hasOwn(scripts, "typecheck"));
   const mode = rank <= 1 && bounded ? "bounded" : "full";
-  const coveredChains = fullPrefix.map(check => localVerificationCommandSteps(scripts, check)).filter((chain): chain is string[] => Boolean(chain));
+  const coveringChecks = mode === "full" ? fullPrefix : [...selected];
+  const coveredChains = coveringChecks.map(check => localVerificationCommandSteps(scripts, check)).filter((chain): chain is string[] => Boolean(chain));
   const invokedChecks = new Set<string>();
   const collectInvocations = (name: string, active = new Set<string>()) => {
     if (active.has(name) || !localVerificationCommandSteps(scripts, name)) return;
@@ -2170,13 +2499,14 @@ export function planLocalVerification(scripts: Readonly<Record<string, string>>,
       if (nested) { invokedChecks.add(nested[1]); collectInvocations(nested[1], next); }
     }
   };
-  for (const check of fullPrefix) collectInvocations(check);
-  const redundantAdditionalChecks = mode === "full" ? [...selected].filter(check => {
-    if (fullPrefix.includes(check) || !invokedChecks.has(check)) return false;
+  for (const check of coveringChecks) collectInvocations(check);
+  const redundantAdditionalChecks = [...selected].filter(check => {
+    if (mode === "full" && fullPrefix.includes(check) || !invokedChecks.has(check)) return false;
     const additional = localVerificationCommandSteps(scripts, check);
     return Boolean(additional && coveredChains.some(chain => chain.some((_, index) => additional.every((step, offset) => chain[index + offset] === step))));
-  }) : [];
-  const prefix = mode === "bounded" ? [...selected] : [...new Set([...fullPrefix, ...[...selected].filter(check => !redundantAdditionalChecks.includes(check))])];
+  });
+  const additionalChecks = [...selected].filter(check => !redundantAdditionalChecks.includes(check));
+  const prefix = mode === "bounded" ? additionalChecks : [...new Set([...fullPrefix, ...additionalChecks])];
   return { risk: risks[rank], mode, prefix, tail: GATES.map(gate => gate.name), unresolvedVerificationInputs,
     redundantAdditionalChecks,
     ...(actual.changeImpact ? { changeImpact: actual.changeImpact } : {}),
@@ -2322,7 +2652,6 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     if (process.env[key] !== undefined) environment[key] = process.env[key];
   const git = (...args: string[]) => execFileSync("git", args, { cwd: ROOT, env: environment, windowsHide: true,
     timeout: 30_000, maxBuffer: 32_000_000, stdio: ["ignore", "pipe", "pipe"] });
-  if (operationalBudget !== undefined) git("merge-base", "--is-ancestor", "9edaf02f4cd476315d71b306d5f786f3d8d1efd0", "HEAD");
   // Reuse immutable CI baseline selection. Its source-only DRIFT is diagnostic,
   // never permission to omit the fresh behavioral qualification below.
   const additional = [...(options.additionalSourceFiles ?? [])];
@@ -2455,7 +2784,7 @@ export async function qualifyLocalVerificationAdmission(options: { baselineHead?
     assertions = validateLocalVerificationAssertionRelocations({ baselineSources, currentSources, observations: [...assertionsRaw, inputRaw] });
     inputs = validateLocalVerificationInputObservations({ sources: currentSources, observations: inputRaw });
     assert.equal(assertions.status, "PASS", "Original predicates lack qualified source/execution correspondence.");
-    assert.equal(inputs.status, "PASS", "Four verification inputs lack qualified actual-consumer evidence.");
+    assert.equal(inputs.status, "PASS", "Verification inputs lack qualified actual-consumer evidence.");
     assertSnapshot();
   } catch (error) {
     failures.push(error instanceof Error ? error.message : "Admission qualification failed.");
@@ -2872,7 +3201,7 @@ export function registeredVerificationNodeEntries(scripts: Readonly<Record<strin
   }))];
 }
 
-/** Bounded four-input protocol only; orchestration owns nonce, outer cleanup and artifact byte verification. */
+/** Bounded input protocol; orchestration owns nonce, outer cleanup and artifact byte verification. */
 export function validateLocalVerificationInputObservations(input: {
   sources: ReadonlyMap<string, string | Buffer>; observations: unknown;
 }) {
@@ -2938,6 +3267,7 @@ export function validateLocalVerificationInputObservations(input: {
     const ownerName = ts.isFunctionDeclaration(at) ? at.name?.text : ts.isTryStatement(at) ? "$dispatch" : "$module";
     const knownIf = (condition: ts.Expression) => {
       if (ownerName === "verifyWindowsOwnedProcessContracts") return ['process.platform === "win32"', 'process.platform === "linux"'].some(value => key(condition) === key(expression(value)));
+      if (ownerName === "verifySharedChildControls") return key(condition) === key(expression('process.platform === "win32"'));
       if (ownerName === "nativeBuild") return key(condition) === key(expression("build"));
       if (ownerName !== "options") return false;
       if (nodes(condition).some(node => node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword)) return false;
@@ -3141,7 +3471,8 @@ export function validateLocalVerificationInputObservations(input: {
       assert.deepEqual(result.rawExit, { code: exitCode, signal: null }); assert.deepEqual(row.rawExit, result.rawExit); assert.deepEqual(row.cleanup, result.cleanup);
       const cleanup = record(result.cleanup); assert.equal(cleanup.status, "PASS"); assert.equal(cleanup.liveProcesses, 0); assert.equal(cleanup.processTreeVerified, true);
       assert.equal(cleanup.platform, nativeAcceptancePlatform);
-      const prefix = control === "actual_owned_transport_leaf" ? "public-transport-contracts" : "public-cli-missing-output";
+      const prefix = control === "actual_owned_transport_leaf" ? "public-transport-contracts"
+        : control === "actual_owned_preload_input" ? "public-preload-input" : "public-cli-missing-output";
       for (const stream of ["stdout", "stderr"] as const) {
         assert.equal(typeof result[stream], "string");
         assert.equal(archived.get(prefix + "." + stream + ".log"), digest(result[stream] as string), "Owned raw stream differs from its archived bytes.");
@@ -3250,6 +3581,76 @@ export function validateLocalVerificationInputObservations(input: {
     assert.deepEqual(rejected.row.failure, { status: "needs_attention", stage: "cli", code: "OUTPUT_REQUIRED" });
     assert.ok(typeof rejected.result.stderr === "string"); assert.equal(rejected.row.stderrSha256, digest(rejected.result.stderr));
     assert.deepEqual(rejected.result.stderr.split(/\r?\n/u).filter(line => line.trim().startsWith("{")).map(line => JSON.parse(line)), [rejected.row.failure]);
+    stage = "owned_preload_actual_execution";
+    const preloadFile = "scripts/lib/owned-process-crash-probe.cjs";
+    bound(preloadFile, "$module");
+    if (nativeAcceptancePlatform === "win32") {
+      requireExpressions(shared, [
+        'api.run({ sourceDirectory: root, context, children, signal: new AbortController().signal, crashAttribution: { gateId: "admission-preload:" + preloadNonce, commands: [{ id: "admission-preload-leaf", entry: preloadLeaf }] } }, [preloadLeaf], { ...environment, VENESIA_QA_ADMISSION_NONCE: preloadNonce }, "preload-input", 10_000)',
+        'assert.deepEqual(JSON.parse(result.stdout), { nonce: preloadNonce, pid: result.nativeJobIdentity?.rootPid, entrySha256: sha256(preloadLeafSource) })',
+        'assert.equal(result.crashAttribution?.status, "COMPLETE_DIAGNOSTIC_ONLY")', 'assert.equal(readSource(preloadFile), preloadSource)',
+        'writeFileSync(preloadLeaf, preloadLeafSource, { flag: "wx", mode: 0o600 })',
+        'assert.equal(config.directory, path.join(directory, "public-preload-input-crash-nodes"))',
+        'assert.deepEqual(config.commands, [{ id: "admission-preload-leaf", entry: preloadLeaf, sha256: sha256(preloadLeafSource) }])',
+      ]);
+      const preload = owned("actual_owned_preload_input", preloadFile, 0), nonce = preload.row.nonce;
+      assert.equal(nonce, raw.nonce); assert.equal(preload.row.sourceSha256, digest(source(preloadFile))); assert.equal(preload.result.stderr, "");
+      const identity = record(preload.result.nativeJobIdentity), terminal = record(preload.result.nativeJobReceipt);
+      const rawFiles = new Map<string, string>();
+      for (const value of rows(preload.row.rawArtifacts)) {
+        const artifact = record(value); assert.ok(typeof artifact.file === "string" && typeof artifact.text === "string");
+        assert.ok(artifact.text.length <= 1_048_576); assert.equal(rawFiles.has(artifact.file), false);
+        assert.equal(artifact.sha256, digest(artifact.text)); assert.equal(archived.get(artifact.file), artifact.sha256); rawFiles.set(artifact.file, artifact.text);
+      }
+      assert.equal(rawFiles.size, 5);
+      const bytes = (file: string) => { const text = rawFiles.get(file); assert.ok(text !== undefined); return text; };
+      const config = record(JSON.parse(bytes("public-preload-input.crash-config.json")));
+      const gateId = "admission-preload:" + raw.nonce; assert.equal(config.schema, 1); assert.equal(config.gateId, gateId);
+      assert.equal(config.probeSha256, digest(source(preloadFile)));
+      const commands = rows(config.commands).map(value => record(value)); assert.equal(commands.length, 1);
+      const command = commands[0]!; assert.equal(command.id, "admission-preload-leaf"); assert.ok(typeof command.entry === "string");
+      const actualArtifact = record(preload.result.crashAttribution); assert.ok(typeof actualArtifact.file === "string");
+      const attributionPath = actualArtifact.file.replaceAll("\\", "/"), suffix = "public-preload-input.crash-attribution.json";
+      assert.ok(attributionPath.endsWith("/" + suffix)); const originalDirectory = attributionPath.slice(0, -suffix.length);
+      assert.match(originalDirectory, /^[a-zA-Z]:\/.*\/venisia-owned-child-controls-[a-zA-Z0-9_-]+\/$/u);
+      assert.equal(command.entry.replaceAll("\\", "/"), originalDirectory + "preload-input-leaf.cjs");
+      assert.ok(typeof config.directory === "string"); assert.equal(config.directory.replaceAll("\\", "/"), originalDirectory + "public-preload-input-crash-nodes");
+      assert.equal(command.sha256, digest(bytes("preload-input-leaf.cjs")));
+      assert.deepEqual(JSON.parse(String(preload.result.stdout)), { nonce, pid: identity.rootPid, entrySha256: command.sha256 });
+      const leafBindings = nodes(shared).filter((node): node is ts.VariableDeclaration => ts.isVariableDeclaration(node) && node.name.getText() === "preloadLeafSource");
+      assert.equal(leafBindings.length, 1); const leaf = leafBindings[0]!.initializer; assert.ok(leaf && ts.isStringLiteralLike(leaf));
+      assert.equal(bytes("preload-input-leaf.cjs"), leaf.text);
+      const parseRows = (text: string) => text.split(/\r?\n/u).filter(Boolean).map(line => record(JSON.parse(line)));
+      const nativeRows = parseRows(bytes("public-preload-input.crash-native.jsonl"));
+      const nodeFiles = [...rawFiles.keys()].filter(file => /^public-preload-input-crash-nodes\/\d+-[a-f0-9-]{36}\.node\.jsonl$/u.test(file)); assert.equal(nodeFiles.length, 1);
+      const nodeRows = parseRows(bytes(nodeFiles[0]!)); assert.ok(nodeRows.length >= 2 && nodeRows.length < 4096);
+      const start = nodeRows[0]!, end = nodeRows.at(-1)!;
+      assert.equal(nodeFiles[0], "public-preload-input-crash-nodes/" + start.pid + "-" + start.probeId + ".node.jsonl");
+      assert.equal(start.kind, "node_start"); assert.equal(end.kind, "node_exit"); assert.equal(end.exitCode, 0);
+      assert.equal(start.pid, identity.rootPid); assert.equal(start.commandId, command.id); assert.equal(start.entryKind, "allowlisted-entry");
+      for (const row of nodeRows) {
+        assert.equal(row.gateId, gateId); assert.equal(row.pid, start.pid); assert.equal(row.probeId, start.probeId);
+        assert.equal(row.commandId, command.id); assert.equal(row.entryKind, "allowlisted-entry");
+        assert.equal(row.node, runtime.node); assert.equal(row.v8, runtime.v8); assert.equal(row.mainIsolateOnly, true);
+      }
+      const diagnostic = record(terminal.diagnostic), cleanup = record(terminal.cleanup);
+      const qualified = qualifyOwnedCrashAttribution({ gateId, jobToken: String(identity.jobToken),
+        commands: [{ id: String(command.id), entry: command.entry, sha256: String(command.sha256) }], nativeRows, nodeRows,
+        totalProcesses: Number(cleanup.totalProcesses), nativeComplete: diagnostic.complete === true,
+        rootIdentity: { pid: Number(identity.rootPid), creationTimeFileTime: String(identity.rootCreationTimeFileTime) }, rootExitCode: 0 });
+      assert.equal(qualified.status, "COMPLETE_DIAGNOSTIC_ONLY");
+      const actual = record(JSON.parse(bytes("public-preload-input.crash-attribution.json")));
+      assert.deepEqual(actual, { ...qualified, sourceBindings: [{ id: command.id, sha256: command.sha256 }],
+        probeSha256: config.probeSha256, limitsUnchanged: true, argsUnchanged: true });
+      assert.equal(actualArtifact.status, qualified.status);
+      assert.equal(actualArtifact.sha256, digest(bytes("public-preload-input.crash-attribution.json")));
+      coverage.push({ file: preloadFile, check, entry, evidence: { kind: "qualified_input_control_observations", role: "actual_owned_node_preload",
+        control: "actual_owned_preload_input", nonce: raw.nonce, artifacts: [...artifacts.keys()] } });
+    } else {
+      const preload = proof("actual_owned_preload_input"); assert.equal(preload.status, "NOT_EXECUTED_PLATFORM_UNSUPPORTED");
+      assert.equal(preload.platform, "linux"); assert.equal(preload.nativeExecuted, false); assert.equal(preload.preloadExecuted, false);
+      assert.equal(preload.actualRootProcessesAllocated, 0); assert.equal(preload.actualResult, undefined); assert.equal(preload.rawArtifacts, undefined);
+    }
     for (const [file, role, control] of [[lockFile, "read_parse_validate_data", "actual_release_lock_input"], ["scripts/lib/windows-owned-process.cs", "compiled_native_owner", "windows_imported_type_and_source_contracts"],
       ["scripts/qa-isolated-supabase-transport.mjs", "owned_executable_leaf", "actual_owned_transport_leaf"], [cliFile, "actual_parser_dispatcher_and_rejection", "actual_cli_parser_dispatcher"]])
       coverage.push({ file: file!, check, entry, evidence: { kind: "qualified_input_control_observations",
@@ -5024,11 +5425,86 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv, re
 }
 
 /** One owned Node-child lifecycle shared by Public gates and qualified targeted verification. */
+/** Diagnostic completeness only; no exit-code, resource or release policy. */
+export function qualifyOwnedCrashAttribution(input: {
+  gateId: string; jobToken: string; commands: readonly { id: string; entry: string; sha256: string }[];
+  nativeRows: Record<string, unknown>[]; nodeRows: Record<string, unknown>[]; totalProcesses: number | null; nativeComplete: boolean;
+  rootIdentity: { pid: number; creationTimeFileTime: string } | null; rootExitCode: number | null; readIssues?: string[];
+}) {
+  const issues = new Set<string>();
+  if (input.readIssues?.length) issues.add("DIAGNOSTIC_READ_INCOMPLETE");
+  const number = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+  const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const utc = (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(value) && Number.isFinite(Date.parse(value)) ? value : null;
+  const identityKey = (row: Record<string, unknown>) => Number.isSafeInteger(row.pid) && Number(row.pid) > 0 && typeof row.creationTimeFileTime === "string"
+    && /^[1-9]\d{11,19}$/u.test(row.creationTimeFileTime) ? `${row.pid}:${row.creationTimeFileTime}` : null;
+  const nativeRows = input.nativeRows.filter(row => {
+    if (row.gateId !== input.gateId || row.jobToken !== input.jobToken) { issues.add("NATIVE_GATE_OR_JOB_MISMATCH"); return false; } return true;
+  });
+  const starts = nativeRows.filter(row => row.kind === "process_start"), exits = nativeRows.filter(row => row.kind === "process_exit");
+  const terminal = nativeRows.filter(row => row.kind === "diagnostic_terminal");
+  if (input.nativeComplete !== true || terminal.length !== 1 || terminal[0]!.complete !== true || terminal[0]!.handlesClosed !== true) issues.add("NATIVE_OBSERVER_INCOMPLETE");
+  if (input.totalProcesses === null || starts.length !== input.totalProcesses || exits.length !== starts.length) issues.add("NATIVE_PROCESS_COVERAGE_INCOMPLETE");
+  const startKeys = starts.map(identityKey);
+  if (startKeys.some(key => key === null) || new Set(startKeys).size !== startKeys.length || new Set(starts.map(row => row.pid)).size !== starts.length) issues.add("NATIVE_BIRTH_IDENTITY_INVALID");
+  const rootKey = input.rootIdentity ? `${input.rootIdentity.pid}:${input.rootIdentity.creationTimeFileTime}` : null;
+  const rootStarts = starts.filter(row => identityKey(row) === rootKey), rootExits = exits.filter(row => identityKey(row) === rootKey);
+  if (!rootKey || rootStarts.length !== 1 || rootExits.length !== 1 || input.rootExitCode === null || rootExits[0]!.exitCode !== input.rootExitCode) issues.add("NATIVE_ROOT_BINDING_INCOMPLETE");
+  const nodeStarts = input.nodeRows.filter(row => row.kind === "node_start");
+  const assigned = new Set<Record<string, unknown>>();
+  const processRows = starts.map(start => {
+    const key = identityKey(start), matching = exits.filter(row => identityKey(row) === key);
+    const end = matching.length === 1 ? matching[0]! : {};
+    const startedUtc = utc(start.startedUtc), endedUtc = utc(end.endedUtc);
+    if (start.ownership !== "exact-private-job" || matching.length !== 1 || !startedUtc || !endedUtc || Date.parse(endedUtc) < Date.parse(startedUtc)) issues.add("PROCESS_TERMINAL_IDENTITY_INCOMPLETE");
+    if (key && startedUtc && Number(BigInt(start.creationTimeFileTime as string) / BigInt(10_000) - BigInt(11_644_473_600_000)) !== Date.parse(startedUtc)) issues.add("NATIVE_CREATION_CLOCK_MISMATCH");
+    const matches = nodeStarts.filter(row => row.pid === start.pid && row.gateId === input.gateId && utc(row.utc)
+      && startedUtc && endedUtc && Date.parse(String(row.utc)) >= Date.parse(startedUtc) && Date.parse(String(row.utc)) <= Date.parse(endedUtc));
+    const node = matches.length === 1 ? matches[0]! : undefined;
+    if (matches.length > 1) issues.add("NODE_BIRTH_AMBIGUOUS");
+    const executableKind = ["node.exe", "cmd.exe", "chrome.exe", "chromium.exe", "conhost.exe", "powershell.exe", "pwsh.exe", "other"].includes(String(start.executableKind)) ? String(start.executableKind) : "other";
+    if (executableKind === "other") issues.add("NATIVE_EXECUTABLE_UNMAPPED");
+    if (executableKind === "node.exe" && !node) issues.add("NODE_COMMAND_MISSING");
+    if (node) { if (assigned.has(node)) issues.add("NODE_BIRTH_REUSED"); assigned.add(node); }
+    const command = node && input.commands.find(row => row.id === node.commandId);
+    const entryKind = node?.entryKind === "node-eval" ? "node-eval" : command ? "allowlisted-entry" : "unmapped-entry";
+    if (node && !command && entryKind !== "node-eval") issues.add("NODE_COMMAND_UNMAPPED");
+    const nodeSamples = node ? input.nodeRows.filter(row => row.probeId === node.probeId && row.pid === node.pid && row.gateId === input.gateId).map(row => {
+      const memory = object(row.memory), heap = object(row.heap), usage = object(row.usage);
+      return { kind: ["node_start", "node_memory", "node_exit"].includes(String(row.kind)) ? String(row.kind) : "unknown", utc: utc(row.utc),
+        sequence: number(row.sequence), heapUsedBytes: number(memory.heapUsed), heapTotalBytes: number(memory.heapTotal), rssBytes: number(memory.rss),
+        externalBytes: number(memory.external), heapLimitBytes: number(heap.heapSizeLimit), v8PeakMallocedBytes: number(heap.peakMallocedMemory),
+        peakRssKiB: number(usage.maxRssKiB), exitCode: number(row.exitCode) };
+    }) : [];
+    if (nodeSamples.some(row => !row.utc || row.sequence === null || row.heapLimitBytes === null
+      || !startedUtc || !endedUtc || Date.parse(row.utc) < Date.parse(startedUtc) || Date.parse(row.utc) > Date.parse(endedUtc))) issues.add("NODE_SAMPLE_MALFORMED");
+    if (nodeSamples.some((row, index) => row.sequence !== index + 1 || row.kind === "unknown"
+      || index === 0 && row.kind !== "node_start" || index > 0 && row.kind === "node_start"
+      || row.kind === "node_exit" && index !== nodeSamples.length - 1
+      || index > 0 && row.utc && nodeSamples[index - 1]!.utc && Date.parse(row.utc) < Date.parse(nodeSamples[index - 1]!.utc!))) issues.add("NODE_SAMPLE_SEQUENCE_INVALID");
+    if (nodeSamples.some(row => row.sequence !== null && row.sequence >= 4095)) issues.add("NODE_SAMPLE_CAP_REACHED");
+    const exitCode = number(end.exitCode);
+    if (exitCode === null) issues.add("PROCESS_EXIT_CODE_MISSING");
+    return { pid: number(start.pid), creationTimeFileTime: key ? start.creationTimeFileTime as string : null,
+      startedUtc, endedUtc, exitCode, reason: end.reason === "process-exit-observed" ? "process-exit-observed" : "unknown",
+      ownerTerminationRequested: end.ownerTerminationRequested === true,
+      executableKind, commandId: command?.id ?? null, entryKind, ppid: number(node?.ppid), nodeSamples,
+      javascriptExitObserved: nodeSamples.some(row => row.kind === "node_exit"), nativeExitObserved: matching.length === 1 };
+  });
+  if (nodeStarts.some(row => !assigned.has(row))) issues.add("NODE_NATIVE_IDENTITY_UNBOUND");
+  return { schema: 1, gateId: input.gateId, jobToken: input.jobToken,
+    status: issues.size ? "PARTIAL_DIAGNOSTIC_ONLY" as const : "COMPLETE_DIAGNOSTIC_ONLY" as const,
+    issues: [...issues].sort(), processRows, totalProcesses: input.totalProcesses,
+    nativeMemoryRecords: nativeRows.filter(row => row.kind === "memory").length,
+    diagnosticOnly: true, releaseQualified: false, oomCauseInferred: false, memoryLeakInferred: false };
+}
+
 export function runOwnedVerificationChild(ports: {
   sourceDirectory: string;
   context: Pick<PrivatePublicVerificationContext, "runDirectory" | "sanitize" | "cleanEnvironment">;
   children: Set<ChildProcess>;
   signal: AbortSignal;
+  crashAttribution?: { gateId: string; commands: readonly { id: string; entry: string }[] };
 }, args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number): Promise<{ code: number; stdout: string; stderr: string; durationMs: number;
   rawExit: { code: number | null; signal: NodeJS.Signals | null }; identity: { pid: number | null; ppid: number; spawnedAtUtc: string };
   cleanup: { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
@@ -5037,6 +5513,7 @@ export function runOwnedVerificationChild(ports: {
   nativeCapability?: { executable: string; executableSha256: string; sourceSha256: string; compilerSha256: string; provenance: string };
   helperExit?: { code: number | null; signal: NodeJS.Signals | null };
   helperIdentity?: { pid: number | null; ppid: number };
+  crashAttribution?: { file: string; sha256: string; status: "COMPLETE_DIAGNOSTIC_ONLY" | "PARTIAL_DIAGNOSTIC_ONLY" };
   timingEvidence?: { file: string; sha256: string; status: "COMPLETE_DIAGNOSTIC_ONLY" | "PARTIAL_DIAGNOSTIC_ONLY";
     overhead: { setupMs: number; observerMs: number; readParseMs: number; serializationMs: number; writeMs: number } } }> {
   const { sourceDirectory, context, children, signal } = ports;
@@ -5046,6 +5523,69 @@ export function runOwnedVerificationChild(ports: {
     assert.ok(Number.isSafeInteger(limitMs) && limitMs > 0 && limitMs <= 2_147_483_647, "Owned child deadline must be a finite timer-safe positive integer.");
     const stdoutPath = ownedPath(context, `public-${name}.stdout.log`), stderrPath = ownedPath(context, `public-${name}.stderr.log`);
     assert.equal(existsSync(stdoutPath) || existsSync(stderrPath), false, "Owned child evidence already exists; refuse duplicate execution.");
+    const crashProbe = (() => {
+      if (!ports.crashAttribution) return undefined;
+      assert.equal(process.platform, "win32", "Native crash attribution currently requires the Windows Job owner.");
+      assert.ok(/^[a-zA-Z0-9:_-]{1,96}$/u.test(ports.crashAttribution.gateId));
+      assert.ok(!env.NODE_OPTIONS && !env.VENESIA_QA_CRASH_CONFIG, "Diagnostic injection cannot replace existing Node options or config.");
+      assert.ok(ports.crashAttribution.commands.length > 0 && ports.crashAttribution.commands.length <= 256);
+      const commands = ports.crashAttribution.commands.map(row => {
+        assert.ok(/^[a-zA-Z0-9:_.\/-]{1,160}$/u.test(row.id) && isAbsolute(row.entry));
+        assert.ok(lstatSync(row.entry).isFile() && !lstatSync(row.entry).isSymbolicLink() && realpathSync(row.entry) === row.entry);
+        return { ...row, sha256: digest(readFileSync(row.entry)) };
+      });
+      assert.equal(new Set(commands.map(row => row.id)).size, commands.length);
+      assert.equal(new Set(commands.map(row => row.entry.toLowerCase())).size, commands.length);
+      const probe = join(sourceDirectory, "scripts/lib/owned-process-crash-probe.cjs");
+      assert.ok(lstatSync(probe).isFile() && !lstatSync(probe).isSymbolicLink() && realpathSync(probe) === probe);
+      const directory = ownedPath(context, `public-${name}-crash-nodes`);
+      assert.equal(existsSync(directory), false); mkdirSync(directory, { mode: 0o700 });
+      const configPath = ownedPath(context, `public-${name}.crash-config.json`);
+      const config = { schema: 1, gateId: ports.crashAttribution.gateId, directory, commands, probeSha256: digest(readFileSync(probe)) };
+      writeFileSync(configPath, JSON.stringify(config) + "\n", { mode: 0o600, flag: "wx" });
+      const nativePath = ownedPath(context, `public-${name}.crash-native.jsonl`);
+      return { gateId: config.gateId, nativePath,
+        environment: { NODE_OPTIONS: '--require="' + probe.replaceAll("\\", "/") + '"', VENESIA_QA_CRASH_CONFIG: configPath },
+        finish: (identity: WindowsJobIdentity | null, native: WindowsJobReceipt | null) => {
+          const readIssues = new Set<string>();
+          const readLines = (file: string): Record<string, unknown>[] => {
+            try {
+              const stat = lstatSync(file); assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.size <= 16_777_216);
+              const rows: Record<string, unknown>[] = [];
+              for (const line of readFileSync(file, "utf8").split(/\r?\n/u).filter(Boolean)) {
+                if (rows.length >= 32_768) { readIssues.add("DIAGNOSTIC_ROW_BOUND"); break; }
+                try { const value: unknown = JSON.parse(line); assert.ok(value && typeof value === "object" && !Array.isArray(value)); rows.push(value as Record<string, unknown>); }
+                catch { readIssues.add("INVALID_OR_TORN_JSONL_RECORD"); }
+              }
+              return rows;
+            } catch { readIssues.add("DIAGNOSTIC_FILE_UNAVAILABLE_OR_OUT_OF_BOUND"); return []; }
+          };
+          let nodeFiles: string[] = [];
+          try { nodeFiles = readdirSync(directory); } catch { readIssues.add("NODE_EVIDENCE_DIRECTORY_UNAVAILABLE"); }
+          if (nodeFiles.length > 1024) { readIssues.add("NODE_FILE_COUNT_BOUND"); nodeFiles = nodeFiles.slice(0, 1024); }
+          const nodeRows: Record<string, unknown>[] = [];
+          let bytes = 0;
+          for (const file of nodeFiles) {
+            if (!/^\d+-[a-f0-9-]{36}\.node\.jsonl$/u.test(file)) { readIssues.add("NODE_FILE_NAME_INVALID"); continue; }
+            try { bytes += lstatSync(join(directory, file)).size; } catch { readIssues.add("NODE_FILE_UNAVAILABLE"); continue; }
+            if (bytes > 33_554_432 || nodeRows.length >= 65_536) { readIssues.add("NODE_TOTAL_READ_BOUND"); break; }
+            nodeRows.push(...readLines(join(directory, file)));
+          }
+          assert.equal(digest(readFileSync(probe)), config.probeSha256, "Crash probe source changed during execution.");
+          for (const command of commands) assert.equal(digest(readFileSync(command.entry)), command.sha256);
+          const evidence = qualifyOwnedCrashAttribution({ gateId: config.gateId, jobToken: identity?.jobToken ?? "missing",
+            commands, nativeRows: existsSync(nativePath) ? readLines(nativePath) : [], nodeRows, totalProcesses: native?.cleanup.totalProcesses ?? null,
+            nativeComplete: native?.diagnostic?.complete === true, readIssues: [...readIssues],
+            rootIdentity: identity ? { pid: identity.rootPid, creationTimeFileTime: identity.rootCreationTimeFileTime } : null,
+            rootExitCode: native?.rootExitCode ?? null });
+          const file = ownedPath(context, `public-${name}.crash-attribution.json`);
+          const text = JSON.stringify({ ...evidence, sourceBindings: commands.map(row => ({ id: row.id, sha256: row.sha256 })),
+            probeSha256: config.probeSha256, limitsUnchanged: true, argsUnchanged: true }, null, 2) + "\n";
+          assert.equal(context.sanitize(text), text, "Crash attribution contains private content.");
+          writeFileSync(file, text, { mode: 0o600, flag: "wx" });
+          return { file, sha256: digest(text), status: evidence.status };
+        } };
+    })();
     const gate57Timing = (() => {
       // Unrelated owners/argv perform no additional filesystem or runtime work.
       if (args.length !== 3 || args[1] !== "run" || args[2] !== "verify:admin-runtime") return undefined;
@@ -5251,7 +5791,8 @@ export function runOwnedVerificationChild(ports: {
       return { environment: enabled ? { npm_config_timing: "true", npm_config_logs_dir: directory, npm_config_logs_max: "0" } : {}, observe, finish,
         beginDeadline: () => { ownerTimeoutReferenceMonotonicMs = performance.now(); } };
     })();
-    const invocationEnvironment = gate57Timing ? { ...env, ...gate57Timing.environment } : env;
+    const timingEnvironment = gate57Timing ? { ...env, ...gate57Timing.environment } : env;
+    const invocationEnvironment = crashProbe ? { ...timingEnvironment, ...crashProbe.environment } : timingEnvironment;
     if (process.platform === "linux") {
       assert.equal(typeof process.getuid, "function", "Owned Linux cleanup needs current-user process identity.");
       assert.ok(readFileSync("/proc/self/stat", "utf8").length > 0 && lstatSync("/proc").isDirectory(), "Owned Linux cleanup needs inspectable procfs.");
@@ -5261,7 +5802,8 @@ export function runOwnedVerificationChild(ports: {
     const markerKey = "VENESIA_QA_OWNED_CHILD", marker = globalThis.crypto.randomUUID();
     const spawnedAtUtc = new Date().toISOString();
     const windows = process.platform === "win32" ? spawnWindowsOwnedProcess({ args, cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
-      identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs }) : undefined;
+      identityPath: ownedPath(context, `public-${name}.native-identity.json`), receiptPath: ownedPath(context, `public-${name}.native-result.json`), limitMs,
+      ...(crashProbe ? { diagnosticPath: crashProbe.nativePath, diagnosticGate: crashProbe.gateId } : {}) }) : undefined;
     const child = windows?.child ?? spawn(process.execPath, args, { cwd: sourceDirectory, env: { ...invocationEnvironment, [markerKey]: marker },
       detached: process.platform === "linux", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     children.add(child); let stdout = "", stderr = "", failed = false;
@@ -5419,6 +5961,13 @@ export function runOwnedVerificationChild(ports: {
         writeFileSync(stderrPath, cleanErrors, { mode: 0o600, flag: "wx" });
       } catch (error) { evidenceFailure = error; }
       let timingEvidence: ReturnType<NonNullable<typeof gate57Timing>["finish"]> | undefined;
+      let crashAttribution: ReturnType<NonNullable<typeof crashProbe>["finish"]> | undefined;
+      let crashAttributionFailure: { stage: string; originalExitPreserved: true } | undefined;
+      try { crashAttribution = crashProbe?.finish(nativeJobIdentity, nativeJobReceipt); }
+      catch (error) {
+        crashAttributionFailure = { stage: "attribution_finalize", originalExitPreserved: true };
+        if (rootCode === 0 && !failed && !processFailure && !cleanupFailure) evidenceFailure ??= error;
+      }
       try { timingEvidence = gate57Timing?.finish({ code: rootCode, reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput,
         stderr: cleanErrors, cleanup, nativeJobIdentity, nativeJobReceipt }); }
       catch (error) {
@@ -5437,7 +5986,7 @@ export function runOwnedVerificationChild(ports: {
       const cleanupCode = cleanupData(cleanupError, "code") ?? cleanupData(cleanupCause, "code");
       const cleanupExit = cleanupData(cleanupCause, "exitCode");
       const childResult = { code: rootCode ?? null, signal: rootSignal,
-        identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), durationMs: performance.now() - started,
+        identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), ...(crashAttribution ? { crashAttribution } : {}), ...(crashAttributionFailure ? { crashAttributionFailure } : {}), durationMs: performance.now() - started,
         reason: failureReason ?? (rootCode ? "nonzero_exit" : null), stdout: cleanOutput, stderr: cleanErrors,
         cleanup: cleanup ?? { status: "FAIL" as const, platform: process.platform, method: "owned-child-cleanup", processTreeVerified: false,
           forcedTermination: null, observedProcesses: null, liveProcesses: null, residualProcessesAfterExit: null },
@@ -5454,7 +6003,7 @@ export function runOwnedVerificationChild(ports: {
         : processFailure ?? (cleanupFailure ? new Error(`Public ${name} cleanup failed.`, { cause: cleanupFailure }) : evidenceFailure);
       if (error) { if (error instanceof Error) Object.defineProperty(error, "childResult", { value: childResult, enumerable: true }); reject(error); }
       else { assert.ok(cleanup && cleanOutput !== null && cleanErrors !== null); done({ code: rootCode ?? -1, rawExit: { code: rootCode, signal: rootSignal },
-        identity: childResult.identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
+        identity: childResult.identity, ...nativeProof, ...(timingEvidence ? { timingEvidence } : {}), ...(crashAttribution ? { crashAttribution } : {}), ...(crashAttributionFailure ? { crashAttributionFailure } : {}), stdout: cleanOutput, stderr: cleanErrors, durationMs: childResult.durationMs, cleanup }); }
     };
     child.once("close", code => { void settle(code).catch(reject); });
   });

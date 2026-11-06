@@ -72,6 +72,7 @@ export type WindowsJobReceipt = Omit<WindowsJobIdentity, "rootPid"> & { rootPid:
     retainedOwnedProcessHandles?: number; retainedOwnedProcessIds?: number[]; retainedOwnedHandlesSignaled?: boolean };
   residualMemberEvidence?: { members: { pid: number; creationTimeFileTime: string | null; inExactJob: boolean;
     signaledAfterCleanup: boolean | null; processHandleClosed: boolean | null }[] } | null;
+  diagnostic?: { complete: boolean; handlesClosed: boolean; issues: { stage: string; win32Code: number; pid: number | null }[] };
   nativeFailure: { stage: string; win32Code: number } | null };
 export type WindowsStopReason = "cancelled" | "timeout" | "output_limit" | "owner_shutdown";
 type NativeCleanup = { status: "PASS"; platform: string; method: string; processTreeVerified: boolean; forcedTermination: boolean;
@@ -231,14 +232,22 @@ export function startWindowsClosureObservation(options: { identity: WindowsJobId
 }
 
 export function spawnWindowsOwnedProcess(options: { args: string[]; cwd: string; env: NodeJS.ProcessEnv;
-  identityPath: string; receiptPath: string; limitMs: number }) {
+  identityPath: string; receiptPath: string; limitMs: number; diagnosticPath?: string; diagnosticGate?: string }) {
   assert.ok(Number.isSafeInteger(options.limitMs) && options.limitMs > 0 && options.limitMs <= 86_400_000,
     "Native owned process deadline must be a positive integer no greater than 86400000 ms.");
   const native = nativeBuild(), { identityPath, receiptPath } = options;
   assert.ok(!existsSync(identityPath) && !existsSync(receiptPath), "Native evidence cannot be replaced.");
   for (const file of [identityPath, receiptPath]) assert.equal(realpathSync(dirname(file)), dirname(file), "Native evidence cannot traverse links.");
+  const diagnosticArgs: string[] = [];
+  if (options.diagnosticPath !== undefined || options.diagnosticGate !== undefined) {
+    assert.ok(options.diagnosticPath && options.diagnosticGate && /^[a-zA-Z0-9:_-]{1,96}$/u.test(options.diagnosticGate));
+    assert.equal(dirname(options.diagnosticPath), dirname(identityPath));
+    assert.equal(realpathSync(dirname(options.diagnosticPath)), dirname(options.diagnosticPath));
+    assert.ok(!existsSync(options.diagnosticPath) && options.diagnosticPath !== identityPath && options.diagnosticPath !== receiptPath);
+    diagnosticArgs.push("--diagnostic-path", options.diagnosticPath, "--diagnostic-gate", options.diagnosticGate);
+  }
   const child = spawn(native.executable, ["--identity", identityPath, "--receipt", receiptPath, "--limit-ms", String(Math.ceil(options.limitMs)),
-    "--cleanup-ms", "10000", "--", process.execPath, ...options.args], { cwd: options.cwd, env: options.env,
+    "--cleanup-ms", "10000", ...diagnosticArgs, "--", process.execPath, ...options.args], { cwd: options.cwd, env: options.env,
     windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
   // Only this owner holds the control pipe. The native root receives NUL stdin,
   // so owner death closes this pipe and cannot be hidden by inherited descendants.

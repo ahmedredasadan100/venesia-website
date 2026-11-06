@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import * as ts from "typescript";
@@ -1583,6 +1583,7 @@ function collectSymbolAwareExecutableSourceGraph(input: {
     const selected = selectedSourceFile(parsed, requestedExports);
     graph.set(sourceFile, selected);
     if (traversalBoundaries.has(sourceFile)) continue;
+    for (const entry of directNodeEnvironmentPreloads(selected, input.root, input.sourceOverrides)) enqueue(entry, null);
 
     for (const statement of selected.statements) {
       if (
@@ -1981,6 +1982,263 @@ function directWebpackEntries(parsed: ts.SourceFile, workspaceRoot: string): str
   return [...new Set(result)];
 }
 
+/** One consumed, immutable --require environment producer; not a general Node option parser. */
+function directNodeEnvironmentPreloads(parsed: ts.SourceFile, root: string, sources?: SourceOverrides): string[] {
+  if (!parsed.text.includes("NODE_OPTIONS") || !parsed.text.includes("--require=")) return [];
+  const index = staticSourceIndex(parsed), result = new Set<string>();
+  const literal = (node: ts.Node | undefined) => node && ts.isStringLiteralLike(node) ? node.text : undefined;
+  const identity = (node: ts.Expression | undefined) => {
+    if (!node) return null;
+    const current = unwrapStaticExpression(node);
+    if (!ts.isIdentifier(current)) return null;
+    const binding = lexicalBindingForReference(parsed, current);
+    return binding ? `${binding.declaration.pos}:${current.text}` : null;
+  };
+  const same = (left: ts.Expression, right: ts.Expression) => identity(left) !== null && identity(left) === identity(right);
+  const constant = (node: ts.Expression) => {
+    const current = unwrapStaticExpression(node);
+    if (!ts.isIdentifier(current)) return null;
+    const binding = lexicalBindingForReference(parsed, current);
+    return binding?.kind === "variable" && ts.isIdentifier(binding.declaration.name) && binding.declaration.initializer &&
+      binding.declaration.pos < current.pos && (binding.declarationList.flags & ts.NodeFlags.Const) !== 0 ? binding.declaration : null;
+  };
+  const imported = (node: ts.Expression, module: string, name: string) => {
+    if (!ts.isIdentifier(node)) return false;
+    const binding = lexicalBindingForReference(parsed, node);
+    if (binding?.kind !== "import" || !ts.isImportSpecifier(binding.declaration) || binding.declaration.isTypeOnly ||
+      (binding.declaration.propertyName ?? binding.declaration.name).text !== name) return false;
+    const declaration = binding.declaration.parent.parent.parent;
+    return ts.isImportDeclaration(declaration) && !declaration.importClause?.isTypeOnly && literal(declaration.moduleSpecifier) === module;
+  };
+  const propertyName = (name: ts.PropertyName): string | undefined => {
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
+    if (!ts.isComputedPropertyName(name)) return undefined;
+    const value = constant(name.expression)?.initializer;
+    return literal(value);
+  };
+  const properties = (expression: ts.Expression, optionSpreads = false): Map<string, ts.Expression> | null => {
+    const node = unwrapStaticExpression(expression);
+    if (!ts.isObjectLiteralExpression(node)) return null;
+    const values = new Map<string, ts.Expression>();
+    for (const property of node.properties) {
+      if (optionSpreads && ts.isSpreadAssignment(property)) {
+        const conditional = unwrapStaticExpression(property.expression);
+        if (!ts.isConditionalExpression(conditional)) return null;
+        const branches = [conditional.whenTrue, conditional.whenFalse].map(branch => properties(branch));
+        if (branches.some(branch => !branch || [...branch.keys()].some(name => ["cwd", "env", "args"].includes(name)))) return null;
+        continue;
+      }
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return null;
+      const name = propertyName(property.name);
+      if (name === undefined || values.has(name)) return null;
+      values.set(name, ts.isPropertyAssignment(property) ? property.initializer : property.name);
+    }
+    return values;
+  };
+  const truth = (expression: ts.Expression, depth = 0): boolean | undefined => {
+    if (depth > 8) return undefined;
+    const node = unwrapStaticExpression(expression);
+    if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
+    if (node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) return false;
+    if (ts.isIdentifier(node) && node.text === "undefined" && !lexicalBindingForReference(parsed, node)) return false;
+    if (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return Boolean(ts.isNumericLiteral(node) ? Number(node.text) : node.text);
+    if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
+      const value = truth(node.operand, depth + 1); return value === undefined ? undefined : !value;
+    }
+    const value = constant(node)?.initializer;
+    return value ? truth(value, depth + 1) : undefined;
+  };
+  const reachable = (node: ts.Node) => {
+    for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
+      if (ts.isBlock(current)) {
+        const containing = current.statements.findIndex(statement => nodeIsWithin(node, statement));
+        if (containing >= 0 && current.statements.slice(0, containing).some(statement => ts.isReturnStatement(statement) || ts.isThrowStatement(statement))) return false;
+      }
+      if (ts.isIfStatement(current)) {
+        const value = truth(current.expression);
+        if (value === false && nodeIsWithin(node, current.thenStatement) || value === true && current.elseStatement && nodeIsWithin(node, current.elseStatement)) return false;
+      }
+      if (ts.isConditionalExpression(current)) {
+        const value = truth(current.condition);
+        if (value === false && nodeIsWithin(node, current.whenTrue) || value === true && nodeIsWithin(node, current.whenFalse)) return false;
+      }
+      if (ts.isBinaryExpression(current) && nodeIsWithin(node, current.right)) {
+        const value = truth(current.left);
+        if (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken && value === false ||
+          current.operatorToken.kind === ts.SyntaxKind.BarBarToken && value === true) return false;
+      }
+    }
+    return true;
+  };
+  const rootIdentifier = (expression: ts.Expression): ts.Identifier | null => {
+    let current = unwrapStaticExpression(expression);
+    while (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) current = unwrapStaticExpression(current.expression);
+    return ts.isIdentifier(current) ? current : null;
+  };
+  const nodeExecutable = (node: ts.Expression, tree: ts.SourceFile) => ts.isPropertyAccessExpression(node) && node.name.text === "execPath" &&
+    ts.isIdentifier(node.expression) && node.expression.text === "process" && !lexicalBindingForReference(tree, node.expression);
+  const nativeForwarding = (call: ts.CallExpression) => {
+    if (!ts.isIdentifier(call.expression) || call.arguments.length !== 1) return null;
+    const options = properties(call.arguments[0], true);
+    if (!options?.has("cwd") || !options.has("env")) return null;
+    const binding = lexicalBindingForReference(parsed, call.expression);
+    if (binding?.kind !== "import" || !ts.isImportSpecifier(binding.declaration) || binding.declaration.isTypeOnly) return null;
+    const declaration = binding.declaration.parent.parent.parent;
+    if (!ts.isImportDeclaration(declaration) || declaration.importClause?.isTypeOnly || !ts.isStringLiteral(declaration.moduleSpecifier)) return null;
+    const file = resolveModule(root, parsed.fileName, declaration.moduleSpecifier.text, sources);
+    if (!file || isAbsolute(file) || file.startsWith("../") || sources && !sources.has(file)) return null;
+    const text = sources?.get(file) ?? readFileSync(join(root, file), "utf8"), tree = parseTypeScriptSource(file, text);
+    const exported = (binding.declaration.propertyName ?? binding.declaration.name).text;
+    const owners = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === exported &&
+      node.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) === true);
+    if (owners.length !== 1 || !owners[0].body || owners[0].parameters.length !== 1 || !ts.isIdentifier(owners[0].parameters[0].name)) return null;
+    const owner = owners[0], parameter = owner.parameters[0];
+    const member = (node: ts.Expression, name: string) => ts.isPropertyAccessExpression(node) && node.name.text === name && ts.isIdentifier(node.expression) &&
+      lexicalBindingForReference(tree, node.expression)?.declaration === parameter;
+    const candidates = staticSourceIndex(tree).callExpressions.filter(candidate => {
+      if (!nodeIsWithin(candidate, owner) || !ts.isIdentifier(candidate.expression) || candidate.arguments.length !== 3) return false;
+      if (!ts.isVariableDeclaration(candidate.parent) || candidate.parent.initializer !== candidate || !ts.isVariableDeclarationList(candidate.parent.parent) ||
+        (candidate.parent.parent.flags & ts.NodeFlags.Const) === 0 || !ts.isVariableStatement(candidate.parent.parent.parent) || candidate.parent.parent.parent.parent !== owner.body) return false;
+      const statement = candidate.parent.parent.parent, previous = owner.body!.statements.slice(0, owner.body!.statements.indexOf(statement));
+      let stopped = false;
+      const stop = (node: ts.Node) => {
+        if (ts.isFunctionLike(node)) return;
+        if (ts.isReturnStatement(node) || ts.isThrowStatement(node)) stopped = true;
+        ts.forEachChild(node, stop);
+      };
+      previous.forEach(stop);
+      if (stopped) return false;
+      const imported = lexicalBindingForReference(tree, candidate.expression);
+      if (imported?.kind !== "import" || !ts.isImportSpecifier(imported.declaration) || imported.declaration.isTypeOnly ||
+        (imported.declaration.propertyName ?? imported.declaration.name).text !== "spawn") return false;
+      const moduleImport = imported.declaration.parent.parent.parent;
+      if (!ts.isImportDeclaration(moduleImport) || moduleImport.importClause?.isTypeOnly || literal(moduleImport.moduleSpecifier) !== "node:child_process") return false;
+      const argv = candidate.arguments[1], settings = candidate.arguments[2];
+      if (!ts.isArrayLiteralExpression(argv) || !ts.isObjectLiteralExpression(settings)) return false;
+      const end = argv.elements.length - 1, args = argv.elements[end];
+      if (end < 2 || !ts.isSpreadElement(args) || !member(args.expression, "args") || !nodeExecutable(argv.elements[end - 1], tree) || literal(argv.elements[end - 2]) !== "--") return false;
+      const fields = new Map<string, ts.Expression>();
+      for (const property of settings.properties) {
+        if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name) || fields.has(property.name.text)) return false;
+        fields.set(property.name.text, property.initializer);
+      }
+      return Boolean(fields.get("cwd") && fields.get("env") && member(fields.get("cwd")!, "cwd") && member(fields.get("env")!, "env"));
+    });
+    if (candidates.length !== 1) return null;
+    const forwarded = candidates[0];
+    let safe = true;
+    const inspect = (node: ts.Node) => {
+      if (!safe || node === forwarded || node.pos >= forwarded.end) return;
+      if (ts.isIdentifier(node) && lexicalBindingForReference(tree, node)?.declaration === parameter && node !== parameter.name) {
+        let field: ts.Node = node;
+        while ((ts.isPropertyAccessExpression(field.parent) || ts.isElementAccessExpression(field.parent)) && field.parent.expression === field) field = field.parent;
+        const parent = field.parent;
+        const metadata = field === node && ts.isVariableDeclaration(parent) && parent.initializer === node && ts.isObjectBindingPattern(parent.name) &&
+          ts.isVariableDeclarationList(parent.parent) && (parent.parent.flags & ts.NodeFlags.Const) !== 0 && parent.name.elements.every(element =>
+            !element.dotDotDotToken && !element.initializer && ts.isIdentifier(element.name) && !["env", "cwd", "args"].includes(element.propertyName?.getText(tree) ?? element.name.text));
+        if (field === node && !metadata || ts.isBinaryExpression(parent) && parent.left === field && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment ||
+          ts.isDeleteExpression(parent) || ts.isPostfixUnaryExpression(parent) || ts.isPrefixUnaryExpression(parent) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(parent.operator) ||
+          ts.isCallExpression(parent) && parent.expression === field || ts.isPropertyAccessExpression(field) && field.name.text === "env") safe = false;
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(owner.body!);
+    return safe ? options : null;
+  };
+  for (const call of index.callExpressions) {
+    if (!reachable(call)) continue;
+    // A platform fallback behind another child's result is not independent
+    // execution proof. Its real imported forwarding owner must establish the edge.
+    const direct = imported(call.expression, "node:child_process", "spawn") && call.arguments.length === 3 && nodeExecutable(unwrapStaticExpression(call.arguments[0]), parsed) &&
+      (ts.isReturnStatement(call.parent) || ts.isExpressionStatement(call.parent) || ts.isVariableDeclaration(call.parent) && call.parent.initializer === call);
+    const options = direct ? properties(call.arguments[2]) : nativeForwarding(call), cwd = options?.get("cwd"), env = options?.get("env");
+    if (!cwd || !env || !identity(cwd)) continue;
+    const cwdNode = unwrapStaticExpression(cwd);
+    if (!ts.isIdentifier(cwdNode)) continue;
+    const cwdBinding = lexicalBindingForReference(parsed, cwdNode);
+    if (cwdBinding?.kind !== "variable" || (cwdBinding.declarationList.flags & ts.NodeFlags.Const) === 0 || !ts.isObjectBindingPattern(cwdBinding.declaration.name) ||
+      !cwdBinding.declaration.initializer || !ts.isIdentifier(cwdBinding.declaration.initializer)) continue;
+    const rootPort = cwdBinding.declaration.name.elements.find(element => ts.isIdentifier(element.name) && element.name.text === cwdNode.text && !element.dotDotDotToken && !element.initializer);
+    const portOwner = lexicalBindingForReference(parsed, cwdBinding.declaration.initializer);
+    if (!rootPort || (rootPort.propertyName?.getText(parsed) ?? rootPort.name.getText(parsed)) !== "sourceDirectory" || portOwner?.kind !== "parameter" ||
+      !portOwner.declaration.type || !ts.isTypeLiteralNode(portOwner.declaration.type) || !portOwner.declaration.type.members.some(member => ts.isPropertySignature(member) &&
+        ts.isIdentifier(member.name) && member.name.text === "sourceDirectory" && member.type?.kind === ts.SyntaxKind.StringKeyword)) continue;
+    const finalEnvironment = unwrapStaticExpression(env);
+    if (!ts.isObjectLiteralExpression(finalEnvironment) || !finalEnvironment.properties.length || !ts.isSpreadAssignment(finalEnvironment.properties[0]) ||
+      finalEnvironment.properties.slice(1).some(property => !ts.isPropertyAssignment(property) || propertyName(property.name) === undefined || propertyName(property.name) === "NODE_OPTIONS")) continue;
+    const invocation = constant(finalEnvironment.properties[0].expression), invocationValue = invocation?.initializer && unwrapStaticExpression(invocation.initializer);
+    if (!invocation || !invocationValue || !ts.isConditionalExpression(invocationValue) || truth(invocationValue.condition) === false) continue;
+    const producer = constant(invocationValue.condition), enabled = unwrapStaticExpression(invocationValue.whenTrue);
+    if (!producer || !ts.isObjectLiteralExpression(enabled) || enabled.properties.length !== 2 || !enabled.properties.every(ts.isSpreadAssignment)) continue;
+    const [background, override] = enabled.properties as ts.NodeArray<ts.SpreadAssignment>;
+    if (!same(background.expression, invocationValue.whenFalse)) continue;
+    const forwarded = unwrapStaticExpression(override.expression);
+    if (!ts.isPropertyAccessExpression(forwarded) || !same(forwarded.expression, invocationValue.condition)) continue;
+    const factory = unwrapStaticExpression(producer.initializer!);
+    if (!ts.isCallExpression(factory) || factory.arguments.length !== 0) continue;
+    const closure = unwrapStaticExpression(factory.expression);
+    if (!ts.isArrowFunction(closure) || closure.parameters.length || closure.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) || !ts.isBlock(closure.body)) continue;
+    const statements = closure.body.statements, terminal = statements.at(-1);
+    if (!terminal || !ts.isReturnStatement(terminal) || !terminal.expression) continue;
+    // Only the existing optional early return can bypass this producer. Nested
+    // callbacks are values, not alternate returns from the immediately invoked body.
+    if (statements.slice(0, -1).some(statement => {
+      if (ts.isVariableStatement(statement) || ts.isExpressionStatement(statement)) return false;
+      if (!ts.isIfStatement(statement) || statement.elseStatement || truth(statement.expression) === true) return true;
+      const branch = ts.isBlock(statement.thenStatement) && statement.thenStatement.statements.length === 1 ? statement.thenStatement.statements[0] : statement.thenStatement;
+      return !ts.isReturnStatement(branch) || Boolean(branch.expression && !(ts.isIdentifier(branch.expression) && branch.expression.text === "undefined" && !lexicalBindingForReference(parsed, branch.expression)));
+    })) continue;
+    const producedEnvironment = properties(terminal.expression)?.get(forwarded.name.text);
+    const nodeOptions = producedEnvironment && properties(producedEnvironment)?.get("NODE_OPTIONS");
+    if (!nodeOptions) continue;
+    const tail = unwrapStaticExpression(nodeOptions);
+    if (!ts.isBinaryExpression(tail) || tail.operatorToken.kind !== ts.SyntaxKind.PlusToken || literal(tail.right) !== '"') continue;
+    const head = unwrapStaticExpression(tail.left);
+    if (!ts.isBinaryExpression(head) || head.operatorToken.kind !== ts.SyntaxKind.PlusToken || literal(head.left) !== '--require="') continue;
+    const slash = unwrapStaticExpression(head.right);
+    if (!ts.isCallExpression(slash) || !ts.isPropertyAccessExpression(slash.expression) || slash.expression.name.text !== "replaceAll" ||
+      slash.arguments.length !== 2 || literal(slash.arguments[0]) !== "\\" || literal(slash.arguments[1]) !== "/") continue;
+    const pathDeclaration = constant(slash.expression.expression), path = pathDeclaration?.initializer && unwrapStaticExpression(pathDeclaration.initializer);
+    if (!pathDeclaration || !path || !ts.isCallExpression(path) || !imported(path.expression, "node:path", "join") || path.arguments.length !== 2 || !same(path.arguments[0], cwd)) continue;
+    const file = literal(path.arguments[1]);
+    if (!file || !/^[a-zA-Z0-9_./-]+\.(?:cjs|mjs|js)$/u.test(file) || file.includes("//") || file.split("/").some(part => part === "." || part === "..") || isAbsolute(file)) continue;
+    const portIdentity = identity(cwdBinding.declaration.initializer);
+    const protectedIdentities = new Set([identity(invocationValue.condition), identity(finalEnvironment.properties[0].expression), identity(slash.expression.expression), identity(cwd), portIdentity, identity(call.expression), identity(path.expression)]);
+    if (index.binaryExpressions.some(expression => expression.pos < call.end && expression.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && expression.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
+      protectedIdentities.has(identity(rootIdentifier(expression.left) ?? undefined)))) continue;
+    let unsafe = false;
+    const producerIdentity = identity(invocationValue.condition), invocationIdentity = identity(finalEnvironment.properties[0].expression);
+    const visit = (node: ts.Node) => {
+      if (unsafe || node.pos >= call.end) return;
+      if ((ts.isDeleteExpression(node) || ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(node.operator)) &&
+        protectedIdentities.has(identity(rootIdentifier(ts.isDeleteExpression(node) ? node.expression : node.operand) ?? undefined))) { unsafe = true; return; }
+      if (ts.isIdentifier(node) && node !== producer.name && node !== invocation.name) {
+        const bound = identity(node);
+        if (bound === portIdentity && node !== portOwner.declaration.name && node !== cwdBinding.declaration.initializer &&
+          !(ts.isPropertyAccessExpression(node.parent) && node.parent.expression === node)) { unsafe = true; return; }
+        if (bound === producerIdentity || bound === invocationIdentity) {
+          let member: ts.Expression = node;
+          while (ts.isPropertyAccessExpression(member.parent) && member.parent.expression === member) member = member.parent;
+          // Other fields of the inline produced object cannot alias its newly
+          // allocated environment; only that environment and whole-object escapes matter.
+          if (member !== node && (bound !== producerIdentity || !ts.isPropertyAccessExpression(member) || member.name.text !== forwarded.name.text)) { ts.forEachChild(node, visit); return; }
+          const parent = member.parent;
+          const condition = ts.isConditionalExpression(parent) && parent.condition === member || ts.isIfStatement(parent) && parent.expression === member;
+          const spread = ts.isSpreadAssignment(parent) && (bound === invocationIdentity || member !== node);
+          if (!condition && !spread) unsafe = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    if (unsafe) continue;
+    const absolute = resolve(root, file);
+    if (sources ? !sources.has(file) : !existsSync(absolute) || !lstatSync(absolute).isFile() || lstatSync(absolute).isSymbolicLink() || realpathSync(absolute) !== absolute) continue;
+    result.add(file);
+  }
+  return [...result];
+}
+
 export function collectExecutableSourceGraph(input: {
   root: string;
   entrySourceFiles: readonly string[];
@@ -2018,6 +2276,7 @@ export function collectExecutableSourceGraph(input: {
       : parseWorkspaceModule(input.root, sourceFile);
     graph.set(sourceFile, parsed);
     if (traversalBoundaries.has(sourceFile)) continue;
+    for (const entry of directNodeEnvironmentPreloads(parsed, input.root, input.sourceOverrides)) if (!graph.has(entry)) queue.push(entry);
     for (const entry of directWebpackEntries(parsed, input.root)) opaqueBuildEntries.add(entry);
     for (const statement of parsed.statements) {
       if (

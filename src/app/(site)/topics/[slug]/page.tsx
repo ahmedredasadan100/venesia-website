@@ -131,6 +131,9 @@ export default async function TopicDetailsPage({
       showHeroImage={topic.showImageOnPage}
       showSubtitle={topic.showExcerptOnPage}
     >
+      {topic.showTitleOnPage === false ? (
+        <h1 className="sr-only">{topic.title}</h1>
+      ) : null}
       <TopicViewTracker topicId={topic.id} />
       <JsonLd data={pageJsonLd} />
 

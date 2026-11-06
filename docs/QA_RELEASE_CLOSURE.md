@@ -304,6 +304,22 @@ existing source, Admission, Preflight, evidence and cleanup contracts. No
 automatic retry follows a real functional/security failure, and this authority
 does not authorize Product changes, Push, Ready, Merge or Production.
 
+The existing `pr229-20261103-double-operational` selector is a compatibility
+identifier for this standing allowance. The Owner's scope-restoration decision
+of 5 November 2026 withdraws the unqualified request-scope expansion in
+`cd52a98d`: when the selector is present, the original execution owner requires
+`selection="admin-adoption"` and undefined `adoptionScope`, `adoptionCohort`,
+`adoptionJourneySelection` and `adminMeasurement`. The five original predicates
+and their acceptance/rejection semantics are restored at that owner. They are
+runtime request restrictions, not duplicate tests or relocated assertions.
+Ordinary scope validation and private live Admission remain mandatory. The
+standing original x2 calculation, technical maxima and omitted-selector baseline
+mode are unchanged; no historical PR ancestry is required by the standing
+allowance. This is not an environment-wide timer override. Same-source receipt
+reuse also requires the same effective leaf deadline; baseline-mode receipts
+cannot satisfy a standing-budget invocation or vice versa. Independent bounded
+command deduplication does not depend on broadening this request boundary.
+
 For the current PR #229 continuation, the whole live-connection qualification
 uses420000→840000ms and its Native wrapper480000→960000ms, retaining120000ms
 outside the inner limit. Windows host/ports snapshots retain20000→40000ms;
@@ -382,6 +398,60 @@ owner or assertion. Preserve the failed Admission and its source binding;
 fresh live qualification is required for the corrected source. The continuation
 evidence is under `.tmp-qa/pr229-timeout-ownership-release-20261103-02/`.
 
+The 5 November QA scope-restoration release on `bd980139` passed fresh
+Admission and initial Preflight, then stopped after six Full E gates. Gate7's
+submitted-draft control failed at `dispatch`; its original catch discarded the
+cause. The separately authorized, observation-only targeted invocation passed
+80 checks and did not reproduce that failure. Preserve both outcomes under
+`.tmp-qa/qa-scope-restoration-20261105-01/` and
+`.tmp-qa/qa-gate7-diagnosis-20261105-01/`; neither is a completed Gate7 or Full E
+release proof, and the historical dispatch root cause remains unknown.
+
+The subsequent authorized correction adds bounded failure visibility at the
+existing draft-restoration fixture and its verifier. Diagnostics retain only
+allowlisted error classifications, fixed phases and request counts. They must
+not export raw error messages, stacks, causes, locator logs, requests or private
+draft values. Preserve the original assertions, successful receipt shape,
+500ms controlled-page timeout, 25-second interception/event waits and cleanup
+precedence. Capture rejection metadata without replacing the promises or
+changing their race; attach the final diagnostic after the existing settlement
+and cleanup. Synthetic click, environment, draft-loss and cleanup failures
+qualify this visibility only. The successor still requires fresh Admission and
+one complete Full E75 invocation; partial attempts cannot be combined, resumed
+or relabeled PASS. This correction changes no acceptance or budget policy.
+
+For the authorized PR #230 Gate7 crash-attribution investigation, the optional
+diagnostic port remains at `runOwnedVerificationChild` and its Windows Job
+owner. Bind the gate, allowlisted source command, PID plus creation identity,
+native start/end and exit code; JavaScript exit hooks cannot prove a fatal
+process exit. Retain bounded process and machine memory counters separately
+from sampled Node/V8 heap counters. A sampled increase is not proof of a leak,
+and a native allocation failure is not automatically a JavaScript heap-limit
+failure. Never record raw argv, environment, heap contents or application data.
+Missing, torn, capped, unmapped or mismatched evidence remains partial; observer
+failure must not replace the original failure or relax cleanup. The opt-in
+observer changes no heap limit, concurrency, deadline, cancellation or assertion.
+Qualify it through the existing isolated-verification controls, including an
+actual bounded native abort, nonzero exit, cancellation and negative identity
+cases, before one authorized Gate7 diagnostic. This investigation does not
+authorize Full E or a release. Historical failed invocations remain separate;
+a successful diagnostic cannot retrospectively identify the historical PID or
+prove its initiating memory cause. Future release of this verification-execution
+change remains class E and requires fresh complete release gates.
+
+On 6 November 2026, the Owner closed the historical Gate7 investigation as
+**Unresolved / not Fixed**: the intermittent fatal failure did not recur in the
+one authorized diagnostic, and its initiating cause remains unproven. Preserve
+the failed and partial diagnostic evidence; do not reopen that investigation or
+repeat its reproduction without new authority. Retain the tested, default-off
+diagnostic port for its demonstrated bounded evidence value. The Owner separately
+authorizes a fresh official Full E from its first gate on the qualified committed
+source, with ordinary diagnostic settings and all75 gates required. A new failure
+must be classified from its own evidence. This disposition is not a safety,
+coverage, Admission, release or resource-policy waiver; the standalone Gate7
+pass cannot replace any official gate. Existing release authorizations and
+mandatory readiness, exact-head CI, review, merge and Smoke conditions apply.
+
 Constitution Sections 25.4 and 28.8, existing ownership, contracts, Source of
 Truth, Stop Conditions, and authorization boundaries remain unchanged. This
 rule grants no additional Product, Architecture, Auth, Permission, Database,
@@ -437,6 +507,17 @@ binding to a current command and executable graph; missing or conflicting edges
 expand verification or block the unsupported claim, never prove exclusion.
 The existing focused contract guard is
 `node --experimental-strip-types scripts/verify-isolated-supabase.mts --local-risk-verification-only`.
+
+For a bounded A/B plan, the same selector removes an additional named check only
+when another selected command literally invokes that exact registered npm check
+and contains its complete ordered leaf argv chain. Both executions would use
+the same reviewed snapshot, inputs, environment and execution owner. Preserve
+the source-floor slots and the canonical Public tail. An alias with similar
+leaves, different argv, an unresolved/cyclic command, or a different environment
+is not equivalent evidence. Keep the omitted name in
+`redundantAdditionalChecks` so the reviewed obligation remains traceable to its
+executing parent. Full Local Gate keeps every canonical named gate; this bounded
+deduplication does not prune CI jobs or waive any release obligation.
 
 The same reader derives an ephemeral source-impact report from the exact current
 snapshot and baseline Git bytes. It consults the existing Collection/Form and
@@ -742,6 +823,48 @@ private-ancestor membership. Unknown ancestry remains unqualified.
 Native waits on Windows8+ exclude low-power time, so native and UTC bounds and
 the scoped awake-window evidence must remain explicit; no future Sleep or
 long-run transport guarantee follows ([Microsoft wait semantics](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject)).
+
+**Operating-window power policy — Owner amendment, 5 November 2026:** battery
+operation is authorized. `AC Offline` describes the current power source and
+requires an observation/warning; it is not, by itself, failed readiness, failed
+QA or a release Stop Condition. An AC transition alone must not cancel an
+otherwise qualified invocation. This retains the battery permission already
+recorded in Registry Section 27.36 and supersedes contrary task-local AC-only
+startup, preparation and preallocation checks. It changes no Product contract.
+
+Use the existing task-local native operating-condition helper as the single
+power interpretation owner, with the existing preparation and release caller
+consuming its qualified observations. Keep source type separate from safety:
+known OS-reported critical depletion prevents new allocation or requests managed
+cancellation of an active invocation, including when AC is reported Online.
+A known Low-only state is a warning, not a newly invented percentage cutoff.
+Distinguish an unknown/invalid primary power status or failed power API from
+critical depletion: the former is unqualified telemetry and cannot establish
+safe readiness; record its actual cause and use the same managed stop path.
+Handle the OS unknown sentinel before interpreting flag bits. A valid explicit
+no-system-battery status is not missing telemetry or a critical battery.
+Unavailable discharge-rate/capacity estimates remain unknown; they do not prove
+exhaustion, runtime capacity or battery endurance. No universal numeric battery
+threshold, forecast or guarantee is introduced.
+
+The native helper observes and owns only its temporary execution-state request;
+it does not acquire, terminate or manage QA children. The existing caller owns
+readiness rejection and `AbortController` cancellation, preserving the original
+reason, bounded child cleanup and raw terminal evidence. Do not introduce a
+second power runtime or duplicate safety predicates in each consumer. Required
+resource, connection, heartbeat, lease, deadline, cancellation and cleanup checks
+remain unchanged; battery permission cannot waive any of them.
+
+Keep current Sleep/hibernate observations and the bounded awake window. Acquire
+the existing temporary thread-scoped idle-prevention state, retain its actual
+previous state and restore it on the same native thread in `finally`. Do not
+alter permanent power-plan settings or suppress OS critical-battery safety
+actions. Power transitions, unavailable observations, acquisition/restoration
+and managed cancellation need distinct evidence; missing evidence is not PASS.
+Prior AC-only stopped attempts remain immutable historical results. Any changed
+operating-condition helper/caller requires affected positive/negative controls
+and current source-bound release qualification before a resumed invocation.
+
 The original root exit is distinct from the helper/capability outcome. Normal
 and abnormal root exit, cancellation, timeout, detached descendants, owner loss
 and unrelated-process preservation need actual scoped controls.

@@ -60,6 +60,19 @@ internal static class WindowsOwnedProcess
     }
     [StructLayout(LayoutKind.Sequential)]
     private struct FileTime { public uint Low; public uint High; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CompletionAssociation { public IntPtr Key; public IntPtr Port; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessMemory {
+        public uint Size; public uint PageFaults;
+        public UIntPtr PeakWorkingSet, WorkingSet, PeakPagedPool, PagedPool, PeakNonPagedPool, NonPagedPool, Pagefile, PeakPagefile, Private;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SystemPerformance {
+        public uint Size;
+        public UIntPtr CommitTotal, CommitLimit, CommitPeak, PhysicalTotal, PhysicalAvailable, SystemCache, KernelTotal, KernelPaged, KernelNonPaged, PageSize;
+        public uint Handles, Processes, Threads;
+    }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct ProcessEntry32 {
         public uint Size; public uint Usage; public uint Pid; public UIntPtr DefaultHeap;
@@ -144,6 +157,20 @@ internal static class WindowsOwnedProcess
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry32 entry);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateIoCompletionPort(IntPtr file, IntPtr existing, UIntPtr key, uint threads);
+    [DllImport("kernel32.dll", EntryPoint = "SetInformationJobObject", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AssociateCompletionPort(IntPtr job, int informationClass, ref CompletionAssociation association, uint length);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetQueuedCompletionStatus(IntPtr port, out uint message, out UIntPtr key, out IntPtr value, uint milliseconds);
+    [DllImport("kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadProcessMemory(IntPtr process, out ProcessMemory counters, uint length);
+    [DllImport("kernel32.dll", EntryPoint = "K32GetPerformanceInfo", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadSystemPerformance(out SystemPerformance counters, uint length);
 
     private sealed class NativeFailure : Exception {
         public readonly string Stage;
@@ -156,6 +183,185 @@ internal static class WindowsOwnedProcess
         Dictionary<string, object> result = new Dictionary<string, object>();
         for (int i = 0; i < values.Length; i += 2) result.Add((string)values[i], values[i + 1]);
         return result;
+    }
+    // Optional observation only. It neither selects commands nor changes containment,
+    // deadlines, cancellation or the original result. Missing notifications are not proof
+    // of absence: exact retained identities must reconcile with final Job accounting.
+    private sealed class DiagnosticObserver {
+        private const int MaxProcesses = 1024, MaxSamples = 4096, MaxRows = 32768, MaxBytes = 16777216, ReserveBytes = 65536;
+        private readonly string gateId, token;
+        private readonly Dictionary<uint, ObservedProcess> processes = new Dictionary<uint, ObservedProcess>();
+        private readonly List<object> issues = new List<object>();
+        private readonly HashSet<string> issueKeys = new HashSet<string>();
+        private readonly Stopwatch clock = Stopwatch.StartNew();
+        private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
+        private FileStream output; private IntPtr port; private bool associated, writeFailed, truncated, finished;
+        private int rows, bytes, samples, starts, exits, opened, closed, issueCount, notifications;
+        private long nextSample;
+        private static ulong TimeValue(FileTime value) { return ((ulong)value.High << 32) | value.Low; }
+        private void Issue(string stage, int code, uint pid) {
+            // Only fixed call-site identifiers and numeric native data enter diagnostics.
+            string key = stage + ":" + code.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (issueKeys.Count >= 64 || !issueKeys.Add(key)) return;
+            issueCount++; if (issues.Count < 32) issues.Add(Map("stage", stage, "win32Code", code, "pid", pid == 0 ? null : (object)pid));
+        }
+        private void Emit(string kind, Dictionary<string, object> row, bool terminal) {
+            if (writeFailed || output == null) return;
+            try {
+                row.Add("schema", 1); row.Add("kind", kind); row.Add("gateId", gateId); row.Add("jobToken", token);
+                row.Add("observedUtc", DateTime.UtcNow.ToString("o"));
+                byte[] encoded = new UTF8Encoding(false).GetBytes(serializer.Serialize(row) + "\n");
+                if ((!terminal && (rows >= MaxRows - 1 || bytes + encoded.Length > MaxBytes - ReserveBytes))
+                    || encoded.Length > 1048576 || bytes + encoded.Length > MaxBytes) {
+                    truncated = true; Issue("evidence_cap", 0, 0); return;
+                }
+                output.Write(encoded, 0, encoded.Length); output.Flush(true); rows++; bytes += encoded.Length;
+            } catch { writeFailed = true; Issue("evidence_write", 0, 0); }
+        }
+        public DiagnosticObserver(IntPtr job, string path, string gate, string jobToken) {
+            gateId = gate; token = jobToken; serializer.MaxJsonLength = 1048576; serializer.RecursionLimit = 12;
+            try {
+                output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                port = CreateIoCompletionPort(InvalidHandle, IntPtr.Zero, UIntPtr.Zero, 1);
+                if (port == IntPtr.Zero) throw Error("completion_port_create");
+                uint flags;
+                if (!GetHandleInformation(port, out flags)) throw Error("completion_port_flags");
+                if ((flags & 1) != 0) throw new NativeFailure("completion_port_inheritable", 0);
+                CompletionAssociation association = new CompletionAssociation(); association.Key = new IntPtr(1); association.Port = port;
+                if (!AssociateCompletionPort(job, 7, ref association, (uint)Marshal.SizeOf(typeof(CompletionAssociation)))) throw Error("completion_port_associate");
+                associated = true;
+                Emit("diagnostic_start", Map("processAccessMask", 0x00101000, "processHandlesInheritable", false, "jobHandlesExported", 0,
+                    "caps", Map("processes", MaxProcesses, "samples", MaxSamples, "rows", MaxRows, "bytes", MaxBytes, "sampleIntervalMs", 1000)), false);
+            } catch (NativeFailure error) { Issue(error.Stage, error.Code, 0); }
+            catch { Issue("diagnostic_setup", 0, 0); }
+        }
+        public void Capture(IntPtr job, uint pid) {
+            if (finished || !associated || processes.ContainsKey(pid)) return;
+            if (processes.Count >= MaxProcesses) { truncated = true; Issue("process_cap", 0, pid); return; }
+            IntPtr handle = IntPtr.Zero;
+            try {
+                handle = OpenProcess(0x00101000, false, pid);
+                if (handle == IntPtr.Zero) throw Error("process_open_race_or_access");
+                opened++;
+                uint flags;
+                if (!GetHandleInformation(handle, out flags)) throw Error("process_handle_flags");
+                if ((flags & 1) != 0) throw new NativeFailure("process_handle_inheritable", 0);
+                if (GetProcessId(handle) != pid) throw new NativeFailure("process_pid_mismatch", 0);
+                bool inJob;
+                if (!IsProcessInJob(handle, job, out inJob)) throw Error("process_membership_query");
+                if (!inJob) throw new NativeFailure("process_missing_exact_job_membership", 0);
+                string creation = CreationTime(handle, "process_creation_time");
+                ObservedProcess process = new ObservedProcess(); process.Pid = pid; process.Creation = creation; process.Handle = handle;
+                processes.Add(pid, process); handle = IntPtr.Zero; starts++;
+                string executableKind = "other"; StringBuilder image = new StringBuilder(32768); uint imageLength = (uint)image.Capacity;
+                if (QueryFullProcessImageNameW(process.Handle, 0, image, ref imageLength)) {
+                    string name = Path.GetFileName(image.ToString()).ToLowerInvariant();
+                    if (name == "node.exe" || name == "cmd.exe" || name == "chrome.exe" || name == "chromium.exe"
+                        || name == "conhost.exe" || name == "powershell.exe" || name == "pwsh.exe") executableKind = name;
+                } else Issue("executable_kind_unavailable", Marshal.GetLastWin32Error(), pid);
+                Emit("process_start", Map("pid", pid, "creationTimeFileTime", creation, "executableKind", executableKind,
+                    "startedUtc", DateTime.FromFileTimeUtc(Int64.Parse(creation, System.Globalization.CultureInfo.InvariantCulture)).ToString("o"),
+                    "ownership", "exact-private-job", "handleAccessMask", 0x00101000), false);
+            } catch (NativeFailure error) { Issue(error.Stage, error.Code, pid); }
+            catch { Issue("process_capture", 0, pid); }
+            finally {
+                if (handle != IntPtr.Zero) { if (CloseHandle(handle)) closed++; else Issue("unqualified_handle_close", Marshal.GetLastWin32Error(), pid); }
+            }
+        }
+        private void Exits(string ownerReason, bool terminationRequested) {
+            foreach (ObservedProcess process in processes.Values) {
+                if (process.Signaled) continue;
+                try {
+                    if (!RootExited(process.Handle)) continue;
+                    process.Signaled = true;
+                    FileTime creation, ended, kernel, user; uint code;
+                    if (!GetProcessTimes(process.Handle, out creation, out ended, out kernel, out user)) throw Error("process_exit_times");
+                    if (!GetExitCodeProcess(process.Handle, out code)) throw Error("process_exit_code");
+                    if (TimeValue(creation).ToString(System.Globalization.CultureInfo.InvariantCulture) != process.Creation
+                        || TimeValue(ended) < TimeValue(creation)) throw new NativeFailure("process_exit_identity_time", 0);
+                    process.Code = (long)code; exits++;
+                    Emit("process_exit", Map("pid", process.Pid, "creationTimeFileTime", process.Creation,
+                        "endedUtc", DateTime.FromFileTimeUtc(checked((long)TimeValue(ended))).ToString("o"), "exitCode", (long)code,
+                        "reason", "process-exit-observed", "ownerReasonAtObservation", ownerReason, "ownerTerminationRequested", terminationRequested), false);
+                } catch (NativeFailure error) { Issue(error.Stage, error.Code, process.Pid); }
+                catch { Issue("process_exit_observation", 0, process.Pid); }
+            }
+        }
+        private void Drain(IntPtr job, int bound) {
+            if (!associated) return;
+            for (int i = 0; i < bound; i++) {
+                uint message; UIntPtr key; IntPtr value;
+                if (!GetQueuedCompletionStatus(port, out message, out key, out value, 0)) {
+                    int error = Marshal.GetLastWin32Error(); if (error != 258) Issue("completion_port_read", error, 0); return;
+                }
+                notifications++;
+                if (key.ToUInt64() != 1) { Issue("completion_key", 0, 0); continue; }
+                // Notifications identify candidate PIDs only; exact-Job membership is
+                // established by a safe handle, never by a PID or parent-PID assumption.
+                if (message == 6 || message == 7 || message == 8) {
+                    long raw = IntPtr.Size == 4 ? (long)unchecked((uint)value.ToInt32()) : value.ToInt64();
+                    if (raw <= 0 || raw > UInt32.MaxValue) Issue("completion_pid", 0, 0);
+                    else Capture(job, (uint)raw);
+                }
+            }
+        }
+        private void Sample(IntPtr job) {
+            if (samples >= MaxSamples) { truncated = true; Issue("sample_cap", 0, 0); return; }
+            samples++;
+            foreach (long pid in ProcessIds(job, true)) Capture(job, (uint)pid);
+            SystemPerformance system;
+            if (!ReadSystemPerformance(out system, (uint)Marshal.SizeOf(typeof(SystemPerformance)))) throw Error("system_memory");
+            List<object> memory = new List<object>();
+            foreach (ObservedProcess process in processes.Values) {
+                if (process.Signaled || RootExited(process.Handle)) continue;
+                ProcessMemory counters;
+                if (!ReadProcessMemory(process.Handle, out counters, (uint)Marshal.SizeOf(typeof(ProcessMemory)))) {
+                    int memoryError = Marshal.GetLastWin32Error();
+                    // A process may exit between the liveness check and the query.
+                    if (!RootExited(process.Handle)) Issue("process_memory", memoryError, process.Pid);
+                    continue;
+                }
+                memory.Add(Map("pid", process.Pid, "creationTimeFileTime", process.Creation,
+                    "workingSetBytes", counters.WorkingSet.ToUInt64(), "peakWorkingSetBytes", counters.PeakWorkingSet.ToUInt64(),
+                    "privateBytes", counters.Private.ToUInt64(), "pagefileBytes", counters.Pagefile.ToUInt64(),
+                    "peakPagefileBytes", counters.PeakPagefile.ToUInt64(), "pageFaultCount", counters.PageFaults));
+            }
+            Emit("memory", Map("system", Map("pageSizeBytes", system.PageSize.ToUInt64(), "commitTotalPages", system.CommitTotal.ToUInt64(),
+                "commitLimitPages", system.CommitLimit.ToUInt64(), "commitPeakPages", system.CommitPeak.ToUInt64(),
+                "physicalTotalPages", system.PhysicalTotal.ToUInt64(), "physicalAvailablePages", system.PhysicalAvailable.ToUInt64(),
+                "handleCount", system.Handles, "processCount", system.Processes, "threadCount", system.Threads), "processes", memory), false);
+        }
+        public void Poll(IntPtr job, string ownerReason, bool terminationRequested) {
+            if (finished || !associated) return;
+            try {
+                Drain(job, 64); Exits(ownerReason, terminationRequested);
+                if (clock.ElapsedMilliseconds >= nextSample) { nextSample = clock.ElapsedMilliseconds + 1000; Sample(job); }
+            } catch (NativeFailure error) { Issue(error.Stage, error.Code, 0); }
+            catch { Issue("diagnostic_poll", 0, 0); }
+        }
+        public Dictionary<string, object> Finish(IntPtr job, uint? total, string ownerReason, bool terminationRequested) {
+            try { if (associated) { Drain(job, 4096); Exits(ownerReason, terminationRequested); } }
+            catch (NativeFailure error) { Issue(error.Stage, error.Code, 0); }
+            catch { Issue("diagnostic_final_observation", 0, 0); }
+            finished = true;
+            foreach (ObservedProcess process in processes.Values) {
+                if (!process.Signaled || !process.Code.HasValue) Issue("process_exit_missing", 0, process.Pid);
+                if (CloseHandle(process.Handle)) closed++; else Issue("process_handle_close", Marshal.GetLastWin32Error(), process.Pid);
+            }
+            bool portClosed = port == IntPtr.Zero || CloseHandle(port);
+            if (!portClosed) Issue("completion_port_close", Marshal.GetLastWin32Error(), 0);
+            if (!total.HasValue || total.Value != starts) Issue("job_process_coverage", 0, 0);
+            if (opened != closed) Issue("handles_not_closed", 0, 0);
+            Dictionary<string, object> result = Map("complete", associated && issueCount == 0 && !truncated && !writeFailed && starts == exits && opened == closed && total.HasValue && total.Value == starts,
+                "issues", issues, "truncated", truncated, "handlesClosed", opened == closed && portClosed,
+                "counts", Map("observedProcesses", starts, "observedExits", exits, "jobTotalProcesses", total.HasValue ? (object)total.Value : null,
+                    "samples", samples, "rowsBeforeTerminal", rows, "bytesBeforeTerminal", bytes, "notifications", notifications,
+                    "openedHandles", opened, "closedHandles", closed, "issueKinds", issueCount));
+            Emit("diagnostic_terminal", result, true);
+            try { if (output != null) output.Dispose(); } catch { writeFailed = true; Issue("evidence_close", 0, 0); }
+            if (writeFailed || truncated) result["complete"] = false;
+            return result;
+        }
     }
     private static void RequestControl(string reason) {
         lock (ControlLock) {
@@ -721,12 +927,24 @@ internal static class WindowsOwnedProcess
     public static int Main(string[] args) {
         if (args.Length > 0 && args[0] == "--observe-close") return ObserveClose(args);
         if (args.Length > 0 && args[0] == "--probe-breakaway") return ProbeBreakaway(args);
-        string identityPath = null, receiptPath = null, executable = null;
+        string identityPath = null, receiptPath = null, executable = null, diagnosticPath = null, diagnosticGate = null;
         int limitMs = 0, cleanupMs = 0, firstArgument = -1;
         // Parse and validate the complete fixed protocol before allocating a process or job.
         try {
-            if (args.Length < 10 || args[0] != "--identity" || args[2] != "--receipt" || args[4] != "--limit-ms" || args[6] != "--cleanup-ms" || args[8] != "--") return 2;
-            identityPath = args[1]; receiptPath = args[3]; executable = args[9]; firstArgument = 9;
+            if (args.Length < 10 || args[0] != "--identity" || args[2] != "--receipt" || args[4] != "--limit-ms" || args[6] != "--cleanup-ms") return 2;
+            identityPath = args[1]; receiptPath = args[3]; firstArgument = 9;
+            if (args[8] == "--diagnostic-path") {
+                if (args.Length < 14 || args[10] != "--diagnostic-gate" || args[12] != "--") return 2;
+                diagnosticPath = args[9]; diagnosticGate = args[11]; firstArgument = 13;
+                if (diagnosticGate.Length == 0 || diagnosticGate.Length > 96) return 2;
+                foreach (char c in diagnosticGate)
+                    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == ':')) return 2;
+                ValidateEvidencePath(diagnosticPath);
+                if (!String.Equals(Path.GetDirectoryName(identityPath), Path.GetDirectoryName(diagnosticPath), StringComparison.OrdinalIgnoreCase)
+                    || String.Equals(identityPath, diagnosticPath, StringComparison.OrdinalIgnoreCase)
+                    || String.Equals(receiptPath, diagnosticPath, StringComparison.OrdinalIgnoreCase)) return 2;
+            } else if (args[8] != "--") return 2;
+            executable = args[firstArgument];
             if (!Int32.TryParse(args[5], out limitMs) || limitMs <= 0 || limitMs > 86400000
                 || !Int32.TryParse(args[7], out cleanupMs) || cleanupMs <= 0 || cleanupMs > 60000) return 2;
             ValidateEvidencePath(identityPath); ValidateEvidencePath(receiptPath);
@@ -749,6 +967,7 @@ internal static class WindowsOwnedProcess
         bool retainedOwnedHandlesSignaled = false;
         string rootCreationFileTime = null, rootCreationUtc = null;
         Dictionary<string, object> jobBeforeResume = null;
+        DiagnosticObserver diagnostic = null; Dictionary<string, object> diagnosticResult = null;
         ProcessInformation root = new ProcessInformation(); NativeFailure failure = null;
         Thread control = new Thread(ControlLoop); control.IsBackground = true; control.Start();
         Thread watchdog = new Thread(delegate() { Watchdog(lifetime, limitMs, cleanupMs); }); watchdog.IsBackground = true; watchdog.Start();
@@ -766,6 +985,7 @@ internal static class WindowsOwnedProcess
             if (!QueryLimits(job, 9, out effective, (uint)Marshal.SizeOf(typeof(ExtendedLimits)), IntPtr.Zero)) throw Error("query_job_limits");
             effectiveFlags = effective.Basic.Flags;
             if ((effectiveFlags & KillOnJobClose) == 0 || (effectiveFlags & (Breakaway | SilentBreakaway)) != 0) throw new NativeFailure("job_limit_verification", 0);
+            if (diagnosticPath != null) diagnostic = new DiagnosticObserver(job, diagnosticPath, diagnosticGate, jobToken);
             stdout = DuplicateStandard(-11); stderr = DuplicateStandard(-12);
             SecurityAttributes security = new SecurityAttributes(); security.Length = (uint)Marshal.SizeOf(typeof(SecurityAttributes)); security.Inherit = true;
             stdin = CreateFileW("NUL", 0x80000000, 3, ref security, 3, 0x80, IntPtr.Zero);
@@ -796,6 +1016,7 @@ internal static class WindowsOwnedProcess
                 if (!IsProcessInJob(root.Process, job, out inJob)) throw Error("verify_root_membership");
                 if (!inJob) throw new NativeFailure("root_outside_job", 0);
                 assigned = true;
+                if (diagnostic != null) diagnostic.Capture(job, root.Pid);
                 FileTime creation, exit, kernel, user;
                 if (!GetProcessTimes(root.Process, out creation, out exit, out kernel, out user)) throw Error("root_creation_time");
                 long fileTime = unchecked((long)(((ulong)creation.High << 32) | creation.Low));
@@ -821,6 +1042,7 @@ internal static class WindowsOwnedProcess
                         if (ControlReceived.WaitOne(0)) { reason = ReadControlReason(); break; }
                         if (Interlocked.CompareExchange(ref checkpointState, 2, 1) == 1)
                             WriteClosureCheckpoint(identityPath + ".closure.json", job, root, rootCreationFileTime, jobToken, helperPid);
+                        if (diagnostic != null) diagnostic.Poll(job, "running", false);
                         uint wait = WaitForSingleObject(root.Process, 25);
                         if (wait == WaitObject0) { rootCode = ExitCode(root.Process); reason = "completed"; break; }
                         if (wait == WaitFailed) throw Error("wait_root");
@@ -857,6 +1079,7 @@ internal static class WindowsOwnedProcess
             catch (NativeFailure error) { Remember(ref failure, error); }
             catch { Remember(ref failure, new NativeFailure("managed_cleanup_snapshot", 0)); }
             if (activeBefore.HasValue && activeBefore.Value != 0 && membersBefore != null) {
+                if (diagnostic != null) diagnostic.Poll(job, reason, false);
                 try {
                     int remaining = (int)Math.Min(1000, cleanupMs - cleanup.ElapsedMilliseconds);
                     if (remaining > 0) residualMemberEvidence = CaptureResidualMembers(job, membersBefore, activeBefore.Value, residualHandles, ref failure, remaining);
@@ -884,6 +1107,7 @@ internal static class WindowsOwnedProcess
                 if (!rootCode.HasValue && root.Process != IntPtr.Zero) rootCode = ExitCode(root.Process);
             } catch (NativeFailure error) { Remember(ref failure, error); }
             catch { Remember(ref failure, new NativeFailure("managed_cleanup", 0)); }
+            if (diagnostic != null) diagnosticResult = diagnostic.Finish(job, total, reason, jobTerminated);
             if (!CloseHandle(job)) Remember(ref failure, Error("close_job")); else jobClosed = true;
         } else { rootHandleExited = root.Process == IntPtr.Zero; treeVerified = rootHandleExited; activeAfter = 0; membersAfter = new long[0]; retainedOwnedHandlesSignaled = true; }
         if (root.Thread != IntPtr.Zero && !CloseHandle(root.Thread)) Remember(ref failure, Error("close_root_thread"));
@@ -921,6 +1145,7 @@ internal static class WindowsOwnedProcess
                 "retainedOwnedProcessHandles", retainedOwnedPids.Count, "retainedOwnedProcessIds", retainedOwnedPids,
                 "retainedOwnedHandlesSignaled", retainedOwnedHandlesSignaled,
                 "totalProcesses", total.HasValue ? (object)total.Value : null, "rootHandleExited", rootHandleExited, "processTreeVerified", treeVerified));
+        if (diagnosticPath != null) receipt.Add("diagnostic", diagnosticResult ?? Map("complete", false, "issues", new object[] { Map("stage", "diagnostic_not_started", "win32Code", 0, "pid", null) }));
         try { WriteExclusive(receiptPath, receipt); }
         catch { HelperFinished.Set(); return 3; }
         HelperFinished.Set();
