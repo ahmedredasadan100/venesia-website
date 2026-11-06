@@ -4618,3 +4618,27 @@ Pending, with zero approvals; Admin Smoke remains unperformed. New release
 evidence is separate under `.tmp-qa/pr230-release-resume-20261106-05/`, preserving
 all prior evidence and the WebP study. This records permission to attempt the
 gates, not their success, release readiness or global closure.
+
+**Formal-resume qualification outcome — 6 November 2026:** the retained delta
+was committed locally as `377cf0dbb2cedd235a0da2eb0c9ede1513cd5392`. Before any
+Admission or Full E invocation, the canonical source-impact inspection derived
+four changed exported-contract obligations. It found no accepted changed
+assertion binding for `runOwnedVerificationChild` or `WindowsJobReceipt` across
+the discovered protections; the other two obligations have candidate bindings.
+This is a new mandatory source-protection qualification gap, independent of
+the closed historical OOM incident. Actual32-control behavior proof remains
+valid, but it is not proof of the required executable correspondence. The
+existing analyzer does not reconstruct the returned-result flow through the
+test helpers/aliases, and its type-member extraction does not cover the receipt's
+intersection type. No free-form maintenance row or dynamic-axis exception can
+truthfully satisfy these two current obligations. No protection rule was relaxed.
+
+Release preparation stopped before Admission, Preflight, GNU qualification,
+connection qualification or Full E. No new Gate7 reproduction, Push, CI retry,
+Ready, Merge or Production action was performed. The operating-window helper
+was stopped normally for same-thread restoration; exact cleanup and preservation
+results belong to `.tmp-qa/pr230-release-resume-20261106-05/`. The next bounded
+decision is how to qualify the actual diagnostic tests at their existing owners
+without expanding or weakening the source-protection contract. Historical
+Gate7 remains **Unresolved / not Fixed**, the six reviews remain Pending, and
+Admin Smoke remains unperformed. This outcome supersedes no sealed prior result.
